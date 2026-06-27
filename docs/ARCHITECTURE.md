@@ -152,13 +152,67 @@ sequenceDiagram
 
 ---
 
-## 7. Observabilidade como instrumento da tese
+## 7. Alocação de game server (session-service)
+
+Quando o matchmaking fecha uma partida, o `session-service` precisa achar um Dedicated Server livre e saudável para hospedá-la — a reimplementação do *game session placement* do GameLift. Quatro responsabilidades: **registry** (quais servers existem e seu estado), **health** (heartbeat detecta server morto), **allocation** (reivindicar um livre sem corrida) e **reclaim** (devolver ao pool no fim).
+
+Ciclo de vida de um game server:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ready: boot + registra
+    Ready --> Allocated: AllocateSession (claim atômico)
+    Allocated --> Shutdown: partida termina
+    Shutdown --> Ready: reinicia limpo
+    Ready --> Down: heartbeat perdido
+    Allocated --> Down: heartbeat perdido
+    Down --> [*]
+```
+
+Fluxo de alocação:
+
+```mermaid
+sequenceDiagram
+    participant GS as Game Server (Unity headless)
+    participant SS as session-service
+    participant MM as matchmaking-service
+    participant C as Unity Client
+    GS->>SS: registra (Ready, addr, região, versão)
+    loop a cada N s
+        GS->>SS: heartbeat
+    end
+    MM->>SS: AllocateSession(matchId, players, região)
+    SS->>SS: claim atômico Ready -> Allocated
+    SS->>GS: hospede matchId (jogadores, chave do token)
+    SS-->>C: serverAddress + port + connect token
+    C->>GS: conecta (token)
+    GS->>SS: valida token / confirma
+    Note over GS: partida roda
+    GS->>SS: matchId concluído (resultado vai ao backend)
+    SS->>GS: reciclar -> Ready
+```
+
+> O **claim atômico** Ready→Allocated é o ponto de concorrência crítico (duas partidas não podem pegar o mesmo server). Em processo único: `sync.Mutex`. Distribuído (várias instâncias do session-service): update condicional no store (DynamoDB `... IF state=Ready` / Postgres `UPDATE ... WHERE state='Ready' RETURNING`). Detalhado em `docs/GO-LEARNINGS.md` §01.
+
+Espectro de implementação (ADR-0005, ADR-0011):
+
+| Nível | Como aloca |
+|---|---|
+| Local/dev | 1 server estático em `localhost:7777` |
+| Pool self-managed (Go) | registry + heartbeat + claim atômico em Go — reimplementa o GameLift |
+| **Agones / EKS** | delega o fleet ao Agones: `Fleet` de game servers + API de *Allocation*; o session-service vira cliente fino do Agones |
+
+**Agones** é um projeto open-source que estende o Kubernetes para gerenciar game servers: CRD `GameServer` com o ciclo de vida acima, `Fleet` com buffer de servers `Ready`, API de *Allocation* e autoscaler. É **engine-agnóstico** — empacota-se o Unity Dedicated Server (build Linux headless) num container e integra-se o **Agones SDK (C#)** para o server reportar Ready/Allocated/Health/Shutdown. É aqui que o **EKS** ganha aplicação concreta: hospedar o fleet de game servers gerenciado pelo Agones (ADR-0011).
+
+---
+
+## 8. Observabilidade como instrumento da tese
 
 `slog` JSON (logs) + Prometheus (métricas) + Grafana (dashboards) + OpenTelemetry (traces). A mesma stack roda local e em prod, e alimenta a comparação Go-vs-AWS: custo $/mês, latência p50/p95/p99, throughput, uso de recurso. (ADR-0006)
 
 ---
 
-## 8. Índice de decisões
+## 9. Índice de decisões
 
 Todas as decisões e seus trade-offs estão em `docs/adr/README.md`. Antes de implementar algo arquitetural, confira se há ADR aplicável; se conflitar com um ADR aceito, avise antes de prosseguir.
 

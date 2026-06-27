@@ -90,6 +90,7 @@ Guia completo: `docs/sdd/SDD-GUIDE.md`
 
 - Diagramas (fluxos, sequências, relações, estados) em **Mermaid** — GitHub e o preview local renderizam nativo. Não use ASCII art para diagramas.
 - Listagens de estrutura de pastas/arquivos podem permanecer em bloco de código texto (Mermaid não representa bem árvore de arquivos).
+- Aprendizados de Go relevantes vão em `docs/GO-LEARNINGS.md` (exemplos comentados), atualizados conforme surgem no desenvolvimento.
 
 ## ADRs — Architecture Decision Records
 

@@ -28,6 +28,7 @@ Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Te
 |---|---|
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Roadmap de execução e fases de estudo |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Visão consolidada da arquitetura |
+| [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | Aprendizados de Go (exemplos comentados) |
 | [docs/adr/README.md](docs/adr/README.md) | Índice de Architecture Decision Records |
 | [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) | Guia da metodologia SDD |
 | [docs/adr/ADR-GUIDE.md](docs/adr/ADR-GUIDE.md) | Guia para criação de ADRs |
