@@ -5,23 +5,23 @@
 
 ## O que é este projeto
 
-Monorepo de microsserviços em Go para backend de jogos multiplayer.
-Cada serviço em `services/` é independente: módulo Go próprio, Dockerfile próprio, infra Terraform própria.
+Monorepo de microsserviços em Go para backend de jogos multiplayer. Tese: reimplementar serviços de jogo da AWS (GameKit/GameLift) em Go sobre compute barato e comparar custo/performance (ADR-0008). O realtime de gameplay NÃO é feito em Go — roda no Unity Dedicated Server (data plane, repo separado; ADR-0010).
+Cada serviço em `services/` é um binário/imagem Docker independente, mas todos compartilham o **módulo Go único** da raiz (ver ADR-0001). Dockerfile próprio e infra Terraform própria por serviço.
 
 ## Metodologia: Spec-Driven Development
 
-**Toda implementação começa pela spec.** Não escreva código antes de ler `services/<nome>/specs/*.spec.md`.
+**Toda implementação começa pela spec.** Não escreva código antes de ler `services/<nome>/specs/NNN-slug/spec.md` (pasta por feature, numerada por serviço).
 Se a spec não existir, crie-a junto com o usuário antes de qualquer código.
 
 ## Arquitetura interna (todos os serviços)
 
 Hexagonal Architecture — camadas com dependências unidirecionais:
 
+```mermaid
+flowchart LR
+    T["transport/"] -->|Port| S["service/"] -->|Port| R["repository/"]
 ```
-transport/ → service/ → repository/
-               ↑               ↑
-           (via interfaces de domain/)
-```
+Dependências sempre via interfaces declaradas em `domain/`.
 
 - `domain/` — tipos e interfaces puras. Zero imports externos.
 - `service/` — lógica de negócio. Só usa interfaces de `domain/`.
@@ -47,8 +47,8 @@ services/<nome>-service/
   internal/repository/   ← acesso a dados
   internal/transport/    ← HTTP/gRPC handlers
   migrations/            ← SQL migrations
-  specs/                 ← specs SDD (leia primeiro)
-  go.mod                 ← módulo independente
+  specs/                 ← specs SDD, pasta por feature (leia primeiro)
+  (sem go.mod por serviço — módulo único na raiz; ver ADR-0001)
 ```
 
 ## Comandos de build e teste
@@ -78,6 +78,8 @@ Leia `docs/adr/ADR-GUIDE.md`. Durante a sessão, monitore decisões arquiteturai
 - Não ignore erros (`_`)
 - Não escreva código sem ler a spec primeiro
 - Não faça deploy manual — use os pipelines em `.github/workflows/`
+- Não crie `go.mod` por serviço — o repo é módulo único (ADR-0001)
+- Não implemente gameplay realtime em Go — data plane é Unity Dedicated Server, repo separado (ADR-0010)
 
 ## Documentação
 
@@ -85,3 +87,4 @@ Leia `docs/adr/ADR-GUIDE.md`. Durante a sessão, monitore decisões arquiteturai
 - Guia SDD: `docs/sdd/SDD-GUIDE.md`
 - Guia ADR: `docs/adr/ADR-GUIDE.md`
 - Índice de ADRs: `docs/adr/README.md`
+- Diagramas: sempre em **Mermaid** (não ASCII art); árvores de arquivos podem ficar em texto

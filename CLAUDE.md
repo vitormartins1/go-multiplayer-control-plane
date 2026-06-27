@@ -1,15 +1,16 @@
 # CLAUDE.md — game-backend monorepo
 
-Backend de jogos multiplayer em Go. Monorepo com microsserviços independentes.
+Backend de jogos multiplayer em Go. Monorepo de **módulo único** (um `go.mod` na raiz — ver ADR-0001); cada serviço é um binário/imagem Docker independente.
+Tese do projeto: reimplementar serviços de jogo da AWS (GameKit/GameLift) em Go sobre compute barato e comparar custo/performance (ADR-0008).
 Metodologia: Spec-Driven Development (SDD). Leia `docs/sdd/SDD-GUIDE.md` antes de implementar qualquer serviço.
 
 ## Stack
 
-- **Linguagem:** Go 1.22+
+- **Linguagem:** Go 1.22+ — **módulo único** na raiz (ainda não multi-módulo; ver ADR-0001)
 - **Arquitetura interna:** Hexagonal (domain / service / repository / transport)
-- **API:** REST com `net/http` (player, achievements, analytics) | gRPC (matchmaking)
-- **Banco local:** PostgreSQL via `pgx/v5`
-- **Cloud:** AWS — ECS Fargate, DynamoDB, SQS, API Gateway, ECR
+- **API:** REST com `net/http` (identity, achievements, player-data, cloud-save, leaderboard, analytics) | gRPC streaming (matchmaking, session)
+- **Banco local:** PostgreSQL via `pgx/v5` (escolha de banco por serviço — ver ADR-0005)
+- **Cloud:** AWS — compute por serviço (Lambda/Fargate/ECS-EC2/EC2/EKS — ver ADR-0005), DynamoDB, SQS, API Gateway, ECR
 - **IaC:** Terraform (local → LocalStack, prod → AWS)
 - **Observabilidade:** Prometheus + Grafana + OpenTelemetry
 - **CI/CD:** GitHub Actions (deploy seletivo por serviço)
@@ -21,13 +22,13 @@ Metodologia: Spec-Driven Development (SDD). Leia `docs/sdd/SDD-GUIDE.md` antes d
 docker compose -f infra/docker/docker-compose.yml up
 
 # Rodar um serviço específico
-cd services/player-service && go run ./cmd/server/
+cd services/identity-service && go run ./cmd/server/
 
 # Testes com race detector
-cd services/player-service && go test ./... -v -race -cover
+cd services/identity-service && go test ./... -v -race -cover
 
 # Build
-cd services/player-service && go build ./cmd/server/...
+cd services/identity-service && go build ./cmd/server/...
 
 # Lint
 golangci-lint run ./...
@@ -36,12 +37,12 @@ golangci-lint run ./...
 cd infra/terraform/environments/local && terraform init && terraform apply
 
 # Terraform prod (requer AWS credentials)
-cd infra/terraform/environments/prod/player-service && terraform init && terraform apply
+cd infra/terraform/environments/prod/identity-service && terraform init && terraform apply
 ```
 
 ## Estrutura dos serviços
 
-Cada serviço em `services/<nome>-service/` segue a mesma estrutura:
+Cada serviço em `services/<nome>-service/` segue a mesma estrutura (todos compartilham o `go.mod` único da raiz — não há `go.mod` por serviço; ver ADR-0001):
 
 ```
 cmd/server/main.go       ← entrypoint, wire-up de dependências
@@ -62,7 +63,7 @@ specs/
 - `service/` NUNCA importa `transport/` ou `repository/` — só interfaces de `domain/`
 - `domain/` tem zero dependências externas (sem frameworks, sem AWS SDK, sem `net/http`)
 - Toda função que faz I/O recebe `ctx context.Context` como primeiro parâmetro
-- Erros sempre wrappados: `fmt.Errorf("player service: create: %w", err)`
+- Erros sempre wrappados: `fmt.Errorf("identity service: create: %w", err)`
 - Goroutines SEMPRE com context para cancelamento e `sync.WaitGroup` para lifecycle
 - Logging com `slog` em JSON: `slog.Info("event", slog.String("key", val))`
 
@@ -84,6 +85,11 @@ Guia completo: `docs/sdd/SDD-GUIDE.md`
 - Mocks: `testify/mock` (nunca struct real em unit test)
 - Race detector: sempre rodar com `-race`
 - Cobertura mínima: 80% no `service/` e `domain/`
+
+## Convenções de documentação
+
+- Diagramas (fluxos, sequências, relações, estados) em **Mermaid** — GitHub e o preview local renderizam nativo. Não use ASCII art para diagramas.
+- Listagens de estrutura de pastas/arquivos podem permanecer em bloco de código texto (Mermaid não representa bem árvore de arquivos).
 
 ## ADRs — Architecture Decision Records
 
@@ -111,6 +117,8 @@ Leia `docs/adr/ADR-GUIDE.md` para o guia completo. Resumo do comportamento esper
 - Não adicione dependências externas em `domain/`
 - Não faça deploy direto — use o pipeline CI/CD
 - Não grave ADRs sem confirmação do usuário
+- Não crie `go.mod` por serviço — o repo é módulo único (ADR-0001)
+- Não implemente gameplay realtime em Go — o data plane é o Unity Dedicated Server, em repo separado (ADR-0010)
 
 ## Referências detalhadas
 

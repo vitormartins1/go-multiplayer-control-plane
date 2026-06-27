@@ -1,133 +1,157 @@
 # Game Backend em Go — Roadmap & Arquitetura
+
 > Monorepo de microsserviços para backend de jogos multiplayer
-> Autor: Vitor (C130N) | Stack: Go · gRPC · Terraform · AWS · LocalStack · Grafana
+> Autor: Vitor (C130N) | Stack: Go · gRPC · Terraform · AWS · LocalStack · Prometheus · Grafana
 
 ---
 
 ## Visão Geral
 
-Este projeto serve dois propósitos simultâneos:
+Este projeto tem uma tese central:
 
-1. **Aprender Go** de forma estruturada e progressiva, contextualizado com C#/.NET
-2. **Construir infraestrutura reutilizável** para jogos próprios futuros
+> **Reimplementar em Go, sobre infraestrutura própria e barata, os serviços de backend que a AWS vende prontos (e caros) para jogos — e depois comparar custo, performance e eficiência entre a nossa versão e a da AWS.**
 
-O backend é um **monorepo com microsserviços independentes**: cada serviço tem seu próprio binário, módulo Go, Dockerfile, infra Terraform e ciclo de deploy separado.
+A AWS oferece um catálogo "AWS for Games" com serviços gerenciados (GameLift, GameKit, Game Analytics Pipeline). Eles resolvem problemas reais de jogos — matchmaking, conquistas, identidade, leaderboards, telemetria — mas têm custo elevado e acoplam o jogo ao ecossistema AWS. A proposta aqui é construir esses mesmos recursos como microsserviços Go independentes, rodando em compute genérico barato (ECS, Lambda, EC2, EKS), e usar a observabilidade do projeto para medir o trade-off real.
 
-A metodologia de desenvolvimento adotada é **Spec-Driven Development (SDD)**: specs escritas antes do código, usadas como fonte de verdade para o agente de IA e para os testes.
+Isso atende a três objetivos simultâneos:
+
+1. **Aprender Go** de forma estruturada e progressiva, contextualizado com C#/.NET — cada serviço exercita um músculo diferente da linguagem.
+2. **Construir infraestrutura reutilizável** para jogos próprios futuros — não é throwaway, é base de verdade.
+3. **Produzir uma comparação técnica** (Go self-hosted vs. AWS gerenciado) como entregável de pós-projeto: custo $/mês, latência p50/p95/p99, throughput e uso de recurso.
+
+A metodologia de desenvolvimento é **Spec-Driven Development (SDD)**: specs escritas antes do código, usadas como fonte de verdade para o agente de IA e para os testes. Ver `docs/sdd/SDD-GUIDE.md`.
+
+As decisões arquiteturais ficam registradas em **ADRs** (`docs/adr/`). A visão de arquitetura consolidada fica em `docs/ARCHITECTURE.md`.
+
+### Princípio: compute genérico, não serviços-de-jogo da AWS
+
+Deliberadamente **não** usamos os serviços purpose-built da AWS para jogos (GameLift, GameKit gerenciado etc.). Reconstruímos a funcionalidade deles em Go sobre compute commodity. Isso é a tese — e está registrado no **ADR-0008**.
+
+---
+
+## Os serviços como reimplementações de serviços AWS
+
+Cada microsserviço é a reimplementação de um serviço/recurso AWS, e forma um **par de comparação** para o estudo de custo/performance. Trilha principal em ordem de complexidade crescente (construída um serviço por vez):
+
+| # | Serviço Go | Equivalente AWS | Compute | Desafio central |
+|---|---|---|---|---|
+| 1 | **identity-service** | GameKit Identity & Auth | Lambda | auth/JWT **próprio** (reimplementa o papel do Cognito), fundação de auth |
+| 2 | **achievements-service** | GameKit Achievements | Lambda | desbloqueio por evento, progresso parcial |
+| 3 | **player-data-service** | GameKit User Gameplay Data | Lambda | inventário/stats, persistência cross-play |
+| 4 | **cloud-save-service** | GameKit Game State Saving | Lambda | blob versionado, sync, resolução de conflito |
+| 5 | **leaderboard-service** | ref. arch DynamoDB/Redis | Fargate | ranking em tempo real, sorted sets |
+| 6 | **analytics-service** | Game Analytics Pipeline | ECS Fargate | worker pool, goroutines (prioridade menor, posição flexível) |
+| 7 | **matchmaking-service** | GameLift FlexMatch | ECS / EKS | pool de tickets, rules engine, gRPC streaming |
+| 8 | **session-service** | GameLift (orquestração de frota/sessão) | Fargate | ciclo de sessão, registry de game servers, connect token, resultado |
+
+> **Descartado por ora:** economy-service (≈ GameSparks: moeda virtual/transações) — escopo grande, sem valor imediato.
+
+### Decomposição: fiel ao GameKit (ADR a registrar)
+
+Os quatro equivalentes do GameKit (identity, achievements, player-data, cloud-save) são **serviços separados em Lambda**, espelhando como a AWS provisiona o GameKit: **cada feature é um stack próprio** (API Gateway + Lambda + DynamoDB), com a **identity como fundação de auth** — os demais validam o JWT emitido por ela.
+
+Por que separar e não consolidar: (1) realismo de microsserviços enterprise (auth entre serviços, deploy/escala independentes); (2) comparação 1:1 fiel com o GameKit; (3) em Lambda, **separar não custa idle** (escala a zero), então o único contra-argumento real some. Fronteiras não são cravadas de uma vez — cada feature nova nasce como serviço próprio por default (Lambda), e só se junta a outra se houver motivo concreto de carga.
+
+> **Nota histórica:** o **Amazon GameSparks** foi **descontinuado em set/2022**, derrubando jogos em produção. O **AWS GameKit** segue vivo e open-source (deploy por feature via CloudFormation: Cognito + Lambda + DynamoDB). O **GameLift FlexMatch** segue vivo.
+
+### Control plane (Go) vs data plane (Unity) — ADR a registrar
+
+A parte realtime do jogo (input, tick da partida, estado do mundo, física, snapshots, sincronização) **não é feita em Go**. Ela roda num **Unity Dedicated Server** (Netcode for GameObjects + Unity Transport), em **repo separado**. Go cuida do **control plane**; Unity cuida do **data plane**.
+
+| Plano | Responsável | Conteúdo |
+|---|---|---|
+| **Control plane** | Go (este repo) | auth, matchmaking, sessão, registry de servidores, persistência, leaderboard, achievements, analytics, resultado de partida |
+| **Data plane** | Unity Dedicated Server (repo separado) | input, tick, estado do mundo, movimento, colisão, combate, snapshots, sync realtime |
+
+Por que assim: reescrever netcode (prediction/reconciliation/interpolation, UDP, perda de pacote) em Go é R&D enorme e não é o que se faz em backend Go enterprise. E é **como o GameLift realmente funciona** — ele orquestra frota + matchmaking e roda o *seu* binário de servidor; não simula gameplay. Logo `matchmaking + session ≈ orquestração do GameLift`, e o Unity Dedicated Server = o build que você subiria nele.
+
+Serviços pagos da Unity (Relay, Lobby, Matchmaker, Multiplay) são **substituídos por serviços Go** + game server com IP/porta. Escala de game server: EC2/VPS/Docker → ECS-on-EC2 → **Agones/EKS** (equivalente open-source do GameLift, sem serviço pago). Coerente com o ADR-0008.
+
+### Filosofia de desenvolvimento
+
+Os serviços são desenvolvidos **um por um, conforme a necessidade** — às vezes com um jogo em paralelo testando a funcionalidade pronta antes de partir pro próximo. **A decisão de infra de cada serviço é tomada na hora de construí-lo**, não antecipadamente. Este roadmap levanta as opções e o raciocínio; a escolha concreta de compute por serviço sai no `plan.md` da feature correspondente (ver ADR-0005).
 
 ---
 
 ## Estrutura do Monorepo
 
+Monorepo de **módulo único** (um `go.mod` na raiz): cada serviço vira um binário independente e uma imagem Docker própria; o `shared` é um pacote interno. Simples e idiomático para começar, sem over-engineering. Migração para **multi-módulo + `go.work`** (a forma oficial/moderna) fica reservada para quando houver necessidade concreta — ex: versões de dependência divergentes entre serviços. Decisão registrada no **ADR-0001**.
+
 ```
-game-backend/                              ← raiz do monorepo
+game-backend/                              ← raiz do monorepo (módulo único)
+│
+├── go.mod                                 ← módulo único: github.com/c130n/game-backend
+├── go.sum
 │
 ├── services/
-│   ├── player-service/                    ← microsserviço: CRUD de jogadores
-│   │   ├── cmd/server/main.go
+│   ├── identity-service/                  ← ≈ GameKit Identity & Auth
+│   │   ├── cmd/server/main.go             ← entrypoint, wire-up de dependências
 │   │   ├── internal/
-│   │   │   ├── domain/                    ← tipos de negócio puros, sem dependências externas
-│   │   │   │   ├── player.go
-│   │   │   │   └── errors.go
-│   │   │   ├── service/                   ← regras de negócio (usa interfaces do domain)
-│   │   │   │   ├── player_service.go
-│   │   │   │   └── player_service_test.go
+│   │   │   ├── domain/                    ← tipos puros + interfaces (Ports). Zero deps externas
+│   │   │   ├── service/                   ← regras de negócio (só usa interfaces do domain)
 │   │   │   ├── repository/                ← acesso a dados (implementa interfaces do domain)
-│   │   │   │   ├── postgres_repository.go
-│   │   │   │   └── postgres_repository_test.go
-│   │   │   └── transport/                 ← handlers HTTP (entram, saem, não têm lógica)
-│   │   │       ├── http_handler.go
-│   │   │       └── http_handler_test.go
+│   │   │   └── transport/                 ← handlers HTTP/gRPC (só traduz, sem lógica)
 │   │   ├── migrations/                    ← SQL migrations versionadas
-│   │   ├── specs/                         ← SDD: specs antes do código
-│   │   │   ├── player-service.spec.md
-│   │   │   └── api-contract.md
-│   │   ├── Dockerfile
-│   │   └── go.mod
+│   │   ├── specs/                         ← SDD: pasta por feature (NNN-slug/)
+│   │   └── Dockerfile
 │   │
-│   ├── achievements-service/
-│   │   ├── cmd/server/main.go
-│   │   ├── internal/
-│   │   │   ├── domain/
-│   │   │   ├── service/
-│   │   │   ├── repository/
-│   │   │   └── transport/
-│   │   ├── migrations/
-│   │   ├── specs/
-│   │   ├── Dockerfile
-│   │   └── go.mod
+│   ├── achievements-service/              ← ≈ GameKit Achievements
+│   ├── player-data-service/               ← ≈ GameKit User Gameplay Data
+│   ├── cloud-save-service/                ← ≈ GameKit Game State Saving
+│   ├── leaderboard-service/               ← ≈ ref. arch DynamoDB/Redis
 │   │
-│   ├── analytics-service/
-│   │   ├── cmd/server/main.go
-│   │   ├── internal/
-│   │   │   ├── domain/
-│   │   │   ├── service/
-│   │   │   ├── repository/
-│   │   │   ├── transport/
-│   │   │   └── worker/                    ← goroutine workers assíncronos (exclusivo deste serviço)
-│   │   ├── specs/
-│   │   ├── Dockerfile
-│   │   └── go.mod
+│   ├── analytics-service/                 ← ≈ Game Analytics Pipeline
+│   │   └── internal/worker/               ← goroutine workers assíncronos (exclusivo deste serviço)
 │   │
-│   └── matchmaking-service/
-│       ├── cmd/server/main.go
-│       ├── internal/
-│       │   ├── domain/
-│       │   ├── service/
-│       │   ├── queue/                     ← fila com goroutines + channels
-│       │   └── transport/                 ← gRPC server (não HTTP)
-│       ├── proto/                         ← .proto definitions (local ao serviço)
-│       ├── specs/
-│       ├── Dockerfile
-│       └── go.mod
+│   ├── matchmaking-service/               ← ≈ GameLift FlexMatch
+│   │   ├── internal/queue/                ← fila com goroutines + channels
+│   │   ├── internal/transport/            ← gRPC server (não HTTP)
+│   │   └── proto/                         ← .proto definitions (local ao serviço)
+│   │
+│   └── session-service/                   ← ≈ GameLift orquestração de frota/sessão (control plane)
+│       └── internal/                      ← sessão, registry de game servers, connect token, resultado
+│                                            (realtime sim = Unity Dedicated Server, repo separado, não-Go)
 │
-├── shared/                                ← código compartilhado (apenas utilitários)
-│   ├── pkg/
-│   │   ├── logger/                        ← slog wrapper padronizado
-│   │   ├── middleware/                    ← auth, metrics, tracing
-│   │   ├── config/                        ← leitura de env vars
-│   │   └── telemetry/                     ← OpenTelemetry setup
-│   └── go.mod                             ← módulo separado: github.com/c130n/game-backend/shared
+├── shared/                                ← pacotes compartilhados (utilitários finos, sem go.mod próprio)
+│   ├── logger/                            ← slog wrapper padronizado
+│   ├── middleware/                        ← auth, metrics, tracing
+│   ├── config/                            ← leitura de env vars
+│   └── telemetry/                         ← OpenTelemetry setup
 │
 ├── infra/
 │   ├── terraform/
-│   │   ├── modules/                       ← módulos reutilizáveis
-│   │   │   ├── ecs-service/               ← ECS Fargate genérico, parametrizável por serviço
+│   │   ├── modules/                       ← módulos reutilizáveis por tipo de compute
+│   │   │   ├── ecs-service/               ← ECS Fargate genérico, parametrizável
+│   │   │   ├── lambda-service/            ← Lambda + API Gateway
+│   │   │   ├── eks-cluster/               ← (quando houver aplicação real — ADR-0005)
 │   │   │   ├── dynamodb/
 │   │   │   ├── sqs/
 │   │   │   ├── api-gateway/
 │   │   │   └── monitoring/                ← CloudWatch + Budgets
 │   │   ├── environments/
 │   │   │   ├── local/                     ← aponta para LocalStack
-│   │   │   │   └── main.tf
 │   │   │   └── prod/                      ← AWS real, state no S3
 │   │   │       ├── shared/                ← VPC, ECR, IAM (provisionado uma vez)
-│   │   │       ├── player-service/        ← infra isolada: ECS + DynamoDB
-│   │   │       ├── achievements-service/
-│   │   │       ├── analytics-service/     ← infra isolada: ECS + SQS (mais tasks, escala diferente)
-│   │   │       └── matchmaking-service/   ← infra isolada: ECS (conexões longas, gRPC)
+│   │   │       └── <cada-serviço>/        ← infra isolada, state independente por serviço
 │   │   └── shared-vars.tf
 │   └── docker/
 │       ├── docker-compose.yml             ← ambiente local completo
 │       └── prometheus.yml
 │
-├── docs/                                  ← documentação geral do projeto
+├── docs/
 │   ├── ROADMAP.md                         ← este arquivo
-│   ├── ARCHITECTURE.md                    ← decisões arquiteturais (ADRs)
-│   ├── adr/                               ← Architecture Decision Records
-│   │   ├── 001-monorepo.md
-│   │   ├── 002-hexagonal-arch.md
-│   │   └── 003-grpc-matchmaking.md
-│   └── sdd/                              ← guia SDD do projeto
+│   ├── ARCHITECTURE.md                    ← visão geral consolidada da arquitetura
+│   ├── adr/                               ← Architecture Decision Records (4 dígitos)
+│   │   ├── 0000-template.md
+│   │   ├── 0001-monorepo-structure.md
+│   │   ├── ...
+│   │   ├── ADR-GUIDE.md
+│   │   └── README.md                      ← índice de ADRs
+│   └── sdd/
 │       └── SDD-GUIDE.md
 │
 ├── .github/
-│   └── workflows/
-│       ├── ci-player.yml
-│       ├── ci-achievements.yml
-│       ├── ci-analytics.yml
-│       ├── ci-matchmaking.yml
-│       └── cd.yml                         ← deploy seletivo por serviço modificado
+│   └── workflows/                         ← CI por serviço + CD seletivo
 │
 ├── CLAUDE.md                              ← contexto do agente (raiz do monorepo)
 ├── AGENTS.md                              ← cross-tool (Cursor, Codex, etc.)
@@ -136,31 +160,38 @@ game-backend/                              ← raiz do monorepo
 
 ---
 
-## Arquitetura Interna de Cada Serviço — Hexagonal
+## Arquitetura Interna de Cada Serviço — Hexagonal idiomático em Go
 
-Todos os serviços seguem **Hexagonal Architecture** (Ports & Adapters), que é o padrão de mercado para microsserviços Go:
+Todos os serviços seguem **Hexagonal Architecture** (Ports & Adapters), aplicada com o idioma de Go — **não** com o peso do Clean Architecture do .NET. Decisão registrada no **ADR-0002**.
 
-```
-┌─────────────────────────────────────────────┐
-│                   transport/                │  ← Adapter de entrada (HTTP/gRPC)
-│         handler recebe request, chama       │
-│         service via interface (Port)        │
-└─────────────────┬───────────────────────────┘
-                  │ interface (Port)
-┌─────────────────▼───────────────────────────┐
-│                   service/                  │  ← Core: regras de negócio puras
-│         não conhece HTTP nem banco          │
-│         depende apenas de interfaces        │
-└─────────────────┬───────────────────────────┘
-                  │ interface (Port)
-┌─────────────────▼───────────────────────────┐
-│                 repository/                 │  ← Adapter de saída (banco, cache, SQS)
-│         implementa a interface do domain    │
-│         conhece SQL/DynamoDB/AWS SDK        │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    T["transport/ — Adapter de entrada (HTTP/gRPC)"]
+    S["service/ — Core: regras de negócio puras (não conhece HTTP nem banco)"]
+    R["repository/ — Adapter de saída (banco, cache, SQS)"]
+    T -->|interface Port de domain/| S
+    S -->|interface Port de domain/| R
 ```
 
-**Regra principal:** o `service/` nunca importa `transport/` nem `repository/` diretamente. Só trabalha com interfaces declaradas em `domain/`. Isso torna unit testing trivial — basta mockar a interface.
+**Regra principal:** o `service/` nunca importa `transport/` nem `repository/` diretamente. Só trabalha com interfaces declaradas em `domain/`.
+
+### Régua anti-interface-pollution (boa prática de Go)
+
+Vindo de .NET, o instinto é criar interface pra tudo. Go empurra no sentido oposto, e a interface é declarada **no consumidor**, não no produtor. Regra do projeto:
+
+> Uma interface só existe quando **(a)** é mockada em teste, **(b)** tem 2+ implementações reais, ou **(c)** cruza uma fronteira de I/O. Caso contrário, é struct concreta.
+
+Na prática: `PlayerRepository` ganha interface (é mockada no teste do service ✅). Uma interface `transport → service` só nasce se realmente formos isolar o service no teste do handler.
+
+### Como o hexagonal se dobra a cada formato de serviço
+
+| Serviço | Forma | Como o hexagonal acomoda |
+|---|---|---|
+| identity | REST + auth | adapters triviais, core fininho |
+| achievements | regras de desbloqueio | core gordo — onde o hexagonal mais brilha |
+| leaderboard | ranking real-time | repository = Redis/DynamoDB; core ordena |
+| analytics | pipeline assíncrono | consumidor SQS = driving adapter; worker pool no service; sink = driven adapter |
+| matchmaking | fila stateful + gRPC | gRPC stream = driving adapter; fila é o core de concorrência |
 
 ### Exemplo em código
 
@@ -169,37 +200,21 @@ Todos os serviços seguem **Hexagonal Architecture** (Ports & Adapters), que é 
 package domain
 
 type Player struct {
-    ID       string
-    Name     string
-    Rating   int
+    ID        string
+    Name      string
+    Rating    int
     CreatedAt time.Time
 }
 
-// Port de saída — interface que o service usa
+// Port de saída — interface declarada onde é consumida (no service)
 type PlayerRepository interface {
     FindByID(ctx context.Context, id string) (*Player, error)
     Save(ctx context.Context, p *Player) error
-}
-
-// Port de entrada — interface que o transport usa
-type PlayerService interface {
-    GetPlayer(ctx context.Context, id string) (*Player, error)
-    CreatePlayer(ctx context.Context, name string) (*Player, error)
 }
 ```
 
 ```go
 // service/player_service.go — regras de negócio
-package service
-
-type playerService struct {
-    repo domain.PlayerRepository  // injeta a interface, não a implementação
-}
-
-func NewPlayerService(repo domain.PlayerRepository) domain.PlayerService {
-    return &playerService{repo: repo}
-}
-
 func (s *playerService) CreatePlayer(ctx context.Context, name string) (*domain.Player, error) {
     if name == "" {
         return nil, domain.ErrInvalidName  // erro de domínio, não HTTP
@@ -211,16 +226,13 @@ func (s *playerService) CreatePlayer(ctx context.Context, name string) (*domain.
 
 ```go
 // transport/http_handler.go — só traduz HTTP ↔ domínio
-package transport
-
 func (h *Handler) CreatePlayer(w http.ResponseWriter, r *http.Request) {
     var req CreatePlayerRequest
     json.NewDecoder(r.Body).Decode(&req)
 
     player, err := h.service.CreatePlayer(r.Context(), req.Name)
     if err != nil {
-        // mapeia erros de domínio → HTTP status codes
-        writeError(w, err)
+        writeError(w, err)  // mapeia erro de domínio → HTTP status
         return
     }
     writeJSON(w, http.StatusCreated, player)
@@ -231,31 +243,16 @@ func (h *Handler) CreatePlayer(w http.ResponseWriter, r *http.Request) {
 
 ## Boas Práticas Go Adotadas
 
-### Tratamento de erros
+### Tratamento de erros — sempre wrappado com contexto
 ```go
-// NUNCA: ignorar erro
-result, _ := service.DoSomething()
-
-// SEMPRE: tratar explicitamente
 result, err := service.DoSomething()
 if err != nil {
-    return fmt.Errorf("player service: do something: %w", err)  // wrapping com contexto
+    return fmt.Errorf("player service: do something: %w", err)
 }
 ```
 
-### Interfaces pequenas (Go idiomático)
+### Interfaces pequenas, compostas quando necessário
 ```go
-// RUIM: interface gigante difícil de mockar
-type PlayerRepository interface {
-    FindByID(...) (*Player, error)
-    FindByName(...) (*Player, error)
-    Save(...) error
-    Delete(...) error
-    List(...) ([]*Player, error)
-    // ...10 métodos mais
-}
-
-// BOM: interfaces pequenas, compostas quando necessário
 type PlayerFinder interface {
     FindByID(ctx context.Context, id string) (*Player, error)
 }
@@ -266,28 +263,21 @@ type PlayerWriter interface {
 
 ### Context em toda chamada I/O
 ```go
-// Toda função que faz I/O (banco, HTTP, gRPC) recebe ctx como primeiro parâmetro
 func (r *repository) FindByID(ctx context.Context, id string) (*domain.Player, error) {
     // ctx carrega: deadline, cancelamento, tracing
 }
 ```
 
-### Logging estruturado (slog — padrão desde Go 1.21)
+### Logging estruturado (slog, JSON)
 ```go
-logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 logger.Info("player created",
     slog.String("player_id", player.ID),
-    slog.String("name", player.Name),
     slog.Duration("latency", time.Since(start)),
 )
 ```
 
-### Goroutines — sempre com context e WaitGroup
+### Goroutines — sempre com context + WaitGroup
 ```go
-// NUNCA: goroutine solta sem controle de lifecycle
-go processEvent(event)
-
-// SEMPRE: com context + WaitGroup para graceful shutdown
 func (w *Worker) Start(ctx context.Context) {
     var wg sync.WaitGroup
     for i := 0; i < w.concurrency; i++ {
@@ -302,327 +292,182 @@ func (w *Worker) Start(ctx context.Context) {
 ```
 
 ### Testes
-- Unit tests com `testing` nativo + `testify/assert`
-- Mocks com `testify/mock` ou `gomock`
-- Testes de integração com `testcontainers-go` (sobe banco real em Docker)
+- Unit tests com `testing` nativo + `testify/assert`; mocks com `testify/mock`
+- Integração com `testcontainers-go` (sobe banco real em Docker)
+- Sempre rodar com `-race`
 - Nomenclatura: `TestNomeDaFuncao_Cenario_ResultadoEsperado`
-
-```go
-func TestCreatePlayer_EmptyName_ReturnsError(t *testing.T) {
-    mockRepo := new(MockPlayerRepository)
-    svc := service.NewPlayerService(mockRepo)
-
-    _, err := svc.CreatePlayer(context.Background(), "")
-
-    assert.ErrorIs(t, err, domain.ErrInvalidName)
-    mockRepo.AssertNotCalled(t, "Save")
-}
-```
+- Cobertura mínima: 80% em `service/` e `domain/`
 
 ---
 
 ## Spec-Driven Development (SDD)
 
-### O que é
-
-SDD é a metodologia onde a **spec é a fonte de verdade**, não o código. O fluxo é:
+A **spec é a fonte de verdade**, não o código. Fluxo em cascata, um artefato por fase:
 
 ```
-1. SPEC    → descreve O QUE o sistema faz (comportamento, contratos, regras)
-2. PLAN    → descreve COMO implementar (tarefas atômicas derivadas da spec)
-3. CODE    → gerado/escrito a partir do plan
-4. TEST    → verifica que o código satisfaz a spec
+spec.md  →  plan.md  →  tasks.md  →  código  →  testes
+(O QUE)     (COMO)      (trabalho)
 ```
 
-O agente de IA (Claude Code) trabalha a partir das specs, não de descrições vagas. Isso produz código consistente com a intenção original e evita drift entre requisito e implementação.
-
-### Estrutura de uma Spec
-
-Cada microsserviço tem sua pasta `specs/` com:
+Cada feature é uma **pasta numerada por serviço** dentro de `specs/`:
 
 ```
-services/player-service/specs/
-├── player-service.spec.md     ← spec de comportamento (EARS format)
-├── api-contract.md            ← contrato da API (OpenAPI-like em markdown)
-└── data-model.md              ← modelo de dados e invariantes
+services/identity-service/specs/
+├── 001-account-auth/
+│   ├── spec.md      ← comportamento em EARS (O QUE)
+│   ├── plan.md      ← decisões técnicas, arquivos, compute (COMO)
+│   └── tasks.md     ← tarefas atômicas, marcadas [x] conforme implementa
+└── 002-session-jwt/
+    └── ...
 ```
 
-### Formato EARS para regras (usado nas specs)
-
-EARS (Easy Approach to Requirements Syntax) elimina ambiguidade:
-
-```markdown
-## Regras de Negócio — Player
-
-- WHEN um novo jogador é criado, the system SHALL atribuir rating inicial de 1000
-- IF o nome estiver vazio, the system SHALL retornar ErrInvalidName
-- WHEN um jogador é buscado por ID inexistente, the system SHALL retornar ErrNotFound
-- THE SYSTEM SHALL rejeitar nomes com menos de 2 ou mais de 50 caracteres
-```
-
-### Exemplo de spec completa
-
-```markdown
-# Spec: Player Service
-
-## Contexto
-Microsserviço responsável por criação, leitura e atualização de perfis de jogadores.
-
-## Comportamento
-
-### Criar jogador
-- WHEN POST /players com nome válido → retorna 201 + player criado
-- IF nome vazio ou < 2 chars → retorna 400 com ErrInvalidName
-- IF nome > 50 chars → retorna 400 com ErrNameTooLong
-- THE SYSTEM SHALL garantir unicidade de nome (case-insensitive)
-
-### Buscar jogador
-- WHEN GET /players/:id com ID existente → retorna 200 + player
-- IF ID não existir → retorna 404 com ErrNotFound
-- IF ID mal formatado → retorna 400 com ErrInvalidID
-
-## Contratos de Interface
-
-### PlayerRepository (Port de saída)
-- FindByID(ctx, id) → (*Player, error)
-- FindByName(ctx, name) → (*Player, error)
-- Save(ctx, player) → error
-
-## Casos de Teste Obrigatórios
-- [ ] CreatePlayer com nome válido → sucesso
-- [ ] CreatePlayer com nome vazio → ErrInvalidName
-- [ ] CreatePlayer com nome duplicado → ErrDuplicateName
-- [ ] GetPlayer com ID existente → sucesso
-- [ ] GetPlayer com ID inexistente → ErrNotFound
-```
-
-### Fluxo de trabalho com Claude Code
-
-```
-1. Você escreve ou refina a spec em specs/*.spec.md
-2. Você abre Claude Code e diz: "Implemente o player-service seguindo a spec em specs/player-service.spec.md"
-3. Claude lê a spec + CLAUDE.md e gera o código alinhado com a arquitetura
-4. Claude gera os testes a partir dos "Casos de Teste Obrigatórios" da spec
-5. Se comportamento mudar: edite a spec → peça ao Claude para atualizar o código
-```
+Guia completo e formato EARS: `docs/sdd/SDD-GUIDE.md`.
 
 ---
 
-## Infraestrutura com Terraform
+## Infraestrutura — Terraform + LocalStack
 
-### Princípio: cada serviço tem estado Terraform independente
+Decisão registrada no **ADR-0004**. Cada serviço tem **estado Terraform independente**.
 
-```
-infra/terraform/environments/prod/
-├── shared/          → terraform init + apply (uma vez, VPC + ECR + IAM)
-├── player-service/  → terraform init + apply (independente)
-├── analytics-service/ → terraform init + apply (independente, mais tasks)
-└── matchmaking-service/ → terraform init + apply (independente, gRPC)
-```
+- **Local:** LocalStack (DynamoDB, SQS, Lambda, ECR) — provider AWS apontando para `http://localhost:4566`.
+- **Prod:** AWS real, state no S3. `shared/` (VPC, ECR, IAM) provisionado uma vez; cada serviço aplicado de forma isolada.
 
-### Local com LocalStack
+### Framework de compute por serviço (ADR-0005)
 
-```hcl
-# environments/local/main.tf
-provider "aws" {
-  access_key                  = "test"
-  secret_key                  = "test"
-  region                      = "us-east-1"
-  skip_credentials_validation = true
-  skip_metadata_api_check     = true
-  skip_requesting_account_id  = true
-  endpoints {
-    dynamodb = "http://localhost:4566"
-    sqs      = "http://localhost:4566"
-    lambda   = "http://localhost:4566"
-  }
-}
-```
+Não há padronização forçada. A escolha de compute é feita **por serviço, na hora de construí-lo**, a partir deste cardápio e dos critérios abaixo:
 
-### Escalabilidade independente por serviço
+| Compute | Sweet spot | Evitar quando |
+|---|---|---|
+| **Lambda** | request/response stateless, bursty, escala a zero | conexões longas, streaming, estado em memória, processamento contínuo |
+| **ECS Fargate** | serviço long-running/stateful, sem gerenciar instância | — (default seguro) |
+| **ECS-on-EC2** | controle de instância, custo em escala | quando não precisa gerenciar o metal |
+| **EC2 puro** | controle total, instance types específicos | undifferentiated heavy lifting sem necessidade |
+| **EKS / Kubernetes** | quando houver aplicação real de cluster | usar "por usar" — só com justificativa concreta |
 
-| Serviço | CPU/Mem | Min tasks | Max tasks | Métrica de escala |
-|---|---|---|---|---|
-| player-service | 256/512 | 1 | 3 | CPU % |
-| achievements-service | 256/512 | 1 | 5 | Request count |
-| analytics-service | 512/1024 | 1 | 10 | SQS queue depth |
-| matchmaking-service | 512/1024 | 1 | 8 | Conexões ativas |
+> Critério rápido: worker always-on → ECS/EC2; disparado por evento/SQS em rajada → Lambda; streaming/stateful → ECS/EKS; CRUD stateless → Lambda.
+
+### Escalabilidade independente por serviço (referência inicial, ajustável)
+
+| Serviço | Min tasks | Max tasks | Métrica de escala |
+|---|---|---|---|
+| identity-service | 0 (Lambda) | — | concorrência Lambda |
+| achievements-service | 0 (Lambda) | — | concorrência Lambda |
+| player-data-service | 0 (Lambda) | — | concorrência Lambda |
+| cloud-save-service | 0 (Lambda) | — | concorrência Lambda |
+| leaderboard-service | 1 | 5 | CPU % / latência |
+| analytics-service | 1 | 10 | SQS queue depth |
+| matchmaking-service | 1 | 8 | conexões ativas |
+| session-service | 1 | 5 | sessões/partidas ativas |
 
 ---
 
-## Ambiente Local com Docker Compose
+## Observabilidade — instrumento da tese de comparação
 
-```yaml
-services:
-  player-service:
-    build: ../../services/player-service
-    ports: ["8081:8080"]
-    environment:
-      DB_HOST: postgres
-      AWS_ENDPOINT: http://localstack:4566
+A stack de observabilidade não é enfeite: é **o instrumento que mede o trade-off** Go self-hosted vs. AWS gerenciado. Decisão Prometheus+Grafana no **ADR-0006**.
 
-  achievements-service:
-    build: ../../services/achievements-service
-    ports: ["8082:8080"]
-
-  analytics-service:
-    build: ../../services/analytics-service
-    ports: ["8083:8080"]
-
-  matchmaking-service:
-    build: ../../services/matchmaking-service
-    ports: ["50051:50051"]
-
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: gamebackend
-      POSTGRES_USER: dev
-      POSTGRES_PASSWORD: dev
-
-  localstack:
-    image: localstack/localstack
-    ports: ["4566:4566"]
-    environment:
-      SERVICES: sqs,dynamodb,lambda,ecr
-
-  prometheus:
-    image: prom/prometheus
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports: ["9090:9090"]
-
-  grafana:
-    image: grafana/grafana
-    ports: ["3000:3000"]
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    volumes:
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-```
-
----
-
-## Observabilidade com Grafana
-
-### Três pilares obrigatórios
-
-1. **Logs** — `slog` com JSON handler → CloudWatch / Grafana Loki
-2. **Métricas** — Prometheus client Go → Grafana dashboards
+### Três pilares
+1. **Logs** — `slog` JSON → CloudWatch / Grafana Loki
+2. **Métricas** — Prometheus client Go → Grafana
 3. **Traces** — OpenTelemetry → Grafana Tempo (ou AWS X-Ray)
 
-### Métricas por serviço no Grafana
+### Métricas que alimentam a comparação
 
 | Dashboard | Métricas |
 |---|---|
 | API Overview | RPS, latência p50/p95/p99, error rate por serviço |
-| Matchmaking | Tamanho da fila, tempo médio de espera, partidas formadas/min |
-| Analytics | Eventos recebidos/s, eventos processados/s, lag da fila SQS |
-| Go Runtime | Goroutines ativas, heap usage, GC pause duration |
-| AWS FinOps | Custo por serviço (via CloudWatch Billing) |
+| Matchmaking | tamanho da fila, tempo médio de espera, partidas formadas/min |
+| Leaderboard | latência de ranking, throughput de updates |
+| Analytics | eventos recebidos/s, processados/s, lag da fila |
+| Go Runtime | goroutines, heap, GC pause |
+| FinOps / Comparação | custo $/serviço vs. estimativa do equivalente AWS gerenciado |
 
 ---
 
-## CI/CD com GitHub Actions
+## Práticas transversais — desde o serviço 1
 
-### CI por serviço (roda em paralelo)
+**Observabilidade nasce com cada serviço.** O primeiro serviço já sobe instrumentado (slog JSON + métricas Prometheus + traces OpenTelemetry) e com o stack local (Prometheus + Grafana no docker-compose). Cada serviço novo adiciona a própria instrumentação de forma **incremental** — observabilidade não é uma fase no fim, é requisito de nascença. Dashboards Grafana específicos de Go (goroutines, GC, heap, latência p50/p95/p99) serão pesquisados/adaptados ao montar o serviço 1. (ADR-0006)
 
-```yaml
-# .github/workflows/ci-player.yml
-on:
-  push:
-    paths: ["services/player-service/**"]
+**Estratégia de testes em camadas:**
+- **Unit** (`testify`) — desde o serviço 1; cobre os Casos de Teste Obrigatórios da spec.
+- **Integração** (`testcontainers-go`) — banco/dependências reais em container; entra cedo, por serviço.
+- **E2E de sessão real** (meta futura) — subir um binário/jogo que abre uma sessão real em container e capturar as validações, eliminando teste manual.
+- **Infra como código testada** (Terratest / TaC) — validar os módulos Terraform à medida que a fase de infra avança.
 
-jobs:
-  test:
-    steps:
-      - uses: actions/setup-go@v5
-        with: {go-version: '1.22'}
-      - run: cd services/player-service && go test ./... -v -race -cover
-      - run: cd services/player-service && go build ./cmd/server/...
-```
+## CI/CD — GitHub Actions
 
-### CD seletivo — só deploya o que mudou
-
-```yaml
-# .github/workflows/cd.yml
-jobs:
-  detect-changes:
-    outputs:
-      player:       ${{ steps.changes.outputs.player }}
-      analytics:    ${{ steps.changes.outputs.analytics }}
-      matchmaking:  ${{ steps.changes.outputs.matchmaking }}
-    steps:
-      - uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            player:       ["services/player-service/**"]
-            analytics:    ["services/analytics-service/**"]
-            matchmaking:  ["services/matchmaking-service/**"]
-
-  deploy-analytics:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.analytics == 'true'
-    # build → ECR → ECS update apenas do analytics-service
-```
+- **CI por serviço** (paralelo): roda em `push` filtrado por `services/<nome>/**` — `go test ./... -race -cover` + `go build`.
+- **CD seletivo**: só deploya o serviço que mudou (via `dorny/paths-filter`), respeitando o compute escolhido para cada um.
 
 ---
 
 ## FinOps — Controle de Custo
 
-| Serviço AWS | Uso | Estimativa/mês |
-|---|---|---|
-| ECS Fargate | 4 serviços × tarefa mínima | ~$15–25 |
-| DynamoDB on-demand | Baixo volume inicial | ~$1–3 |
-| SQS | analytics events | Gratuito (< 1M/mês) |
-| API Gateway | REST endpoints | ~$3–5 |
-| ECR | imagens Docker | ~$1 |
-| CloudWatch | logs + alarms | ~$2–3 |
-| **Total estimado** | **fase de estudo** | **~$22–37/mês** |
+Budget AWS via Terraform, alerta em 80% de **$40/mês**. Mover serviços stateless para Lambda tende a **abaixar** o custo vs. tudo-em-Fargate (free tier + escala a zero). Estimativa de partida (fase de estudo): **~$20–37/mês**, variando conforme o mix de compute.
 
-**AWS Budget configurado via Terraform com alerta em 80% de $40/mês.**
+A coluna de custo de cada serviço alimenta diretamente a **comparação com o equivalente AWS gerenciado** — que costuma ser ordens de magnitude mais caro para volumes baixos.
 
 ---
 
 ## Roadmap de Estudo — Fases
 
-### Fase 1 — Fundamentos Go (2–3 semanas)
-- [ ] Tour of Go + Go by Example
-- [ ] Structs, interfaces, ponteiros, error handling
+> Durações são estimativas, ajustáveis. Os serviços são construídos **um por um, conforme a necessidade** — a ordem abaixo é de complexidade crescente, não um compromisso rígido de cronograma.
+
+### Fase 0 — Fundação de docs e arquitetura
+- [ ] ADRs iniciais (0001–0008) + índice `docs/adr/README.md`
+- [ ] `docs/ARCHITECTURE.md` com a visão consolidada
+- [ ] Scaffold do monorepo: `go.work`, `shared/`, estrutura base
+
+### Fase 1 — Fundamentos Go
+- [ ] Tour of Go + Go by Example; structs, interfaces, ponteiros, errors
 - [ ] Unit tests com `testing` + `testify`
-- [ ] Primeira spec: `player-service.spec.md`
+- [ ] Primeira spec: `identity-service/specs/001-account-auth/spec.md`
 
-### Fase 2 — Player Service + Hexagonal Arch (3–4 semanas)
+### Fase 2 — identity-service (≈ GameKit Identity) + Hexagonal
 - [ ] Estrutura hexagonal: domain / service / repository / transport
-- [ ] API REST com `net/http` puro
-- [ ] PostgreSQL com `pgx`
-- [ ] Docker Compose local
-- [ ] CI no GitHub Actions
+- [ ] API REST com `net/http`; auth/JWT; PostgreSQL com `pgx`
+- [ ] Docker Compose local; CI no GitHub Actions
 
-### Fase 3 — Terraform + LocalStack (2 semanas)
+### Fase 3 — Terraform + LocalStack + primeiro compute
 - [ ] Terraform básico: providers, resources, modules, state
-- [ ] LocalStack: DynamoDB + SQS
-- [ ] Módulo reutilizável `ecs-service`
-- [ ] Ambiente prod na AWS
+- [ ] LocalStack: DynamoDB + SQS; módulo reutilizável (`lambda-service` ou `ecs-service`)
+- [ ] Deploy do identity-service na AWS
 
-### Fase 4 — Analytics + Goroutines (2–3 semanas)
-- [ ] Worker pool com goroutines + channels
-- [ ] `context` com cancelamento e deadline
-- [ ] Integração SQS via AWS SDK Go v2
-- [ ] Métricas Prometheus + dashboard Grafana
+### Fase 4 — achievements-service (≈ GameKit Achievements)
+- [ ] Domínio rico: desbloqueio por evento, progresso parcial
+- [ ] Segundo serviço Lambda; **auth entre serviços** (valida JWT da identity)
 
-### Fase 5 — CI/CD completo (1–2 semanas)
-- [ ] CD seletivo por serviço
-- [ ] Build Docker + push ECR
-- [ ] Deploy ECS Fargate
-- [ ] AWS Budgets + CloudWatch Alarms
+### Fase 5 — player-data-service (≈ GameKit User Gameplay Data)
+- [ ] CRUD de inventário/stats, persistência cross-play; modelagem de dados
+- [ ] Decisão de DB no `plan.md`: gerenciado (DynamoDB) vs. auto-provisionado
 
-### Fase 6 — Matchmaking gRPC (3–4 semanas)
-- [ ] Protobuf: definir `.proto`, gerar código Go
-- [ ] gRPC server com streaming bidirecional
-- [ ] Fila de matchmaking com goroutines + channels
-- [ ] Testes de integração gRPC
+### Fase 6 — cloud-save-service (≈ GameKit Game State Saving)
+- [ ] Blob versionado, sincronização, resolução de conflito; storage (S3)
+
+### Fase 7 — leaderboard-service (≈ ref. arch DynamoDB/Redis)
+- [ ] Ranking em tempo real; sorted sets (Redis/ElastiCache) ou DynamoDB GSI
+- [ ] Primeiro serviço always-on (Fargate); dashboard de latência no Grafana
+
+### Fase 8 — matchmaking-service (≈ GameLift FlexMatch)
+- [ ] Protobuf + gRPC server com streaming bidirecional
+- [ ] Pool de tickets, rules engine, agrupamento por latência, relaxamento progressivo
+- [ ] Fila stateful com goroutines + channels; testes de integração gRPC
+- [ ] Avaliar EKS (cluster, conexões longas)
+
+### Fase 9 — analytics-service (≈ Game Analytics Pipeline) — prioridade menor
+- [ ] Worker pool com goroutines + channels; `context` com cancelamento/deadline
+- [ ] Ingestão via SQS (AWS SDK Go v2); métricas Prometheus
+- [ ] Posição flexível: pode ser antecipada se houver necessidade de telemetria
+
+### Fase 10 — session-service + realtime (control/data plane) — capstone final
+- [ ] `session-service` (Go, Fargate): ciclo de sessão, registry de game servers, connect token, ingestão de resultado
+- [ ] **Data plane = Unity Dedicated Server** (Netcode for GameObjects + Transport), repo separado — não-Go
+- [ ] Fluxo: matchmaking forma partida → session aloca game server → token → Unity conecta → resultado volta pro backend Go
+- [ ] Escala de game server: EC2/VPS/Docker → ECS-on-EC2 → avaliar Agones/EKS (open-source, sem serviço pago)
+
+### Fase 11 — Comparação Go vs. AWS (entregável de tese)
+- [ ] Coletar custo/latência/throughput de cada serviço
+- [ ] Comparar com a estimativa do equivalente AWS gerenciado
+- [ ] Documentar conclusões
 
 ---
 
@@ -633,11 +478,14 @@ jobs:
 | Tour of Go | tour.golang.org |
 | Go by Example | gobyexample.com |
 | Effective Go | go.dev/doc/effective_go |
-| golang-standards/project-layout | github.com/golang-standards/project-layout |
+| Go Workspaces (go.work) | go.dev/doc/tutorial/workspaces |
 | AWS SDK Go v2 | pkg.go.dev/github.com/aws/aws-sdk-go-v2 |
 | gRPC Go | grpc.io/docs/languages/go |
+| AWS GameLift FlexMatch | docs.aws.amazon.com/gameliftservers/latest/flexmatchguide |
+| AWS GameKit | docs.aws.amazon.com/gamekit |
+| AWS Game Analytics Pipeline | aws.amazon.com/blogs/gametech |
 | LocalStack | docs.localstack.cloud |
 | Terraform AWS Provider | registry.terraform.io/providers/hashicorp/aws |
 | Prometheus Go Client | prometheus.io/docs/guides/go-application |
 | OpenTelemetry Go | opentelemetry.io/docs/languages/go |
-| SDD Guide (Thoughtworks) | thoughtworks.com/insights/blog/spec-driven-development |
+| SDD (GitHub Spec Kit) | github.com/github/spec-kit |
