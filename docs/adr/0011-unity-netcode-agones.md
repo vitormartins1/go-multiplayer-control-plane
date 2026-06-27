@@ -37,7 +37,9 @@ Data plane usa **Netcode for GameObjects + Unity Transport + Dedicated Server bu
 - Curva de aprendizado da Unity multiplayer; operar Agones/EKS quando escalar; Netcode for GameObjects menos performático que ECS.
 
 ### Neutras / Implicações
-- Unity Client e Dedicated Server vivem em repo(s) separado(s); contrato com o backend via `.proto`.
+- Unity Client e Dedicated Server são **o mesmo projeto Unity** (2 build targets: client com gráficos + server headless), num repo separado do backend Go — ~2 repos no total. Contrato com o backend via `.proto`.
+- O Go **não** participa do loop realtime por tick; só do control plane e de chamadas fora do caminho crítico (token, heartbeat, resultado). Ver ADR-0010.
+- A infra do Dedicated Server na AWS (deploy, fleet, alocação por sessão) e um template reutilizável para outros jogos são trabalho futuro (backlog).
 
 ## Referências
 - Unity Netcode for GameObjects / Unity Transport — docs.unity3d.com

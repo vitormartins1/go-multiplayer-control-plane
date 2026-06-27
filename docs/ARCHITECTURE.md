@@ -46,6 +46,27 @@ flowchart TB
 
 Serviços pagos (Unity Relay/Lobby/Matchmaker/Multiplay, AWS GameLift/GameKit gerenciados) são **substituídos por serviços Go** + game server com IP/porta. Escala de game server: EC2/VPS → ECS-on-EC2 → **Agones/EKS** (open-source). (ADR-0011)
 
+### Onde o Go entra (e onde NÃO entra) no gameplay
+
+Durante a partida em tempo real, **o Go não participa**. A simulação autoritativa (input, tick, física, colisão, estado do mundo) roda inteira no Unity Dedicated Server, falando direto com os clients por UDP. O Go atua **em volta** da partida (control plane) e em chamadas **fora do caminho de tick** (validar token, heartbeat, resultado) — nunca no loop por frame, onde um salto extra só adicionaria latência.
+
+```mermaid
+flowchart LR
+    Client["Unity Client"]
+    Server["Unity Dedicated Server<br/>(headless, autoritativo)"]
+    Go["Go backend<br/>(control plane)"]
+
+    Client <-->|"UDP realtime · por tick · SEM Go"| Server
+    Client -->|"HTTP/gRPC · login, matchmaking, leaderboard"| Go
+    Server -->|"HTTP/gRPC · valida token, heartbeat, resultado"| Go
+```
+
+> Nuance: o host realtime ser Unity vale para jogos com física/ação (o server precisa rodar a MESMA simulação do client). Para jogos turn-based/baixa frequência (cartas, tabuleiro), um serviço Go poderia hospedar a lógica da partida diretamente, sem Unity Dedicated Server — matchmaking e session continuam iguais; só muda o "host da partida".
+
+### Repos: 2 no total
+
+Client e Dedicated Server são **o mesmo projeto Unity** (dois build targets: client com gráficos, server headless) — compartilham o código de jogo (NetworkBehaviours, mundo, regras). Logo: **2 repos** — `go-game-backend` (este) e `game-unity` (projeto Unity), com contrato via `.proto`. A infra de deploy do Dedicated Server na AWS e um **template reutilizável** para outros jogos são trabalho de backlog. (ADR-0011)
+
 ---
 
 ## 3. Mapa de serviços (control plane)
