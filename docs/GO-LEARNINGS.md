@@ -90,3 +90,63 @@ func (r *Registry) Allocate(region string) (*GameServer, error) {
 - Postgres: `UPDATE servers SET state='allocated' WHERE id=$1 AND state='ready' RETURNING *` — se não voltar linha, já estava ocupado.
 
 Ou seja: o conceito (ler-e-reivindicar atômico) é o mesmo; só muda **onde** a atomicidade é garantida — no mutex local ou no banco distribuído.
+
+---
+
+## 02 — Assinatura assimétrica com `crypto/ed25519` (connect token)
+
+**O que é / por que importa:** assinar dados de forma que **só o backend** (chave privada) consiga produzir uma assinatura válida, mas **qualquer um com a chave pública** consiga verificar — sem segredo compartilhado. Ed25519 é rápido, tem chaves pequenas e está na biblioteca padrão do Go.
+
+**Onde no projeto:** `session-service` cunha o connect token assinado; o Unity Dedicated Server verifica com a chave pública (offline, sem chamar o backend). Ver `docs/ARCHITECTURE.md` §7 "Connect token".
+
+```go
+package token
+
+import (
+	"crypto/ed25519"
+	"encoding/json"
+	"errors"
+	"time"
+)
+
+var (
+	ErrBadSignature = errors.New("token: assinatura inválida")
+	ErrExpired      = errors.New("token: expirado")
+)
+
+type ConnectToken struct {
+	PlayerID string    `json:"sub"`
+	MatchID  string    `json:"match_id"`
+	Server   string    `json:"server"`
+	Expiry   time.Time `json:"exp"`
+}
+
+// Sign serializa os claims e assina com a chave privada (fica só no backend).
+func Sign(priv ed25519.PrivateKey, t ConnectToken) (payload, sig []byte, err error) {
+	payload, err = json.Marshal(t)
+	if err != nil {
+		return nil, nil, err
+	}
+	sig = ed25519.Sign(priv, payload)
+	return payload, sig, nil
+}
+
+// Verify roda no game server: confere a assinatura com a chave PÚBLICA
+// e a expiração. A assinatura prova autenticidade; cabe ao chamador ainda
+// checar match_id/server contra a partida que ele hospeda (autorização).
+func Verify(pub ed25519.PublicKey, payload, sig []byte) (*ConnectToken, error) {
+	if !ed25519.Verify(pub, payload, sig) {
+		return nil, ErrBadSignature
+	}
+	var t ConnectToken
+	if err := json.Unmarshal(payload, &t); err != nil {
+		return nil, err
+	}
+	if time.Now().After(t.Expiry) {
+		return nil, ErrExpired
+	}
+	return &t, nil
+}
+```
+
+**Pegadinha / nuance:** a chave **privada nunca sai do backend**; o game server só recebe a **pública** (via config ou um endpoint JWKS da identity-service). Em produção, em vez de `payload`+`sig` separados, costuma-se empacotar como **JWT com `EdDSA`** (uma string `header.payload.signature`) — mesma criptografia, formato padrão que o lado C#/Unity também lê.

@@ -51,6 +51,8 @@ Visão de alto nível; endpoints/proto concretos são `(TODO)` conforme os servi
 6. Dedicated Server **valida o token** contra a identity/session.
 7. Fim da partida: Dedicated Server → backend reporta **resultado** → leaderboard/achievements/analytics.
 
+> O **connect token** (passos 4–6) é um JWT assinado em Ed25519 pelo backend e validado **localmente** pelo Dedicated Server, sem round-trip. No NGO viaja no payload de *connection approval*. Detalhes em [ARCHITECTURE.md](ARCHITECTURE.md) §7 e [GO-LEARNINGS.md](GO-LEARNINGS.md) §02.
+
 ## Como o Agones se encaixa (orquestração de game servers — ADR-0012)
 
 - Agones é o orquestrador **desde o início**. Roda em **k3s (homelab, Raspberry Pi 5 ARM64)** no dev e em **EKS sob demanda** na nuvem. Os game servers rodam como `GameServer` dentro de um `Fleet`.

@@ -205,6 +205,27 @@ Onde roda (ADR-0012):
 
 > O claim atômico Ready→Allocated passa a ser responsabilidade do Agones, não do session-service. O exemplo em Go (`GO-LEARNINGS.md` §01) permanece como **estudo de concorrência**; a concorrência de produção vive no matchmaking (pool de tickets).
 
+### Connect token
+
+Ao alocar a sessão, o session-service também cunha um **connect token** — o ingresso criptográfico que o jogador apresenta ao Unity Dedicated Server. Ele prova *"este jogador foi autorizado a entrar nesta partida, neste server, dentro de uma janela curta"*, impedindo que alguém conecte direto no IP:porta sem passar pelo matchmaking.
+
+Claims (JWT):
+
+```json
+{
+  "sub": "player-abc123",     // quem
+  "match_id": "match-xyz789", // qual partida
+  "server": "10.0.0.5:7777",  // vale só para este server
+  "iat": 1719500000,
+  "exp": 1719500060,          // ~60s
+  "jti": "nonce-uuid"         // anti-reuso
+}
+```
+
+Assinatura **assimétrica (Ed25519)**: o backend assina com a **chave privada** (nunca sai dele); o game server verifica com a **chave pública**, **localmente, sem round-trip ao backend** a cada conexão. No Netcode for GameObjects, o token viaja no payload de *connection approval*, validado no callback de aprovação do server. Implementação em `GO-LEARNINGS.md` §02.
+
+Não confundir com o **JWT de identidade** (emitido pela identity-service, prova "sou o jogador X" para o backend, vida longa): o connect token é de **uma entrada só**, curtíssimo, e prova autorização para uma partida específica ao *game server*.
+
 ---
 
 ## 8. Observabilidade como instrumento da tese
