@@ -1,241 +1,325 @@
 # SDD-GUIDE.md — Spec-Driven Development no game-backend
 
-## O que é SDD
-
-Spec-Driven Development é a metodologia onde a **spec é a fonte de verdade**, não o código.
-O agente de IA (Claude Code, Cursor, etc.) implementa a partir da spec, não de instruções vagas.
-
-```
-SPEC → PLAN → CODE → TEST → (repeat se spec mudar)
-```
-
-**Princípio central:** o código é o detalhe de implementação da spec. Quando o requisito muda, você edita a spec — e regenera o código que precisa mudar.
-
-## Por que usar SDD aqui
-
-- O agente sempre sabe o comportamento esperado antes de escrever código
-- Testes são derivados diretamente dos casos listados na spec
-- Drift entre intenção e implementação é detectado na review da spec, não em produção
-- Múltiplos serviços mantêm coerência porque todos partem do mesmo formato
-
-## Fluxo de trabalho
-
-### 1. Escrever a spec (você + Claude em modo planejamento)
-
-Antes de qualquer código:
-```
-"Claude, me ajude a escrever a spec do achievements-service. 
-Quero que ele gerencie conquistas de jogadores, 
-com desbloqueio automático por evento e listagem por jogador."
-```
-
-Claude faz perguntas, você responde, a spec é escrita em `specs/achievements-service.spec.md`.
-
-### 2. Review da spec
-
-Leia a spec gerada. Valide:
-- Os comportamentos descritos são o que você quer?
-- As regras de negócio estão corretas?
-- Os casos de erro fazem sentido?
-
-Edite até estar satisfeito. **Não avance sem validar a spec.**
-
-### 3. Implementar a partir da spec
-
-```
-"Implemente o achievements-service seguindo a spec em 
-services/achievements-service/specs/achievements-service.spec.md.
-Siga a arquitetura hexagonal descrita no CLAUDE.md."
-```
-
-### 4. Gerar os testes
-
-```
-"Agora gere os unit tests para o achievements service.
-Cubra todos os casos listados em 'Casos de Teste Obrigatórios' da spec."
-```
-
-### 5. Mudança de requisito
-
-Se o requisito mudar, **edite a spec primeiro**:
-```
-"Adicione na spec que uma conquista pode ser revertida por um admin.
-Depois atualize o código para refletir essa mudança."
-```
-
-Nunca mude o código diretamente e atualize a spec depois — a spec lidera.
+> Baseado no padrao GitHub Spec Kit (2025/2026)
+> Referencia: github.com/github/spec-kit
 
 ---
 
-## Formato de Spec (padrão do projeto)
+## O que e SDD
+
+Spec-Driven Development e a metodologia onde a spec e a fonte de verdade, nao o codigo.
+O agente de IA implementa a partir de arquivos estruturados, nao de instrucoes vagas em chat.
+
+Principio central: cada fase produz um artefato markdown que alimenta a proxima.
+
+    spec.md -> plan.md -> tasks.md -> codigo
+
+Quando o requisito muda: edite a spec primeiro, depois regenere em cascata.
+Nunca mude o codigo diretamente e atualize a spec depois. A spec sempre lidera.
+
+---
+
+## Estrutura de pastas no monorepo
+
+Cada feature e uma pasta numerada dentro de specs/ do seu servico.
+
+```
+services/
+├── player-service/
+│   └── specs/
+│       ├── 001-player-crud/
+│       │   ├── spec.md          <- O QUE construir
+│       │   ├── plan.md          <- COMO construir
+│       │   └── tasks.md         <- lista de trabalho atomico
+│       └── 002-player-rating/
+│           ├── spec.md
+│           ├── plan.md
+│           └── tasks.md
+│
+├── achievements-service/
+│   └── specs/
+│       └── 001-unlock-system/
+│           ├── spec.md
+│           ├── plan.md
+│           ├── tasks.md
+│           └── data-model.md    <- opcional: modelo de dados detalhado
+│
+├── analytics-service/
+│   └── specs/
+│       └── 001-event-ingestion/
+│           ├── spec.md
+│           ├── plan.md
+│           └── tasks.md
+│
+└── matchmaking-service/
+    └── specs/
+        └── 001-queue-streaming/
+            ├── spec.md
+            ├── plan.md
+            ├── tasks.md
+            └── contracts/       <- opcional: contratos gRPC detalhados
+                └── matchmaking-proto.md
+```
+
+### Regras de nomenclatura
+
+| Item             | Formato              | Exemplo            |
+|------------------|----------------------|--------------------|
+| Pasta da feature | NNN-slug-kebab-case  | 001-player-crud    |
+| Spec             | sempre spec.md       | spec.md            |
+| Plan             | sempre plan.md       | plan.md            |
+| Tasks            | sempre tasks.md      | tasks.md           |
+| Extras opcionais | nome descritivo      | data-model.md      |
+
+- Numeracao sequencial POR SERVICO — cada servico comeca em 001
+- Nao existe numeracao global pro monorepo
+- Nunca reutilize um numero — feature cancelada deixa o numero vago
+
+---
+
+## O que vai em cada arquivo
+
+### spec.md — O QUE o sistema faz
+
+Comportamento e regras de negocio em EARS. Sem decisoes tecnicas.
+Responde: o que o sistema deve fazer?
 
 ```markdown
-# Spec: <nome>-service
+# Spec: NNN-nome-da-feature
+**Servico:** <nome>-service
+**Status:** Draft | Approved | Implemented
+**Data:** YYYY-MM-DD
 
 ## Contexto
-[Uma ou duas frases descrevendo o propósito do serviço.]
+[Uma ou duas frases: por que esta feature existe?]
 
 ## Comportamento
 
 ### <Nome do caso de uso>
-- WHEN <condição> → <resultado esperado>
-- IF <condição inválida> → retorna <erro específico>
+- WHEN <evento> -> <resultado>
+- IF <condicao invalida> -> retorna <erro especifico>
 - THE SYSTEM SHALL <invariante sempre verdadeiro>
 
-[Repita para cada caso de uso]
-
 ## Contratos de Interface
-
-### <NomeRepository> (Port de saída)
-- Metodo(ctx, param) → (retorno, error)
 
 ### <NomeService> (Port de entrada)
-- Metodo(ctx, param) → (retorno, error)
+- Metodo(ctx, param) -> (retorno, error)
+
+### <NomeRepository> (Port de saida)
+- Metodo(ctx, param) -> (retorno, error)
 
 ## Modelo de Dados
-[Campos do tipo principal com tipos e restrições]
+[Campos, tipos e restricoes]
 
-## Regras de Validação
-[Lista de validações com mensagens de erro esperadas]
+## Regras de Validacao
+| Campo | Regra | Erro |
 
-## Casos de Teste Obrigatórios
-- [ ] <Cenário feliz 1>
-- [ ] <Cenário feliz 2>
-- [ ] <Cenário de erro 1>
-- [ ] <Cenário de erro 2>
-- [ ] <Edge case>
+## Casos de Teste Obrigatorios
+- [ ] <cenario feliz>
+- [ ] <cenario de erro>
+- [ ] <edge case>
 
-## Não está no escopo
-[O que este serviço explicitamente NÃO faz — evita scope creep]
+## Fora do escopo
+[O que esta feature explicitamente NAO faz]
 ```
 
 ---
 
-## Formato EARS para regras
+### plan.md — COMO construir
 
-EARS (Easy Approach to Requirements Syntax) elimina ambiguidade:
-
-| Padrão | Quando usar | Exemplo |
-|---|---|---|
-| `WHEN X → Y` | Evento que dispara comportamento | `WHEN jogador completa missão → sistema SHALL desbloquear conquista` |
-| `IF X → Y` | Condição de validação | `IF nome estiver vazio → retorna ErrInvalidName` |
-| `THE SYSTEM SHALL X` | Invariante sempre verdadeiro | `THE SYSTEM SHALL rejeitar nomes com mais de 50 chars` |
-| `WHILE X, Y` | Comportamento contínuo | `WHILE jogador está na fila, sistema SHALL notificar status a cada 30s` |
-
----
-
-## Exemplo completo — Player Service Spec
+Decisoes tecnicas derivadas da spec. Arquitetura, libs, trade-offs.
+Responde: como vamos implementar?
 
 ```markdown
-# Spec: player-service
+# Plan: NNN-nome-da-feature
+**Spec:** specs/NNN-nome-da-feature/spec.md
+**Data:** YYYY-MM-DD
 
-## Contexto
-Microsserviço responsável pelo ciclo de vida de perfis de jogadores.
-Gerencia criação, leitura e atualização de dados de jogadores.
+## Abordagem tecnica
+[Resumo das decisoes de implementacao]
 
-## Comportamento
+## Arquivos a criar ou modificar
+- internal/domain/player.go        — tipos e interfaces
+- internal/service/player_service.go — logica de negocio
+- internal/repository/postgres.go  — acesso ao banco
+- internal/transport/http_handler.go — handlers HTTP
+- migrations/001_create_players.sql
 
-### Criar jogador
-- WHEN POST /players com nome válido → retorna 201 + player criado com rating 1000
-- IF nome estiver vazio → retorna 400 + ErrInvalidName
-- IF nome tiver menos de 2 caracteres → retorna 400 + ErrNameTooShort
-- IF nome tiver mais de 50 caracteres → retorna 400 + ErrNameTooLong
-- IF nome já existir (case-insensitive) → retorna 409 + ErrDuplicateName
-- THE SYSTEM SHALL atribuir ID único (UUID v4) a cada jogador
-- THE SYSTEM SHALL atribuir rating inicial de 1000
+## Dependencias e libs
+- github.com/jackc/pgx/v5          — driver PostgreSQL
+- github.com/google/uuid           — geracao de IDs
 
-### Buscar jogador
-- WHEN GET /players/:id com ID existente → retorna 200 + player
-- IF ID não existir → retorna 404 + ErrNotFound
-- IF ID tiver formato inválido (não UUID) → retorna 400 + ErrInvalidID
+## Decisoes tecnicas e trade-offs
+[Se for decisao arquitetural relevante -> propor ADR. Ver docs/adr/ADR-GUIDE.md]
 
-### Atualizar progresso
-- WHEN PATCH /players/:id com campos válidos → retorna 200 + player atualizado
-- IF ID não existir → retorna 404 + ErrNotFound
-- THE SYSTEM SHALL ignorar campos não permitidos na atualização
+## Ordem de implementacao
+[Sequencia que minimiza dependencias bloqueantes]
 
-## Contratos de Interface
-
-### PlayerRepository (Port de saída)
-- FindByID(ctx context.Context, id string) → (*Player, error)
-- FindByName(ctx context.Context, name string) → (*Player, error)
-- Save(ctx context.Context, p *Player) → error
-- Update(ctx context.Context, p *Player) → error
-
-### PlayerService (Port de entrada)
-- CreatePlayer(ctx context.Context, name string) → (*Player, error)
-- GetPlayer(ctx context.Context, id string) → (*Player, error)
-- UpdatePlayer(ctx context.Context, id string, updates PlayerUpdates) → (*Player, error)
-
-## Modelo de Dados
-
-```go
-type Player struct {
-    ID        string    // UUID v4
-    Name      string    // 2–50 chars, único (case-insensitive)
-    Rating    int       // default 1000, range 0–9999
-    CreatedAt time.Time
-    UpdatedAt time.Time
-}
-```
-
-## Regras de Validação
-
-| Campo | Regra | Erro |
-|---|---|---|
-| name | len >= 2 | ErrNameTooShort |
-| name | len <= 50 | ErrNameTooLong |
-| name | não vazio | ErrInvalidName |
-| name | único (case-insensitive) | ErrDuplicateName |
-| id | UUID v4 válido | ErrInvalidID |
-
-## Casos de Teste Obrigatórios
-
-- [ ] CreatePlayer com nome válido → player criado com rating 1000
-- [ ] CreatePlayer com nome vazio → ErrInvalidName
-- [ ] CreatePlayer com nome de 1 char → ErrNameTooShort
-- [ ] CreatePlayer com nome de 51 chars → ErrNameTooLong
-- [ ] CreatePlayer com nome duplicado → ErrDuplicateName
-- [ ] CreatePlayer com nome duplicado case-insensitive → ErrDuplicateName
-- [ ] GetPlayer com ID existente → player correto
-- [ ] GetPlayer com ID inexistente → ErrNotFound
-- [ ] GetPlayer com ID não-UUID → ErrInvalidID
-
-## Não está no escopo
-
-- Autenticação/autorização (responsabilidade do API Gateway)
-- Histórico de partidas (responsabilidade do matchmaking-service)
-- Sistema de conquistas (responsabilidade do achievements-service)
+## Riscos e pontos de atencao
+[O que pode dar errado ou precisar de cuidado especial]
 ```
 
 ---
 
-## Dicas para prompts SDD eficazes
+### tasks.md — Lista de trabalho atomico
 
-**Para criar uma spec:**
-```
-"Me ajude a escrever a spec do analytics-service no formato SDD do projeto 
-(docs/sdd/SDD-GUIDE.md). O serviço recebe eventos de gameplay via POST /events, 
-processa de forma assíncrona com workers, e persiste no DynamoDB."
+Tarefas pequenas o suficiente para o agente executar sem ambiguidade.
+O agente marca [x] conforme implementa — funciona como checklist vivo.
+Voce pode parar e retomar em qualquer ponto sem perder o estado.
+
+```markdown
+# Tasks: NNN-nome-da-feature
+**Plan:** specs/NNN-nome-da-feature/plan.md
+**Data:** YYYY-MM-DD
+
+## Fase 1 — Domain
+- [ ] Criar internal/domain/player.go com struct Player e interfaces
+- [ ] Criar internal/domain/errors.go com os tipos de erro da spec
+
+## Fase 2 — Service
+- [ ] Implementar internal/service/player_service.go
+- [ ] Escrever unit tests cobrindo todos os Casos de Teste Obrigatorios da spec
+
+## Fase 3 — Repository
+- [ ] Implementar internal/repository/postgres_repository.go
+- [ ] Criar migration migrations/001_create_players.sql
+- [ ] Escrever integration tests com testcontainers
+
+## Fase 4 — Transport
+- [ ] Implementar handlers em internal/transport/http_handler.go
+- [ ] Mapear erros de dominio para HTTP status codes
+- [ ] Escrever handler tests com httptest
+
+## Fase 5 — Wire-up e verificacao
+- [ ] Conectar dependencias em cmd/server/main.go
+- [ ] Confirmar que go test ./... -race passa
+- [ ] Confirmar que go build ./... passa
 ```
 
-**Para implementar a partir de uma spec:**
-```
-"Implemente o analytics-service seguindo exatamente a spec em 
-services/analytics-service/specs/analytics-service.spec.md.
-Use a arquitetura hexagonal do CLAUDE.md. 
-Não implemente nada que não esteja na spec."
-```
+---
 
-**Para atualizar após mudança de requisito:**
-```
-"A spec do player-service mudou: adicionamos soft delete. 
-A spec atualizada está em services/player-service/specs/player-service.spec.md.
-Atualize o código para refletir a mudança e adicione os novos casos de teste."
-```
+## Fluxo de trabalho completo
 
-**Para revisar alinhamento spec↔código:**
-```
-"Revise o achievements-service e verifique se o código implementa 
-todos os casos descritos na spec. Liste qualquer divergência encontrada."
-```
+### Sessao 1 — Spec (voce + agente em modo planejamento)
+
+Descreva a intencao. O agente faz perguntas para eliminar ambiguidade,
+depois gera spec.md. Nao implementa nada.
+
+    "Me ajuda a escrever a spec do sistema de conquistas do achievements-service.
+    Quero desbloqueio automatico por evento, progresso parcial salvo,
+    e listagem de conquistas por jogador."
+
+Voce valida. Se algo estiver errado, edite antes de avancar.
+
+### Sessao 2 — Plan
+
+    "A spec esta aprovada. Gere o plan.md para specs/001-unlock-system/."
+
+Agente gera plan.md com decisoes tecnicas.
+Voce valida a abordagem, a ordem, os riscos.
+
+### Sessao 3 — Tasks
+
+    "Plan aprovado. Gere o tasks.md quebrando em tarefas atomicas."
+
+Voce confere se as tarefas fazem sentido e se a ordem esta correta.
+
+### Sessao 4 — Implementacao
+
+    "Tasks aprovadas. Implemente seguindo specs/001-unlock-system/tasks.md.
+    Siga a arquitetura hexagonal do CLAUDE.md."
+
+Agente executa task por task, marcando [x] conforme conclui.
+
+### Mudanca de requisito pos-implementacao
+
+    1. Edite spec.md com a mudanca
+    2. Peca ao agente para atualizar plan.md se necessario
+    3. Peca ao agente para adicionar novas tasks em tasks.md
+    4. Peca ao agente para atualizar codigo e testes
+
+---
+
+## Formato EARS para regras no spec.md
+
+| Padrao           | Quando usar                   | Exemplo                                               |
+|------------------|-------------------------------|-------------------------------------------------------|
+| WHEN X -> Y      | Evento dispara comportamento  | WHEN jogador completa 10 partidas -> SHALL desbloquear "Veterano" |
+| IF X -> Y        | Condicao de validacao         | IF nome estiver vazio -> retorna ErrInvalidName       |
+| THE SYSTEM SHALL | Invariante sempre verdadeiro  | THE SYSTEM SHALL garantir unicidade de nome (ci)      |
+| WHILE X, Y       | Comportamento continuo        | WHILE jogador na fila, SHALL notificar status a cada 30s |
+
+---
+
+## INSTRUCOES PARA O AGENTE DE IA
+
+> Esta secao e direcionada ao Claude Code. Aplique em toda sessao neste repositorio.
+
+### Antes de qualquer implementacao
+
+1. Verifique se existe specs/NNN-<feature>/spec.md para o que esta sendo pedido
+2. Se nao existir -> pergunte ao usuario antes de prosseguir. Nunca invente comportamento
+3. Se existir spec mas nao houver plan -> oferea gerar plan.md antes de implementar
+4. Se existir plan mas nao houver tasks -> oferea gerar tasks.md antes de implementar
+5. Nunca pule fases sem confirmacao do usuario
+
+### Ao gerar spec.md
+
+- Use EARS para todas as regras de comportamento
+- Seja especifico nos erros (nome do tipo, nao so "retorna erro")
+- Liste todos os casos de teste obrigatorios — viram unit tests
+- Preencha "Fora do escopo" para evitar scope creep
+- NAO tome decisoes tecnicas no spec.md — isso vai no plan.md
+
+### Ao gerar plan.md
+
+- Liste exatamente quais arquivos serao criados ou modificados
+- Se a decisao tecnica for arquiteturalmente significativa -> proponha ADR (docs/adr/ADR-GUIDE.md)
+- Documente trade-offs considerados, nao so a decisao final
+
+### Ao gerar tasks.md
+
+- Cada task deve ser atomica: uma responsabilidade, um arquivo de destino
+- Ordene por dependencia: domain antes de service, service antes de transport
+- Inclua tasks de teste junto das tasks de implementacao (nao so no final)
+- Use [ ] para tasks pendentes — marque [x] conforme implementar
+
+### Durante a implementacao
+
+- Execute task por task na ordem do tasks.md
+- Marque [x] em cada task concluida antes de avancar para a proxima
+- Se encontrar ambiguidade nao coberta pela spec -> pare e pergunte, nao chute
+- Ao final: rode go test ./... -race e confirme que todos os casos da spec passam
+
+### Nomenclatura de pastas
+
+- Descubra o proximo numero inspecionando ls services/<nome>/specs/
+- Formato: NNN-slug-kebab-case sem acentos
+- Crie a pasta e os arquivos (spec, plan, tasks) na sequencia correta
+
+---
+
+## Prompts uteis por fase
+
+Criar spec:
+    "Me ajuda a escrever a spec de <feature> para o <servico>.
+    Quero <descricao de intencao>. Use o formato do SDD-GUIDE.md."
+
+Gerar plan a partir de spec aprovada:
+    "A spec em specs/001-<feature>/spec.md esta aprovada.
+    Gere o plan.md com as decisoes tecnicas de implementacao."
+
+Gerar tasks a partir de plan aprovado:
+    "Plan aprovado. Gere o tasks.md com tarefas atomicas ordenadas por dependencia."
+
+Implementar:
+    "Tasks aprovadas. Implemente seguindo specs/001-<feature>/tasks.md.
+    Siga a arquitetura hexagonal descrita no CLAUDE.md."
+
+Atualizar apos mudanca de requisito:
+    "O requisito mudou: <descricao da mudanca>.
+    Atualize specs/001-<feature>/spec.md e mostre o que muda no plan e nas tasks."
+
+Verificar alinhamento spec vs codigo:
+    "Revise o <servico> e verifique se o codigo implementa todos os casos
+    da spec em specs/001-<feature>/spec.md. Liste divergencias encontradas."

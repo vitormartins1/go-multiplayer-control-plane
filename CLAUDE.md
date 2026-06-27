@@ -50,7 +50,11 @@ internal/service/        ← regras de negócio (só usa interfaces do domain)
 internal/repository/     ← acesso a dados (implementa interfaces do domain)
 internal/transport/      ← handlers HTTP ou gRPC (traduz para/de domínio)
 migrations/              ← SQL migrations versionadas
-specs/                   ← specs SDD (leia antes de qualquer implementação)
+specs/
+  NNN-nome-feature/        ← uma pasta por feature, numerada por serviço
+    spec.md                ← O QUE construir (EARS, comportamento)
+    plan.md                ← COMO construir (decisões técnicas, arquivos)
+    tasks.md               ← tarefas atômicas ([x] marcado conforme implementa)
 ```
 
 ## Regras arquiteturais
@@ -64,11 +68,15 @@ specs/                   ← specs SDD (leia antes de qualquer implementação)
 
 ## Fluxo SDD (obrigatório)
 
-1. Leia a spec em `specs/*.spec.md` antes de implementar
-2. Se a spec não existir ou estiver incompleta, pergunte ao usuário antes de prosseguir
-3. Implemente seguindo exatamente os contratos e regras da spec
-4. Gere os casos de teste listados na seção "Casos de Teste Obrigatórios" da spec
-5. Se precisar desviar da spec, documente o motivo em comentário e avise o usuário
+Cada feature segue três fases com artefatos separados. Nunca pule fases sem confirmação.
+
+1. **spec.md** — verifique se existe antes de qualquer implementação. Se não existir, pergunte ao usuário. Nunca invente comportamento.
+2. **plan.md** — se spec existe mas plan não, ofereça gerar antes de implementar
+3. **tasks.md** — se plan existe mas tasks não, ofereça gerar antes de implementar
+4. **Implementação** — execute task por task, marcando `[x]` conforme conclui
+5. Se encontrar ambiguidade não coberta pela spec → pare e pergunte, não chute
+
+Guia completo: `docs/sdd/SDD-GUIDE.md`
 
 ## Padrões de teste
 
