@@ -15,3 +15,4 @@
 | [0009](0009-gamekit-faithful-decomposition.md) | Decomposição fiel ao GameKit (identity como fundação) | Accepted | 2026-06-27 | identity, achievements, player-data, cloud-save |
 | [0010](0010-control-plane-data-plane.md) | Control plane (Go) vs data plane (Unity Dedicated Server) | Accepted | 2026-06-27 | matchmaking, session, Unity |
 | [0011](0011-unity-netcode-agones.md) | Unity Netcode for GameObjects + Agones/EKS, sem serviços pagos | Accepted | 2026-06-27 | data plane, infra |
+| [0012](0012-agones-from-start.md) | Agones desde o início (homelab k3s / EKS sob demanda) | Accepted | 2026-06-27 | session, data plane, infra |

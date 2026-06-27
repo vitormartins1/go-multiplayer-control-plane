@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Data:** 2026-06-27
 **Serviço(s) afetado(s):** data plane (Unity — repo separado), infra de game server
+**Refinado por:** ADR-0012 (Agones adotado desde o início; homelab k3s / EKS sob demanda)
 
 ---
 

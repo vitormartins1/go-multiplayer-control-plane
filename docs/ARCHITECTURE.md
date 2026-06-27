@@ -194,15 +194,16 @@ sequenceDiagram
 
 > O **claim atômico** Ready→Allocated é o ponto de concorrência crítico (duas partidas não podem pegar o mesmo server). Em processo único: `sync.Mutex`. Distribuído (várias instâncias do session-service): update condicional no store (DynamoDB `... IF state=Ready` / Postgres `UPDATE ... WHERE state='Ready' RETURNING`). Detalhado em `docs/GO-LEARNINGS.md` §01.
 
-Espectro de implementação (ADR-0005, ADR-0011):
+**Decisão (ADR-0012): Agones desde o início.** Em vez de construir um pool em Go, o `session-service` é **cliente fino da Allocation API do Agones**. O Agones é um projeto open-source que estende o Kubernetes para gerenciar game servers: CRD `GameServer` com o ciclo de vida acima, `Fleet` com buffer de servers `Ready`, API de *Allocation* e autoscaler. É **engine-agnóstico** — empacota-se o Unity Dedicated Server (Linux headless **ARM64**, suportado no Unity 6) num container e integra-se o **Agones SDK (C#)** para reportar Ready/Allocated/Health/Shutdown.
 
-| Nível | Como aloca |
-|---|---|
-| Local/dev | 1 server estático em `localhost:7777` |
-| Pool self-managed (Go) | registry + heartbeat + claim atômico em Go — reimplementa o GameLift |
-| **Agones / EKS** | delega o fleet ao Agones: `Fleet` de game servers + API de *Allocation*; o session-service vira cliente fino do Agones |
+Onde roda (ADR-0012):
 
-**Agones** é um projeto open-source que estende o Kubernetes para gerenciar game servers: CRD `GameServer` com o ciclo de vida acima, `Fleet` com buffer de servers `Ready`, API de *Allocation* e autoscaler. É **engine-agnóstico** — empacota-se o Unity Dedicated Server (build Linux headless) num container e integra-se o **Agones SDK (C#)** para o server reportar Ready/Allocated/Health/Shutdown. É aqui que o **EKS** ganha aplicação concreta: hospedar o fleet de game servers gerenciado pelo Agones (ADR-0011).
+| Ambiente | Kubernetes | Custo |
+|---|---|---|
+| Dev / homelab | **k3s** no Raspberry Pi 5 16GB (ARM64) | grátis (hardware próprio) |
+| Cloud (sob demanda) | **EKS** efêmero (sobe/destrói via Terraform) só p/ testes de nuvem | ~$73/mês só ligado → manter efêmero |
+
+> O claim atômico Ready→Allocated passa a ser responsabilidade do Agones, não do session-service. O exemplo em Go (`GO-LEARNINGS.md` §01) permanece como **estudo de concorrência**; a concorrência de produção vive no matchmaking (pool de tickets).
 
 ---
 

@@ -26,10 +26,10 @@ Recap (detalhes em [ARCHITECTURE.md](ARCHITECTURE.md)):
 ## Requisitos do projeto Unity
 
 - Unity 6.x, **Netcode for GameObjects** + **Unity Transport**.
-- Dois build targets: **Client** (com gráficos) e **Dedicated Server** (Linux headless).
+- Dois build targets: **Client** (com gráficos) e **Dedicated Server** (Linux headless, **ARM64** para o homelab).
 - Server build **containerizado** (Docker) para deploy.
 - `(TODO)` Cliente HTTP/gRPC no Unity para falar com o backend Go (gerado do `.proto` compartilhado).
-- `(escala)` **Agones C# SDK** no server build, se for usar Agones/EKS.
+- **Agones C# SDK** no server build (orquestração desde o início — ADR-0012).
 
 ## Infra / deploy
 
@@ -51,12 +51,11 @@ Visão de alto nível; endpoints/proto concretos são `(TODO)` conforme os servi
 6. Dedicated Server **valida o token** contra a identity/session.
 7. Fim da partida: Dedicated Server → backend reporta **resultado** → leaderboard/achievements/analytics.
 
-## Como o Agones se encaixa (camada de escala)
+## Como o Agones se encaixa (orquestração de game servers — ADR-0012)
 
-- Agones é instalado no cluster **EKS**; os game servers rodam como `GameServer` dentro de um `Fleet`.
-- O **server build (Unity)** usa o **Agones SDK (C#)**: `Ready()` no boot, `Health()` periódico, `Allocate()`/`Shutdown()`.
+- Agones é o orquestrador **desde o início**. Roda em **k3s (homelab, Raspberry Pi 5 ARM64)** no dev e em **EKS sob demanda** na nuvem. Os game servers rodam como `GameServer` dentro de um `Fleet`.
+- O **server build (Unity)** é compilado para **Linux ARM64** (Unity 6) e usa o **Agones SDK (C#)**: `Ready()` no boot, `Health()` periódico, `Allocate()`/`Shutdown()`.
 - O **session-service (Go)** chama a **API de Allocation do Agones** (cliente gRPC) para obter um server `Ready` — não reimplementa o fleet.
-- Nos níveis menores (sem Agones), o session-service mantém um **registry mínimo próprio** com claim atômico. Ver ARCHITECTURE §7 e `GO-LEARNINGS.md` §01.
 
 ## TODO (conforme a implementação avança)
 

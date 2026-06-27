@@ -406,6 +406,8 @@ Budget AWS via Terraform, alerta em 80% de **$40/mês**. Mover serviços statele
 
 A coluna de custo de cada serviço alimenta diretamente a **comparação com o equivalente AWS gerenciado** — que costuma ser ordens de magnitude mais caro para volumes baixos.
 
+**Kubernetes/Agones fora da AWS:** o EKS custa ~$73/mês só o control plane — estouraria o budget sozinho. Por isso o k8s+Agones rodam num **homelab (k3s no Raspberry Pi 5 16GB)** no dev, e o EKS é usado **sob demanda** (efêmero, sobe/destrói via Terraform) só para testes de nuvem. (ADR-0012)
+
 ---
 
 ## Roadmap de Estudo — Fases
@@ -462,7 +464,7 @@ A coluna de custo de cada serviço alimenta diretamente a **comparação com o e
 - [ ] `session-service` (Go, Fargate): ciclo de sessão, registry de game servers, connect token, ingestão de resultado
 - [ ] **Data plane = Unity Dedicated Server** (Netcode for GameObjects + Transport), repo separado — não-Go
 - [ ] Fluxo: matchmaking forma partida → session aloca game server → token → Unity conecta → resultado volta pro backend Go
-- [ ] Escala de game server: EC2/VPS/Docker → ECS-on-EC2 → avaliar Agones/EKS (open-source, sem serviço pago)
+- [ ] Orquestração de game server: **Agones** (ADR-0012) — dev em k3s homelab (Raspberry Pi 5 ARM64), EKS sob demanda; session-service = cliente da Allocation API; Unity server buildado p/ Linux ARM64
 
 ### Fase 11 — Comparação Go vs. AWS (entregável de tese)
 - [ ] Coletar custo/latência/throughput de cada serviço
