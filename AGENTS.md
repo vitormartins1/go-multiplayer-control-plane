@@ -67,6 +67,10 @@ cd services/<nome>-service && go test ./... -v -race -cover
 golangci-lint run ./...
 ```
 
+## ADRs
+
+Leia `docs/adr/ADR-GUIDE.md`. Durante a sessão, monitore decisões arquiteturais e proponha criar ADRs quando detectar escolhas entre tecnologias, padrões ou infra. Só grave o arquivo após confirmação explícita do usuário. Antes de implementar algo arquitetural, verifique `docs/adr/README.md` para consistência com decisões existentes.
+
 ## O que não fazer
 
 - Não modifique `shared/` sem aprovação — impacta todos os serviços
@@ -79,4 +83,5 @@ golangci-lint run ./...
 
 - Roadmap completo: `docs/ROADMAP.md`
 - Guia SDD: `docs/sdd/SDD-GUIDE.md`
-- Decisões arquiteturais: `docs/adr/`
+- Guia ADR: `docs/adr/ADR-GUIDE.md`
+- Índice de ADRs: `docs/adr/README.md`
