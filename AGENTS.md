@@ -90,6 +90,10 @@ O usuário vem de C#/.NET e aprende Go com este projeto. Ao concluir cada featur
 
 Não invente aprendizado para preencher; se não houve nada novo, diga isso. Não pule o passo silenciosamente.
 
+## Observabilidade por serviço (obrigatório)
+
+Cada serviço novo entra na stack de observabilidade antes de fechar a feature. Siga o checklist e a nomenclatura de `docs/OBSERVABILITY.md` → "Padrão por serviço novo": métricas RED, scrape no Prometheus, tracing (OTel + otelpgx) e um exporter por banco. Convenção: `<svc>-service`, `<svc>-postgres`, DB `<svc>`, `<svc>-postgres-exporter`.
+
 ## Documentação
 
 - Roadmap completo: `docs/ROADMAP.md`
