@@ -17,6 +17,10 @@ Princípio central: cada fase produz um artefato markdown que alimenta a próxim
 Quando o requisito muda: edite a spec primeiro, depois regenere em cascata.
 Nunca mude o código diretamente e atualize a spec depois. A spec sempre lidera.
 
+### Escopo: o que NÃO é SDD
+
+SDD aplica-se a **features de comportamento** (os serviços Go). **Infra e deploy** (Terraform, provisionamento de banco, LocalStack, k8s/Agones) **não** usam o ciclo spec→plan→tasks: são tratados como **tasks da própria feature** (o que o serviço possui — ex: schema/migrations) ou como **itens de backlog** (provisionamento cloud, deploy), documentados de forma leve (ex: README junto do Terraform). Não criar specs SDD para infra.
+
 ---
 
 ## Estrutura de pastas no monorepo
