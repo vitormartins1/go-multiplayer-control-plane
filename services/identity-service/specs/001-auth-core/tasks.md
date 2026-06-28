@@ -34,7 +34,7 @@
 - [x] `internal/transport/http_handler_test.go` — httptest: caminho feliz dos 3 endpoints + mapeamento de cada erro → status
 
 ## Fase 6 — Wire-up e verificação
-- [ ] `cmd/server/main.go` — wire-up (config, logger, pgxpool, repo, token issuer, service, handler) + HTTP server com graceful shutdown
-- [ ] `services/identity-service/Dockerfile` — build multi-stage (contexto = raiz; módulo único)
-- [ ] `infra/docker/docker-compose.yml` — Postgres + identity-service (aplicar migrations no setup local)
-- [ ] Confirmar `go test ./... -race -cover` e `go build ./...` passando; todos os Casos de Teste Obrigatórios da spec verdes
+- [x] `cmd/server/main.go` — wire-up (config, logger, pgxpool, repo, token issuer, service, handler) + HTTP server com graceful shutdown
+- [x] `services/identity-service/Dockerfile` — build multi-stage (contexto = raiz; módulo único)
+- [x] `infra/docker/docker-compose.yml` — Postgres + identity-service (aplicar migrations no setup local)
+- [x] Confirmar `go test ./... -race -cover` e `go build ./...` passando; todos os Casos de Teste Obrigatórios da spec verdes
