@@ -25,9 +25,9 @@
   - login correto (JWT com sub/exp/kid); senha errada e handle inexistente → mesmo `ErrInvalidCredentials`
 
 ## Fase 4 — Repository
-- [ ] `migrations/001_create_accounts.sql` — tabela `accounts` (id, handle único case-insensitive, password_hash, created_at)
-- [ ] `internal/repository/postgres_account.go` — `Create`, `FindByHandle` (case-insensitive) com pgx
-- [ ] `internal/repository/postgres_account_test.go` — integration tests com testcontainers: criar conta; unicidade de handle case-insensitive; buscar por handle
+- [x] `migrations/001_create_accounts.sql` — tabela `accounts` (id, handle único case-insensitive, password_hash, created_at)
+- [x] `internal/repository/postgres_account.go` — `Create`, `FindByHandle` (case-insensitive) com pgx
+- [x] `internal/repository/postgres_account_test.go` — integration tests com testcontainers: criar conta; unicidade de handle case-insensitive; buscar por handle
 
 ## Fase 5 — Transport
 - [ ] `internal/transport/http_handler.go` — `POST /accounts`, `POST /sessions`, `GET /.well-known/jwks.json`; mapear erros de domínio → HTTP (400 InvalidHandle/WeakPassword, 401 InvalidCredentials, 409 HandleTaken)
