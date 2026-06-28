@@ -36,18 +36,34 @@ curl -s localhost:8081/healthz
 curl -s -XPOST localhost:8081/accounts -d '{"handle":"Vitor_1","password":"supersecret"}'
 ```
 
-## Dashboards recomendados (importar via Grafana UI → Import by ID)
+## Dashboards
 
-A datasource Prometheus já está provisionada; ao importar, selecione-a.
+**Provisionado** (sobe automático na pasta `game-backend`):
+- **Service Overview (RED)** — parametrizado por `$job` (um serviço, ou "All" para a frota): RPS / erros 5xx / latência p95 por rota + goroutines / heap / GC. Como o `shared/middleware` padroniza as métricas, este dashboard serve **qualquer serviço Go** sem refazer.
+
+**Complementares** (importar via Grafana UI → Import by ID; selecionar a datasource Prometheus):
 
 | Dashboard | ID | Para |
 |---|---|---|
-| Go Processes / Go Metrics | 6671 | goroutines, GC, heap, threads |
-| PostgreSQL (postgres_exporter) | 9628 | conexões, throughput, locks do banco |
+| Go Processes | 6671 | deep-dive de runtime |
+| PostgreSQL (postgres_exporter) | 9628 | internals do banco |
 
-Para o RED do próprio serviço, montar painéis com:
-- RPS: `sum(rate(http_requests_total[1m])) by (route)`
-- Erro: `sum(rate(http_requests_total{status=~"5.."}[5m]))`
-- Latência p95: `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route))`
+## Visão de futuro: observabilidade do sistema completo
 
-> Dashboards provisionados (JSON versionado) podem ser adicionados depois, validados em Grafana. Por ora, importação via UI mantém o setup simples.
+A observabilidade não para no backend Go. Não implementamos agora, mas as decisões atuais já acomodam:
+
+### Game server (Unity Dedicated Server)
+- **Métricas:** tick rate, jogadores na partida, duração da partida, CPU/mem — via **OTel C# SDK** → Prometheus (OTel é poliglota: serve Go e C#).
+- **Traces:** o trace deve **continuar do backend para o game server**. O handshake de sessão/connect token precisa **carregar o trace context (W3C `traceparent`)**, para um único trace cobrir client → backend → game server. (Decisão de design do session-service + connect token — entra na ADR de tracing.)
+
+### Fleet/cluster de game servers (Agones no k8s)
+- **Agones expõe métricas Prometheus** nativas (GameServers por estado, réplicas do Fleet, latência de allocation) + **kube-state-metrics** e métricas de nó do cluster (homelab Pi 5).
+- **Dashboards:** Fleet Overview (Ready/Allocated), latência de alocação, saúde do cluster.
+
+### Game clients (se aplicável)
+- Telemetria client-side (FPS, RTT ao server, erros) — em boa parte território do **analytics-service**; pode emitir OTel do cliente. Prioridade menor.
+
+### O que isso decide AGORA
+- **Tracing:** propagação **W3C trace context** ponta a ponta; desenhar o connect token / handshake de sessão para carregar `traceparent`.
+- **Convenções de label:** manter `job`/`service` consistentes (e `match_id` onde fizer sentido) para métricas do game server caberem no mesmo modelo de dashboard.
+- **Stack já acomoda:** OTel (Go + C#), Prometheus (nativo no Agones), Grafana (painel único) — as escolhas atuais se estendem ao lado do jogo sem retrabalho.
