@@ -9,7 +9,7 @@
 | **Logs** | `slog` JSON no stdout de cada serviço |
 | **Métricas** | Prometheus client no serviço → `GET /metrics` → Prometheus → Grafana |
 | **Métricas do banco** | `postgres_exporter` → Prometheus |
-| **Traces** | OpenTelemetry (a integrar quando houver fluxo entre serviços) |
+| **Traces** | OpenTelemetry (W3C trace context) → OTLP → **Grafana Tempo** → Grafana (ADR-0014) — instrumentação a implementar |
 
 Métricas expostas pelo serviço Go em `/metrics`:
 

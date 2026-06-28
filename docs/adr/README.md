@@ -17,3 +17,4 @@
 | [0011](0011-unity-netcode-agones.md) | Unity Netcode for GameObjects + Agones/EKS, sem serviços pagos | Accepted | 2026-06-27 | data plane, infra |
 | [0012](0012-agones-from-start.md) | Agones desde o início (homelab k3s / EKS sob demanda) | Accepted | 2026-06-27 | session, data plane, infra |
 | [0013](0013-git-branching-strategy.md) | Trunk-based + feature branches + conventional commits | Accepted | 2026-06-27 | todos (processo) |
+| [0014](0014-grafana-tempo-tracing.md) | Grafana Tempo + OTLP para distributed tracing | Accepted | 2026-06-28 | todos, infra |
