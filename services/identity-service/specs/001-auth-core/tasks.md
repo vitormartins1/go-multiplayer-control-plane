@@ -30,8 +30,8 @@
 - [x] `internal/repository/postgres_account_test.go` — integration tests com testcontainers: criar conta; unicidade de handle case-insensitive; buscar por handle
 
 ## Fase 5 — Transport
-- [ ] `internal/transport/http_handler.go` — `POST /accounts`, `POST /sessions`, `GET /.well-known/jwks.json`; mapear erros de domínio → HTTP (400 InvalidHandle/WeakPassword, 401 InvalidCredentials, 409 HandleTaken)
-- [ ] `internal/transport/http_handler_test.go` — httptest: caminho feliz dos 3 endpoints + mapeamento de cada erro → status
+- [x] `internal/transport/http_handler.go` — `POST /accounts`, `POST /sessions`, `GET /.well-known/jwks.json`; mapear erros de domínio → HTTP (400 InvalidHandle/WeakPassword, 401 InvalidCredentials, 409 HandleTaken)
+- [x] `internal/transport/http_handler_test.go` — httptest: caminho feliz dos 3 endpoints + mapeamento de cada erro → status
 
 ## Fase 6 — Wire-up e verificação
 - [ ] `cmd/server/main.go` — wire-up (config, logger, pgxpool, repo, token issuer, service, handler) + HTTP server com graceful shutdown
