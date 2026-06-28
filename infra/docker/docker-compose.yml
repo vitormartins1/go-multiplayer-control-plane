@@ -36,6 +36,25 @@ services:
       tempo:
         condition: service_started
 
+  player-data-service:
+    build:
+      context: ../..
+      dockerfile: services/player-data-service/Dockerfile
+    ports:
+      - "8083:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://dev:dev@player-data-postgres:5432/player_data?sslmode=disable
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      player-data-postgres:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16
@@ -68,6 +87,23 @@ services:
       - ../../services/achievements-service/migrations/002_add_progress.sql:/docker-entrypoint-initdb.d/002_add_progress.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Banco próprio do player-data (database-per-service, ADR-0015).
+  player-data-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: player_data
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5434:5432"
+    volumes:
+      - ../../services/player-data-service/migrations/001_create_player_data.sql:/docker-entrypoint-initdb.d/001_create_player_data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d player_data"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -127,3 +163,12 @@ services:
       - "9188:9187"
     depends_on:
       - achievements-postgres
+
+  player-data-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://dev:dev@player-data-postgres:5432/player_data?sslmode=disable
+    ports:
+      - "9189:9187"
+    depends_on:
+      - player-data-postgres
