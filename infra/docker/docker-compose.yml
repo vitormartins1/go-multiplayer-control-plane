@@ -10,9 +10,12 @@ services:
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://dev:dev@postgres:5432/gamebackend?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
       postgres:
         condition: service_healthy
+      tempo:
+        condition: service_started
 
   postgres:
     image: postgres:16
@@ -40,6 +43,15 @@ services:
     depends_on:
       - identity-service
 
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./tempo.yml:/etc/tempo/tempo.yml:ro
+    ports:
+      - "3200:3200" # API de query
+      - "4317:4317" # OTLP gRPC (ingestão)
+
   grafana:
     image: grafana/grafana:latest
     environment:
@@ -52,6 +64,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+      - tempo
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest

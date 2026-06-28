@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/c130n/game-backend/services/identity-service/internal/repository"
 	"github.com/c130n/game-backend/services/identity-service/internal/service"
@@ -28,6 +29,7 @@ import (
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
 	"github.com/c130n/game-backend/shared/middleware"
+	"github.com/c130n/game-backend/shared/telemetry"
 )
 
 func main() {
@@ -40,6 +42,22 @@ func main() {
 
 func run(log *slog.Logger) error {
 	cfg := config.Load()
+
+	shutdownTracing, err := telemetry.SetupTracing(context.Background(), telemetry.Config{
+		ServiceName:  "identity-service",
+		OTLPEndpoint: cfg.OTLPEndpoint,
+		SampleRatio:  cfg.TraceSampleRatio,
+	})
+	if err != nil {
+		return fmt.Errorf("telemetry: %w", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(ctx); err != nil {
+			log.Error("telemetry shutdown", "err", err)
+		}
+	}()
 
 	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -66,9 +84,19 @@ func run(log *slog.Logger) error {
 	mux.Handle("GET /metrics", promhttp.Handler())
 	handler.Register(mux)
 
+	// otelhttp é o handler mais externo: abre o span por request e continua o
+	// trace do client via traceparent (propagator global). RouteSpanName renomeia
+	// o span para a rota casada (ex. "POST /accounts"). /healthz e /metrics ficam
+	// de fora para não poluir os traces.
+	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(mux)), "http.server",
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/healthz" && r.URL.Path != "/metrics"
+		}),
+	)
+
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      metrics.Wrap(mux),
+		Handler:      traced,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}

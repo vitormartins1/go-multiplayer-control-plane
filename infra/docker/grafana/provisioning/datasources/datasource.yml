@@ -7,3 +7,18 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    jsonData:
+      # exemplar no gráfico de latência salta direto pro trace no Tempo (ADR-0014).
+      # Requer o serviço emitir exemplars com trace_id — refinamento posterior.
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      nodeGraph:
+        enabled: true

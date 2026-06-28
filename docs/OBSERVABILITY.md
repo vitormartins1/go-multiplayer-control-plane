@@ -9,7 +9,7 @@
 | **Logs** | `slog` JSON no stdout de cada serviço |
 | **Métricas** | Prometheus client no serviço → `GET /metrics` → Prometheus → Grafana |
 | **Métricas do banco** | `postgres_exporter` → Prometheus |
-| **Traces** | OpenTelemetry (a integrar quando houver fluxo entre serviços) |
+| **Traces** | OpenTelemetry (W3C trace context) → OTLP gRPC → **Grafana Tempo** → Grafana (ADR-0014) |
 
 Métricas expostas pelo serviço Go em `/metrics`:
 
@@ -26,7 +26,8 @@ docker compose -f infra/docker/docker-compose.yml up --build
 |---|---|---|
 | identity-service | http://localhost:8081 | API; `/metrics`, `/healthz` |
 | Prometheus | http://localhost:9090 | ver alvos em Status → Targets |
-| Grafana | http://localhost:3000 | login anônimo (admin); datasource Prometheus já provisionado |
+| Grafana | http://localhost:3000 | login anônimo (admin); datasources Prometheus e Tempo provisionados |
+| Tempo | http://localhost:3200 | backend de traces (API de query); OTLP gRPC em `:4317` |
 | postgres_exporter | http://localhost:9187/metrics | métricas do Postgres |
 
 Gerar tráfego para ver as métricas RED:
@@ -35,6 +36,10 @@ Gerar tráfego para ver as métricas RED:
 curl -s localhost:8081/healthz
 curl -s -XPOST localhost:8081/accounts -d '{"handle":"Vitor_1","password":"supersecret"}'
 ```
+
+### Ver traces
+
+O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de fora, para não poluir). No Grafana → **Explore** → datasource **Tempo** → busca TraceQL `{ resource.service.name = "identity-service" }`. O serviço só emite traces quando `OTEL_EXPORTER_OTLP_ENDPOINT` está setado (o compose aponta para `tempo:4317`); rodando solto via `go run` sem essa env, o tracing fica no-op.
 
 ## Dashboards
 
