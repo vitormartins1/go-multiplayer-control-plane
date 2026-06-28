@@ -11,7 +11,8 @@ services:
       PORT: "8080"
       DATABASE_URL: postgres://dev:dev@postgres:5432/gamebackend?sslmode=disable
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16
@@ -24,6 +25,11 @@ services:
     volumes:
       # aplica a migration na inicialização do banco
       - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d gamebackend"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   prometheus:
     image: prom/prometheus:latest
