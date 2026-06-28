@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -82,7 +83,7 @@ func TestAuth_SemBearer_401(t *testing.T) {
 }
 
 func TestAuth_TokenInvalido_401(t *testing.T) {
-	srv := newServer(&fakeService{}, fakeVerifier{err: domain.ErrUnauthorized})
+	srv := newServer(&fakeService{}, fakeVerifier{err: errors.New("token inválido")})
 	defer srv.Close()
 
 	resp := do(t, srv, http.MethodGet, "/me/achievements", "qualquer", "")

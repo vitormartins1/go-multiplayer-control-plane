@@ -159,8 +159,6 @@ func writeError(w http.ResponseWriter, status int, code string) {
 // writeDomainError mapeia erros de domínio para HTTP status + código estável.
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, domain.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, "unauthorized")
 	case errors.Is(err, domain.ErrInvalidEvent):
 		writeError(w, http.StatusBadRequest, "invalid_event")
 	default:

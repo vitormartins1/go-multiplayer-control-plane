@@ -1,0 +1,62 @@
+### player-data-service — collection HTTP
+#
+# Requer a stack no ar:
+#   docker compose -f infra/docker/docker-compose.yml up
+#
+# Todos os endpoints exigem um JWT do identity (ADR-0009). O login captura o token.
+# GoLand/IntelliJ: clique no ▶. (VS Code REST Client: ver nota no fim.)
+#
+# Acompanhe: Grafana http://localhost:3000 e o banco em localhost:5434
+# (db player_data, user/pass dev/dev).
+
+@identityHost = http://localhost:8081
+@playerDataHost = http://localhost:8083
+@handle = Data_1
+@password = supersecret
+
+### (uma vez) Criar a conta no identity
+POST {{identityHost}}/accounts
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+### Login no identity -> captura o token
+# @name login
+POST {{identityHost}}/sessions
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+> {%
+    client.global.set("token", response.body.token);
+%}
+
+### Gravar um valor (inventory/gold)
+PUT {{playerDataHost}}/me/data/inventory/gold
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "amount": 100 }
+
+### Gravar outro (inventory/potions)
+PUT {{playerDataHost}}/me/data/inventory/potions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+5
+
+### Ler um valor
+GET {{playerDataHost}}/me/data/inventory/gold
+Authorization: Bearer {{token}}
+
+### Ler o namespace inteiro -> { "gold": ..., "potions": ... }
+GET {{playerDataHost}}/me/data/inventory
+Authorization: Bearer {{token}}
+
+### Remover um valor (DELETE é idempotente)
+DELETE {{playerDataHost}}/me/data/inventory/gold
+Authorization: Bearer {{token}}
+
+# --- VS Code REST Client ---
+# O bloco "> {% ... %}" é sintaxe do HTTP Client do JetBrains. No REST Client,
+# remova-o e use: Authorization: Bearer {{login.response.body.$.token}}

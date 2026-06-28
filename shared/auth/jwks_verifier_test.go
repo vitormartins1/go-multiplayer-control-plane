@@ -15,11 +15,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-
-	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
 )
 
-// testKey gera um par Ed25519 e o kid derivado (mesma regra do identity).
 func testKey(t *testing.T) (ed25519.PrivateKey, string) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -30,7 +27,6 @@ func testKey(t *testing.T) (ed25519.PrivateKey, string) {
 	return priv, base64.RawURLEncoding.EncodeToString(sum[:8])
 }
 
-// jwksJSON monta o JWKS público de um conjunto de (kid -> pub).
 func jwksJSON(keys map[string]ed25519.PublicKey) []byte {
 	var jwk []map[string]string
 	for kid, pub := range keys {
@@ -43,7 +39,6 @@ func jwksJSON(keys map[string]ed25519.PublicKey) []byte {
 	return b
 }
 
-// signToken assina um JWT EdDSA com o kid e a expiração dados.
 func signToken(t *testing.T, priv ed25519.PrivateKey, kid, sub string, exp time.Time) string {
 	t.Helper()
 	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
@@ -57,7 +52,6 @@ func signToken(t *testing.T, priv ed25519.PrivateKey, kid, sub string, exp time.
 	return s
 }
 
-// jwksServer serve um JWKS fixo e conta os fetches.
 func jwksServer(body []byte, hits *int32) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if hits != nil {
@@ -93,14 +87,14 @@ func TestVerify_TokenExpirado_ErrUnauthorized(t *testing.T) {
 	token := signToken(t, priv, kid, "player-123", time.Now().Add(-time.Minute))
 
 	_, err := v.Verify(context.Background(), token)
-	if !errors.Is(err, domain.ErrUnauthorized) {
+	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, quer ErrUnauthorized", err)
 	}
 }
 
 func TestVerify_AssinaturaInvalida_ErrUnauthorized(t *testing.T) {
 	priv, kid := testKey(t)
-	other, _ := testKey(t) // assina com outra chave, mas usa o kid da boa
+	other, _ := testKey(t)
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
 	defer srv.Close()
 
@@ -108,7 +102,7 @@ func TestVerify_AssinaturaInvalida_ErrUnauthorized(t *testing.T) {
 	token := signToken(t, other, kid, "player-123", time.Now().Add(time.Minute))
 
 	_, err := v.Verify(context.Background(), token)
-	if !errors.Is(err, domain.ErrUnauthorized) {
+	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, quer ErrUnauthorized", err)
 	}
 }
@@ -122,7 +116,7 @@ func TestVerify_KidDesconhecido_ErrUnauthorized(t *testing.T) {
 	token := signToken(t, priv, "kid-fantasma", "player-123", time.Now().Add(time.Minute))
 
 	_, err := v.Verify(context.Background(), token)
-	if !errors.Is(err, domain.ErrUnauthorized) {
+	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, quer ErrUnauthorized", err)
 	}
 }
@@ -135,7 +129,7 @@ func TestVerify_TokenMalformado_ErrUnauthorized(t *testing.T) {
 	v := NewVerifier(srv.URL, time.Minute)
 
 	_, err := v.Verify(context.Background(), "nao-eh-um-jwt")
-	if !errors.Is(err, domain.ErrUnauthorized) {
+	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, quer ErrUnauthorized", err)
 	}
 }
