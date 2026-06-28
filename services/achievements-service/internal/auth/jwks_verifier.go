@@ -1,0 +1,139 @@
+// Package auth valida o JWT emitido pelo identity-service, buscando as chaves
+// públicas no endpoint JWKS (ADR-0009). É um adapter de saída que satisfaz
+// domain.TokenVerifier. Será promovido a shared/auth quando um segundo serviço
+// precisar dele (ver plan.md da 001-achievement-core).
+package auth
+
+import (
+	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
+)
+
+// Verifier valida tokens EdDSA contra o JWKS do identity, com cache por kid.
+type Verifier struct {
+	jwksURL string
+	client  *http.Client
+	ttl     time.Duration
+
+	mu      sync.RWMutex
+	keys    map[string]ed25519.PublicKey
+	fetched time.Time
+}
+
+// NewVerifier cria um verificador que busca o JWKS em jwksURL e mantém as
+// chaves em cache por ttl (com refetch sob kid desconhecido).
+func NewVerifier(jwksURL string, ttl time.Duration) *Verifier {
+	return &Verifier{
+		jwksURL: jwksURL,
+		client:  &http.Client{Timeout: 5 * time.Second},
+		ttl:     ttl,
+		keys:    map[string]ed25519.PublicKey{},
+	}
+}
+
+// Verify valida a assinatura e a expiração do token e devolve o sub (playerID).
+// Qualquer falha vira domain.ErrUnauthorized (sem vazar o motivo ao chamador).
+func (v *Verifier) Verify(ctx context.Context, token string) (string, error) {
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
+		kid, _ := t.Header["kid"].(string)
+		if kid == "" {
+			return nil, errors.New("token sem kid")
+		}
+		return v.keyForKid(ctx, kid)
+	}, jwt.WithValidMethods([]string{"EdDSA"}))
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", domain.ErrUnauthorized, err)
+	}
+	sub, _ := claims["sub"].(string)
+	if sub == "" {
+		return "", domain.ErrUnauthorized
+	}
+	return sub, nil
+}
+
+// keyForKid devolve a chave pública do kid, atualizando o cache quando o kid é
+// desconhecido ou o cache está vencido. Se o refetch falhar mas houver uma
+// chave em cache (stale), usa-a — disponibilidade do identity não derruba a
+// validação de tokens já conhecidos.
+func (v *Verifier) keyForKid(ctx context.Context, kid string) (ed25519.PublicKey, error) {
+	v.mu.RLock()
+	key, ok := v.keys[kid]
+	stale := time.Since(v.fetched) >= v.ttl
+	v.mu.RUnlock()
+	if ok && !stale {
+		return key, nil
+	}
+
+	if err := v.refresh(ctx); err != nil {
+		if ok {
+			return key, nil // fallback: usa a chave stale
+		}
+		return nil, err
+	}
+
+	v.mu.RLock()
+	key, ok = v.keys[kid]
+	v.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("auth: kid desconhecido %q", kid)
+	}
+	return key, nil
+}
+
+// refresh busca o JWKS e substitui o cache de chaves.
+func (v *Verifier) refresh(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.jwksURL, nil)
+	if err != nil {
+		return fmt.Errorf("auth: jwks request: %w", err)
+	}
+	resp, err := v.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("auth: jwks fetch: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("auth: jwks status %d", resp.StatusCode)
+	}
+
+	var set struct {
+		Keys []struct {
+			Kty string `json:"kty"`
+			Crv string `json:"crv"`
+			X   string `json:"x"`
+			Kid string `json:"kid"`
+		} `json:"keys"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&set); err != nil {
+		return fmt.Errorf("auth: jwks decode: %w", err)
+	}
+
+	keys := make(map[string]ed25519.PublicKey, len(set.Keys))
+	for _, k := range set.Keys {
+		if k.Kty != "OKP" || k.Crv != "Ed25519" {
+			continue
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(k.X)
+		if err != nil || len(raw) != ed25519.PublicKeySize {
+			continue
+		}
+		keys[k.Kid] = ed25519.PublicKey(raw)
+	}
+
+	v.mu.Lock()
+	v.keys = keys
+	v.fetched = time.Now()
+	v.mu.Unlock()
+	return nil
+}
