@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -59,7 +60,12 @@ func run(log *slog.Logger) error {
 		}
 	}()
 
-	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("pgxpool config: %w", err)
+	}
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer() // spans de query dentro do trace (ADR-0014)
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
 		return fmt.Errorf("pgxpool: %w", err)
 	}
@@ -81,7 +87,9 @@ func run(log *slog.Logger) error {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-	mux.Handle("GET /metrics", promhttp.Handler())
+	// OpenMetrics habilita a exposição de exemplars (trace_id no histograma de
+	// latência) para o Grafana saltar métrica -> trace. Ver ADR-0014.
+	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	handler.Register(mux)
 
 	// otelhttp é o handler mais externo: abre o span por request e continua o

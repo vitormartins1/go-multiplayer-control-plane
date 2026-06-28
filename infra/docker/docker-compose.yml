@@ -36,6 +36,10 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --enable-feature=exemplar-storage # retém/serve exemplars p/ o Grafana (ADR-0014)
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
