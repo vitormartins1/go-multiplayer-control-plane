@@ -15,8 +15,8 @@
 - [x] `internal/domain/errors.go` — `ErrInvalidHandle`, `ErrHandleTaken`, `ErrWeakPassword`, `ErrInvalidCredentials`
 
 ## Fase 2 — Token issuer (Ed25519 + JWKS)
-- [ ] `internal/token/ed25519_issuer.go` — carregar/gerar chave; `Sign(subject, claims...)` → JWT EdDSA (golang-jwt) com `sub/iat/exp/kid` + claims extras (ex: `anon`, para a 002); `JWKS()` → JSON do JWK público; `kid` derivado da chave pública
-- [ ] `internal/token/ed25519_issuer_test.go` — token assinado é verificável com a pública; token expira; JWKS contém `kid` e nunca a chave privada
+- [x] `internal/token/ed25519_issuer.go` — carregar/gerar chave; `Sign(subject, claims...)` → JWT EdDSA (golang-jwt) com `sub/iat/exp/kid` + claims extras (ex: `anon`, para a 002); `JWKS()` → JSON do JWK público; `kid` derivado da chave pública
+- [x] `internal/token/ed25519_issuer_test.go` — token assinado é verificável com a pública; token expira; JWKS contém `kid` e nunca a chave privada
 
 ## Fase 3 — Service
 - [ ] `internal/service/auth_service.go` — `Register` (validar regras da spec → bcrypt hash → `repo.Create`); `Authenticate` (`repo.FindByHandle` → bcrypt compare, com compare "dummy" quando a conta não existe → `token.Sign`)
