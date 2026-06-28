@@ -1,7 +1,7 @@
 // Package auth valida o JWT emitido pelo identity-service, buscando as chaves
-// públicas no endpoint JWKS (ADR-0009). É um adapter de saída que satisfaz
-// domain.TokenVerifier. Será promovido a shared/auth quando um segundo serviço
-// precisar dele (ver plan.md da 001-achievement-core).
+// públicas no endpoint JWKS (ADR-0009). Compartilhado pelos serviços que
+// consomem o token do identity; satisfaz estruturalmente a Port TokenVerifier
+// de cada serviço (Verify(ctx, token) (playerID string, error)).
 package auth
 
 import (
@@ -17,9 +17,11 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-
-	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
 )
+
+// ErrUnauthorized indica token ausente, malformado, expirado ou com assinatura
+// inválida. O transport de cada serviço o mapeia para HTTP 401.
+var ErrUnauthorized = errors.New("auth: não autorizado")
 
 // Verifier valida tokens EdDSA contra o JWKS do identity, com cache por kid.
 type Verifier struct {
@@ -38,7 +40,7 @@ func NewVerifier(jwksURL string, ttl time.Duration) *Verifier {
 	return &Verifier{
 		jwksURL: jwksURL,
 		// otelhttp propaga o trace context ao buscar o JWKS — o fetch vira um
-		// span filho do request e cria o edge achievements->identity no service
+		// span filho do request e cria o edge <serviço>->identity no service
 		// graph (ADR-0014).
 		client: &http.Client{
 			Timeout:   5 * time.Second,
@@ -50,7 +52,7 @@ func NewVerifier(jwksURL string, ttl time.Duration) *Verifier {
 }
 
 // Verify valida a assinatura e a expiração do token e devolve o sub (playerID).
-// Qualquer falha vira domain.ErrUnauthorized (sem vazar o motivo ao chamador).
+// Qualquer falha vira ErrUnauthorized (sem vazar o motivo ao chamador).
 func (v *Verifier) Verify(ctx context.Context, token string) (string, error) {
 	claims := jwt.MapClaims{}
 	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
@@ -61,11 +63,11 @@ func (v *Verifier) Verify(ctx context.Context, token string) (string, error) {
 		return v.keyForKid(ctx, kid)
 	}, jwt.WithValidMethods([]string{"EdDSA"}))
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", domain.ErrUnauthorized, err)
+		return "", fmt.Errorf("%w: %v", ErrUnauthorized, err)
 	}
 	sub, _ := claims["sub"].(string)
 	if sub == "" {
-		return "", domain.ErrUnauthorized
+		return "", ErrUnauthorized
 	}
 	return sub, nil
 }
