@@ -1,0 +1,54 @@
+### cloud-save-service — collection HTTP
+#
+# Requer a stack no ar:
+#   docker compose -f infra/docker/docker-compose.yml up
+#
+# Endpoints exigem um JWT do identity (ADR-0009). O login captura o token.
+# GoLand/IntelliJ: clique no ▶. (VS Code REST Client: ver nota no fim.)
+#
+# Acompanhe: Grafana http://localhost:3000 e o console do MinIO
+# http://localhost:9001 (minioadmin/minioadmin), bucket cloud-save.
+
+@identityHost = http://localhost:8081
+@cloudSaveHost = http://localhost:8084
+@handle = Save_1
+@password = supersecret
+
+### (uma vez) Criar a conta no identity
+POST {{identityHost}}/accounts
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+### Login no identity -> captura o token
+# @name login
+POST {{identityHost}}/sessions
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+> {%
+    client.global.set("token", response.body.token);
+%}
+
+### Salvar o save (blob — aqui um JSON, mas o serviço trata como opaco)
+PUT {{cloudSaveHost}}/me/save
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "level": 7, "hp": 50, "inventory": ["sword", "shield"] }
+
+### Carregar o save (volta no mesmo Content-Type)
+GET {{cloudSaveHost}}/me/save
+Authorization: Bearer {{token}}
+
+### Sobrescrever (last-write-wins)
+PUT {{cloudSaveHost}}/me/save
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "level": 8, "hp": 100 }
+
+# --- VS Code REST Client ---
+# O bloco "> {% ... %}" é sintaxe do JetBrains. No REST Client, remova-o e use
+# Authorization: Bearer {{login.response.body.$.token}}

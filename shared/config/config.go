@@ -22,6 +22,13 @@ type Config struct {
 	// jogadores (consumidores do token, ADR-0009). Usado por serviços que
 	// validam o token; vazio nos que não validam (ex.: o próprio identity).
 	IdentityJWKSURL string // via IDENTITY_JWKS_URL
+
+	// Object storage (S3/MinIO) — usado por serviços de blob (ex. cloud-save,
+	// ADR-0015). Vazio nos serviços que não usam object storage.
+	S3Endpoint  string // via S3_ENDPOINT (ex. http://minio:9000)
+	S3AccessKey string // via S3_ACCESS_KEY
+	S3SecretKey string // via S3_SECRET_KEY
+	S3Bucket    string // via S3_BUCKET
 }
 
 // Load lê o ambiente, com defaults convenientes para dev local.
@@ -33,6 +40,10 @@ func Load() Config {
 		OTLPEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		TraceSampleRatio: envFloat("OTEL_TRACES_SAMPLER_RATIO", 1.0),
 		IdentityJWKSURL:  os.Getenv("IDENTITY_JWKS_URL"),
+		S3Endpoint:       os.Getenv("S3_ENDPOINT"),
+		S3AccessKey:      os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey:      os.Getenv("S3_SECRET_KEY"),
+		S3Bucket:         os.Getenv("S3_BUCKET"),
 	}
 }
 
