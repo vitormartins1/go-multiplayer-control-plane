@@ -1,6 +1,6 @@
 # Tempo single-binary para a stack local (ADR-0014).
-# Recebe OTLP gRPC dos serviços e guarda os traces em disco local.
-# Config mínima — o resto fica nos defaults (Tempo v3).
+# Recebe OTLP gRPC dos serviços, guarda os traces em disco e gera métricas de
+# trace (service graph + span metrics) via metrics-generator -> Prometheus.
 server:
   http_listen_port: 3200
 
@@ -11,6 +11,17 @@ distributor:
         grpc:
           endpoint: 0.0.0.0:4317
 
+# Deriva métricas dos spans e as envia ao Prometheus por remote_write.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
 storage:
   trace:
     backend: local
@@ -18,3 +29,9 @@ storage:
       path: /var/tempo/blocks
     wal:
       path: /var/tempo/wal
+
+# Habilita os processadores de métricas por padrão (service graph + RED por span).
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]

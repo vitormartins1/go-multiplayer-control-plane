@@ -48,6 +48,7 @@ O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de for
 **Provisionados** (sobem automático na pasta `game-backend`):
 - **Service Overview (RED)** — parametrizado por `$job` (um serviço, ou "All" para a frota): RPS / erros 5xx / latência p95 por rota + goroutines / heap / GC. Como o `shared/middleware` padroniza as métricas, este dashboard serve **qualquer serviço Go** sem refazer.
 - **PostgreSQL** — parametrizado por `$job` (um banco, ex. `identity-postgres`/`achievements-postgres`, ou "All"): conexões, commits/rollbacks, cache hit, tuplas/s, tamanho do banco, deadlocks. Serve **qualquer `<svc>-postgres-exporter`** sem refazer.
+- **Tracing (APM)** — **service graph** (mapa de dependências `user → serviço → banco`, derivado dos traces) + RED por serviço e latência p95 a partir dos spans. Alimentado pelo **metrics-generator do Tempo** (gera `traces_*` e faz `remote_write` ao Prometheus). É o "APM visual"; para inspecionar um trace específico em waterfall, use **Explore → Tempo** (ou a aba **Service Graph** lá).
 
 **Complementar** (importar via Grafana UI → Import by ID; selecionar a datasource Prometheus):
 

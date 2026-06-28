@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
 )
@@ -36,9 +37,15 @@ type Verifier struct {
 func NewVerifier(jwksURL string, ttl time.Duration) *Verifier {
 	return &Verifier{
 		jwksURL: jwksURL,
-		client:  &http.Client{Timeout: 5 * time.Second},
-		ttl:     ttl,
-		keys:    map[string]ed25519.PublicKey{},
+		// otelhttp propaga o trace context ao buscar o JWKS — o fetch vira um
+		// span filho do request e cria o edge achievements->identity no service
+		// graph (ADR-0014).
+		client: &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
+		ttl:  ttl,
+		keys: map[string]ed25519.PublicKey{},
 	}
 }
 

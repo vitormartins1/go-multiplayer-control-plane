@@ -22,3 +22,9 @@ datasources:
     jsonData:
       nodeGraph:
         enabled: true
+      # Service graph e métricas de trace vêm das séries traces_* que o
+      # metrics-generator do Tempo grava no Prometheus (ADR-0014).
+      serviceMap:
+        datasourceUid: prometheus
+      tracesToMetrics:
+        datasourceUid: prometheus
