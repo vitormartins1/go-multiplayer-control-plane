@@ -92,6 +92,10 @@ Guia completo: `docs/sdd/SDD-GUIDE.md`
 - Listagens de estrutura de pastas/arquivos podem permanecer em bloco de código texto (Mermaid não representa bem árvore de arquivos).
 - Aprendizados de Go relevantes vão em `docs/GO-LEARNINGS.md` (exemplos comentados), atualizados conforme surgem no desenvolvimento.
 
+## Git e versionamento
+
+Trabalhe em **feature branches** `feat/<serviço>/<NNN-slug>` (uma por feature SDD), nunca direto na `main`. **Conventional Commits** com escopo de serviço (`feat(identity): ...`). `main` sempre verde. Guia completo: `docs/GIT-WORKFLOW.md` (ADR-0013).
+
 ## ADRs — Architecture Decision Records
 
 Leia `docs/adr/ADR-GUIDE.md` para o guia completo. Resumo do comportamento esperado:

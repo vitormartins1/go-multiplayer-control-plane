@@ -33,6 +33,7 @@ Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Te
 | [docs/UNITY-INTEGRATION.md](docs/UNITY-INTEGRATION.md) | Guia genérico de integração Unity ↔ backend (rascunho) |
 | [docs/adr/README.md](docs/adr/README.md) | Índice de Architecture Decision Records |
 | [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) | Guia da metodologia SDD |
+| [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Padrão de branches e commits (ADR-0013) |
 | [docs/adr/ADR-GUIDE.md](docs/adr/ADR-GUIDE.md) | Guia para criação de ADRs |
 
 ## Status
