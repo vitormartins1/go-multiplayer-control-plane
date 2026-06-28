@@ -27,6 +27,7 @@ func NewHandler(auth domain.AuthService, tokens domain.TokenIssuer) *Handler {
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /accounts", h.register)
 	mux.HandleFunc("POST /sessions", h.login)
+	mux.HandleFunc("POST /sessions/anonymous", h.loginAnonymous)
 	mux.HandleFunc("GET /.well-known/jwks.json", h.jwks)
 }
 
@@ -62,6 +63,15 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, err := h.auth.Authenticate(r.Context(), req.Handle, req.Password)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+func (h *Handler) loginAnonymous(w http.ResponseWriter, r *http.Request) {
+	token, err := h.auth.LoginAnonymous(r.Context())
 	if err != nil {
 		writeDomainError(w, err)
 		return
