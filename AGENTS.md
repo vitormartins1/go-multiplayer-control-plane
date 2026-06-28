@@ -86,7 +86,7 @@ Leia `docs/adr/ADR-GUIDE.md`. Durante a sessão, monitore decisões arquiteturai
 O usuário vem de C#/.NET e aprende Go com este projeto. Ao concluir cada feature ou fase relevante de um serviço:
 
 1. Passe pelo `docs/GO-LEARNINGS.md` e registre conceitos/padrões de Go novos ou não-óbvios — exemplo comentado, referência ao código real (`serviço/arquivo`) e **diagrama Mermaid** quando houver fluxo/ordem/estado a visualizar.
-2. Dê ao usuário um resumo didático sob a ótica de aprendizado de Go (o "porquê", não só o status), contrastando com C#/.NET quando ajudar.
+2. Dê ao usuário um resumo didático sob a ótica de aprendizado de Go (o "porquê", não só o status), contrastando com C#/.NET quando ajudar. Nível **conceitual** (ideia e motivação de cada padrão), não walkthrough linha-a-linha.
 
 Não invente aprendizado para preencher; se não houve nada novo, diga isso. Não pule o passo silenciosamente.
 

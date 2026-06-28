@@ -84,7 +84,7 @@ Guia completo: `docs/sdd/SDD-GUIDE.md`
 O usuário vem de C#/.NET e está aprendendo Go com este projeto. Ao concluir **cada feature ou fase relevante** de um serviço (não só ao terminar o serviço inteiro):
 
 1. **Passe pelo `docs/GO-LEARNINGS.md`:** apareceu algum conceito/padrão de Go novo ou não-óbvio? Registre como nova entrada — exemplo curto comentado, **referência ao código real** que criamos (`serviço/arquivo`), e **diagrama Mermaid** quando houver fluxo/ordem/estado a visualizar (segue o template no topo do arquivo).
-2. **Dê um resumo didático ao usuário:** explique o que foi construído sob a ótica de *aprendizado de Go* — o "porquê" dos padrões, não só o status. Contraste com C#/.NET quando ajudar a fixar.
+2. **Dê um resumo didático ao usuário:** explique o que foi construído sob a ótica de *aprendizado de Go* — o "porquê" dos padrões, não só o status. Contraste com C#/.NET quando ajudar a fixar. Mantenha o nível **conceitual** (a ideia e a motivação de cada padrão, com um trecho curto só para ancorar), **não** um walkthrough linha-a-linha do código.
 
 Não invente aprendizado para preencher: se a etapa não trouxe nada novo, diga isso. Não pule este passo silenciosamente.
 
