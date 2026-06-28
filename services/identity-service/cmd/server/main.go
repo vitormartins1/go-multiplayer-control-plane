@@ -85,9 +85,10 @@ func run(log *slog.Logger) error {
 	handler.Register(mux)
 
 	// otelhttp é o handler mais externo: abre o span por request e continua o
-	// trace do client via traceparent (propagator global). /healthz e /metrics
-	// ficam de fora para não poluir os traces.
-	traced := otelhttp.NewHandler(metrics.Wrap(mux), "http.server",
+	// trace do client via traceparent (propagator global). RouteSpanName renomeia
+	// o span para a rota casada (ex. "POST /accounts"). /healthz e /metrics ficam
+	// de fora para não poluir os traces.
+	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(mux)), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return r.URL.Path != "/healthz" && r.URL.Path != "/metrics"
 		}),
