@@ -2,12 +2,14 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Metrics expõe métricas RED (Rate, Errors, Duration) das requisições HTTP.
@@ -53,8 +55,22 @@ func (m *Metrics) Wrap(next http.Handler) http.Handler {
 			route = "unmatched"
 		}
 		m.requests.WithLabelValues(r.Method, route, strconv.Itoa(rec.status)).Inc()
-		m.duration.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
+		observeDuration(r.Context(), m.duration.WithLabelValues(r.Method, route), time.Since(start).Seconds())
 	})
+}
+
+// observeDuration registra a latência e, quando o request faz parte de um
+// trace amostrado, anexa o trace_id como exemplar. É isso que liga o gráfico
+// de latência ao trace no Grafana (exemplar do Prometheus → Tempo). Sem trace
+// ativo, vira um Observe normal. Ver ADR-0014.
+func observeDuration(ctx context.Context, obs prometheus.Observer, secs float64) {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsSampled() {
+		if eo, ok := obs.(prometheus.ExemplarObserver); ok {
+			eo.ObserveWithExemplar(secs, prometheus.Labels{"trace_id": sc.TraceID().String()})
+			return
+		}
+	}
+	obs.Observe(secs)
 }
 
 // statusRecorder captura o status code escrito pelo handler.
