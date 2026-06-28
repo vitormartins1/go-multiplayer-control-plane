@@ -27,6 +27,7 @@ Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Te
 | Documento | Conteúdo |
 |---|---|
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Roadmap de execução e fases de estudo |
+| [docs/FEATURE-MAP.md](docs/FEATURE-MAP.md) | Mapa de features de alto nível dos serviços |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Visão consolidada da arquitetura |
 | [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | Aprendizados de Go (exemplos comentados) |
 | [docs/UNITY-INTEGRATION.md](docs/UNITY-INTEGRATION.md) | Guia genérico de integração Unity ↔ backend (rascunho) |
