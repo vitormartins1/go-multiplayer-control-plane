@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -127,4 +128,41 @@ func TestAuthenticate_HandleInexistente_RetornaInvalidCredentials(t *testing.T) 
 	// resposta idêntica ao caso de senha incorreta (não revela existência)
 	assert.ErrorIs(t, err, domain.ErrInvalidCredentials)
 	tokens.AssertNotCalled(t, "Sign")
+}
+
+func TestLoginAnonymous_EmiteTokenGuestAnonSemPersistir(t *testing.T) {
+	tokens := new(mockTokens)
+	var sub string
+	var claims map[string]any
+	tokens.On("Sign", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return("guest-token", nil).
+		Run(func(args mock.Arguments) {
+			sub = args.String(1)
+			claims, _ = args.Get(2).(map[string]any)
+		})
+	repo := new(mockRepo)
+	svc := New(repo, tokens)
+
+	token, err := svc.LoginAnonymous(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "guest-token", token)
+	assert.True(t, strings.HasPrefix(sub, "guest-"))
+	assert.Equal(t, true, claims["anon"])
+	repo.AssertNotCalled(t, "Create")
+	repo.AssertNotCalled(t, "FindByHandle")
+}
+
+func TestLoginAnonymous_GuestsDistintos(t *testing.T) {
+	tokens := new(mockTokens)
+	subs := map[string]bool{}
+	tokens.On("Sign", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return("t", nil).
+		Run(func(args mock.Arguments) { subs[args.String(1)] = true })
+	svc := New(new(mockRepo), tokens)
+
+	_, _ = svc.LoginAnonymous(context.Background())
+	_, _ = svc.LoginAnonymous(context.Background())
+
+	assert.Len(t, subs, 2)
 }

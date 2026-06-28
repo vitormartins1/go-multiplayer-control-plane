@@ -28,6 +28,11 @@ func (m *mockAuth) Authenticate(ctx context.Context, handle, password string) (s
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockAuth) LoginAnonymous(ctx context.Context) (string, error) {
+	args := m.Called(ctx)
+	return args.String(0), args.Error(1)
+}
+
 type mockTokens struct{ mock.Mock }
 
 func (m *mockTokens) Sign(ctx context.Context, subject string, claims map[string]any) (string, error) {
@@ -120,4 +125,17 @@ func TestJWKS_200(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.JSONEq(t, `{"keys":[]}`, rr.Body.String())
+}
+
+func TestLoginAnonymous_200ComToken(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("LoginAnonymous", mock.Anything).Return("guest-token", nil)
+	srv := newServer(auth, new(mockTokens))
+
+	rr := do(srv, http.MethodPost, "/sessions/anonymous", "")
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, "guest-token", resp["token"])
 }

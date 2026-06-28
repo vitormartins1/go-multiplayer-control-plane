@@ -77,3 +77,12 @@ func (s *service) Authenticate(ctx context.Context, handle, password string) (st
 	}
 	return token, nil
 }
+
+func (s *service) LoginAnonymous(ctx context.Context) (string, error) {
+	subject := "guest-" + uuid.NewString()
+	token, err := s.tokens.Sign(ctx, subject, map[string]any{"anon": true})
+	if err != nil {
+		return "", fmt.Errorf("identity service: login anonymous: sign: %w", err)
+	}
+	return token, nil
+}

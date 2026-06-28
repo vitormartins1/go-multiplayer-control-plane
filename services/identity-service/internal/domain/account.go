@@ -20,6 +20,9 @@ type Account struct {
 type AuthService interface {
 	Register(ctx context.Context, handle, password string) (*Account, error)
 	Authenticate(ctx context.Context, handle, password string) (token string, err error)
+	// LoginAnonymous emite um session token para uma identidade guest
+	// efêmera, sem credenciais e sem persistência (feature 002-anonymous-login).
+	LoginAnonymous(ctx context.Context) (token string, err error)
 }
 
 // AccountRepository é a Port de saída de persistência (implementada em repository).
