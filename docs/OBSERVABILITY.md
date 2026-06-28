@@ -45,15 +45,15 @@ O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de for
 
 ## Dashboards
 
-**Provisionado** (sobe automático na pasta `game-backend`):
+**Provisionados** (sobem automático na pasta `game-backend`):
 - **Service Overview (RED)** — parametrizado por `$job` (um serviço, ou "All" para a frota): RPS / erros 5xx / latência p95 por rota + goroutines / heap / GC. Como o `shared/middleware` padroniza as métricas, este dashboard serve **qualquer serviço Go** sem refazer.
+- **PostgreSQL** — parametrizado por `$job` (um banco, ex. `identity-postgres`/`achievements-postgres`, ou "All"): conexões, commits/rollbacks, cache hit, tuplas/s, tamanho do banco, deadlocks. Serve **qualquer `<svc>-postgres-exporter`** sem refazer.
 
-**Complementares** (importar via Grafana UI → Import by ID; selecionar a datasource Prometheus):
+**Complementar** (importar via Grafana UI → Import by ID; selecionar a datasource Prometheus):
 
 | Dashboard | ID | Para |
 |---|---|---|
 | Go Processes | 6671 | deep-dive de runtime |
-| PostgreSQL (postgres_exporter) | 9628 | internals do banco |
 
 ## Padrão por serviço novo
 

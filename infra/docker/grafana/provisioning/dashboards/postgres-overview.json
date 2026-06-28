@@ -1,0 +1,271 @@
+{
+ "uid": "postgres-overview",
+ "title": "Game Backend — PostgreSQL",
+ "tags": [
+  "game-backend"
+ ],
+ "timezone": "",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "10s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "job",
+    "label": "Banco",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "prometheus"
+    },
+    "query": {
+     "query": "label_values(pg_up, job)",
+     "refId": "StandardVariableQuery"
+    },
+    "refresh": 2,
+    "includeAll": true,
+    "multi": true,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "title": "Conexões ativas",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(pg_stat_database_numbackends{job=~\"$job\"}) by (job)",
+     "legendFormat": "{{job}}"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "title": "Commits/s e Rollbacks/s",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 0
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_xact_commit{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}} commits"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_xact_rollback{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}} rollbacks"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "title": "Cache hit ratio",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_blks_hit{job=~\"$job\"}[5m])) by (job) / clamp_min(sum(rate(pg_stat_database_blks_hit{job=~\"$job\"}[5m])) by (job) + sum(rate(pg_stat_database_blks_read{job=~\"$job\"}[5m])) by (job), 1)",
+     "legendFormat": "{{job}}"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "title": "Tuplas/s (fetch/insert/update/delete)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 8
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_tup_fetched{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}} fetched"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_tup_inserted{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}} inserted"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_tup_updated{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}} updated"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_tup_deleted{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}} deleted"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "title": "Tamanho do banco",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 16
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "decbytes"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(pg_database_size_bytes{job=~\"$job\", datname!~\"template.*\"}) by (job, datname)",
+     "legendFormat": "{{job}}/{{datname}}"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "title": "Deadlocks/s",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 16
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(pg_stat_database_deadlocks{job=~\"$job\"}[5m])) by (job)",
+     "legendFormat": "{{job}}"
+    }
+   ]
+  }
+ ]
+}
