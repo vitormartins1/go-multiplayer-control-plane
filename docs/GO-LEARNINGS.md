@@ -388,3 +388,33 @@ VALUES ($1, $2, 1, CASE WHEN 1 >= $3 THEN $4::timestamptz ELSE NULL END)
 ```
 
 **Pegadinha / nuance:** o erro do cast (`column ... is of type timestamptz but expression is of type text`) **não** aparece no compilador Go — só ao rodar contra o Postgres. É mais um argumento para os testes de integração com testcontainers: o SQL só é validado de verdade contra um banco real, não pelo `go build`.
+
+---
+
+## 10 — Interfaces implícitas: um tipo satisfaz uma Port sem declarar
+
+**O que é / por que importa:** em Go um tipo implementa uma interface **só por ter os métodos** — não existe `implements` nem `: IFoo`. Foi isso que permitiu o `shared/auth.Verifier` satisfazer a Port `TokenVerifier` do achievements **e** do player-data (e de qualquer serviço futuro) sem conhecer nenhum desses pacotes. Vindo de C#/Java é o **inverso**: lá o tipo declara a interface que implementa (acopla-se ao contrato). Em Go, **quem define a interface é o consumidor**, e o provedor nem sabe que ela existe.
+
+**Onde no projeto:** `shared/auth.Verifier` (não importa nenhum domain) satisfaz `domain.TokenVerifier` tanto em `achievements-service` quanto em `player-data-service`.
+
+```mermaid
+flowchart LR
+    Port["domain.TokenVerifier<br/>(interface, definida pelo CONSUMIDOR)"]
+    WireUp["wire-up do serviço"] -->|espera a Port| Port
+    Verifier["shared/auth.Verifier<br/>(não conhece o serviço)"] -.->|satisfaz sem declarar| Port
+```
+
+```go
+// shared/auth — NÃO conhece nenhum serviço:
+func (v *Verifier) Verify(ctx context.Context, token string) (string, error) { ... }
+
+// cada serviço declara a Port que precisa, do jeito que precisa:
+type TokenVerifier interface {
+	Verify(ctx context.Context, token string) (playerID string, err error)
+}
+
+// no wire-up o Verifier é aceito onde a Port é esperada — sem cast, sem "implements":
+handler := transport.NewHandler(svc, auth.NewVerifier(url, ttl))
+```
+
+**Pegadinha / nuance:** isso é a base do **hexagonal idiomático em Go** (ADR-0002) — a interface mora no `domain` (o lado de dentro, que a define do tamanho exato que precisa) e os adapters a satisfazem de fora **sem importá-la**. Por isso as Ports são pequenas e específicas por serviço, e `interface` de uma linha é comum e saudável (ao contrário do C#, onde interfaces tendem a ser grandes e centralizadas). O `var _ domain.X = (*T)(nil)` nos adapters é só uma **asserção de compilação** que falha cedo se o tipo deixar de satisfazer a Port.
