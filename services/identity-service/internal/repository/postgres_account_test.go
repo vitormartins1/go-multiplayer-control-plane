@@ -25,7 +25,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 	ctr, err := tcpostgres.Run(ctx, "postgres:16",
-		tcpostgres.WithDatabase("gamebackend"),
+		tcpostgres.WithDatabase("identity"),
 		tcpostgres.WithUsername("dev"),
 		tcpostgres.WithPassword("dev"),
 		tcpostgres.WithInitScripts("../../migrations/001_create_accounts.sql"),

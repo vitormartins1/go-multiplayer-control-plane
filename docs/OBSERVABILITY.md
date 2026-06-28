@@ -25,10 +25,12 @@ docker compose -f infra/docker/docker-compose.yml up --build
 | Serviço | URL | Notas |
 |---|---|---|
 | identity-service | http://localhost:8081 | API; `/metrics`, `/healthz` |
+| achievements-service | http://localhost:8082 | API; `/metrics`, `/healthz` |
 | Prometheus | http://localhost:9090 | ver alvos em Status → Targets |
 | Grafana | http://localhost:3000 | login anônimo (admin); datasources Prometheus e Tempo provisionados |
 | Tempo | http://localhost:3200 | backend de traces (API de query); OTLP gRPC em `:4317` |
-| postgres_exporter | http://localhost:9187/metrics | métricas do Postgres |
+| identity-postgres-exporter | http://localhost:9187/metrics | métricas do banco do identity |
+| achievements-postgres-exporter | http://localhost:9188/metrics | métricas do banco do achievements |
 
 Gerar tráfego para ver as métricas RED:
 
@@ -52,6 +54,30 @@ O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de for
 |---|---|---|
 | Go Processes | 6671 | deep-dive de runtime |
 | PostgreSQL (postgres_exporter) | 9628 | internals do banco |
+
+## Padrão por serviço novo
+
+Cada serviço Go nasce instrumentado (ADR-0006). Ao adicionar um serviço, siga a nomenclatura e o checklist — assim ele entra na stack de observabilidade sem refazer dashboard.
+
+### Nomenclatura
+
+| Recurso | Padrão | identity / achievements |
+|---|---|---|
+| Serviço HTTP (compose) | `<svc>-service` | identity-service / achievements-service |
+| Banco (compose) | `<svc>-postgres` | identity-postgres / achievements-postgres |
+| Database | `<svc>` | identity / achievements |
+| Exporter do banco | `<svc>-postgres-exporter` | identity-postgres-exporter / achievements-postgres-exporter |
+| Porta do banco (host) | 5432, 5433, … | 5432 / 5433 |
+| Porta do exporter (host) | 9187, 9188, … | 9187 / 9188 |
+| `service.name` (OTel) / `job` (Prometheus) | `<svc>-service` | identity-service / achievements-service |
+
+### Checklist de observabilidade (a cada serviço novo)
+
+- [ ] **Métricas RED + runtime:** herdadas do `shared/middleware`; exponha `/metrics` (OpenMetrics) no wire-up. Aparece automático no dashboard **Service Overview (RED)** (parametrizado por `$job`).
+- [ ] **Scrape do serviço:** job `<svc>-service` no `prometheus.yml`.
+- [ ] **Tracing:** `telemetry.SetupTracing` + `otelhttp` + otelpgx no wire-up (ADR-0014); `OTEL_EXPORTER_OTLP_ENDPOINT` no compose.
+- [ ] **Banco:** `<svc>-postgres-exporter` no compose + job `<svc>-postgres` no `prometheus.yml` (dashboard PostgreSQL 9628, filtrar por `instance`).
+- [ ] **Logs:** `slog` JSON via `shared/logger` (de graça).
 
 ## Visão de futuro: observabilidade do sistema completo
 
