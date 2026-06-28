@@ -17,6 +17,25 @@ services:
       tempo:
         condition: service_started
 
+  achievements-service:
+    build:
+      context: ../..
+      dockerfile: services/achievements-service/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://dev:dev@achievements-postgres:5432/achievements?sslmode=disable
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      achievements-postgres:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   postgres:
     image: postgres:16
     environment:
@@ -30,6 +49,23 @@ services:
       - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d gamebackend"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Banco próprio do achievements (database-per-service, ADR-0015).
+  achievements-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: achievements
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - ../../services/achievements-service/migrations/001_create_achievements.sql:/docker-entrypoint-initdb.d/001_create_achievements.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
       timeout: 3s
       retries: 10

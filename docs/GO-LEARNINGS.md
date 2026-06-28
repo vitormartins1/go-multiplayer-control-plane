@@ -339,3 +339,28 @@ func observeDuration(ctx context.Context, obs prometheus.Observer, secs float64)
 ```
 
 **Pegadinha / nuance:** o `, ok` é o que torna o assertion seguro — sem ele (`obs.(prometheus.ExemplarObserver)`), um valor que **não** implementa a interface causa **panic**. A mesma técnica aparece na stdlib (ex.: checar se um `io.Writer` também é `io.ReaderFrom` para copiar mais rápido). É composição em vez de herança: capacidades se **somam**, e você pergunta por elas quando precisa.
+
+---
+
+## 08 — Valores request-scoped no `context.Context` (chave de tipo privado)
+
+**O que é / por que importa:** dados que "viajam com a requisição" mas não são parâmetros explícitos — ex. o jogador que o middleware de auth resolveu a partir do JWT — vão no `context.Context` via `context.WithValue`. O idioma de Go: a **chave** é de um tipo **não exportado** do seu pacote, não uma string. Assim nenhum outro pacote consegue colidir com a sua chave nem ler seu valor por acidente. Em C# isso seria o `HttpContext.Items` ou um serviço *scoped* do DI; em Go é o próprio context, com isolamento garantido pelo tipo da chave.
+
+**Onde no projeto:** `services/achievements-service/internal/transport/http_handler.go` — o middleware valida o token, injeta o `playerID`; os handlers o leem.
+
+```go
+type ctxKey int           // tipo privado do pacote
+const playerIDKey ctxKey = iota
+
+// no middleware, após validar o token:
+ctx := context.WithValue(r.Context(), playerIDKey, playerID)
+next.ServeHTTP(w, r.WithContext(ctx))
+
+// no handler:
+func playerID(ctx context.Context) string {
+	id, _ := ctx.Value(playerIDKey).(string) // type assertion; "" se ausente
+	return id
+}
+```
+
+**Pegadinha / nuance:** usar `ctxKey` (e não `string`) é o que dá o isolamento — um `context.WithValue(ctx, "playerID", ...)` de outro pacote **não** colide com a sua chave, porque os tipos diferem. Regra prática: o context carrega só o que é **request-scoped** (quem é o usuário, trace, deadline). Dependências fixas do serviço (repo, logger, config) vão por **injeção no construtor**, nunca pelo context. Se o dado sobrevive à requisição, não é lugar de context.

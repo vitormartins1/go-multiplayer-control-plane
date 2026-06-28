@@ -1,0 +1,60 @@
+### achievements-service — collection HTTP
+#
+# Requer a stack no ar:
+#   docker compose -f infra/docker/docker-compose.yml up
+#
+# Todos os endpoints exigem um JWT do identity (ADR-0009). O login abaixo
+# captura o token e os demais requests o reutilizam.
+#
+# GoLand/IntelliJ: clique no ▶ na margem. (VS Code REST Client: ver nota no fim.)
+#
+# Acompanhe: Grafana http://localhost:3000 (Explore -> Tempo) e o banco
+# achievements em localhost:5433 (db achievements, user/pass dev/dev).
+
+@identityHost = http://localhost:8081
+@achievementsHost = http://localhost:8082
+@handle = Achiever_1
+@password = supersecret
+
+### (uma vez) Criar a conta no identity
+POST {{identityHost}}/accounts
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+### Login no identity -> captura o token
+# @name login
+POST {{identityHost}}/sessions
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+> {%
+    client.global.set("token", response.body.token);
+%}
+
+### Catálogo de conquistas
+GET {{achievementsHost}}/achievements
+Authorization: Bearer {{token}}
+
+### Enviar evento de gameplay -> desbloqueia (idempotente)
+POST {{achievementsHost}}/events
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "type": "match_won" }
+
+### Minhas conquistas (desbloqueadas + bloqueadas)
+GET {{achievementsHost}}/me/achievements
+Authorization: Bearer {{token}}
+
+### Repetir o evento -> idempotente (unlocked vazio na resposta)
+POST {{achievementsHost}}/events
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "type": "match_won" }
+
+# --- VS Code REST Client ---
+# O bloco "> {% ... %}" é sintaxe do HTTP Client do JetBrains. No REST Client,
+# remova-o e use diretamente: Authorization: Bearer {{login.response.body.$.token}}

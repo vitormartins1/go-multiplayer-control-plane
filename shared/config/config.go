@@ -17,6 +17,11 @@ type Config struct {
 	// Tempo no ar roda normal; o compose seta a env para apontar ao coletor.
 	OTLPEndpoint     string  // OTLP gRPC host:port; via OTEL_EXPORTER_OTLP_ENDPOINT
 	TraceSampleRatio float64 // fração de traces-raiz amostrados (ParentBased)
+
+	// IdentityJWKSURL é o endpoint JWKS do identity para validar o JWT dos
+	// jogadores (consumidores do token, ADR-0009). Usado por serviços que
+	// validam o token; vazio nos que não validam (ex.: o próprio identity).
+	IdentityJWKSURL string // via IDENTITY_JWKS_URL
 }
 
 // Load lê o ambiente, com defaults convenientes para dev local.
@@ -27,6 +32,7 @@ func Load() Config {
 		JWTPrivateKey:    os.Getenv("JWT_PRIVATE_KEY"),
 		OTLPEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		TraceSampleRatio: envFloat("OTEL_TRACES_SAMPLER_RATIO", 1.0),
+		IdentityJWKSURL:  os.Getenv("IDENTITY_JWKS_URL"),
 	}
 }
 
