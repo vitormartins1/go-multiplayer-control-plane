@@ -1,5 +1,5 @@
-# Ambiente local do identity-service. A observabilidade (Prometheus/Grafana/
-# postgres_exporter) é adicionada na task de observabilidade (ver backlog, ADR-0006).
+# Ambiente local do identity-service + observabilidade.
+# Ver ADR-0006 e docs/OBSERVABILITY.md.
 services:
   identity-service:
     build:
@@ -11,7 +11,8 @@ services:
       PORT: "8080"
       DATABASE_URL: postgres://dev:dev@postgres:5432/gamebackend?sslmode=disable
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16
@@ -24,3 +25,39 @@ services:
     volumes:
       # aplica a migration na inicialização do banco
       - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d gamebackend"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - identity-service
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://dev:dev@postgres:5432/gamebackend?sslmode=disable
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres

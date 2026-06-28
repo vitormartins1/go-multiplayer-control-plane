@@ -34,6 +34,7 @@ Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Te
 | [docs/adr/README.md](docs/adr/README.md) | Índice de Architecture Decision Records |
 | [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) | Guia da metodologia SDD |
 | [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Padrão de branches e commits (ADR-0013) |
+| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) | Observabilidade local (Prometheus/Grafana) |
 | [docs/adr/ADR-GUIDE.md](docs/adr/ADR-GUIDE.md) | Guia para criação de ADRs |
 
 ## Status

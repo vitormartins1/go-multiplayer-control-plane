@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/c130n/game-backend/services/identity-service/internal/repository"
 	"github.com/c130n/game-backend/services/identity-service/internal/service"
@@ -25,6 +27,7 @@ import (
 	"github.com/c130n/game-backend/services/identity-service/internal/transport"
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
+	"github.com/c130n/game-backend/shared/middleware"
 )
 
 func main() {
@@ -53,16 +56,19 @@ func run(log *slog.Logger) error {
 	svc := service.New(repo, issuer)
 	handler := transport.NewHandler(svc, issuer)
 
+	metrics := middleware.NewMetrics(prometheus.DefaultRegisterer, "identity-service")
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	mux.Handle("GET /metrics", promhttp.Handler())
 	handler.Register(mux)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      mux,
+		Handler:      metrics.Wrap(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
