@@ -1,0 +1,20 @@
+# Tempo single-binary para a stack local (ADR-0014).
+# Recebe OTLP gRPC dos serviços e guarda os traces em disco local.
+# Config mínima — o resto fica nos defaults (Tempo v3).
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
