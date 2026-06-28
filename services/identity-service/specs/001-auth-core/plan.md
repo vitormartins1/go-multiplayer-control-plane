@@ -50,6 +50,7 @@ Fluxo: `Register` valida → hasheia a senha → persiste; `Authenticate` busca 
 - **Não vazar existência do handle:** no `Authenticate`, quando o handle não existe, ainda executar uma comparação bcrypt "dummy" para evitar oráculo de timing — mesma resposta e tempo aproximado de senha incorreta.
 - **JWKS à mão** em vez de uma lib de JWK: menos dependência e melhor para aprender o formato; o JSON é pequeno e estável.
 - **golang-jwt vs jwx:** golang-jwt é mais simples/difundido; como o JWKS é montado à mão, não preciso do jwx. Trade: se o JWKS crescer (rotação, múltiplas chaves), reavaliar jwx.
+- **TokenIssuer.Sign extensível:** projetado para aceitar claims extras (ex: `anon`), servindo o 001 e a feature 002-anonymous-login sem retrabalho.
 
 ## Ordem de implementação
 
