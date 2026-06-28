@@ -9,4 +9,9 @@ var (
 	ErrHandleTaken        = errors.New("identity: handle já em uso")
 	ErrWeakPassword       = errors.New("identity: senha fraca")
 	ErrInvalidCredentials = errors.New("identity: credenciais inválidas")
+
+	// ErrAccountNotFound é um sentinel interno (repository -> service).
+	// Nunca é exposto à API: o service o traduz para ErrInvalidCredentials,
+	// para não revelar se o handle existe.
+	ErrAccountNotFound = errors.New("identity: conta não encontrada")
 )

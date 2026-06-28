@@ -19,8 +19,8 @@
 - [x] `internal/token/ed25519_issuer_test.go` — token assinado é verificável com a pública; token expira; JWKS contém `kid` e nunca a chave privada
 
 ## Fase 3 — Service
-- [ ] `internal/service/auth_service.go` — `Register` (validar regras da spec → bcrypt hash → `repo.Create`); `Authenticate` (`repo.FindByHandle` → bcrypt compare, com compare "dummy" quando a conta não existe → `token.Sign`)
-- [ ] `internal/service/auth_service_test.go` — unit tests cobrindo TODOS os Casos de Teste Obrigatórios da spec (mocks de `AccountRepository` e `TokenIssuer`):
+- [x] `internal/service/auth_service.go` — `Register` (validar regras da spec → bcrypt hash → `repo.Create`); `Authenticate` (`repo.FindByHandle` → bcrypt compare, com compare "dummy" quando a conta não existe → `token.Sign`)
+- [x] `internal/service/auth_service_test.go` — unit tests cobrindo TODOS os Casos de Teste Obrigatórios da spec (mocks de `AccountRepository` e `TokenIssuer`):
   - register válido (sem vazar senha/hash); handle inválido; senha fraca; handle duplicado (ci)
   - login correto (JWT com sub/exp/kid); senha errada e handle inexistente → mesmo `ErrInvalidCredentials`
 
