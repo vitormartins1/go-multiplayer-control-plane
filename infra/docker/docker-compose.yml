@@ -9,10 +9,10 @@ services:
       - "8081:8080"
     environment:
       PORT: "8080"
-      DATABASE_URL: postgres://dev:dev@postgres:5432/gamebackend?sslmode=disable
+      DATABASE_URL: postgres://dev:dev@identity-postgres:5432/identity?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
-      postgres:
+      identity-postgres:
         condition: service_healthy
       tempo:
         condition: service_started
@@ -36,10 +36,11 @@ services:
       tempo:
         condition: service_started
 
-  postgres:
+  # Banco próprio do identity (database-per-service, ADR-0015).
+  identity-postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: gamebackend
+      POSTGRES_DB: identity
       POSTGRES_USER: dev
       POSTGRES_PASSWORD: dev
     ports:
@@ -48,7 +49,7 @@ services:
       # aplica a migration na inicialização do banco
       - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dev -d gamebackend"]
+      test: ["CMD-SHELL", "pg_isready -U dev -d identity"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -106,11 +107,21 @@ services:
       - prometheus
       - tempo
 
-  postgres-exporter:
+  # Um exporter por banco — padrão a repetir a cada serviço novo (ver OBSERVABILITY.md).
+  identity-postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     environment:
-      DATA_SOURCE_NAME: postgresql://dev:dev@postgres:5432/gamebackend?sslmode=disable
+      DATA_SOURCE_NAME: postgresql://dev:dev@identity-postgres:5432/identity?sslmode=disable
     ports:
       - "9187:9187"
     depends_on:
-      - postgres
+      - identity-postgres
+
+  achievements-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://dev:dev@achievements-postgres:5432/achievements?sslmode=disable
+    ports:
+      - "9188:9187"
+    depends_on:
+      - achievements-postgres
