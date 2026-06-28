@@ -133,8 +133,8 @@ func TestRecordEvent_ErroDominio_MapeiaStatus(t *testing.T) {
 func TestListForPlayer_UsaPlayerIDDoToken_200(t *testing.T) {
 	at := time.Now().UTC()
 	svc := &fakeService{forPlayer: []domain.PlayerAchievement{
-		{Achievement: domain.Achievement{ID: "first_win", Name: "Primeira Vitória"}, Unlocked: true, UnlockedAt: at},
-		{Achievement: domain.Achievement{ID: "first_blood", Name: "Primeiro Sangue"}},
+		{Achievement: domain.Achievement{ID: "first_win", Name: "Primeira Vitória", Target: 1}, Progress: 1, Unlocked: true, UnlockedAt: at},
+		{Achievement: domain.Achievement{ID: "ten_wins", Name: "Veterano", Target: 10}, Progress: 7},
 	}}
 	srv := newServer(svc, fakeVerifier{playerID: "player-9"})
 	defer srv.Close()
@@ -149,8 +149,14 @@ func TestListForPlayer_UsaPlayerIDDoToken_200(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.Len(t, body.Achievements, 2)
+	// desbloqueada: progress = target, unlocked
 	assert.True(t, body.Achievements[0].Unlocked)
+	assert.Equal(t, 1, body.Achievements[0].Progress)
+	assert.Equal(t, 1, body.Achievements[0].Target)
 	assert.NotNil(t, body.Achievements[0].UnlockedAt)
+	// em progresso: 7/10, ainda bloqueada
 	assert.False(t, body.Achievements[1].Unlocked)
+	assert.Equal(t, 7, body.Achievements[1].Progress)
+	assert.Equal(t, 10, body.Achievements[1].Target)
 	assert.Nil(t, body.Achievements[1].UnlockedAt)
 }

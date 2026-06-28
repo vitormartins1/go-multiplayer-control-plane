@@ -25,7 +25,10 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithDatabase("achievements"),
 		tcpostgres.WithUsername("dev"),
 		tcpostgres.WithPassword("dev"),
-		tcpostgres.WithInitScripts("../../migrations/001_create_achievements.sql"),
+		tcpostgres.WithInitScripts(
+			"../../migrations/001_create_achievements.sql",
+			"../../migrations/002_add_progress.sql",
+		),
 		tcpostgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
@@ -39,62 +42,102 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func TestListCatalog_CarregaSeed(t *testing.T) {
+func TestListCatalog_CarregaSeedComTarget(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
 	cat, err := repo.ListCatalog(context.Background())
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(cat), 3)
 
-	ids := map[string]bool{}
+	byID := map[string]int{}
 	for _, a := range cat {
-		ids[a.ID] = true
+		byID[a.ID] = a.Target
 	}
-	assert.True(t, ids["first_win"])
+	assert.Equal(t, 1, byID["first_win"], "first_win target=1")
+	assert.Equal(t, 10, byID["ten_wins"], "ten_wins target=10")
 }
 
-func TestFindByEventType_RetornaConquistasDoTipo(t *testing.T) {
+func TestRecordProgress_AtingeMeta_DesbloqueiaETrava(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
-	got, err := repo.FindByEventType(context.Background(), "match_won")
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// 9 primeiras ocorrências: progride sem desbloquear
+	for i := 1; i < 10; i++ {
+		ju, err := repo.RecordProgress(ctx, "p1", "ten_wins", 10, now)
+		require.NoError(t, err)
+		assert.False(t, ju, "ocorrência %d não deve desbloquear", i)
+	}
+	// 10ª: desbloqueia
+	ju, err := repo.RecordProgress(ctx, "p1", "ten_wins", 10, now)
 	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, "first_win", got[0].ID)
+	assert.True(t, ju, "10ª ocorrência desbloqueia")
+	// 11ª: no-op
+	ju, err = repo.RecordProgress(ctx, "p1", "ten_wins", 10, now)
+	require.NoError(t, err)
+	assert.False(t, ju, "após desbloqueada é no-op")
+
+	prog := mustProgress(t, repo, "p1")
+	assert.Equal(t, 10, prog["ten_wins"].Progress, "progress trava em target")
+	assert.False(t, prog["ten_wins"].UnlockedAt.IsZero(), "fica desbloqueada")
 }
 
-func TestUnlock_Idempotente_NaoAlteraUnlockedAt(t *testing.T) {
+func TestRecordProgress_Target1_DesbloqueiaNoPrimeiro(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+
+	ju, err := repo.RecordProgress(ctx, "p1", "first_win", 1, time.Now().UTC())
+	require.NoError(t, err)
+	assert.True(t, ju, "target=1 desbloqueia na 1ª")
+
+	ju, err = repo.RecordProgress(ctx, "p1", "first_win", 1, time.Now().UTC())
+	require.NoError(t, err)
+	assert.False(t, ju, "2ª é no-op")
+}
+
+func TestRecordProgress_PreservaUnlockedAt(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
 	ctx := context.Background()
 
 	at1 := time.Now().UTC()
-	created, err := repo.Unlock(ctx, "player-1", "first_win", at1)
+	_, err := repo.RecordProgress(ctx, "p1", "first_win", 1, at1)
 	require.NoError(t, err)
-	assert.True(t, created, "primeiro unlock deve criar")
 
 	at2 := at1.Add(time.Hour)
-	created, err = repo.Unlock(ctx, "player-1", "first_win", at2)
+	_, err = repo.RecordProgress(ctx, "p1", "first_win", 1, at2)
 	require.NoError(t, err)
-	assert.False(t, created, "segundo unlock deve ser no-op")
 
-	unlocks, err := repo.ListPlayerUnlocks(ctx, "player-1")
-	require.NoError(t, err)
-	require.Len(t, unlocks, 1)
-	assert.WithinDuration(t, at1, unlocks[0].UnlockedAt, time.Second, "unlocked_at deve permanecer o original")
+	prog := mustProgress(t, repo, "p1")
+	assert.WithinDuration(t, at1, prog["first_win"].UnlockedAt, time.Second, "unlocked_at imutável")
 }
 
-func TestUnlock_Guest_PlayerIDTexto(t *testing.T) {
-	repo := NewPostgresAchievementRepository(newTestPool(t))
-	created, err := repo.Unlock(context.Background(), "guest-abc-123", "first_blood", time.Now().UTC())
-	require.NoError(t, err)
-	assert.True(t, created)
-}
-
-func TestListPlayerUnlocks_IsolaPorJogador(t *testing.T) {
+func TestListPlayerProgress_IsolaPorJogador(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
 	ctx := context.Background()
 
-	_, err := repo.Unlock(ctx, "player-1", "first_win", time.Now().UTC())
+	_, err := repo.RecordProgress(ctx, "p1", "ten_wins", 10, time.Now().UTC())
 	require.NoError(t, err)
 
-	got, err := repo.ListPlayerUnlocks(ctx, "player-2")
+	prog, err := repo.ListPlayerProgress(ctx, "p2")
 	require.NoError(t, err)
-	assert.Empty(t, got, "player-2 não tem desbloqueios")
+	assert.Empty(t, prog)
+}
+
+// mustProgress indexa o progresso do jogador por achievement_id.
+func mustProgress(t *testing.T, repo *PostgresAchievementRepository, playerID string) map[string]struct {
+	Progress   int
+	UnlockedAt time.Time
+} {
+	t.Helper()
+	list, err := repo.ListPlayerProgress(context.Background(), playerID)
+	require.NoError(t, err)
+	out := map[string]struct {
+		Progress   int
+		UnlockedAt time.Time
+	}{}
+	for _, p := range list {
+		out[p.AchievementID] = struct {
+			Progress   int
+			UnlockedAt time.Time
+		}{p.Progress, p.UnlockedAt}
+	}
+	return out
 }
