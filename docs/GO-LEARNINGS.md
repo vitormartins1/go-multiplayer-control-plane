@@ -9,6 +9,7 @@
 - Uma entrada por conceito/padrão. Adicione ao final, numerando.
 - Prefira exemplo curto e comentado a teoria longa.
 - Ligue ao serviço/lugar real onde o padrão aparece.
+- **Use Mermaid sempre que um diagrama explicar melhor que texto** — fluxo de execução, ordem de middlewares, sequência de shutdown, máquina de estados, relações entre tipos. O objetivo é didático: ver o conceito, não só ler. (GitHub e o preview local renderizam Mermaid nativo; nunca use ASCII art para diagrama.) O código comentado mostra o *como*; o Mermaid mostra o *fluxo/forma*.
 
 ### Template de entrada
 
@@ -17,6 +18,12 @@
 
 **O que é / por que importa:** ...
 **Onde no projeto:** <serviço/arquivo>
+
+​```mermaid
+%% opcional, mas recomendado quando há fluxo/ordem/estado a visualizar
+flowchart LR
+    A --> B
+​```
 
 ​```go
 // exemplo comentado
@@ -149,4 +156,163 @@ func Verify(pub ed25519.PublicKey, payload, sig []byte) (*ConnectToken, error) {
 }
 ```
 
-**Pegadinha / nuance:** a chave **privada nunca sai do backend**; o game server só recebe a **pública** (via config ou um endpoint JWKS da identity-service). Em produção, em vez de `payload`+`sig` separados, costuma-se empacotar como **JWT com `EdDSA`** (uma string `header.payload.signature`) — mesma criptografia, formato padrão que o lado C#/Unity também lê.
+**Pegadinha / nuance:** a chave **privada nunca sai do backend**; o game server só recebe a **pública** (via config ou um endpoint JWKS da identity-service). Em produção, em vez de `payload`+`sig` separados, costuma-se empacotar como **JWT com `EdDSA`** (uma string `header.payload.signature`) — mesma criptografia, formato padrão que o lado C#/Unity também lê. É exatamente o que o `identity-service` já faz: cunha JWT EdDSA e publica a chave pública em `GET /.well-known/jwks.json`.
+
+---
+
+## 03 — `http.Handler` e middleware como decoradores
+
+**O que é / por que importa:** Go não tem um "pipeline de middleware" mágico como o ASP.NET. Um middleware é só uma função que recebe um `http.Handler` e devolve **outro** `http.Handler` que faz algo antes/depois de chamar o original. Você **compõe** aninhando chamadas — e a ordem de aninhamento é a ordem de execução. Explícito, sem registro mágico, fácil de seguir lendo o código.
+
+**Onde no projeto:** `shared/middleware/metrics.go` (`Metrics.Wrap`), `shared/middleware/tracing.go` (`RouteSpanName`), encadeados em `services/identity-service/cmd/server/main.go`.
+
+O request desce pela pilha de decoradores até o `mux` e volta — cada camada age na ida, na volta, ou nas duas:
+
+```mermaid
+flowchart TB
+    req([request]) --> otel["otelhttp<br/>(abre o span)"]
+    otel --> rsn["RouteSpanName<br/>(renomeia o span na volta)"]
+    rsn --> mw["metrics.Wrap<br/>(mede latência/status na volta)"]
+    mw --> mux["ServeMux<br/>(casa a rota → handler)"]
+    mux -. volta .-> mw -. volta .-> rsn -. volta .-> otel --> resp([response])
+```
+
+```go
+// um middleware = função (http.Handler) http.Handler
+func (m *Metrics) Wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r) // chama o handler de dentro
+		// ...mede latência/status DEPOIS que ele retorna
+	})
+}
+
+// composição no main: o mais externo executa primeiro
+traced := otelhttp.NewHandler( //   1º: abre o span do request
+	middleware.RouteSpanName( //     2º: renomeia o span pós-rota
+		metrics.Wrap(mux), //        3º: mede; o mux casa a rota
+	),
+	"http.server",
+)
+```
+
+**Pegadinha / nuance:** para capturar o **status code** (o handler escreve no `http.ResponseWriter`, mas a interface não deixa ler de volta), embrulha-se o writer num tipo que faz **embedding** da interface e sobrescreve só `WriteHeader`:
+
+```go
+type statusRecorder struct {
+	http.ResponseWriter // embedding: ganha todos os métodos de graça
+	status int
+}
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code // intercepta o valor
+	s.ResponseWriter.WriteHeader(code)
+}
+```
+
+Embedding é o "tem um, age como" de Go: o `statusRecorder` **é um** `http.ResponseWriter`, mas intercepta um método. É a alternativa de Go à herança.
+
+---
+
+## 04 — Roteamento do `net/http` (Go 1.22): método no pattern + `r.Pattern`
+
+**O que é / por que importa:** desde o Go 1.22 o `ServeMux` da stdlib roteia por **método + caminho** (`"POST /accounts"`) — sem framework (gorilla/chi). Após o match, o pattern casado fica em `r.Pattern`, e o `net/http` o grava **no próprio request** (não num clone), então um middleware que envolve o mux consegue lê-lo **depois** que o handler retorna.
+
+**Onde no projeto:** rotas em `services/identity-service/internal/transport/http_handler.go` (`Register`); o `r.Pattern` é consumido em `shared/middleware/metrics.go` (label de rota) e `shared/middleware/tracing.go` (nome do span).
+
+O `r.Pattern` só existe **depois** do match — por isso renomear o span acontece na volta:
+
+```mermaid
+sequenceDiagram
+    participant MW as RouteSpanName
+    participant Mux as ServeMux
+    participant H as handler
+    MW->>Mux: next.ServeHTTP(w, r)
+    Note over Mux: casa a rota → grava r.Pattern no request
+    Mux->>H: chama h.register
+    H-->>Mux: retorna
+    Mux-->>MW: retorna
+    Note over MW: agora r.Pattern = "POST /accounts"<br/>→ span.SetName(r.Pattern)
+```
+
+```go
+mux.HandleFunc("POST /accounts", h.register) // método embutido no pattern
+mux.HandleFunc("POST /sessions", h.login)
+mux.HandleFunc("GET /.well-known/jwks.json", h.jwks)
+
+// num middleware, DEPOIS de chamar o mux:
+next.ServeHTTP(w, r)
+route := r.Pattern // "POST /accounts" — preenchido pelo match
+```
+
+**Pegadinha / nuance:** usar `r.Pattern` (o template) e **não** `r.URL.Path` (o caminho real) como label de métrica e nome de span é o que mantém a **cardinalidade baixa** — `GET /players/{id}` vira uma série só, não uma por ID. Antes do match, `r.Pattern` está vazio: por isso o `RouteSpanName` renomeia o span só na volta do `next.ServeHTTP`.
+
+---
+
+## 05 — Graceful shutdown idiomático
+
+**O que é / por que importa:** desligar o servidor "sem cortar requests no meio" em Go é a combinação de três peças da stdlib: `signal.NotifyContext` (context que cancela no SIGINT/SIGTERM), um canal para o erro de boot do servidor, e `srv.Shutdown(ctx)` (para de aceitar conexões novas e espera as em andamento até um timeout). Sem host genérico, sem framework — peças pequenas combinadas.
+
+**Onde no projeto:** `services/identity-service/cmd/server/main.go` (`run`).
+
+```mermaid
+flowchart TB
+    start([run]) --> goroutine["goroutine:<br/>srv.ListenAndServe()"]
+    start --> wait{"select{}<br/>espera"}
+    goroutine -- "erro de boot" --> errCh[/"errCh"/] --> wait
+    sig["SIGINT/SIGTERM<br/>(Ctrl+C, docker stop)"] --> ctxDone[/"ctx.Done()"/] --> wait
+    wait -- "erro" --> fail([retorna erro])
+    wait -- "sinal" --> shutdown["srv.Shutdown(ctx 10s)<br/>drena requests em andamento"]
+    shutdown --> done([encerrado])
+```
+
+```go
+errCh := make(chan error, 1)
+go func() {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		errCh <- err // erro real (porta ocupada etc.)
+	}
+}()
+
+ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+defer stop()
+select {
+case err := <-errCh: // servidor caiu sozinho
+	return fmt.Errorf("http server: %w", err)
+case <-ctx.Done(): // Ctrl+C / SIGTERM do Docker
+}
+
+shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+return srv.Shutdown(shutdownCtx) // drena os requests em andamento
+```
+
+**Pegadinha / nuance:** `ListenAndServe` **sempre** retorna erro não-nil; no shutdown limpo esse erro é `http.ErrServerClosed` — por isso o `errors.Is` o filtra para não virar falha. O canal tem buffer 1 para a goroutine não vazar se ninguém ler.
+
+---
+
+## 06 — Cleanup como closure retornada (e o no-op quando desligado)
+
+**O que é / por que importa:** em vez de devolver um objeto com `Close()`, um padrão muito comum em Go é o setup **retornar a própria função de limpeza** (uma closure). Quem chama só faz `defer shutdown(ctx)`. E quando o recurso está desabilitado, retorna-se uma closure **no-op** em vez de `nil` — assim o chamador nunca precisa checar nil antes de chamar.
+
+**Onde no projeto:** `shared/telemetry/telemetry.go` (`SetupTracing`), usado em `cmd/server/main.go`.
+
+```go
+func SetupTracing(ctx context.Context, cfg Config) (func(context.Context) error, error) {
+	if cfg.OTLPEndpoint == "" {
+		return func(context.Context) error { return nil }, nil // no-op: tracing desligado
+	}
+	// ...monta o TracerProvider...
+	return tp.Shutdown, nil // devolve o próprio Shutdown como handle de limpeza
+}
+
+// no main, simétrico ao shutdown do HTTP server:
+shutdownTracing, err := telemetry.SetupTracing(ctx, cfg)
+defer func() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = shutdownTracing(ctx) // sempre chamável, mesmo desligado
+}()
+```
+
+**Pegadinha / nuance:** repare em duas formas de configurar lado a lado no projeto: `telemetry.SetupTracing` usa uma **struct `Config`** (campos explícitos), enquanto `otelhttp.NewHandler(..., otelhttp.WithFilter(...))` usa **functional options** (`With...` variádicos). Vindo de C#, a struct lembra um objeto de opções; as functional options são o jeito idiomático de Go para "muitos parâmetros opcionais com default" sem vários construtores. Poucas opções → struct é mais simples; API de biblioteca extensível → functional options.
