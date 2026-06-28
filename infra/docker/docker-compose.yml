@@ -1,0 +1,26 @@
+# Ambiente local do identity-service. A observabilidade (Prometheus/Grafana/
+# postgres_exporter) é adicionada na task de observabilidade (ver backlog, ADR-0006).
+services:
+  identity-service:
+    build:
+      context: ../..
+      dockerfile: services/identity-service/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://dev:dev@postgres:5432/gamebackend?sslmode=disable
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: gamebackend
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5432:5432"
+    volumes:
+      # aplica a migration na inicialização do banco
+      - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
