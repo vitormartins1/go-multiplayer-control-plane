@@ -418,3 +418,27 @@ handler := transport.NewHandler(svc, auth.NewVerifier(url, ttl))
 ```
 
 **Pegadinha / nuance:** isso é a base do **hexagonal idiomático em Go** (ADR-0002) — a interface mora no `domain` (o lado de dentro, que a define do tamanho exato que precisa) e os adapters a satisfazem de fora **sem importá-la**. Por isso as Ports são pequenas e específicas por serviço, e `interface` de uma linha é comum e saudável (ao contrário do C#, onde interfaces tendem a ser grandes e centralizadas). O `var _ domain.X = (*T)(nil)` nos adapters é só uma **asserção de compilação** que falha cedo se o tipo deixar de satisfazer a Port.
+
+---
+
+## 11 — Limitar o corpo do request com `http.MaxBytesReader`
+
+**O que é / por que importa:** aceitar um upload (ex. um save de jogo) sem limite é um vetor de OOM/DoS — um cliente manda 2 GB e derruba o serviço. A stdlib resolve com `http.MaxBytesReader`, que envolve o `r.Body` e corta a leitura ao passar do limite, devolvendo um `*http.MaxBytesError`. Em C# seria o `MaxRequestBodySize` do Kestrel; em Go é uma linha no handler.
+
+**Onde no projeto:** `services/cloud-save-service/internal/transport/http_handler.go` (`save`).
+
+```go
+r.Body = http.MaxBytesReader(w, r.Body, maxSaveBytes) // ex. 5 MiB
+blob, err := io.ReadAll(r.Body)
+if err != nil {
+	var mbe *http.MaxBytesError
+	if errors.As(err, &mbe) { // estourou o limite
+		writeError(w, http.StatusRequestEntityTooLarge, "too_large") // 413
+		return
+	}
+	writeError(w, http.StatusBadRequest, "bad_request")
+	return
+}
+```
+
+**Pegadinha / nuance:** o `MaxBytesReader` recebe o `w` (ResponseWriter) de propósito — ao estourar, sinaliza a conexão para não seguir lendo um corpo gigante. E o erro de limite é um **tipo concreto** (`*http.MaxBytesError`), pego com `errors.As` (mesmo padrão do #09): é o que permite distinguir "grande demais" (413) de um erro de leitura genérico (400).
