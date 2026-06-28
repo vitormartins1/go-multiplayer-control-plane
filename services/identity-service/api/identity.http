@@ -1,0 +1,48 @@
+### identity-service — collection HTTP
+#
+# Requer a stack local no ar:
+#   docker compose -f infra/docker/docker-compose.yml up
+#
+# Como rodar cada request:
+#   - GoLand / IntelliJ / Rider: clique no ícone ▶ na margem esquerda.
+#   - VS Code: instale a extensão "REST Client" e clique em "Send Request".
+#
+# Acompanhe os efeitos:
+#   - Métricas/traces: Grafana http://localhost:3000  (Explore -> Tempo)
+#   - Banco: postgres em localhost:5432 (db gamebackend, user/pass dev/dev)
+
+@host = http://localhost:8081
+@handle = Vitor_1
+@password = supersecret
+
+### Health check (não gera trace — filtrado de propósito)
+GET {{host}}/healthz
+
+### Registrar conta -> 201 { id, handle, created_at }
+# @name register
+POST {{host}}/accounts
+Content-Type: application/json
+
+{
+  "handle": "{{handle}}",
+  "password": "{{password}}"
+}
+
+### Login com credenciais -> 200 { token }
+# @name login
+POST {{host}}/sessions
+Content-Type: application/json
+
+{
+  "handle": "{{handle}}",
+  "password": "{{password}}"
+}
+
+### Login anônimo (sem body) -> 200 { token }
+POST {{host}}/sessions/anonymous
+
+### JWKS — chaves públicas Ed25519 para validar o JWT
+GET {{host}}/.well-known/jwks.json
+
+### Métricas Prometheus (RED + runtime Go)
+GET {{host}}/metrics
