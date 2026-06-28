@@ -55,6 +55,28 @@ services:
       tempo:
         condition: service_started
 
+  cloud-save-service:
+    build:
+      context: ../..
+      dockerfile: services/cloud-save-service/Dockerfile
+    ports:
+      - "8084:8080"
+    environment:
+      PORT: "8080"
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: cloud-save
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      minio:
+        condition: service_started
+      identity-service:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16
@@ -107,6 +129,19 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Object storage do cloud-save (S3-compatible; ADR-0015). Métricas Prometheus
+  # nativas em /minio/v2/metrics/cluster (sem exporter separado).
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_PROMETHEUS_AUTH_TYPE: public # métricas sem auth
+    ports:
+      - "9000:9000" # API S3
+      - "9001:9001" # console web
 
   prometheus:
     image: prom/prometheus:latest
