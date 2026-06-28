@@ -6,13 +6,13 @@
 > Testes acompanham cada camada (não ficam para o fim). Marcar [x] conforme implementa.
 
 ## Fase 0 — Módulo e base compartilhada
-- [ ] Criar `go.mod` (módulo `github.com/c130n/game-backend`, Go 1.22)
-- [ ] `shared/logger/logger.go` — logger slog JSON com nome do serviço (ADR-0006)
-- [ ] `shared/config/config.go` — leitura de env: PORT, DSN do Postgres, chave Ed25519
+- [x] Criar `go.mod` (módulo `github.com/c130n/game-backend`, Go 1.22)
+- [x] `shared/logger/logger.go` — logger slog JSON com nome do serviço (ADR-0006)
+- [x] `shared/config/config.go` — leitura de env: PORT, DSN do Postgres, chave Ed25519
 
 ## Fase 1 — Domain
-- [ ] `internal/domain/account.go` — struct `Account` + Ports: `AuthService`, `AccountRepository`, `TokenIssuer`
-- [ ] `internal/domain/errors.go` — `ErrInvalidHandle`, `ErrHandleTaken`, `ErrWeakPassword`, `ErrInvalidCredentials`
+- [x] `internal/domain/account.go` — struct `Account` + Ports: `AuthService`, `AccountRepository`, `TokenIssuer`
+- [x] `internal/domain/errors.go` — `ErrInvalidHandle`, `ErrHandleTaken`, `ErrWeakPassword`, `ErrInvalidCredentials`
 
 ## Fase 2 — Token issuer (Ed25519 + JWKS)
 - [ ] `internal/token/ed25519_issuer.go` — carregar/gerar chave; `Sign(subject, claims...)` → JWT EdDSA (golang-jwt) com `sub/iat/exp/kid` + claims extras (ex: `anon`, para a 002); `JWKS()` → JSON do JWK público; `kid` derivado da chave pública
