@@ -109,12 +109,15 @@ type achievementDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Target      int    `json:"target"`
 }
 
 type playerAchievementDTO struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
+	Progress    int        `json:"progress"`
+	Target      int        `json:"target"`
 	Unlocked    bool       `json:"unlocked"`
 	UnlockedAt  *time.Time `json:"unlocked_at,omitempty"`
 }
@@ -122,7 +125,7 @@ type playerAchievementDTO struct {
 func toAchievementDTOs(in []domain.Achievement) []achievementDTO {
 	out := make([]achievementDTO, 0, len(in))
 	for _, a := range in {
-		out = append(out, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description})
+		out = append(out, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
 	}
 	return out
 }
@@ -130,7 +133,10 @@ func toAchievementDTOs(in []domain.Achievement) []achievementDTO {
 func toPlayerAchievementDTOs(in []domain.PlayerAchievement) []playerAchievementDTO {
 	out := make([]playerAchievementDTO, 0, len(in))
 	for _, p := range in {
-		dto := playerAchievementDTO{ID: p.ID, Name: p.Name, Description: p.Description, Unlocked: p.Unlocked}
+		dto := playerAchievementDTO{
+			ID: p.ID, Name: p.Name, Description: p.Description,
+			Progress: p.Progress, Target: p.Target, Unlocked: p.Unlocked,
+		}
 		if p.Unlocked {
 			at := p.UnlockedAt
 			dto.UnlockedAt = &at

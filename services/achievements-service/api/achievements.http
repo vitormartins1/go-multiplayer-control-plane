@@ -48,7 +48,9 @@ Content-Type: application/json
 GET {{achievementsHost}}/me/achievements
 Authorization: Bearer {{token}}
 
-### Repetir o evento -> idempotente (unlocked vazio na resposta)
+### Progresso parcial: cada match_won progride "ten_wins" (target 10).
+### Dispare este request várias vezes e veja progress subir em /me/achievements;
+### na 10ª ocorrência, ten_wins é desbloqueada. (first_win já saiu na 1ª.)
 POST {{achievementsHost}}/events
 Authorization: Bearer {{token}}
 Content-Type: application/json

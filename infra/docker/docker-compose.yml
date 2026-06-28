@@ -65,6 +65,7 @@ services:
       - "5433:5432"
     volumes:
       - ../../services/achievements-service/migrations/001_create_achievements.sql:/docker-entrypoint-initdb.d/001_create_achievements.sql:ro
+      - ../../services/achievements-service/migrations/002_add_progress.sql:/docker-entrypoint-initdb.d/002_add_progress.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s

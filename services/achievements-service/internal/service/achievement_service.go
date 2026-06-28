@@ -39,22 +39,25 @@ func (s *Service) ListForPlayer(ctx context.Context, playerID string) ([]domain.
 	if err != nil {
 		return nil, fmt.Errorf("achievements service: list for player: %w", err)
 	}
-	unlocks, err := s.repo.ListPlayerUnlocks(ctx, playerID)
+	progress, err := s.repo.ListPlayerProgress(ctx, playerID)
 	if err != nil {
 		return nil, fmt.Errorf("achievements service: list for player: %w", err)
 	}
 
-	unlockedAt := make(map[string]time.Time, len(unlocks))
-	for _, u := range unlocks {
-		unlockedAt[u.AchievementID] = u.UnlockedAt
+	byID := make(map[string]domain.PlayerProgress, len(progress))
+	for _, p := range progress {
+		byID[p.AchievementID] = p
 	}
 
 	out := make([]domain.PlayerAchievement, 0, len(cat))
 	for _, a := range cat {
 		pa := domain.PlayerAchievement{Achievement: a}
-		if at, ok := unlockedAt[a.ID]; ok {
-			pa.Unlocked = true
-			pa.UnlockedAt = at
+		if p, ok := byID[a.ID]; ok {
+			pa.Progress = min(p.Progress, a.Target) // nunca exibir além da meta
+			if !p.UnlockedAt.IsZero() {
+				pa.Unlocked = true
+				pa.UnlockedAt = p.UnlockedAt
+			}
 		}
 		out = append(out, pa)
 	}
@@ -77,11 +80,11 @@ func (s *Service) RecordEvent(ctx context.Context, playerID string, event domain
 	at := s.now().UTC()
 	var unlocked []domain.Achievement
 	for _, a := range matches {
-		created, err := s.repo.Unlock(ctx, playerID, a.ID, at)
+		justUnlocked, err := s.repo.RecordProgress(ctx, playerID, a.ID, a.Target, at)
 		if err != nil {
-			return nil, fmt.Errorf("achievements service: unlock %q: %w", a.ID, err)
+			return nil, fmt.Errorf("achievements service: record progress %q: %w", a.ID, err)
 		}
-		if created {
+		if justUnlocked {
 			unlocked = append(unlocked, a)
 		}
 	}

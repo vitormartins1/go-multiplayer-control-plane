@@ -364,3 +364,27 @@ func playerID(ctx context.Context) string {
 ```
 
 **Pegadinha / nuance:** usar `ctxKey` (e não `string`) é o que dá o isolamento — um `context.WithValue(ctx, "playerID", ...)` de outro pacote **não** colide com a sua chave, porque os tipos diferem. Regra prática: o context carrega só o que é **request-scoped** (quem é o usuário, trace, deadline). Dependências fixas do serviço (repo, logger, config) vão por **injeção no construtor**, nunca pelo context. Se o dado sobrevive à requisição, não é lugar de context.
+
+---
+
+## 09 — pgx: NULL como ponteiro, `RETURNING` como sinal e cast de tipo
+
+**O que é / por que importa:** três detalhes do `pgx` (driver Postgres em Go) que apareceram juntos ao implementar o desbloqueio com contador idempotente — e que o EF/Dapper do mundo C# escondem. (1) Coluna **NULL-able** lê-se em **ponteiro** (`*time.Time`): `NULL` vira `nil`. (2) Um `UPSERT ... WHERE ... RETURNING` que **não afeta** linha devolve `pgx.ErrNoRows` — dá pra usar isso como **sinal** de "nada mudou". (3) Quando um parâmetro entra numa expressão (`CASE`), o Postgres às vezes não infere o tipo e assume `text` — precisa de **cast explícito** `$N::tipo`.
+
+**Onde no projeto:** `services/achievements-service/internal/repository/postgres_achievement.go` (`RecordProgress`).
+
+```go
+var unlockedAt *time.Time // (1) nullable -> ponteiro; nil quando NULL
+err := r.pool.QueryRow(ctx, q, playerID, id, target, at).Scan(&unlockedAt)
+if errors.Is(err, pgx.ErrNoRows) { // (2) WHERE barrou -> linha não tocada
+    return false, nil
+}
+return unlockedAt != nil, nil // 3 estados: 0 linhas / nil / preenchido agora
+```
+
+```sql
+-- (3) sem o ::timestamptz, o Postgres infere $4 como text dentro do CASE e quebra
+VALUES ($1, $2, 1, CASE WHEN 1 >= $3 THEN $4::timestamptz ELSE NULL END)
+```
+
+**Pegadinha / nuance:** o erro do cast (`column ... is of type timestamptz but expression is of type text`) **não** aparece no compilador Go — só ao rodar contra o Postgres. É mais um argumento para os testes de integração com testcontainers: o SQL só é validado de verdade contra um banco real, não pelo `go build`.
