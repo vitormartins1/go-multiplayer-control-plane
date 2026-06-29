@@ -21,6 +21,13 @@ curl -s localhost:8088/api/metrics/live | jq
 # -> { "queueSize":0, "activeSessions":0, "matchesTotal":0, "matchesFailed":0 }
 # Prometheus fora -> 503
 
+# Métricas de um serviço (saúde + RED + runtime) — alimenta a página de domínio
+curl -s localhost:8088/api/services/identity-service/metrics | jq
+# -> { "id":"identity-service","up":true,"requestRate":..,"errorRate":..,
+#      "latencyP95":..,"goroutines":..,"memoryBytes":.. }
+# serviços gRPC (matchmaking/session) não têm RED HTTP -> esses campos vêm null
+# id desconhecido -> 404 | Prometheus fora -> 503
+
 # Achievements de um jogador (via /admin do achievements-service)
 curl -s localhost:8088/api/players/PLAYER_ID/achievements | jq
 # PLAYER_ID = id da conta (sub do JWT). achievements fora -> 502

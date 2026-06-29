@@ -13,9 +13,12 @@ Back-end-for-frontend do **painel de administração** ("sala de controle" do ba
 |---|---|---|
 | GET | `/api/topology` | nós (serviços) com up/down + arestas de dependência |
 | GET | `/api/metrics/live` | contadores ao vivo (fila, sessions, matches) |
+| GET | `/api/services/{id}/metrics` | saúde + RED + runtime de um serviço (página de domínio) |
 | GET | `/api/players/{playerID}/achievements` | achievements anotados de um jogador |
 
-**Degradação por fonte:** Prometheus fora -> `/api/topology` retorna nós `up:null` + `sourceAvailable:false` (200); `/api/metrics/live` -> 503. achievements fora -> `/api/players/{id}/achievements` -> 502.
+**Degradação por fonte:** Prometheus fora -> `/api/topology` retorna nós `up:null` + `sourceAvailable:false` (200); `/api/metrics/live` e `/api/services/{id}/metrics` -> 503. `id` desconhecido -> 404. achievements fora -> `/api/players/{id}/achievements` -> 502.
+
+**RED por serviço:** vem de `http_requests_total`/`http_request_duration_seconds`, que só os serviços REST expõem. Para os gRPC (matchmaking, session) os campos RED vêm `null` (só `up` + runtime). Contadores de produto (fila/sessions/matches) ficam no `/api/metrics/live`.
 
 ## Fontes de dados (ADR-0016)
 

@@ -65,6 +65,53 @@ func (s *Service) LiveMetrics(ctx context.Context) (domain.LiveMetrics, error) {
 	return lm, nil
 }
 
+// ServiceMetrics agrega saúde + RED + runtime de um serviço (página de domínio).
+// Valida o id contra a allowlist (404 via ErrUnknownService) e roda as queries
+// em paralelo (errgroup). Campos sem amostra ficam nil (ex.: RED nos gRPC).
+func (s *Service) ServiceMetrics(ctx context.Context, id string) (domain.ServiceMetrics, error) {
+	if !domain.IsKnownService(id) {
+		return domain.ServiceMetrics{}, domain.ErrUnknownService
+	}
+	sm := domain.ServiceMetrics{ID: id}
+	g, gctx := errgroup.WithContext(ctx)
+	// Cada goroutine escreve um campo distinto de sm (locais independentes).
+	g.Go(func() error {
+		v, err := s.scalar(gctx, `up{job="`+id+`"}`)
+		sm.Up = floatToBool(v)
+		return err
+	})
+	g.Go(func() (err error) {
+		sm.RequestRate, err = s.scalar(gctx, `sum(rate(http_requests_total{service="`+id+`"}[5m]))`)
+		return
+	})
+	g.Go(func() (err error) {
+		sm.ErrorRate, err = s.scalar(gctx, `sum(rate(http_requests_total{service="`+id+`",status=~"5.."}[5m])) / sum(rate(http_requests_total{service="`+id+`"}[5m]))`)
+		return
+	})
+	g.Go(func() (err error) {
+		sm.LatencyP95, err = s.scalar(gctx, `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="`+id+`"}[5m])) by (le))`)
+		return
+	})
+	g.Go(func() (err error) { sm.Goroutines, err = s.scalar(gctx, `go_goroutines{job="`+id+`"}`); return })
+	g.Go(func() (err error) {
+		sm.MemoryBytes, err = s.scalar(gctx, `process_resident_memory_bytes{job="`+id+`"}`)
+		return
+	})
+	if err := g.Wait(); err != nil {
+		return domain.ServiceMetrics{}, err
+	}
+	return sm, nil
+}
+
+// floatToBool mapeia o valor de up{} (1/0) para *bool; nil se não houver amostra.
+func floatToBool(v *float64) *bool {
+	if v == nil {
+		return nil
+	}
+	b := *v == 1
+	return &b
+}
+
 // PlayerAchievements delega ao reader (API admin do achievements-service).
 func (s *Service) PlayerAchievements(ctx context.Context, playerID string) ([]domain.PlayerAchievement, error) {
 	return s.reader.ForPlayer(ctx, playerID)
