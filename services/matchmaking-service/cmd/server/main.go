@@ -19,11 +19,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1"
 	"github.com/c130n/game-backend/services/matchmaking-service/internal/service"
+	"github.com/c130n/game-backend/services/matchmaking-service/internal/sessionclient"
 	"github.com/c130n/game-backend/services/matchmaking-service/internal/transport"
+	sessionv1 "github.com/c130n/game-backend/services/session-service/gen/session/v1"
 	"github.com/c130n/game-backend/shared/auth"
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
@@ -68,7 +71,24 @@ func run(log *slog.Logger) error {
 	}
 	verifier := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
 
-	mm := service.New(matchSize, formInterval)
+	// Conexão gRPC com o session-service: ao formar um match, o matchmaking
+	// chama o CreateSession para alocar server + emitir os connect tokens
+	// (ADR-0003/0010). otelgrpc no client propaga o trace cross-service (ADR-0014).
+	sessionAddr := os.Getenv("SESSION_GRPC_ADDR")
+	if sessionAddr == "" {
+		log.Warn("SESSION_GRPC_ADDR ausente — o provisionamento de sessão vai falhar; aponte para o gRPC do session")
+	}
+	sessionConn, err := grpc.NewClient(sessionAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		return fmt.Errorf("session grpc client: %w", err)
+	}
+	defer func() { _ = sessionConn.Close() }()
+	provisioner := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
+
+	mm := service.New(matchSize, formInterval, provisioner)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -80,8 +100,11 @@ func run(log *slog.Logger) error {
 			Name: "matchmaking_queue_size", Help: "Tickets aguardando na fila.",
 		}, func() float64 { return float64(mm.QueueSize()) }),
 		prometheus.NewCounterFunc(prometheus.CounterOpts{
-			Name: "matchmaking_matches_total", Help: "Total de matches formados.",
+			Name: "matchmaking_matches_total", Help: "Total de matches formados com sucesso.",
 		}, mm.MatchesTotal),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "matchmaking_matches_failed_total", Help: "Total de matches que falharam no provisionamento da sessão.",
+		}, mm.MatchesFailed),
 	)
 
 	grpcSrv := grpc.NewServer(

@@ -108,9 +108,12 @@ services:
       PORT: "8080"
       GRPC_PORT: "50051"
       IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      SESSION_GRPC_ADDR: session-service:50051 # provisiona a sessão ao formar o match (ADR-0010)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
       identity-service:
+        condition: service_started
+      session-service:
         condition: service_started
       tempo:
         condition: service_started

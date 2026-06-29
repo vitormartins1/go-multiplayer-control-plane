@@ -2,15 +2,51 @@ package service
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/c130n/game-backend/services/matchmaking-service/internal/domain"
 )
 
-func TestTryForm_MatchSizeJogadores_MesmoMatch(t *testing.T) {
-	mm := New(2, time.Hour) // intervalo alto: formamos manualmente via tryForm
+// fakeProvisioner permite trocar o comportamento por teste (sucesso/falha).
+type fakeProvisioner struct {
+	mu sync.Mutex
+	fn func(matchID string, players []string) (domain.Provisioned, error)
+}
+
+func (f *fakeProvisioner) set(fn func(matchID string, players []string) (domain.Provisioned, error)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fn = fn
+}
+
+func (f *fakeProvisioner) Provision(_ context.Context, matchID string, players []string) (domain.Provisioned, error) {
+	f.mu.Lock()
+	fn := f.fn
+	f.mu.Unlock()
+	return fn(matchID, players)
+}
+
+// successProvisioner devolve um token determinístico por jogador (tok-<player>).
+func successProvisioner() *fakeProvisioner {
+	f := &fakeProvisioner{}
+	f.set(func(_ string, players []string) (domain.Provisioned, error) {
+		tokens := make(map[string]string, len(players))
+		for _, p := range players {
+			tokens[p] = "tok-" + p
+		}
+		return domain.Provisioned{ServerAddress: "10.0.0.1:7777", Tokens: tokens}, nil
+	})
+	return f
+}
+
+func TestProvision_MatchSizeJogadores_TokenPorJogador(t *testing.T) {
+	mm := New(2, time.Hour, successProvisioner())
 	ctx := context.Background()
 
 	ch1, _ := mm.Join(ctx, "p1")
@@ -19,15 +55,80 @@ func TestTryForm_MatchSizeJogadores_MesmoMatch(t *testing.T) {
 
 	m1 := <-ch1
 	m2 := <-ch2
-	assert.Equal(t, m1.ID, m2.ID, "mesmo matchId")
-	assert.Len(t, m1.Players, 2)
+	assert.Equal(t, m1.MatchID, m2.MatchID, "mesmo matchId")
+	assert.False(t, m1.Failed)
+	assert.Equal(t, "10.0.0.1:7777", m1.ServerAddress)
+	assert.Equal(t, "tok-p1", m1.ConnectToken, "p1 recebe o token do próprio jogador")
+	assert.Equal(t, "tok-p2", m2.ConnectToken, "p2 recebe o token do próprio jogador")
 	assert.ElementsMatch(t, []string{"p1", "p2"}, m1.Players)
-	assert.NotEmpty(t, m1.ConnectInfo)
-	assert.Equal(t, float64(1), mm.MatchesTotal())
+	require.Eventually(t, func() bool { return mm.MatchesTotal() == 1 }, time.Second, 10*time.Millisecond)
+}
+
+func TestProvision_SemServer_EntregaFailed(t *testing.T) {
+	prov := &fakeProvisioner{}
+	prov.set(func(string, []string) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
+	mm := New(2, time.Hour, prov)
+
+	ch1, _ := mm.Join(context.Background(), "p1")
+	ch2, _ := mm.Join(context.Background(), "p2")
+	mm.tryForm()
+
+	m1 := <-ch1
+	<-ch2
+	assert.True(t, m1.Failed)
+	assert.Equal(t, "no game server available", m1.Reason)
+	assert.Empty(t, m1.ConnectToken)
+	require.Eventually(t, func() bool { return mm.MatchesFailed() == 1 }, time.Second, 10*time.Millisecond)
+}
+
+func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
+	prov := &fakeProvisioner{}
+	prov.set(func(string, []string) (domain.Provisioned, error) {
+		return domain.Provisioned{}, errors.New("session indisponível")
+	})
+	mm := New(2, time.Hour, prov)
+
+	ch1, _ := mm.Join(context.Background(), "p1")
+	ch2, _ := mm.Join(context.Background(), "p2")
+	mm.tryForm()
+
+	m1 := <-ch1
+	<-ch2
+	assert.True(t, m1.Failed)
+	assert.Equal(t, "session provisioning failed", m1.Reason)
+}
+
+func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
+	prov := &fakeProvisioner{}
+	prov.set(func(string, []string) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
+	mm := New(2, time.Hour, prov)
+
+	ch1, _ := mm.Join(context.Background(), "p1")
+	ch2, _ := mm.Join(context.Background(), "p2")
+	mm.tryForm()
+	<-ch1
+	<-ch2 // ambos falharam, saíram da fila
+
+	// session volta: jogadores re-ingressam e agora são matched.
+	prov.set(func(_ string, players []string) (domain.Provisioned, error) {
+		tokens := map[string]string{}
+		for _, p := range players {
+			tokens[p] = "tok-" + p
+		}
+		return domain.Provisioned{ServerAddress: "10.0.0.2:7777", Tokens: tokens}, nil
+	})
+	ch1b, _ := mm.Join(context.Background(), "p1")
+	ch2b, _ := mm.Join(context.Background(), "p2")
+	mm.tryForm()
+
+	m := <-ch1b
+	<-ch2b
+	assert.False(t, m.Failed)
+	assert.Equal(t, "10.0.0.2:7777", m.ServerAddress)
 }
 
 func TestTryForm_MenosQueMatchSize_NaoForma(t *testing.T) {
-	mm := New(2, time.Hour)
+	mm := New(2, time.Hour, successProvisioner())
 	ch1, _ := mm.Join(context.Background(), "p1")
 	mm.tryForm()
 
@@ -40,7 +141,7 @@ func TestTryForm_MenosQueMatchSize_NaoForma(t *testing.T) {
 }
 
 func TestJoin_Cancelado_SaiDaFila(t *testing.T) {
-	mm := New(2, time.Hour)
+	mm := New(2, time.Hour, successProvisioner())
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	mm.Join(ctx1, "p1")
 	ch2, _ := mm.Join(context.Background(), "p2")
@@ -57,7 +158,7 @@ func TestJoin_Cancelado_SaiDaFila(t *testing.T) {
 }
 
 func TestJoin_MesmoJogador_UmTicket(t *testing.T) {
-	mm := New(2, time.Hour)
+	mm := New(2, time.Hour, successProvisioner())
 	ctx := context.Background()
 	mm.Join(ctx, "p1")
 	mm.Join(ctx, "p1") // segundo Join do mesmo jogador
@@ -66,7 +167,7 @@ func TestJoin_MesmoJogador_UmTicket(t *testing.T) {
 }
 
 func TestRun_FormaPeloTicker(t *testing.T) {
-	mm := New(2, 10*time.Millisecond)
+	mm := New(2, 10*time.Millisecond, successProvisioner())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go mm.Run(ctx)
@@ -77,6 +178,7 @@ func TestRun_FormaPeloTicker(t *testing.T) {
 	select {
 	case m := <-ch1:
 		assert.Len(t, m.Players, 2)
+		assert.Equal(t, "tok-p1", m.ConnectToken)
 	case <-time.After(time.Second):
 		t.Fatal("timeout esperando o match pelo ticker")
 	}
