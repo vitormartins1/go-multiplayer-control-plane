@@ -30,6 +30,10 @@ scrape_configs:
     static_configs:
       - targets: ["session-service:8080"]
 
+  - job_name: admin-bff
+    static_configs:
+      - targets: ["admin-bff:8080"]
+
   - job_name: identity-postgres
     static_configs:
       - targets: ["identity-postgres-exporter:9187"]

@@ -534,3 +534,30 @@ provisioner := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
 ```
 
 **Pegadinha / nuance:** o pacote `internal/` do Go é uma **fronteira imposta pelo compilador**, não convenção. Código só pode importar `.../X/internal/...` se estiver dentro da subárvore de `X`. Por isso o teste do matchmaking **não pôde** subir o session real reusando `session-service/internal/...` — a solução foi um *fake* que implementa o **contrato gerado** (`sessionv1.SessionServer`), que é público (fica em `gen/`, não em `internal/`). Lição: o que é contrato entre serviços vai para um pacote público (o `gen/` do proto); o que é detalhe interno fica em `internal/` e o compilador garante que ninguém de fora encoste. `grpc.NewClient` (substituto do antigo `grpc.Dial`) é **lazy** — não conecta na hora; a conexão sobe na primeira RPC, então um session fora do ar não derruba o boot do matchmaking, vira erro na chamada (que viramos `STATUS_FAILED`).
+
+---
+
+## 15 — Fan-out concorrente com `errgroup` (agregar várias fontes)
+
+**O que é / por que importa:** quando você precisa de **N chamadas independentes** e quer o resultado de todas (ou o primeiro erro), o idioma é `golang.org/x/sync/errgroup`: dispara cada uma numa goroutine, espera todas com `Wait()`, e o **primeiro erro cancela o `ctx`** das demais (via `errgroup.WithContext`). É o "share by communicating" aplicado a I/O paralelo — e o análogo direto do `Task.WhenAll` do C#/.NET, mas com **cancelamento por context** embutido. Difere dos aprendizados anteriores de concorrência: o #01 era `sync.Mutex` (estado compartilhado) e o #13 era `channels`+`select` (coordenar produtor/consumidor); aqui o objetivo é **paralelizar e juntar**.
+
+**Onde no projeto:** `services/admin-bff/internal/service/admin_service.go` — `LiveMetrics` consulta 4 métricas do Prometheus em paralelo. O admin-bff é um agregador (BFF): juntar várias fontes rápido é exatamente o seu trabalho.
+
+```go
+func (s *Service) LiveMetrics(ctx context.Context) (domain.LiveMetrics, error) {
+	var lm domain.LiveMetrics
+	g, ctx := errgroup.WithContext(ctx) // 1º erro cancela o ctx das outras
+	// Cada goroutine escreve um CAMPO DISTINTO de lm — locais de memória
+	// independentes, então não há corrida (não precisa de mutex aqui).
+	g.Go(func() (err error) { lm.QueueSize, err = s.scalar(ctx, "matchmaking_queue_size"); return })
+	g.Go(func() (err error) { lm.ActiveSessions, err = s.scalar(ctx, "session_active_sessions"); return })
+	g.Go(func() (err error) { lm.MatchesTotal, err = s.scalar(ctx, "matchmaking_matches_total"); return })
+	g.Go(func() (err error) { lm.MatchesFailed, err = s.scalar(ctx, "matchmaking_matches_failed_total"); return })
+	if err := g.Wait(); err != nil { // espera todas; devolve o 1º erro
+		return domain.LiveMetrics{}, err
+	}
+	return lm, nil
+}
+```
+
+**Pegadinha / nuance:** escrever em **campos distintos** do mesmo struct de goroutines diferentes é seguro (são endereços de memória separados — `-race` não acusa). O que **seria** corrida é duas goroutines escreverem o **mesmo** campo, ou darem `append` no mesmo slice — aí precisaria de mutex ou de cada uma escrever no seu índice. Outro ponto: o `errgroup.WithContext` devolve um **novo** `ctx` que você precisa repassar às chamadas (`s.scalar(ctx, ...)`), senão o cancelamento no primeiro erro não chega às outras. E a degradação é decisão de quem chama: aqui um erro de qualquer query derruba o `LiveMetrics` inteiro (vira 503), enquanto a `Topology` trata "fonte fora" como estado normal (degrada) em vez de erro — o mesmo `errgroup` serviria, mas a política de erro é do caso de uso.
