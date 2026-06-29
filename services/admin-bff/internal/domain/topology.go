@@ -14,18 +14,6 @@ var KnownServices = []ServiceNode{
 	{ID: "admin-bff", Label: "Admin BFF"},
 }
 
-// IsKnownService informa se o id corresponde a um serviço conhecido (allowlist
-// usada para validar o {id} do path antes de montar PromQL — evita 404 tardio
-// e label arbitrário na query).
-func IsKnownService(id string) bool {
-	for _, n := range KnownServices {
-		if n.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
 // KnownEdges são as dependências conhecidas entre serviços (estáticas no MVP —
 // ver ADR-0016 e os env do compose: IDENTITY_JWKS_URL / SESSION_GRPC_ADDR).
 var KnownEdges = []Edge{

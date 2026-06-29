@@ -1,0 +1,66 @@
+import { Alert, Button, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { IconRefresh } from "@tabler/icons-react";
+import { api } from "../lib/api";
+import { useAsync } from "../lib/useAsync";
+
+const PAGE = 50;
+
+export function Players() {
+  const nav = useNavigate();
+  const [offset, setOffset] = useState(0);
+  const { data, loading, error, reload } = useAsync((s) => api.players(PAGE, offset, s), [offset]);
+
+  const total = data?.total ?? 0;
+  const canPrev = offset > 0;
+  const canNext = offset + PAGE < total;
+
+  return (
+    <Stack>
+      <Group justify="space-between">
+        <Title order={3}>Players {data ? <Text span c="dimmed">· {total}</Text> : null}</Title>
+        <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={reload}>
+          Atualizar
+        </Button>
+      </Group>
+
+      {loading && !data && <Loader />}
+      {!!error && <Alert color="red">identity indisponível.</Alert>}
+      {data && data.players.length === 0 && <Text c="dimmed">Nenhum usuário cadastrado.</Text>}
+      {data && data.players.length > 0 && (
+        <>
+          <Table striped highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Handle</Table.Th>
+                <Table.Th>Id</Table.Th>
+                <Table.Th>Criado</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {data.players.map((p) => (
+                <Table.Tr key={p.id} style={{ cursor: "pointer" }} onClick={() => nav(`/players/${p.id}`)}>
+                  <Table.Td>{p.handle}</Table.Td>
+                  <Table.Td c="dimmed">{p.id.slice(0, 8)}…</Table.Td>
+                  <Table.Td>{new Date(p.createdAt).toLocaleDateString("pt-BR")}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+          <Group>
+            <Button variant="default" size="xs" disabled={!canPrev} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
+              ← Anterior
+            </Button>
+            <Text c="dimmed" size="sm">
+              {Math.min(offset + 1, total)}–{Math.min(offset + PAGE, total)} de {total}
+            </Text>
+            <Button variant="default" size="xs" disabled={!canNext} onClick={() => setOffset(offset + PAGE)}>
+              Próxima →
+            </Button>
+          </Group>
+        </>
+      )}
+    </Stack>
+  );
+}

@@ -46,19 +46,6 @@ type LiveMetrics struct {
 	MatchesFailed  *float64 `json:"matchesFailed"`
 }
 
-// ServiceMetrics são as métricas de um serviço para a página de domínio: saúde,
-// RED (Rate/Errors/Duration) e runtime. Ponteiros: nil = a métrica não existe
-// para o serviço (ex.: RED é nil nos serviços gRPC, sem http_requests_total).
-type ServiceMetrics struct {
-	ID          string   `json:"id"`
-	Up          *bool    `json:"up"`
-	RequestRate *float64 `json:"requestRate"` // req/s
-	ErrorRate   *float64 `json:"errorRate"`   // fração 0..1 (5xx / total)
-	LatencyP95  *float64 `json:"latencyP95"`  // segundos
-	Goroutines  *float64 `json:"goroutines"`
-	MemoryBytes *float64 `json:"memoryBytes"`
-}
-
 // PlayerAchievement é uma conquista do catálogo anotada com o estado do jogador.
 type PlayerAchievement struct {
 	ID          string    `json:"id"`

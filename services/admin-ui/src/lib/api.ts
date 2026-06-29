@@ -1,5 +1,6 @@
 // Cliente da API do admin-bff. Em dev, as chamadas a /api são repassadas pelo
-// proxy do Vite ao BFF (:8088), evitando CORS.
+// proxy do Vite ao BFF (:8088). Foco em features de produto — observabilidade
+// detalhada fica no Grafana (ADR-0016/0006).
 
 export interface ServiceNode {
   id: string;
@@ -17,23 +18,6 @@ export interface Topology {
   nodes: ServiceNode[];
   edges: Edge[];
   sourceAvailable: boolean;
-}
-
-export interface LiveMetrics {
-  queueSize: number | null;
-  activeSessions: number | null;
-  matchesTotal: number | null;
-  matchesFailed: number | null;
-}
-
-export interface ServiceMetrics {
-  id: string;
-  up: boolean | null;
-  requestRate: number | null;
-  errorRate: number | null;
-  latencyP95: number | null;
-  goroutines: number | null;
-  memoryBytes: number | null;
 }
 
 export interface Player {
@@ -64,7 +48,6 @@ export interface Game {
   createdAt: string;
 }
 
-// CatalogAchievement é uma entrada do catálogo de um jogo.
 export interface CatalogAchievement {
   id: string;
   name: string;
@@ -72,7 +55,6 @@ export interface CatalogAchievement {
   target: number;
 }
 
-// NewAchievement é o payload de cadastro de conquista.
 export interface NewAchievement {
   id: string;
   name: string;
@@ -81,7 +63,7 @@ export interface NewAchievement {
   target: number;
 }
 
-// HttpError carrega o status para a UI distinguir 502/503/404/409 etc.
+// HttpError carrega o status para a UI distinguir 502/409/400 etc.
 export class HttpError extends Error {
   constructor(public status: number) {
     super(`HTTP ${status}`);
@@ -106,13 +88,10 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   topology: (signal?: AbortSignal) => getJSON<Topology>("/api/topology", signal),
-  liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
-  serviceMetrics: (id: string, signal?: AbortSignal) =>
-    getJSON<ServiceMetrics>(`/api/services/${encodeURIComponent(id)}/metrics`, signal),
+
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
 
-  // Jogos (multi-tenant, ADR-0017)
   games: (signal?: AbortSignal) => getJSON<Game[]>("/api/games", signal),
   createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),
   gameCatalog: (gameId: string, signal?: AbortSignal) =>

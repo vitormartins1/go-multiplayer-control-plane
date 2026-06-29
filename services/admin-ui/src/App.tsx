@@ -1,41 +1,62 @@
-import { useState } from "react";
-import { Sidebar } from "./components/Sidebar";
-import { RefreshControls } from "./components/RefreshControls";
-import { Overview } from "./components/Overview";
-import { DomainPage } from "./components/DomainPage";
-import { GamesPanel } from "./components/GamesPanel";
-import { DOMAINS } from "./lib/domains";
-import type { RefreshOptions } from "./lib/useLive";
-import type { Game } from "./lib/api";
+import { AppShell, Group, NavLink, Title } from "@mantine/core";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import {
+  IconChartBar,
+  IconDeviceGamepad2,
+  IconLayoutDashboard,
+  IconUsers,
+} from "@tabler/icons-react";
+
+import { Overview } from "./pages/Overview";
+import { Games } from "./pages/Games";
+import { GameDetail } from "./pages/GameDetail";
+import { Players } from "./pages/Players";
+import { PlayerDetail } from "./pages/PlayerDetail";
+import { Analytics } from "./pages/Analytics";
+
+const NAV = [
+  { to: "/", label: "Visão geral", icon: IconLayoutDashboard },
+  { to: "/games", label: "Games", icon: IconDeviceGamepad2 },
+  { to: "/players", label: "Players", icon: IconUsers },
+  { to: "/analytics", label: "Analytics", icon: IconChartBar },
+];
 
 export function App() {
-  const [active, setActive] = useState(""); // "" = Visão geral
-  const [refresh, setRefresh] = useState<RefreshOptions>({ enabled: true, intervalMs: 5000 });
-  // jogo selecionado: estado compartilhado (Games <-> Achievements). ADR-0017.
-  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
-
-  const domain = DOMAINS.find((d) => d.id === active) ?? DOMAINS[0];
+  const { pathname } = useLocation();
+  const active = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
 
   return (
-    <div className="app">
-      <Sidebar active={active} onSelect={setActive} />
-      <main className="content">
-        <div className="content-header">
-          <h2>{domain.label}</h2>
-          <RefreshControls opts={refresh} onChange={setRefresh} />
-        </div>
+    <AppShell header={{ height: 56 }} navbar={{ width: 230, breakpoint: "sm" }} padding="md">
+      <AppShell.Header>
+        <Group h="100%" px="md">
+          <Title order={4}>🎮 Admin Console</Title>
+        </Group>
+      </AppShell.Header>
 
-        {domain.kind === "overview" ? (
-          <Overview refresh={refresh} onSelectDomain={setActive} />
-        ) : domain.kind === "games" ? (
-          <GamesPanel selectedGame={selectedGame} onSelectGame={setSelectedGame} />
-        ) : domain.kind === "planned" ? (
-          <p className="muted">Em breve — o serviço de {domain.label.toLowerCase()} ainda não existe.</p>
-        ) : (
-          // key força remontar ao trocar de domínio (estado limpo por página)
-          <DomainPage key={domain.id} domain={domain} refresh={refresh} selectedGame={selectedGame} />
-        )}
-      </main>
-    </div>
+      <AppShell.Navbar p="sm">
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            component={Link}
+            to={n.to}
+            label={n.label}
+            leftSection={<n.icon size={18} />}
+            active={active(n.to)}
+          />
+        ))}
+      </AppShell.Navbar>
+
+      <AppShell.Main>
+        <Routes>
+          <Route path="/" element={<Overview />} />
+          <Route path="/games" element={<Games />} />
+          <Route path="/games/:gameId" element={<GameDetail />} />
+          <Route path="/players" element={<Players />} />
+          <Route path="/players/:playerId" element={<PlayerDetail />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell.Main>
+    </AppShell>
   );
 }
