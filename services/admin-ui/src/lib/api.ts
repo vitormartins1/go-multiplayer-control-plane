@@ -57,7 +57,31 @@ export interface PlayerAchievement {
   unlockedAt?: string;
 }
 
-// HttpError carrega o status para a UI distinguir 502/503/404 etc.
+export interface Game {
+  id: string;
+  slug: string;
+  name: string;
+  createdAt: string;
+}
+
+// CatalogAchievement é uma entrada do catálogo de um jogo.
+export interface CatalogAchievement {
+  id: string;
+  name: string;
+  description: string;
+  target: number;
+}
+
+// NewAchievement é o payload de cadastro de conquista.
+export interface NewAchievement {
+  id: string;
+  name: string;
+  description: string;
+  eventType: string;
+  target: number;
+}
+
+// HttpError carrega o status para a UI distinguir 502/503/404/409 etc.
 export class HttpError extends Error {
   constructor(public status: number) {
     super(`HTTP ${status}`);
@@ -70,6 +94,16 @@ async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await resp.json()) as T;
 }
 
+async function postJSON<T>(path: string, body: unknown): Promise<T> {
+  const resp = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new HttpError(resp.status);
+  return (await resp.json()) as T;
+}
+
 export const api = {
   topology: (signal?: AbortSignal) => getJSON<Topology>("/api/topology", signal),
   liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
@@ -77,6 +111,17 @@ export const api = {
     getJSON<ServiceMetrics>(`/api/services/${encodeURIComponent(id)}/metrics`, signal),
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
-  playerAchievements: (playerID: string, signal?: AbortSignal) =>
-    getJSON<PlayerAchievement[]>(`/api/players/${encodeURIComponent(playerID)}/achievements`, signal),
+
+  // Jogos (multi-tenant, ADR-0017)
+  games: (signal?: AbortSignal) => getJSON<Game[]>("/api/games", signal),
+  createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),
+  gameCatalog: (gameId: string, signal?: AbortSignal) =>
+    getJSON<CatalogAchievement[]>(`/api/games/${encodeURIComponent(gameId)}/achievements`, signal),
+  createAchievement: (gameId: string, a: NewAchievement) =>
+    postJSON<CatalogAchievement>(`/api/games/${encodeURIComponent(gameId)}/achievements`, a),
+  playerAchievements: (gameId: string, playerID: string, signal?: AbortSignal) =>
+    getJSON<PlayerAchievement[]>(
+      `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/achievements`,
+      signal,
+    ),
 };
