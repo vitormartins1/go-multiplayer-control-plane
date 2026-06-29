@@ -19,3 +19,4 @@
 | [0013](0013-git-branching-strategy.md) | Trunk-based + feature branches + conventional commits | Accepted | 2026-06-27 | todos (processo) |
 | [0014](0014-grafana-tempo-tracing.md) | Grafana Tempo + OTLP para distributed tracing | Accepted | 2026-06-28 | todos, infra |
 | [0015](0015-database-per-service-polyglot.md) | Database-per-service + polyglot com Postgres default | Accepted | 2026-06-28 | todos, infra |
+| [0016](0016-admin-panel-bff.md) | Painel admin — BFF em Go + SPA, agregação via APIs/Prometheus | Accepted | 2026-06-29 | admin-bff, admin-ui, infra |
