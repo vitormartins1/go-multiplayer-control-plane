@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ReactFlow, Background, Controls, type Node, type Edge as RFEdge } from "@xyflow/react";
 import type { Topology } from "../lib/api";
-import { statusClass } from "./StatusBadge";
+import { statusClass } from "../lib/status";
 
 // Posições estáticas por id (8 nós conhecidos) — layout simples e estável.
 const POS: Record<string, { x: number; y: number }> = {

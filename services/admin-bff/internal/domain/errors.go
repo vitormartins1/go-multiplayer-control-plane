@@ -12,9 +12,6 @@ var (
 	// ErrAchievementsUnavailable indica que o achievements-service está
 	// inacessível. O transport mapeia -> 502.
 	ErrAchievementsUnavailable = errors.New("admin: achievements source unavailable")
-	// ErrUnknownService indica um id de serviço fora de KnownServices. O
-	// transport mapeia -> 404.
-	ErrUnknownService = errors.New("admin: unknown service")
 	// ErrIdentityUnavailable indica que o identity-service está inacessível. O
 	// transport mapeia -> 502.
 	ErrIdentityUnavailable = errors.New("admin: identity source unavailable")
