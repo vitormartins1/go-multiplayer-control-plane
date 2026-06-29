@@ -78,3 +78,57 @@ func TestPostgresAccountRepository_FindInexistente_RetornaErrAccountNotFound(t *
 	_, err := repo.FindByHandle(context.Background(), "fantasma")
 	assert.ErrorIs(t, err, domain.ErrAccountNotFound)
 }
+
+// seedAccounts cria n contas com created_at crescente (older -> newer).
+func seedAccounts(t *testing.T, repo *PostgresAccountRepository, handles ...string) {
+	t.Helper()
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour)
+	for i, h := range handles {
+		a := newAccount(h)
+		a.CreatedAt = base.Add(time.Duration(i) * time.Minute)
+		require.NoError(t, repo.Create(ctx, a))
+	}
+}
+
+func TestPostgresAccountRepository_ListAccounts_OrdemDescESemHash(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	seedAccounts(t, repo, "Alice", "Bob", "Carol") // Carol é a mais recente
+
+	got, err := repo.ListAccounts(context.Background(), 50, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	assert.Equal(t, []string{"Carol", "Bob", "Alice"}, []string{got[0].Handle, got[1].Handle, got[2].Handle})
+	for _, a := range got {
+		assert.Empty(t, a.PasswordHash, "password_hash nunca é lido no caminho admin")
+	}
+}
+
+func TestPostgresAccountRepository_ListAccounts_Paginacao(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	seedAccounts(t, repo, "Alice", "Bob", "Carol", "Dave")
+
+	page1, err := repo.ListAccounts(context.Background(), 2, 0)
+	require.NoError(t, err)
+	require.Len(t, page1, 2)
+	assert.Equal(t, []string{"Dave", "Carol"}, []string{page1[0].Handle, page1[1].Handle})
+
+	page2, err := repo.ListAccounts(context.Background(), 2, 2)
+	require.NoError(t, err)
+	require.Len(t, page2, 2)
+	assert.Equal(t, []string{"Bob", "Alice"}, []string{page2[0].Handle, page2[1].Handle})
+}
+
+func TestPostgresAccountRepository_CountAccounts(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	ctx := context.Background()
+
+	n0, err := repo.CountAccounts(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n0)
+
+	seedAccounts(t, repo, "Alice", "Bob")
+	n2, err := repo.CountAccounts(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n2)
+}

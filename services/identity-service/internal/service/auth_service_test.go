@@ -25,6 +25,17 @@ func (m *mockRepo) FindByHandle(ctx context.Context, handle string) (*domain.Acc
 	return acc, args.Error(1)
 }
 
+func (m *mockRepo) ListAccounts(ctx context.Context, limit, offset int) ([]domain.Account, error) {
+	args := m.Called(ctx, limit, offset)
+	accs, _ := args.Get(0).([]domain.Account)
+	return accs, args.Error(1)
+}
+
+func (m *mockRepo) CountAccounts(ctx context.Context) (int, error) {
+	args := m.Called(ctx)
+	return args.Int(0), args.Error(1)
+}
+
 type mockTokens struct{ mock.Mock }
 
 func (m *mockTokens) Sign(ctx context.Context, subject string, claims map[string]any) (string, error) {
