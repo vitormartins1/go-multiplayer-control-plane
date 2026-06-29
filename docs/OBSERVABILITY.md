@@ -22,15 +22,15 @@ Métricas expostas pelo serviço Go em `/metrics`:
 docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
-| Serviço | URL | Notas |
+Endpoints de observabilidade (mapa **completo** de portas — serviços, bancos, exporters — em [infra/docker/README.md](../infra/docker/README.md)):
+
+| Ferramenta | URL | Notas |
 |---|---|---|
-| identity-service | http://localhost:8081 | API; `/metrics`, `/healthz` |
-| achievements-service | http://localhost:8082 | API; `/metrics`, `/healthz` |
-| Prometheus | http://localhost:9090 | ver alvos em Status → Targets |
 | Grafana | http://localhost:3000 | login anônimo (admin); datasources Prometheus e Tempo provisionados |
+| Prometheus | http://localhost:9090 | ver alvos em Status → Targets |
 | Tempo | http://localhost:3200 | backend de traces (API de query); OTLP gRPC em `:4317` |
-| identity-postgres-exporter | http://localhost:9187/metrics | métricas do banco do identity |
-| achievements-postgres-exporter | http://localhost:9188/metrics | métricas do banco do achievements |
+
+Cada serviço expõe `/metrics` (RED + runtime); cada storage tem seu exporter (Postgres/Redis) ou métricas nativas (MinIO).
 
 Gerar tráfego para ver as métricas RED:
 
@@ -50,6 +50,7 @@ O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de for
 - **PostgreSQL** — parametrizado por `$job` (um banco, ex. `identity-postgres`/`achievements-postgres`, ou "All"): conexões, commits/rollbacks, cache hit, tuplas/s, tamanho do banco, deadlocks. Serve **qualquer `<svc>-postgres-exporter`** sem refazer.
 - **Tracing (APM)** — **service graph** (mapa de dependências `user → serviço → banco`, derivado dos traces) + RED por serviço e latência p95 a partir dos spans. Alimentado pelo **metrics-generator do Tempo** (gera `traces_*` e faz `remote_write` ao Prometheus). É o "APM visual"; para inspecionar um trace específico em waterfall, use **Explore → Tempo** (ou a aba **Service Graph** lá).
 - **MinIO (cloud-save)** — uso de armazenamento, objetos/buckets, requests/erros/tráfego S3 e saúde, a partir das métricas Prometheus nativas do MinIO (`/minio/v2/metrics/cluster`).
+- **Redis (leaderboard)** — comandos/s, clientes conectados, memória, cache hit ratio, chaves e disponibilidade, via `redis-exporter`.
 
 **Complementar** (importar via Grafana UI → Import by ID; selecionar a datasource Prometheus):
 
