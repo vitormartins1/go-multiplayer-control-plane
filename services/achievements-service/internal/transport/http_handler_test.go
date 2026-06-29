@@ -241,3 +241,33 @@ func TestAdmin_SemAuthorization_NaoBloqueia(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+func TestAdminRecordEvent_PorJogoEPlayerDoPath_200(t *testing.T) {
+	svc := &fakeService{unlocked: []domain.Achievement{{ID: "first_win", Name: "Primeira Vitória"}}}
+	srv := newServer(svc, errVerifier{}) // sem JWT (server-authoritative)
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/game-9/players/player-42/events", "", "", `{"type":"match_won"}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID, "gameId do path")
+	assert.Equal(t, "player-42", svc.gotPlayerID, "playerID do path (não JWT)")
+	assert.Equal(t, "match_won", svc.gotEvent.Type)
+
+	var body struct {
+		Unlocked []achievementDTO `json:"unlocked"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Unlocked, 1)
+	assert.Equal(t, "first_win", body.Unlocked[0].ID)
+}
+
+func TestAdminRecordEvent_TypeVazio_400(t *testing.T) {
+	svc := &fakeService{recordErr: domain.ErrInvalidEvent}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/g/players/p/events", "", "", `{"type":""}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
