@@ -4,7 +4,18 @@ Front-end do **painel de administração** ("sala de controle" — ADR-0016). SP
 
 > App de apresentação — fora do hexagonal Go. Segue um **SDD adaptado** (spec = telas/UX): ver `specs/001-control-room/`.
 
-## Rodar (dev)
+## Rodar
+
+### Opção A — Docker (sobe junto com a stack)
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up
+# painel em http://localhost:8089
+```
+
+nginx serve o build estático e faz **proxy** de `/api` -> `admin-bff:8080` (mesma origem, sem CORS). É a forma de ver o painel "com um comando".
+
+### Opção B — dev (hot-reload)
 
 ```bash
 cd services/admin-ui
@@ -12,14 +23,9 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Precisa do `admin-bff` no ar (porta 8088). O Vite faz **proxy** de `/api` -> `http://localhost:8088` (sem CORS). Para apontar a outra porta/host:
+Precisa do `admin-bff` no ar (porta 8088 do host — ex.: `docker compose ... up admin-bff`). O Vite faz proxy de `/api` -> `http://localhost:8088`. Para apontar a outra porta/host: `VITE_BFF_URL=http://localhost:9999 npm run dev` (ou copie `.env.example` para `.env`).
 
-```bash
-VITE_BFF_URL=http://localhost:9999 npm run dev
-# ou copie .env.example para .env e ajuste
-```
-
-Subir o BFF + fontes localmente: `docker compose -f infra/docker/docker-compose.yml up admin-bff prometheus achievements-service ...` (ou a stack toda).
+> **Atenção:** `localhost:8088` é a **API** (BFF, responde JSON), não a tela. A tela é `:8089` (Docker) ou `:5173` (dev).
 
 ## Telas (sidebar por domínio)
 
