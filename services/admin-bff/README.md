@@ -15,7 +15,9 @@ Back-end-for-frontend do **painel de administração** ("sala de controle" do ba
 | GET | `/api/metrics/live` | contadores ao vivo (fila, sessions, matches) |
 | GET | `/api/services/{id}/metrics` | saúde + RED + runtime de um serviço (página de domínio) |
 | GET | `/api/players` | lista de usuários (User base) — via identity `/admin/players` |
-| GET | `/api/players/{playerID}/achievements` | achievements anotados de um jogador |
+| GET / POST | `/api/games` | listar / criar jogos — via game-registry |
+| GET / POST | `/api/games/{gameId}/achievements` | catálogo do jogo / cadastrar conquista — via achievements |
+| GET | `/api/games/{gameId}/players/{playerID}/achievements` | achievements do jogador no jogo |
 
 **Degradação por fonte:** Prometheus fora -> `/api/topology` retorna nós `up:null` + `sourceAvailable:false` (200); `/api/metrics/live` e `/api/services/{id}/metrics` -> 503. `id` desconhecido -> 404. achievements fora -> `/api/players/{id}/achievements` -> 502.
 

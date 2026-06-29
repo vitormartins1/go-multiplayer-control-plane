@@ -78,6 +78,24 @@ type Player struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// Game é um jogo registrado (fonte: game-registry — ADR-0017).
+type Game struct {
+	ID        string    `json:"id"`
+	Slug      string    `json:"slug"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// Achievement é uma entrada do catálogo de conquistas de um jogo. EventType é
+// usado só na criação (o catálogo lido não o expõe) — daí o omitempty.
+type Achievement struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	EventType   string `json:"eventType,omitempty"`
+	Target      int    `json:"target"`
+}
+
 // PlayerPage é uma página da lista de usuários + o total global.
 type PlayerPage struct {
 	Total   int      `json:"total"`
@@ -99,9 +117,21 @@ type PlayerDirectory interface {
 	ListPlayers(ctx context.Context, limit, offset int) (PlayerPage, error)
 }
 
-// AchievementsReader é a Port de saída para a API admin do achievements-service.
+// GameRegistry é a Port de saída para o game-registry (gestão de jogos).
+type GameRegistry interface {
+	ListGames(ctx context.Context) ([]Game, error)
+	// CreateGame registra um jogo. Erro de validação do upstream vira
+	// UpstreamError (status repassado); indisponibilidade -> ErrGameRegistryUnavailable.
+	CreateGame(ctx context.Context, slug, name string) (*Game, error)
+}
+
+// AchievementsReader é a Port de saída para a API admin do achievements-service,
+// agora por jogo (multi-tenant, ADR-0017).
 type AchievementsReader interface {
-	// ForPlayer lê os achievements de um jogador. Devolve ErrAchievementsUnavailable
-	// se o serviço estiver inacessível.
-	ForPlayer(ctx context.Context, playerID string) ([]PlayerAchievement, error)
+	// CatalogForGame lê o catálogo de conquistas do jogo.
+	CatalogForGame(ctx context.Context, gameID string) ([]Achievement, error)
+	// CreateAchievement cadastra uma conquista no jogo. Validação -> UpstreamError.
+	CreateAchievement(ctx context.Context, gameID string, a Achievement) error
+	// PlayerAchievements lê os achievements de um jogador no jogo.
+	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]PlayerAchievement, error)
 }

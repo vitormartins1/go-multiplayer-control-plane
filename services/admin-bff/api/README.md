@@ -33,6 +33,20 @@ curl -s "localhost:8088/api/players?limit=50&offset=0" | jq
 # -> { "total": <int>, "players": [ {"id","handle","createdAt"} ] }
 # identity fora -> 502
 
+# Jogos (via game-registry)
+curl -s localhost:8088/api/games | jq
+curl -s -XPOST localhost:8088/api/games -H 'Content-Type: application/json' -d '{"slug":"tetris","name":"Tetris"}'
+# slug inválido -> 400 ; slug duplicado -> 409 (repassados); game-registry fora -> 502
+
+# Catálogo de um jogo + cadastrar conquista (via achievements)
+GID=...  # id de /api/games
+curl -s "localhost:8088/api/games/$GID/achievements" | jq
+curl -s -XPOST "localhost:8088/api/games/$GID/achievements" -H 'Content-Type: application/json' \
+  -d '{"id":"first_blood","name":"Primeiro Sangue","description":"x","eventType":"kill","target":1}'
+
+# Achievements de um jogador no jogo
+curl -s "localhost:8088/api/games/$GID/players/PLAYER_ID/achievements" | jq
+
 # Achievements de um jogador (via /admin do achievements-service)
 curl -s localhost:8088/api/players/PLAYER_ID/achievements | jq
 # PLAYER_ID = id da conta (sub do JWT). achievements fora -> 502

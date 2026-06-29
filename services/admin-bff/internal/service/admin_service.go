@@ -18,16 +18,37 @@ type Service struct {
 	metrics   domain.MetricsSource
 	reader    domain.AchievementsReader
 	directory domain.PlayerDirectory
+	registry  domain.GameRegistry
 }
 
 // New cria o service a partir das Ports de saída.
-func New(metrics domain.MetricsSource, reader domain.AchievementsReader, directory domain.PlayerDirectory) *Service {
-	return &Service{metrics: metrics, reader: reader, directory: directory}
+func New(metrics domain.MetricsSource, reader domain.AchievementsReader, directory domain.PlayerDirectory, registry domain.GameRegistry) *Service {
+	return &Service{metrics: metrics, reader: reader, directory: directory, registry: registry}
 }
 
 // Players delega ao directory (API admin do identity-service).
 func (s *Service) Players(ctx context.Context, limit, offset int) (domain.PlayerPage, error) {
 	return s.directory.ListPlayers(ctx, limit, offset)
+}
+
+// Games lista os jogos (game-registry).
+func (s *Service) Games(ctx context.Context) ([]domain.Game, error) {
+	return s.registry.ListGames(ctx)
+}
+
+// CreateGame registra um jogo (game-registry).
+func (s *Service) CreateGame(ctx context.Context, slug, name string) (*domain.Game, error) {
+	return s.registry.CreateGame(ctx, slug, name)
+}
+
+// GameCatalog lê o catálogo de conquistas do jogo (achievements).
+func (s *Service) GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error) {
+	return s.reader.CatalogForGame(ctx, gameID)
+}
+
+// CreateAchievement cadastra uma conquista no jogo (achievements).
+func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error {
+	return s.reader.CreateAchievement(ctx, gameID, a)
 }
 
 // Topology monta o mapa de serviços com o status up/down vindo de `up{}`. Se o
@@ -119,9 +140,9 @@ func floatToBool(v *float64) *bool {
 	return &b
 }
 
-// PlayerAchievements delega ao reader (API admin do achievements-service).
-func (s *Service) PlayerAchievements(ctx context.Context, playerID string) ([]domain.PlayerAchievement, error) {
-	return s.reader.ForPlayer(ctx, playerID)
+// PlayerAchievements delega ao reader (achievements do jogador no jogo).
+func (s *Service) PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
+	return s.reader.PlayerAchievements(ctx, gameID, playerID)
 }
 
 // scalar roda uma instant query e devolve o primeiro valor (nil se a métrica

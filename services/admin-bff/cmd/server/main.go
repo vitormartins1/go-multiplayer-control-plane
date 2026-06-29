@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	achievementsclient "github.com/c130n/game-backend/services/admin-bff/internal/achievements"
+	gameregistryclient "github.com/c130n/game-backend/services/admin-bff/internal/gameregistry"
 	identityclient "github.com/c130n/game-backend/services/admin-bff/internal/identity"
 	prometheusclient "github.com/c130n/game-backend/services/admin-bff/internal/prometheus"
 	"github.com/c130n/game-backend/services/admin-bff/internal/service"
@@ -70,6 +71,10 @@ func run(log *slog.Logger) error {
 	if identityURL == "" {
 		log.Warn("IDENTITY_URL ausente — a User base vai falhar; aponte para o identity-service")
 	}
+	gameRegistryURL := os.Getenv("GAME_REGISTRY_URL")
+	if gameRegistryURL == "" {
+		log.Warn("GAME_REGISTRY_URL ausente — a gestão de jogos vai falhar; aponte para o game-registry")
+	}
 
 	// Clients de saída com otelhttp: propaga o trace do BFF até as fontes (ADR-0014).
 	httpClient := &http.Client{
@@ -79,7 +84,8 @@ func run(log *slog.Logger) error {
 	metrics := prometheusclient.New(promURL, httpClient)
 	reader := achievementsclient.New(achURL, httpClient)
 	directory := identityclient.New(identityURL, httpClient)
-	svc := service.New(metrics, reader, directory)
+	registry := gameregistryclient.New(gameRegistryURL, httpClient)
+	svc := service.New(metrics, reader, directory, registry)
 
 	red := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)
 

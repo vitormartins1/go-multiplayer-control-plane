@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	// ErrMetricsUnavailable indica que o Prometheus está inacessível. O service
@@ -15,4 +18,19 @@ var (
 	// ErrIdentityUnavailable indica que o identity-service está inacessível. O
 	// transport mapeia -> 502.
 	ErrIdentityUnavailable = errors.New("admin: identity source unavailable")
+	// ErrGameRegistryUnavailable indica que o game-registry está inacessível. O
+	// transport mapeia -> 502.
+	ErrGameRegistryUnavailable = errors.New("admin: game-registry source unavailable")
 )
+
+// UpstreamError carrega um erro de validação (4xx) repassado de um serviço
+// upstream — o transport reescreve o mesmo status (ex.: slug duplicado -> 409),
+// em vez de mascarar como 502. Code é o código de erro do corpo do upstream.
+type UpstreamError struct {
+	Status int
+	Code   string
+}
+
+func (e *UpstreamError) Error() string {
+	return fmt.Sprintf("admin: upstream error %d (%s)", e.Status, e.Code)
+}
