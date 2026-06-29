@@ -27,6 +27,7 @@ const (
 	Status_STATUS_UNSPECIFIED Status = 0
 	Status_STATUS_SEARCHING   Status = 1
 	Status_STATUS_MATCHED     Status = 2
+	Status_STATUS_FAILED      Status = 3 // provisionamento da sessão falhou (ver reason)
 )
 
 // Enum value maps for Status.
@@ -35,11 +36,13 @@ var (
 		0: "STATUS_UNSPECIFIED",
 		1: "STATUS_SEARCHING",
 		2: "STATUS_MATCHED",
+		3: "STATUS_FAILED",
 	}
 	Status_value = map[string]int32{
 		"STATUS_UNSPECIFIED": 0,
 		"STATUS_SEARCHING":   1,
 		"STATUS_MATCHED":     2,
+		"STATUS_FAILED":      3,
 	}
 )
 
@@ -109,9 +112,11 @@ func (*FindMatchRequest) Descriptor() ([]byte, []int) {
 type TicketUpdate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        Status                 `protobuf:"varint,1,opt,name=status,proto3,enum=matchmaking.v1.Status" json:"status,omitempty"`
-	MatchId       string                 `protobuf:"bytes,2,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"`             // preenchido em MATCHED
-	Players       []string               `protobuf:"bytes,3,rep,name=players,proto3" json:"players,omitempty"`                            // playerIDs do match
-	ConnectInfo   string                 `protobuf:"bytes,4,opt,name=connect_info,json=connectInfo,proto3" json:"connect_info,omitempty"` // mock até o session-service existir
+	MatchId       string                 `protobuf:"bytes,2,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"`                   // preenchido em MATCHED/FAILED
+	Players       []string               `protobuf:"bytes,3,rep,name=players,proto3" json:"players,omitempty"`                                  // playerIDs do match
+	ServerAddress string                 `protobuf:"bytes,4,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server alocado (MATCHED)
+	ConnectToken  string                 `protobuf:"bytes,5,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`    // connect token EdDSA do próprio jogador (MATCHED)
+	Reason        string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`                                    // motivo quando FAILED
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -167,9 +172,23 @@ func (x *TicketUpdate) GetPlayers() []string {
 	return nil
 }
 
-func (x *TicketUpdate) GetConnectInfo() string {
+func (x *TicketUpdate) GetServerAddress() string {
 	if x != nil {
-		return x.ConnectInfo
+		return x.ServerAddress
+	}
+	return ""
+}
+
+func (x *TicketUpdate) GetConnectToken() string {
+	if x != nil {
+		return x.ConnectToken
+	}
+	return ""
+}
+
+func (x *TicketUpdate) GetReason() string {
+	if x != nil {
+		return x.Reason
 	}
 	return ""
 }
@@ -179,16 +198,19 @@ var File_matchmaking_v1_matchmaking_proto protoreflect.FileDescriptor
 const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\n" +
 	" matchmaking/v1/matchmaking.proto\x12\x0ematchmaking.v1\"\x12\n" +
-	"\x10FindMatchRequest\"\x96\x01\n" +
+	"\x10FindMatchRequest\"\xd7\x01\n" +
 	"\fTicketUpdate\x12.\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x16.matchmaking.v1.StatusR\x06status\x12\x19\n" +
 	"\bmatch_id\x18\x02 \x01(\tR\amatchId\x12\x18\n" +
-	"\aplayers\x18\x03 \x03(\tR\aplayers\x12!\n" +
-	"\fconnect_info\x18\x04 \x01(\tR\vconnectInfo*J\n" +
+	"\aplayers\x18\x03 \x03(\tR\aplayers\x12%\n" +
+	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12#\n" +
+	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason*]\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_SEARCHING\x10\x01\x12\x12\n" +
-	"\x0eSTATUS_MATCHED\x10\x022\\\n" +
+	"\x0eSTATUS_MATCHED\x10\x02\x12\x11\n" +
+	"\rSTATUS_FAILED\x10\x032\\\n" +
 	"\vMatchmaking\x12M\n" +
 	"\tFindMatch\x12 .matchmaking.v1.FindMatchRequest\x1a\x1c.matchmaking.v1.TicketUpdate0\x01B]Z[github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
 

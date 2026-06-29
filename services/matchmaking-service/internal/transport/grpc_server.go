@@ -37,12 +37,21 @@ func (s *Server) FindMatch(_ *pb.FindMatchRequest, stream pb.Matchmaking_FindMat
 		return err
 	}
 	select {
-	case match := <-ch:
+	case res := <-ch:
+		if res.Failed {
+			return stream.Send(&pb.TicketUpdate{
+				Status:  pb.Status_STATUS_FAILED,
+				MatchId: res.MatchID,
+				Players: res.Players,
+				Reason:  res.Reason,
+			})
+		}
 		return stream.Send(&pb.TicketUpdate{
-			Status:      pb.Status_STATUS_MATCHED,
-			MatchId:     match.ID,
-			Players:     match.Players,
-			ConnectInfo: match.ConnectInfo,
+			Status:        pb.Status_STATUS_MATCHED,
+			MatchId:       res.MatchID,
+			Players:       res.Players,
+			ServerAddress: res.ServerAddress,
+			ConnectToken:  res.ConnectToken,
 		})
 	case <-stream.Context().Done():
 		return stream.Context().Err() // cliente cancelou -> ticket removido pelo matchmaker

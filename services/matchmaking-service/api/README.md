@@ -25,10 +25,21 @@ grpcurl -plaintext \
   -d '{}' \
   localhost:50051 matchmaking.v1.Matchmaking/FindMatch
 # -> { "status": "STATUS_SEARCHING" }
-# -> { "status": "STATUS_MATCHED", "matchId": "...", "players": [...], "connectInfo": "mock://session/..." }
+# -> { "status": "STATUS_MATCHED", "matchId": "...", "players": [...],
+#      "serverAddress": "10.0.0.1:7777", "connectToken": "<JWT EdDSA do jogador>" }
 
 # sem o header authorization -> erro Unauthenticated
 ```
 
-Acompanhe a fila no Grafana: a métrica `matchmaking_queue_size` (HTTP em :8086/metrics).
-O `connectInfo` é mock até o session-service existir.
+Ao formar o match, o matchmaking chama o `CreateSession` do session-service
+(ADR-0010): aloca um game server e emite **um connect token por jogador**. Cada
+jogador recebe no seu stream o `serverAddress` e o **seu** `connectToken` (JWT
+EdDSA verificável no JWKS do session em `:8087/.well-known/jwks.json`).
+
+Se o session não tiver server livre (ou estiver indisponível), o update vem como
+`{ "status": "STATUS_FAILED", "reason": "..." }` e o stream encerra — o cliente
+chama `FindMatch` de novo.
+
+Acompanhe no Grafana: `matchmaking_queue_size`, `matchmaking_matches_total` e
+`matchmaking_matches_failed_total` (HTTP em :8086/metrics). O trace do FindMatch
+segue até o CreateSession no Tempo (ADR-0014).

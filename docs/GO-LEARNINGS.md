@@ -497,3 +497,40 @@ close(t.ch)
 ```
 
 **Pegadinha / nuance:** o channel com **buffer 1** é deliberado — se o cliente cancelou entre a formação e o envio, `t.ch <- match` não pode **bloquear** o worker (que segura o mutex da fila). O buffer absorve o envio e a mensagem é descartada. E `select` com `<-ctx.Done()` é o padrão universal de "faça X, mas desista se o context cancelar": toda espera deve ter esse braço, senão a goroutine vaza.
+
+---
+
+## 14 — Um serviço como cliente gRPC de outro (e o `internal/` que blinda fronteiras)
+
+**O que é / por que importa:** até aqui cada serviço *expunha* gRPC; agora o matchmaking **consome** o gRPC do session — vira cliente de outro serviço. O padrão no consumidor: abrir uma conexão com `grpc.NewClient`, instanciar o client gerado e chamá-lo como se fosse uma função local. O detalhe idiomático é **traduzir o erro de transporte de volta para um erro de domínio**: o gRPC devolve um `status` com `codes.X`, e o adapter mapeia isso para um erro sentinela do domínio, para o resto do serviço nunca depender de tipos gRPC. É o equivalente Go de, em C#/.NET, um cliente `Grpc.Net.Client` cujo `RpcException.StatusCode` você converte numa exceção/erro do seu domínio.
+
+**Onde no projeto:** `services/matchmaking-service/internal/sessionclient/grpc_client.go` (adapter que implementa a Port `domain.SessionProvisioner`) e o wire-up em `cmd/server/main.go` (dial + `otelgrpc` no client para o trace cross-service). A Port fica em `internal/domain/matchmaking.go`.
+
+```go
+// adapter: chama o gRPC do session e traduz o resultado/erro para o domínio
+func (c *Client) Provision(ctx context.Context, matchID string, players []string) (domain.Provisioned, error) {
+	resp, err := c.session.CreateSession(ctx, &sessionv1.CreateSessionRequest{
+		MatchId: matchID, Players: players,
+	})
+	if err != nil {
+		if status.Code(err) == codes.ResourceExhausted { // erro de transporte...
+			return domain.Provisioned{}, domain.ErrNoServer // ...vira erro de domínio
+		}
+		return domain.Provisioned{}, fmt.Errorf("sessionclient: provision: %w", err)
+	}
+	// ... mapeia resp.Grants -> Provisioned.Tokens (por playerID)
+}
+```
+
+```go
+// main: a conexão é uma dependência com lifecycle (fechar no shutdown).
+// otelgrpc no client propaga o trace: o span do FindMatch continua no CreateSession.
+sessionConn, _ := grpc.NewClient(os.Getenv("SESSION_GRPC_ADDR"),
+	grpc.WithTransportCredentials(insecure.NewCredentials()),
+	grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+)
+defer sessionConn.Close()
+provisioner := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
+```
+
+**Pegadinha / nuance:** o pacote `internal/` do Go é uma **fronteira imposta pelo compilador**, não convenção. Código só pode importar `.../X/internal/...` se estiver dentro da subárvore de `X`. Por isso o teste do matchmaking **não pôde** subir o session real reusando `session-service/internal/...` — a solução foi um *fake* que implementa o **contrato gerado** (`sessionv1.SessionServer`), que é público (fica em `gen/`, não em `internal/`). Lição: o que é contrato entre serviços vai para um pacote público (o `gen/` do proto); o que é detalhe interno fica em `internal/` e o compilador garante que ninguém de fora encoste. `grpc.NewClient` (substituto do antigo `grpc.Dial`) é **lazy** — não conecta na hora; a conexão sobe na primeira RPC, então um session fora do ar não derruba o boot do matchmaking, vira erro na chamada (que viramos `STATUS_FAILED`).

@@ -18,11 +18,14 @@ enum Status {
   STATUS_UNSPECIFIED = 0;
   STATUS_SEARCHING = 1;
   STATUS_MATCHED = 2;
+  STATUS_FAILED = 3; // provisionamento da sessão falhou (ver reason)
 }
 
 message TicketUpdate {
   Status status = 1;
-  string match_id = 2;          // preenchido em MATCHED
+  string match_id = 2;          // preenchido em MATCHED/FAILED
   repeated string players = 3;  // playerIDs do match
-  string connect_info = 4;      // mock até o session-service existir
+  string server_address = 4;    // endereço do game server alocado (MATCHED)
+  string connect_token = 5;     // connect token EdDSA do próprio jogador (MATCHED)
+  string reason = 6;            // motivo quando FAILED
 }
