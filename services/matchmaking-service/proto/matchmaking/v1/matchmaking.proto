@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package matchmaking.v1;
+
+option go_package = "github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1";
+
+// Matchmaking forma partidas a partir de uma fila de tickets (≈ GameLift
+// FlexMatch). Ver ADR-0003 (gRPC com streaming).
+service Matchmaking {
+  // FindMatch enfileira o jogador e transmite o status do ticket até o match
+  // (server-streaming). Cancelar a chamada remove o ticket da fila.
+  rpc FindMatch(FindMatchRequest) returns (stream TicketUpdate);
+}
+
+message FindMatchRequest {}
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_SEARCHING = 1;
+  STATUS_MATCHED = 2;
+}
+
+message TicketUpdate {
+  Status status = 1;
+  string match_id = 2;          // preenchido em MATCHED
+  repeated string players = 3;  // playerIDs do match
+  string connect_info = 4;      // mock até o session-service existir
+}

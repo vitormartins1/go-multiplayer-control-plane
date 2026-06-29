@@ -1,0 +1,136 @@
+// Command server é o entrypoint do matchmaking-service: sobe o servidor gRPC
+// (FindMatch streaming) + um HTTP pequeno só para /healthz e /metrics, roda o
+// loop do matchmaker e faz graceful shutdown dos dois listeners.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	pb "github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1"
+	"github.com/c130n/game-backend/services/matchmaking-service/internal/service"
+	"github.com/c130n/game-backend/services/matchmaking-service/internal/transport"
+	"github.com/c130n/game-backend/shared/auth"
+	"github.com/c130n/game-backend/shared/config"
+	"github.com/c130n/game-backend/shared/logger"
+	"github.com/c130n/game-backend/shared/telemetry"
+)
+
+const (
+	serviceName  = "matchmaking-service"
+	matchSize    = 2
+	formInterval = time.Second
+)
+
+func main() {
+	log := logger.New(serviceName)
+	if err := run(log); err != nil {
+		log.Error("encerrando com erro", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(log *slog.Logger) error {
+	cfg := config.Load()
+
+	shutdownTracing, err := telemetry.SetupTracing(context.Background(), telemetry.Config{
+		ServiceName:  serviceName,
+		OTLPEndpoint: cfg.OTLPEndpoint,
+		SampleRatio:  cfg.TraceSampleRatio,
+	})
+	if err != nil {
+		return fmt.Errorf("telemetry: %w", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(ctx); err != nil {
+			log.Error("telemetry shutdown", "err", err)
+		}
+	}()
+
+	if cfg.IdentityJWKSURL == "" {
+		log.Warn("IDENTITY_JWKS_URL ausente — a validação de token vai falhar; aponte para o JWKS do identity")
+	}
+	verifier := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
+
+	mm := service.New(matchSize, formInterval)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	go mm.Run(ctx)
+
+	// métricas custom (a fila e os matches são o que interessa observar aqui).
+	prometheus.MustRegister(
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "matchmaking_queue_size", Help: "Tickets aguardando na fila.",
+		}, func() float64 { return float64(mm.QueueSize()) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "matchmaking_matches_total", Help: "Total de matches formados.",
+		}, mm.MatchesTotal),
+	)
+
+	grpcSrv := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
+		grpc.StreamInterceptor(transport.StreamAuthInterceptor(verifier)),
+	)
+	pb.RegisterMatchmakingServer(grpcSrv, transport.NewServer(mm))
+	reflection.Register(grpcSrv) // permite grpcurl sem o .proto
+
+	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		return fmt.Errorf("grpc listen: %w", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
+	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+
+	errCh := make(chan error, 2)
+	go func() {
+		log.Info("grpc server iniciando", "addr", grpcLis.Addr().String())
+		if err := grpcSrv.Serve(grpcLis); err != nil {
+			errCh <- fmt.Errorf("grpc server: %w", err)
+		}
+	}()
+	go func() {
+		log.Info("http metrics iniciando", "addr", httpSrv.Addr)
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("http server: %w", err)
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	log.Info("desligando...")
+	grpcSrv.GracefulStop()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("http shutdown: %w", err)
+	}
+	log.Info("encerrado")
+	return nil
+}

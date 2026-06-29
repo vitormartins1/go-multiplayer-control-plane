@@ -96,6 +96,25 @@ services:
       tempo:
         condition: service_started
 
+  # Primeiro serviço gRPC (ADR-0003). Duas portas: gRPC + HTTP (métricas/health).
+  matchmaking-service:
+    build:
+      context: ../..
+      dockerfile: services/matchmaking-service/Dockerfile
+    ports:
+      - "8086:8080"   # HTTP: /metrics, /healthz
+      - "50051:50051" # gRPC: FindMatch
+    environment:
+      PORT: "8080"
+      GRPC_PORT: "50051"
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      identity-service:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16

@@ -32,6 +32,9 @@ type Config struct {
 
 	// Redis — usado por serviços de ranking real-time (ex. leaderboard, ADR-0015).
 	RedisAddr string // via REDIS_ADDR (ex. redis:6379)
+
+	// GRPCPort — porta do servidor gRPC (serviços gRPC, ex. matchmaking; ADR-0003).
+	GRPCPort string // via GRPC_PORT
 }
 
 // Load lê o ambiente, com defaults convenientes para dev local.
@@ -48,6 +51,7 @@ func Load() Config {
 		S3SecretKey:      os.Getenv("S3_SECRET_KEY"),
 		S3Bucket:         os.Getenv("S3_BUCKET"),
 		RedisAddr:        os.Getenv("REDIS_ADDR"),
+		GRPCPort:         env("GRPC_PORT", "50051"),
 	}
 }
 
