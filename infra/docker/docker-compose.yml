@@ -219,6 +219,7 @@ services:
     volumes:
       - ../../services/achievements-service/migrations/001_create_achievements.sql:/docker-entrypoint-initdb.d/001_create_achievements.sql:ro
       - ../../services/achievements-service/migrations/002_add_progress.sql:/docker-entrypoint-initdb.d/002_add_progress.sql:ro
+      - ../../services/achievements-service/migrations/003_add_game_scope.sql:/docker-entrypoint-initdb.d/003_add_game_scope.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
@@ -253,6 +254,7 @@ services:
       - "5435:5432"
     volumes:
       - ../../services/game-registry/migrations/001_create_games.sql:/docker-entrypoint-initdb.d/001_create_games.sql:ro
+      - ../../services/game-registry/migrations/002_seed_sandbox.sql:/docker-entrypoint-initdb.d/002_seed_sandbox.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s

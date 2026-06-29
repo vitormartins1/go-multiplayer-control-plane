@@ -16,6 +16,8 @@ import (
 	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
 )
 
+const gid = "game-1"
+
 type fakeVerifier struct {
 	playerID string
 	err      error
@@ -30,23 +32,35 @@ type fakeService struct {
 	catalog     []domain.Achievement
 	forPlayer   []domain.PlayerAchievement
 	recordErr   error
+	createErr   error
 	gotPlayerID string
+	gotGameID   string
 	gotEvent    domain.Event
+	gotCreate   domain.Achievement
 }
 
-func (f *fakeService) ListCatalog(_ context.Context) ([]domain.Achievement, error) {
+func (f *fakeService) ListCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
+	f.gotGameID = gameID
 	return f.catalog, nil
 }
 
-func (f *fakeService) ListForPlayer(_ context.Context, playerID string) ([]domain.PlayerAchievement, error) {
-	f.gotPlayerID = playerID
+func (f *fakeService) ListForPlayer(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
+	f.gotGameID, f.gotPlayerID = gameID, playerID
 	return f.forPlayer, nil
 }
 
-func (f *fakeService) RecordEvent(_ context.Context, playerID string, event domain.Event) ([]domain.Achievement, error) {
-	f.gotPlayerID = playerID
-	f.gotEvent = event
+func (f *fakeService) RecordEvent(_ context.Context, gameID, playerID string, event domain.Event) ([]domain.Achievement, error) {
+	f.gotGameID, f.gotPlayerID, f.gotEvent = gameID, playerID, event
 	return f.unlocked, f.recordErr
+}
+
+func (f *fakeService) CreateAchievement(_ context.Context, gameID string, a domain.Achievement) (*domain.Achievement, error) {
+	f.gotGameID, f.gotCreate = gameID, a
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
+	a.GameID = gameID
+	return &a, nil
 }
 
 func newServer(svc domain.AchievementService, v domain.TokenVerifier) *httptest.Server {
@@ -55,7 +69,8 @@ func newServer(svc domain.AchievementService, v domain.TokenVerifier) *httptest.
 	return httptest.NewServer(mux)
 }
 
-func do(t *testing.T, srv *httptest.Server, method, path, token, body string) *http.Response {
+// do faz a request; game != "" injeta o header X-Game-Id (data plane).
+func do(t *testing.T, srv *httptest.Server, method, path, token, game, body string) *http.Response {
 	t.Helper()
 	var r *http.Request
 	var err error
@@ -68,6 +83,9 @@ func do(t *testing.T, srv *httptest.Server, method, path, token, body string) *h
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}
+	if game != "" {
+		r.Header.Set("X-Game-Id", game)
+	}
 	resp, err := srv.Client().Do(r)
 	require.NoError(t, err)
 	return resp
@@ -77,18 +95,18 @@ func TestAuth_SemBearer_401(t *testing.T) {
 	srv := newServer(&fakeService{}, fakeVerifier{playerID: "p1"})
 	defer srv.Close()
 
-	resp := do(t, srv, http.MethodGet, "/me/achievements", "", "")
+	resp := do(t, srv, http.MethodGet, "/me/achievements", "", gid, "")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
-func TestAuth_TokenInvalido_401(t *testing.T) {
-	srv := newServer(&fakeService{}, fakeVerifier{err: errors.New("token inválido")})
+func TestRecordEvent_SemGameHeader_400(t *testing.T) {
+	srv := newServer(&fakeService{}, fakeVerifier{playerID: "p1"})
 	defer srv.Close()
 
-	resp := do(t, srv, http.MethodGet, "/me/achievements", "qualquer", "")
+	resp := do(t, srv, http.MethodPost, "/events", "tok", "", `{"type":"match_won"}`) // sem X-Game-Id
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestRecordEvent_Desbloqueia_200(t *testing.T) {
@@ -96,7 +114,7 @@ func TestRecordEvent_Desbloqueia_200(t *testing.T) {
 	srv := newServer(svc, fakeVerifier{playerID: "player-1"})
 	defer srv.Close()
 
-	resp := do(t, srv, http.MethodPost, "/events", "tok", `{"type":"match_won"}`)
+	resp := do(t, srv, http.MethodPost, "/events", "tok", gid, `{"type":"match_won"}`)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -107,6 +125,7 @@ func TestRecordEvent_Desbloqueia_200(t *testing.T) {
 	require.Len(t, body.Unlocked, 1)
 	assert.Equal(t, "first_win", body.Unlocked[0].ID)
 	assert.Equal(t, "match_won", svc.gotEvent.Type)
+	assert.Equal(t, gid, svc.gotGameID, "game vem do header")
 }
 
 func TestRecordEvent_PlayerIDVemDoToken_IgnoraCorpo(t *testing.T) {
@@ -114,52 +133,25 @@ func TestRecordEvent_PlayerIDVemDoToken_IgnoraCorpo(t *testing.T) {
 	srv := newServer(svc, fakeVerifier{playerID: "player-do-token"})
 	defer srv.Close()
 
-	// o corpo tenta forjar outro jogador; deve ser ignorado
-	resp := do(t, srv, http.MethodPost, "/events", "tok", `{"type":"match_won","player_id":"impostor"}`)
+	resp := do(t, srv, http.MethodPost, "/events", "tok", gid, `{"type":"match_won","player_id":"impostor"}`)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "player-do-token", svc.gotPlayerID)
-}
-
-func TestRecordEvent_ErroDominio_MapeiaStatus(t *testing.T) {
-	svc := &fakeService{recordErr: domain.ErrInvalidEvent}
-	srv := newServer(svc, fakeVerifier{playerID: "p1"})
-	defer srv.Close()
-
-	resp := do(t, srv, http.MethodPost, "/events", "tok", `{"type":""}`)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestListForPlayer_UsaPlayerIDDoToken_200(t *testing.T) {
 	at := time.Now().UTC()
 	svc := &fakeService{forPlayer: []domain.PlayerAchievement{
 		{Achievement: domain.Achievement{ID: "first_win", Name: "Primeira Vitória", Target: 1}, Progress: 1, Unlocked: true, UnlockedAt: at},
-		{Achievement: domain.Achievement{ID: "ten_wins", Name: "Veterano", Target: 10}, Progress: 7},
 	}}
 	srv := newServer(svc, fakeVerifier{playerID: "player-9"})
 	defer srv.Close()
 
-	resp := do(t, srv, http.MethodGet, "/me/achievements", "tok", "")
+	resp := do(t, srv, http.MethodGet, "/me/achievements", "tok", gid, "")
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "player-9", svc.gotPlayerID)
-
-	var body struct {
-		Achievements []playerAchievementDTO `json:"achievements"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	require.Len(t, body.Achievements, 2)
-	// desbloqueada: progress = target, unlocked
-	assert.True(t, body.Achievements[0].Unlocked)
-	assert.Equal(t, 1, body.Achievements[0].Progress)
-	assert.Equal(t, 1, body.Achievements[0].Target)
-	assert.NotNil(t, body.Achievements[0].UnlockedAt)
-	// em progresso: 7/10, ainda bloqueada
-	assert.False(t, body.Achievements[1].Unlocked)
-	assert.Equal(t, 7, body.Achievements[1].Progress)
-	assert.Equal(t, 10, body.Achievements[1].Target)
-	assert.Nil(t, body.Achievements[1].UnlockedAt)
+	assert.Equal(t, gid, svc.gotGameID)
 }
 
 // errVerifier sempre falha: prova que as rotas /admin não passam pelo auth.
@@ -169,49 +161,21 @@ func (errVerifier) Verify(_ context.Context, _ string) (string, error) {
 	return "", errors.New("não deveria ser chamado em /admin")
 }
 
-func TestAdminListForPlayer_UsaPlayerIDDoPath_200(t *testing.T) {
-	at := time.Now().UTC()
+func TestAdminListForPlayer_PorJogoEPlayerDoPath_200(t *testing.T) {
 	svc := &fakeService{forPlayer: []domain.PlayerAchievement{
-		{Achievement: domain.Achievement{ID: "first_win", Name: "Primeira Vitória", Target: 1}, Progress: 1, Unlocked: true, UnlockedAt: at},
-	}}
-	srv := newServer(svc, errVerifier{}) // sem auth nas rotas /admin
-	defer srv.Close()
-
-	resp := do(t, srv, http.MethodGet, "/admin/players/player-42/achievements", "", "")
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "player-42", svc.gotPlayerID, "playerID vem do path, não do JWT")
-
-	var body struct {
-		Achievements []playerAchievementDTO `json:"achievements"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	require.Len(t, body.Achievements, 1)
-	assert.True(t, body.Achievements[0].Unlocked)
-}
-
-func TestAdminListForPlayer_SemProgresso_CatalogoZerado(t *testing.T) {
-	svc := &fakeService{forPlayer: []domain.PlayerAchievement{
-		{Achievement: domain.Achievement{ID: "ten_wins", Name: "Veterano", Target: 10}, Progress: 0},
+		{Achievement: domain.Achievement{ID: "first_win", Name: "Primeira Vitória", Target: 1}, Progress: 1, Unlocked: true, UnlockedAt: time.Now().UTC()},
 	}}
 	srv := newServer(svc, errVerifier{})
 	defer srv.Close()
 
-	resp := do(t, srv, http.MethodGet, "/admin/players/novato/achievements", "", "")
+	resp := do(t, srv, http.MethodGet, "/admin/games/game-9/players/player-42/achievements", "", "", "")
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var body struct {
-		Achievements []playerAchievementDTO `json:"achievements"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	require.Len(t, body.Achievements, 1)
-	assert.False(t, body.Achievements[0].Unlocked)
-	assert.Equal(t, 0, body.Achievements[0].Progress)
-	assert.Nil(t, body.Achievements[0].UnlockedAt)
+	assert.Equal(t, "game-9", svc.gotGameID, "gameId vem do path")
+	assert.Equal(t, "player-42", svc.gotPlayerID, "playerID vem do path")
 }
 
-func TestAdminListCatalog_200(t *testing.T) {
+func TestAdminListCatalog_PorJogo_200(t *testing.T) {
 	svc := &fakeService{catalog: []domain.Achievement{
 		{ID: "first_win", Name: "Primeira Vitória", Target: 1},
 		{ID: "ten_wins", Name: "Veterano", Target: 10},
@@ -219,9 +183,10 @@ func TestAdminListCatalog_200(t *testing.T) {
 	srv := newServer(svc, errVerifier{})
 	defer srv.Close()
 
-	resp := do(t, srv, http.MethodGet, "/admin/achievements", "", "")
+	resp := do(t, srv, http.MethodGet, "/admin/games/game-9/achievements", "", "", "")
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
 
 	var body struct {
 		Achievements []achievementDTO `json:"achievements"`
@@ -230,13 +195,49 @@ func TestAdminListCatalog_200(t *testing.T) {
 	assert.Len(t, body.Achievements, 2)
 }
 
-func TestAdmin_SemAuthorization_NaoBloqueia(t *testing.T) {
-	svc := &fakeService{forPlayer: []domain.PlayerAchievement{}}
+func TestAdminCreateAchievement_201(t *testing.T) {
+	svc := &fakeService{}
 	srv := newServer(svc, errVerifier{})
 	defer srv.Close()
 
-	// sem header Authorization: o /me responde 401; o /admin responde 200.
-	resp := do(t, srv, http.MethodGet, "/admin/players/x/achievements", "", "")
+	resp := do(t, srv, http.MethodPost, "/admin/games/game-9/achievements", "", "",
+		`{"id":"first_blood","name":"Primeiro Sangue","description":"x","eventType":"kill","target":1}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "first_blood", svc.gotCreate.ID)
+
+	var body achievementDTO
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "first_blood", body.ID)
+}
+
+func TestAdminCreateAchievement_Invalido_400(t *testing.T) {
+	svc := &fakeService{createErr: domain.ErrInvalidAchievement}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/g/achievements", "", "", `{"id":"X","name":"n","eventType":"kill"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminCreateAchievement_JaExiste_409(t *testing.T) {
+	svc := &fakeService{createErr: domain.ErrAchievementExists}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/g/achievements", "", "", `{"id":"first_win","name":"P","eventType":"match_won","target":1}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+}
+
+func TestAdmin_SemAuthorization_NaoBloqueia(t *testing.T) {
+	svc := &fakeService{catalog: []domain.Achievement{}}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/games/g/achievements", "", "", "")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

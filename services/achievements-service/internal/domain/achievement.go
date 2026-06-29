@@ -7,9 +7,11 @@ import (
 	"time"
 )
 
-// Achievement é uma definição do catálogo de conquistas.
+// Achievement é uma definição do catálogo de conquistas. O catálogo é por jogo
+// (multi-tenant, ADR-0017): o ID (slug) é único POR GameID.
 type Achievement struct {
-	ID          string // slug estável, ex. "first_win"
+	GameID      string // jogo dono da conquista (ADR-0017)
+	ID          string // slug estável, ex. "first_win" — único por jogo
 	Name        string
 	Description string
 	EventType   string // tipo de evento que dispara o progresso (critério)
@@ -37,26 +39,35 @@ type Event struct {
 	Type string
 }
 
-// AchievementService é a Port de entrada do achievements-service.
+// AchievementService é a Port de entrada do achievements-service. Tudo é
+// escopado por gameID (multi-tenant, ADR-0017).
 type AchievementService interface {
-	ListCatalog(ctx context.Context) ([]Achievement, error)
-	ListForPlayer(ctx context.Context, playerID string) ([]PlayerAchievement, error)
+	ListCatalog(ctx context.Context, gameID string) ([]Achievement, error)
+	ListForPlayer(ctx context.Context, gameID, playerID string) ([]PlayerAchievement, error)
 	// RecordEvent avalia o evento, incrementa o progresso das conquistas cujo
 	// critério casa e desbloqueia as que atingem a meta; retorna apenas as
-	// recém-desbloqueadas.
-	RecordEvent(ctx context.Context, playerID string, event Event) (unlocked []Achievement, err error)
+	// recém-desbloqueadas. Escopo: gameID.
+	RecordEvent(ctx context.Context, gameID, playerID string, event Event) (unlocked []Achievement, err error)
+	// CreateAchievement adiciona uma conquista ao catálogo do jogo (admin).
+	// ErrInvalidAchievement em entrada inválida; ErrAchievementExists se o id
+	// já existir nesse jogo.
+	CreateAchievement(ctx context.Context, gameID string, a Achievement) (*Achievement, error)
 }
 
-// AchievementRepository é a Port de saída de persistência (implementada em repository).
+// AchievementRepository é a Port de saída de persistência (implementada em
+// repository). Tudo é escopado por gameID.
 type AchievementRepository interface {
-	ListCatalog(ctx context.Context) ([]Achievement, error)
-	// FindByEventType retorna as conquistas disparadas por um tipo de evento.
-	FindByEventType(ctx context.Context, eventType string) ([]Achievement, error)
-	ListPlayerProgress(ctx context.Context, playerID string) ([]PlayerProgress, error)
+	ListCatalog(ctx context.Context, gameID string) ([]Achievement, error)
+	// FindByEventType retorna as conquistas do jogo disparadas por um event_type.
+	FindByEventType(ctx context.Context, gameID, eventType string) ([]Achievement, error)
+	ListPlayerProgress(ctx context.Context, gameID, playerID string) ([]PlayerProgress, error)
 	// RecordProgress incrementa o progresso do jogador na conquista de forma
 	// atômica e desbloqueia ao atingir target; é no-op se já desbloqueada.
 	// justUnlocked indica se foi desbloqueada nesta chamada.
-	RecordProgress(ctx context.Context, playerID, achievementID string, target int, at time.Time) (justUnlocked bool, err error)
+	RecordProgress(ctx context.Context, gameID, playerID, achievementID string, target int, at time.Time) (justUnlocked bool, err error)
+	// CreateAchievement persiste uma conquista no catálogo do jogo;
+	// ErrAchievementExists em violação de unicidade (game_id, id).
+	CreateAchievement(ctx context.Context, a *Achievement) error
 }
 
 // TokenVerifier é a Port de saída que valida o JWT do identity e devolve o
