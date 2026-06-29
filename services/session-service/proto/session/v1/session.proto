@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package session.v1;
+
+option go_package = "github.com/c130n/game-backend/services/session-service/gen/session/v1;sessionv1";
+
+// Session orquestra frota/sessão (≈ GameLift). A partir de um match, aloca um
+// game server, emite um connect token Ed25519 por jogador e recebe o resultado
+// da partida. Control plane interno (ADR-0010); unary no MVP (ADR-0003).
+service Session {
+  // CreateSession aloca um game server livre, emite um connect token por
+  // jogador e registra a sessão. ResourceExhausted se o pool esgotar.
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  // ReportResult dispara o fan-out do resultado, libera o server e encerra a
+  // sessão. NotFound se não houver sessão para o match.
+  rpc ReportResult(ReportResultRequest) returns (ReportResultResponse);
+}
+
+message CreateSessionRequest {
+  string match_id = 1;
+  repeated string players = 2; // playerIDs do match
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  string server_address = 2;       // endereço do game server alocado
+  repeated ConnectGrant grants = 3; // um connect token por jogador
+}
+
+// ConnectGrant é o connect token (JWT EdDSA) de um jogador para o game server.
+message ConnectGrant {
+  string player_id = 1;
+  string connect_token = 2;
+}
+
+message ReportResultRequest {
+  string match_id = 1;
+  repeated PlayerResult results = 2;
+}
+
+message ReportResultResponse {}
+
+// PlayerResult é o resultado de um jogador na partida (reportado pelo server).
+message PlayerResult {
+  string player_id = 1;
+  int64 score = 2;
+  bool won = 3;
+}
