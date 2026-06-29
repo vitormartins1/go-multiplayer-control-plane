@@ -135,6 +135,27 @@ services:
       tempo:
         condition: service_started
 
+  # admin-bff: back-end-for-frontend do painel admin (ADR-0016). Agregador
+  # read-only — lê o Prometheus e a API admin do achievements. Sem banco.
+  admin-bff:
+    build:
+      context: ../..
+      dockerfile: services/admin-bff/Dockerfile
+    ports:
+      - "8088:8080" # HTTP: API, /metrics, /healthz
+    environment:
+      PORT: "8080"
+      PROMETHEUS_URL: http://prometheus:9090
+      ACHIEVEMENTS_URL: http://achievements-service:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      prometheus:
+        condition: service_started
+      achievements-service:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16
