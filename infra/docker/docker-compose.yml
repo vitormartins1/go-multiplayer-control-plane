@@ -156,6 +156,18 @@ services:
       tempo:
         condition: service_started
 
+  # admin-ui: front do painel admin (React+Vite). nginx serve o build estático e
+  # faz proxy de /api -> admin-bff (mesma origem, sem CORS). Ver ADR-0016.
+  admin-ui:
+    build:
+      context: ../../services/admin-ui
+      dockerfile: Dockerfile
+    ports:
+      - "8089:80" # http://localhost:8089
+    depends_on:
+      admin-bff:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16
