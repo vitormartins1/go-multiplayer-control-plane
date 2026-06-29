@@ -70,11 +70,33 @@ type PlayerAchievement struct {
 	UnlockedAt  time.Time `json:"unlockedAt,omitempty"`
 }
 
+// Player é uma conta de jogador na visão admin (User base). Nunca carrega
+// credenciais — vem da API admin do identity (id/handle/createdAt).
+type Player struct {
+	ID        string    `json:"id"`
+	Handle    string    `json:"handle"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// PlayerPage é uma página da lista de usuários + o total global.
+type PlayerPage struct {
+	Total   int      `json:"total"`
+	Players []Player `json:"players"`
+}
+
 // MetricsSource é a Port de saída para o Prometheus (HTTP API, instant query).
 type MetricsSource interface {
 	// Query roda uma instant query (PromQL). Devolve ErrMetricsUnavailable se o
 	// Prometheus estiver inacessível.
 	Query(ctx context.Context, promQL string) ([]Sample, error)
+}
+
+// PlayerDirectory é a Port de saída para a lista de usuários (API admin do
+// identity-service). Repassa a paginação; a política é do identity.
+type PlayerDirectory interface {
+	// ListPlayers lê a página de usuários. Devolve ErrIdentityUnavailable se o
+	// identity estiver inacessível.
+	ListPlayers(ctx context.Context, limit, offset int) (PlayerPage, error)
 }
 
 // AchievementsReader é a Port de saída para a API admin do achievements-service.

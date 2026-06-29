@@ -14,16 +14,20 @@ import (
 )
 
 type fakeService struct {
-	topo     domain.Topology
-	topoErr  error
-	live     domain.LiveMetrics
-	liveErr  error
-	svcMet   domain.ServiceMetrics
-	svcErr   error
-	ach      []domain.PlayerAchievement
-	achErr   error
-	gotID    string
-	gotSvcID string
+	topo      domain.Topology
+	topoErr   error
+	live      domain.LiveMetrics
+	liveErr   error
+	svcMet    domain.ServiceMetrics
+	svcErr    error
+	page      domain.PlayerPage
+	pageErr   error
+	ach       []domain.PlayerAchievement
+	achErr    error
+	gotID     string
+	gotSvcID  string
+	gotLimit  int
+	gotOffset int
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -35,6 +39,10 @@ func (f *fakeService) LiveMetrics(context.Context) (domain.LiveMetrics, error) {
 func (f *fakeService) ServiceMetrics(_ context.Context, id string) (domain.ServiceMetrics, error) {
 	f.gotSvcID = id
 	return f.svcMet, f.svcErr
+}
+func (f *fakeService) Players(_ context.Context, limit, offset int) (domain.PlayerPage, error) {
+	f.gotLimit, f.gotOffset = limit, offset
+	return f.page, f.pageErr
 }
 func (f *fakeService) PlayerAchievements(_ context.Context, id string) ([]domain.PlayerAchievement, error) {
 	f.gotID = id
@@ -172,6 +180,34 @@ func TestServiceMetrics_FonteFora_503(t *testing.T) {
 	resp := get(t, srv, "/api/services/identity-service/metrics")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+}
+
+func TestPlayers_200_PageETotal(t *testing.T) {
+	svc := &fakeService{page: domain.PlayerPage{Total: 7, Players: []domain.Player{{ID: "id-1", Handle: "Alice"}}}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players?limit=5&offset=10")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, 5, svc.gotLimit)
+	assert.Equal(t, 10, svc.gotOffset)
+
+	var body domain.PlayerPage
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, 7, body.Total)
+	require.Len(t, body.Players, 1)
+	assert.Equal(t, "Alice", body.Players[0].Handle)
+}
+
+func TestPlayers_IdentityFora_502(t *testing.T) {
+	svc := &fakeService{pageErr: domain.ErrIdentityUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
 
 func TestPlayerAchievements_200(t *testing.T) {

@@ -12,15 +12,22 @@ import (
 	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
 )
 
-// Service agrega as fontes (Prometheus + achievements) para os painéis do admin.
+// Service agrega as fontes (Prometheus + achievements + identity) para os
+// painéis do admin.
 type Service struct {
-	metrics domain.MetricsSource
-	reader  domain.AchievementsReader
+	metrics   domain.MetricsSource
+	reader    domain.AchievementsReader
+	directory domain.PlayerDirectory
 }
 
 // New cria o service a partir das Ports de saída.
-func New(metrics domain.MetricsSource, reader domain.AchievementsReader) *Service {
-	return &Service{metrics: metrics, reader: reader}
+func New(metrics domain.MetricsSource, reader domain.AchievementsReader, directory domain.PlayerDirectory) *Service {
+	return &Service{metrics: metrics, reader: reader, directory: directory}
+}
+
+// Players delega ao directory (API admin do identity-service).
+func (s *Service) Players(ctx context.Context, limit, offset int) (domain.PlayerPage, error) {
+	return s.directory.ListPlayers(ctx, limit, offset)
 }
 
 // Topology monta o mapa de serviços com o status up/down vindo de `up{}`. Se o
