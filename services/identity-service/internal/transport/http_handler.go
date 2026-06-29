@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/c130n/game-backend/services/identity-service/internal/domain"
@@ -13,13 +14,14 @@ import (
 
 // Handler expõe os endpoints HTTP do identity-service.
 type Handler struct {
-	auth   domain.AuthService
-	tokens domain.TokenIssuer
+	auth    domain.AuthService
+	tokens  domain.TokenIssuer
+	players domain.PlayerLister
 }
 
 // NewHandler cria o handler a partir das Ports do domínio.
-func NewHandler(auth domain.AuthService, tokens domain.TokenIssuer) *Handler {
-	return &Handler{auth: auth, tokens: tokens}
+func NewHandler(auth domain.AuthService, tokens domain.TokenIssuer, players domain.PlayerLister) *Handler {
+	return &Handler{auth: auth, tokens: tokens, players: players}
 }
 
 // Register monta as rotas no mux fornecido (permite ao main adicionar
@@ -29,6 +31,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sessions", h.login)
 	mux.HandleFunc("POST /sessions/anonymous", h.loginAnonymous)
 	mux.HandleFunc("GET /.well-known/jwks.json", h.jwks)
+
+	// Admin (interno, sem auth — ver specs/003-admin-list-users): lista de usuários.
+	mux.HandleFunc("GET /admin/players", h.adminListPlayers)
 }
 
 type credentials struct {
@@ -87,6 +92,46 @@ func (h *Handler) jwks(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(b)
+}
+
+// playerDTO projeta a conta para o admin: nunca inclui password_hash.
+type playerDTO struct {
+	ID        string    `json:"id"`
+	Handle    string    `json:"handle"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type listPlayersResponse struct {
+	Total   int         `json:"total"`
+	Players []playerDTO `json:"players"`
+}
+
+// adminListPlayers lista os usuários (paginado) para o painel admin. Sem auth
+// (interno). limit/offset vêm da query; ausentes/inválidos caem no default
+// (o clamp dos limites fica no service).
+func (h *Handler) adminListPlayers(w http.ResponseWriter, r *http.Request) {
+	limit := atoiOr(r.URL.Query().Get("limit"), 0) // 0 -> service aplica o default
+	offset := atoiOr(r.URL.Query().Get("offset"), 0)
+
+	accounts, total, err := h.players.ListPlayers(r.Context(), limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+
+	players := make([]playerDTO, len(accounts))
+	for i, a := range accounts {
+		players[i] = playerDTO{ID: a.ID, Handle: a.Handle, CreatedAt: a.CreatedAt}
+	}
+	writeJSON(w, http.StatusOK, listPlayersResponse{Total: total, Players: players})
+}
+
+// atoiOr devolve o inteiro de s, ou def se vazio/inválido.
+func atoiOr(s string, def int) int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return def
 }
 
 func decode(r *http.Request, v any) error {

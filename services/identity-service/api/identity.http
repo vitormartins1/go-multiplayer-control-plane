@@ -44,5 +44,12 @@ POST {{host}}/sessions/anonymous
 ### JWKS — chaves públicas Ed25519 para validar o JWT
 GET {{host}}/.well-known/jwks.json
 
+# --- Admin (interno, sem auth) — usado pelo admin-bff (ADR-0016) ---
+# Control plane INTERNO: NÃO exige JWT e NÃO deve ser exposto publicamente.
+# Nunca retorna o password_hash.
+
+### [admin] Listar usuários (paginado) -> { total, players: [{id, handle, createdAt}] }
+GET {{host}}/admin/players?limit=50&offset=0
+
 ### Métricas Prometheus (RED + runtime Go)
 GET {{host}}/metrics

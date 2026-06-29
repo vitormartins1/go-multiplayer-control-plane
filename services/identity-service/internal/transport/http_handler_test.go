@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -46,9 +48,21 @@ func (m *mockTokens) JWKS(ctx context.Context) ([]byte, error) {
 	return b, args.Error(1)
 }
 
+type mockLister struct{ mock.Mock }
+
+func (m *mockLister) ListPlayers(ctx context.Context, limit, offset int) ([]domain.Account, int, error) {
+	args := m.Called(ctx, limit, offset)
+	accs, _ := args.Get(0).([]domain.Account)
+	return accs, args.Int(1), args.Error(2)
+}
+
 func newServer(auth domain.AuthService, tokens domain.TokenIssuer) http.Handler {
+	return newServerWith(auth, tokens, nil)
+}
+
+func newServerWith(auth domain.AuthService, tokens domain.TokenIssuer, players domain.PlayerLister) http.Handler {
 	mux := http.NewServeMux()
-	NewHandler(auth, tokens).Register(mux)
+	NewHandler(auth, tokens, players).Register(mux)
 	return mux
 }
 
@@ -138,4 +152,52 @@ func TestLoginAnonymous_200ComToken(t *testing.T) {
 	var resp map[string]string
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.Equal(t, "guest-token", resp["token"])
+}
+
+func TestAdminListPlayers_RetornaListaETotal_SemHash(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("ListPlayers", mock.Anything, 0, 0).Return([]domain.Account{
+		{ID: "id-1", Handle: "Alice", PasswordHash: "SEGREDO", CreatedAt: time.Now().UTC()},
+	}, 1, nil)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// o corpo jamais contém o hash nem o campo password
+	assert.NotContains(t, rr.Body.String(), "SEGREDO")
+	assert.NotContains(t, strings.ToLower(rr.Body.String()), "password")
+
+	var resp struct {
+		Total   int `json:"total"`
+		Players []struct {
+			ID        string `json:"id"`
+			Handle    string `json:"handle"`
+			CreatedAt string `json:"createdAt"`
+		} `json:"players"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, 1, resp.Total)
+	require.Len(t, resp.Players, 1)
+	assert.Equal(t, "Alice", resp.Players[0].Handle)
+	assert.NotEmpty(t, resp.Players[0].CreatedAt)
+}
+
+func TestAdminListPlayers_RepassaPaginacaoDaQuery(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("ListPlayers", mock.Anything, 5, 10).Return([]domain.Account{}, 0, nil)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players?limit=5&offset=10", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	lister.AssertExpectations(t) // confirma que 5/10 foram repassados ao service
+}
+
+func TestAdminListPlayers_SemAuthorization_NaoBloqueia(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("ListPlayers", mock.Anything, mock.Anything, mock.Anything).Return([]domain.Account{}, 0, nil)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players", "") // sem header Authorization
+	assert.Equal(t, http.StatusOK, rr.Code)
 }

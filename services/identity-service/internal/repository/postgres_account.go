@@ -40,6 +40,40 @@ func (r *PostgresAccountRepository) Create(ctx context.Context, a *domain.Accoun
 	return nil
 }
 
+// ListAccounts devolve contas por created_at desc (desempata por id para
+// paginação estável). Seleciona só id/handle/created_at — o password_hash NÃO é
+// lido aqui (defesa na fonte: nunca vaza credencial no caminho admin).
+func (r *PostgresAccountRepository) ListAccounts(ctx context.Context, limit, offset int) ([]domain.Account, error) {
+	const q = `SELECT id, handle, created_at FROM accounts ORDER BY created_at DESC, id LIMIT $1 OFFSET $2`
+	rows, err := r.pool.Query(ctx, q, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("identity repository: list accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.Account
+	for rows.Next() {
+		var a domain.Account
+		if err := rows.Scan(&a.ID, &a.Handle, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("identity repository: list accounts: scan: %w", err)
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("identity repository: list accounts: rows: %w", err)
+	}
+	return out, nil
+}
+
+// CountAccounts devolve o total de contas.
+func (r *PostgresAccountRepository) CountAccounts(ctx context.Context) (int, error) {
+	var n int
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM accounts`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("identity repository: count accounts: %w", err)
+	}
+	return n, nil
+}
+
 func (r *PostgresAccountRepository) FindByHandle(ctx context.Context, handle string) (*domain.Account, error) {
 	const q = `SELECT id, handle, password_hash, created_at FROM accounts WHERE lower(handle) = lower($1)`
 	var a domain.Account

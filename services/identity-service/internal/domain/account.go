@@ -30,6 +30,17 @@ type AccountRepository interface {
 	Create(ctx context.Context, a *Account) error
 	// FindByHandle busca por handle de forma case-insensitive.
 	FindByHandle(ctx context.Context, handle string) (*Account, error)
+	// ListAccounts devolve contas por created_at desc (paginadas). Projeta
+	// id/handle/created_at — nunca o password_hash (feature 003-admin-list-users).
+	ListAccounts(ctx context.Context, limit, offset int) ([]Account, error)
+	// CountAccounts devolve o total de contas (para a página exibir "N usuários").
+	CountAccounts(ctx context.Context) (int, error)
+}
+
+// PlayerLister é a Port de entrada do listing admin (feature 003-admin-list-users):
+// lista as contas paginadas e devolve o total. Read-only, control plane interno.
+type PlayerLister interface {
+	ListPlayers(ctx context.Context, limit, offset int) (players []Account, total int, err error)
 }
 
 // TokenIssuer é a Port de saída de emissão de tokens.
