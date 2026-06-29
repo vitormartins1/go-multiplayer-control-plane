@@ -28,6 +28,11 @@ curl -s localhost:8088/api/services/identity-service/metrics | jq
 # serviços gRPC (matchmaking/session) não têm RED HTTP -> esses campos vêm null
 # id desconhecido -> 404 | Prometheus fora -> 503
 
+# Lista de usuários (User base) — via identity /admin/players
+curl -s "localhost:8088/api/players?limit=50&offset=0" | jq
+# -> { "total": <int>, "players": [ {"id","handle","createdAt"} ] }
+# identity fora -> 502
+
 # Achievements de um jogador (via /admin do achievements-service)
 curl -s localhost:8088/api/players/PLAYER_ID/achievements | jq
 # PLAYER_ID = id da conta (sub do JWT). achievements fora -> 502

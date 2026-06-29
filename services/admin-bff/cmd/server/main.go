@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	achievementsclient "github.com/c130n/game-backend/services/admin-bff/internal/achievements"
+	identityclient "github.com/c130n/game-backend/services/admin-bff/internal/identity"
 	prometheusclient "github.com/c130n/game-backend/services/admin-bff/internal/prometheus"
 	"github.com/c130n/game-backend/services/admin-bff/internal/service"
 	"github.com/c130n/game-backend/services/admin-bff/internal/transport"
@@ -65,6 +66,10 @@ func run(log *slog.Logger) error {
 	if achURL == "" {
 		log.Warn("ACHIEVEMENTS_URL ausente — o painel de achievements vai falhar; aponte para o achievements-service")
 	}
+	identityURL := os.Getenv("IDENTITY_URL")
+	if identityURL == "" {
+		log.Warn("IDENTITY_URL ausente — a User base vai falhar; aponte para o identity-service")
+	}
 
 	// Clients de saída com otelhttp: propaga o trace do BFF até as fontes (ADR-0014).
 	httpClient := &http.Client{
@@ -73,7 +78,8 @@ func run(log *slog.Logger) error {
 	}
 	metrics := prometheusclient.New(promURL, httpClient)
 	reader := achievementsclient.New(achURL, httpClient)
-	svc := service.New(metrics, reader)
+	directory := identityclient.New(identityURL, httpClient)
+	svc := service.New(metrics, reader, directory)
 
 	red := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)
 

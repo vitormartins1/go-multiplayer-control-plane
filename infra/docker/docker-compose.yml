@@ -147,11 +147,14 @@ services:
       PORT: "8080"
       PROMETHEUS_URL: http://prometheus:9090
       ACHIEVEMENTS_URL: http://achievements-service:8080
+      IDENTITY_URL: http://identity-service:8080
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
       prometheus:
         condition: service_started
       achievements-service:
+        condition: service_started
+      identity-service:
         condition: service_started
       tempo:
         condition: service_started
