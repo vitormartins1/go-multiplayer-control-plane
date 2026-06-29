@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	sessionv1 "github.com/c130n/game-backend/services/session-service/gen/session/v1"
 	"github.com/c130n/game-backend/services/matchmaking-service/internal/domain"
+	sessionv1 "github.com/c130n/game-backend/services/session-service/gen/session/v1"
 )
 
 // fakeSessionServer implementa o contrato gRPC gerado do session. Não dá para

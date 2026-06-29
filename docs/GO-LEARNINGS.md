@@ -561,3 +561,30 @@ func (s *Service) LiveMetrics(ctx context.Context) (domain.LiveMetrics, error) {
 ```
 
 **Pegadinha / nuance:** escrever em **campos distintos** do mesmo struct de goroutines diferentes é seguro (são endereços de memória separados — `-race` não acusa). O que **seria** corrida é duas goroutines escreverem o **mesmo** campo, ou darem `append` no mesmo slice — aí precisaria de mutex ou de cada uma escrever no seu índice. Outro ponto: o `errgroup.WithContext` devolve um **novo** `ctx` que você precisa repassar às chamadas (`s.scalar(ctx, ...)`), senão o cancelamento no primeiro erro não chega às outras. E a degradação é decisão de quem chama: aqui um erro de qualquer query derruba o `LiveMetrics` inteiro (vira 503), enquanto a `Topology` trata "fonte fora" como estado normal (degrada) em vez de erro — o mesmo `errgroup` serviria, mas a política de erro é do caso de uso.
+
+---
+
+## 16 — `http.RoundTripper` para auth de saída + middleware com `crypto/subtle`
+
+**O que é / por que importa:** dois lados da auth serviço-a-serviço (ADR-0018), ambos idiomáticos em Go. (1) No **callee**, um middleware (`func(http.Handler) http.Handler`) valida um segredo no header — comparado com **`crypto/subtle.ConstantTimeCompare`** para não vazar timing. (2) No **caller**, em vez de setar o header em cada request, embrulha-se o `http.RoundTripper` do client: toda chamada de saída ganha o header automaticamente. É o ponto de extensão do `net/http` para cross-cutting de saída (auth, tracing, retries) — o `otelhttp.NewTransport` é exatamente isso, e a gente compõe os dois.
+
+**Onde no projeto:** `shared/auth/internal_key.go` — `RequireInternalKey` (middleware, só nos prefixos `/admin`/`/games`) e `InternalKeyTransport` (RoundTripper). O `admin-bff` compõe: `auth.InternalKeyTransport(key, otelhttp.NewTransport(...))` — um único client injeta a chave em todas as fontes.
+
+```go
+// caller: um RoundTripper que injeta o header em toda request de saída
+type internalKeyTransport struct {
+	key  string
+	base http.RoundTripper // encadeia (ex.: otelhttp por baixo)
+}
+
+func (t internalKeyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r2 := r.Clone(r.Context()) // NUNCA mutar o request original
+	r2.Header.Set("X-Internal-Key", t.key)
+	return t.base.RoundTrip(r2)
+}
+
+// callee: comparação em tempo constante (não "==" para segredos)
+if subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 { /* 401 */ }
+```
+
+**Pegadinha / nuance:** o contrato do `RoundTripper` diz que ele **não deve modificar o request original** — daí o `r.Clone(ctx)` antes de setar o header (mutar direto pode corromper retries/concorrência). E o middleware aplica o check **por prefixo de path** (`/admin`), deixando `/healthz` e `/metrics` livres — senão o Prometheus não conseguiria raspar. "Fail closed": chave não configurada → nega as rotas protegidas (em vez de liberar por engano).

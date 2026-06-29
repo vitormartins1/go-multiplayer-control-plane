@@ -24,6 +24,7 @@ import (
 	prometheusclient "github.com/c130n/game-backend/services/admin-bff/internal/prometheus"
 	"github.com/c130n/game-backend/services/admin-bff/internal/service"
 	"github.com/c130n/game-backend/services/admin-bff/internal/transport"
+	"github.com/c130n/game-backend/shared/auth"
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
 	"github.com/c130n/game-backend/shared/middleware"
@@ -76,10 +77,16 @@ func run(log *slog.Logger) error {
 		log.Warn("GAME_REGISTRY_URL ausente — a gestão de jogos vai falhar; aponte para o game-registry")
 	}
 
-	// Clients de saída com otelhttp: propaga o trace do BFF até as fontes (ADR-0014).
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — as chamadas aos /admin dos serviços vão dar 401; configure a chave")
+	}
+
+	// Clients de saída com otelhttp (trace cross-service, ADR-0014) + injeção da
+	// internal key serviço-a-serviço (ADR-0018). O Prometheus ignora o header.
 	httpClient := &http.Client{
 		Timeout:   5 * time.Second,
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
 	}
 	metrics := prometheusclient.New(promURL, httpClient)
 	reader := achievementsclient.New(achURL, httpClient)

@@ -23,6 +23,7 @@ import (
 	"github.com/c130n/game-backend/services/game-registry/internal/repository"
 	"github.com/c130n/game-backend/services/game-registry/internal/service"
 	"github.com/c130n/game-backend/services/game-registry/internal/transport"
+	"github.com/c130n/game-backend/shared/auth"
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
 	"github.com/c130n/game-backend/shared/middleware"
@@ -83,7 +84,15 @@ func run(log *slog.Logger) error {
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	handler.Register(mux)
 
-	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(mux)), "http.server",
+	// O game-registry é control plane interno: /games exige a internal key
+	// serviço-a-serviço (ADR-0018). /healthz e /metrics ficam livres.
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — /games vai negar (401); configure a chave")
+	}
+	guarded := auth.RequireInternalKey(internalKey, "/games")(mux)
+
+	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(guarded)), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return r.URL.Path != "/healthz" && r.URL.Path != "/metrics"
 		}),

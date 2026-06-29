@@ -27,6 +27,7 @@ import (
 	"github.com/c130n/game-backend/services/identity-service/internal/service"
 	"github.com/c130n/game-backend/services/identity-service/internal/token"
 	"github.com/c130n/game-backend/services/identity-service/internal/transport"
+	"github.com/c130n/game-backend/shared/auth"
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
 	"github.com/c130n/game-backend/shared/middleware"
@@ -93,11 +94,19 @@ func run(log *slog.Logger) error {
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	handler.Register(mux)
 
+	// /admin exige a internal key serviço-a-serviço (ADR-0018); /healthz e
+	// /metrics ficam livres para o Prometheus raspar.
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — os endpoints /admin vão negar (401); configure a chave")
+	}
+	guarded := auth.RequireInternalKey(internalKey, "/admin")(mux)
+
 	// otelhttp é o handler mais externo: abre o span por request e continua o
 	// trace do client via traceparent (propagator global). RouteSpanName renomeia
 	// o span para a rota casada (ex. "POST /accounts"). /healthz e /metrics ficam
 	// de fora para não poluir os traces.
-	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(mux)), "http.server",
+	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(guarded)), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return r.URL.Path != "/healthz" && r.URL.Path != "/metrics"
 		}),
