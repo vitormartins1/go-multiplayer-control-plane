@@ -20,6 +20,7 @@ export interface Domain {
   counters?: DomainCounter[];
   iter2?: string[];
   hasAchievements?: boolean;
+  hasUsers?: boolean;
 }
 
 export const DOMAINS: Domain[] = [
@@ -28,7 +29,7 @@ export const DOMAINS: Domain[] = [
     id: "identity-service",
     label: "User base",
     kind: "service",
-    iter2: ["Listagem e contagem de usuários (endpoint no identity)"],
+    hasUsers: true,
   },
   {
     id: "achievements-service",
