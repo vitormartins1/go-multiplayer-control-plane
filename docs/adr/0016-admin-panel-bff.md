@@ -64,6 +64,13 @@ Adotamos a **Opção A**, com os seguintes princípios:
 - Pode surgir a necessidade de **service-to-service auth** entre o BFF e os serviços — mesma discussão já anotada para o fan-out do session e a integração matchmaking→session; possível ADR futuro.
 - Localização sugerida: `services/admin-bff/` e `services/admin-ui/` (ou `apps/admin-console/` se preferir separar apps de serviços) — a definir no plan.
 
+## Adendo (2026-06-29) — SDD adaptado também para o `admin-ui`
+
+A decisão 7 (acima) colocou o `admin-ui` *fora* do ciclo SDD. Na prática, optamos por **estender o SDD ao front de forma adaptada**: o `admin-ui` ganhou `spec/plan/tasks` (`services/admin-ui/specs/001-control-room/`), mas a **spec descreve telas, funcionalidades e comportamento de UX** (EARS onde encaixa), **não** Ports/hexagonal/contratos de serviço — esses não mapeiam para um app de apresentação. O "Contratos de Interface" do template vira **"o que o app consome"** (os endpoints do BFF). Isso ajusta a decisão 7: SDD aplica-se ao front **na forma adaptada**, não como doc leve solta. O SDD-GUIDE segue reservando o template *de serviço Go* aos serviços Go.
+
+Decorrência prática: o painel foi **reorganizado por domínio** (uma seção por serviço Go), o que exigiu uma feature extra no BFF — `admin-bff/002-service-metrics` (`GET /api/services/{id}/metrics`, saúde + RED + runtime por serviço, via Prometheus). Localização confirmada: `services/admin-bff/` e `services/admin-ui/`.
+
 ## Referências
 - ADR-0002 (hexagonal), ADR-0006 (Prometheus/Grafana), ADR-0010 (control plane / estado em memória), ADR-0015 (database-per-service)
+- ADR-0007 (SDD) / docs/sdd/SDD-GUIDE.md — escopo do SDD
 - docs/OBSERVABILITY.md (métricas RED + custom por serviço)
