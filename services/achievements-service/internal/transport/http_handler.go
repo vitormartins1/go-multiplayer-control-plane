@@ -28,11 +28,17 @@ type ctxKey int
 
 const playerIDKey ctxKey = iota
 
-// Register monta as rotas no mux, todas atrás do middleware de auth.
+// Register monta as rotas no mux. As de jogador ficam atrás do middleware de
+// auth; as de /admin são control plane interno (sem auth no MVP — ver
+// specs/003-admin-read): a barreira é a rede, não JWT.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /events", h.auth(http.HandlerFunc(h.recordEvent)))
 	mux.Handle("GET /achievements", h.auth(http.HandlerFunc(h.listCatalog)))
 	mux.Handle("GET /me/achievements", h.auth(http.HandlerFunc(h.listForPlayer)))
+
+	// Admin (interno, sem auth): o playerID vem do path, não do JWT.
+	mux.HandleFunc("GET /admin/players/{playerID}/achievements", h.adminListForPlayer)
+	mux.HandleFunc("GET /admin/achievements", h.adminListCatalog)
 }
 
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
@@ -87,6 +93,28 @@ func (h *Handler) listForPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
+}
+
+// adminListForPlayer devolve o catálogo anotado com o progresso do jogador
+// identificado pelo path (endpoint admin, sem JWT). Reusa a mesma lógica do
+// /me/achievements, só mudando de onde vem o playerID.
+func (h *Handler) adminListForPlayer(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.ListForPlayer(r.Context(), r.PathValue("playerID"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
+}
+
+// adminListCatalog devolve o catálogo de conquistas (endpoint admin, sem JWT).
+func (h *Handler) adminListCatalog(w http.ResponseWriter, r *http.Request) {
+	cat, err := h.svc.ListCatalog(r.Context())
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"achievements": toAchievementDTOs(cat)})
 }
 
 // --- helpers ---

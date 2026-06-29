@@ -57,6 +57,18 @@ Content-Type: application/json
 
 { "type": "match_won" }
 
+# --- Admin (interno, sem auth) — usado pelo admin-bff (ADR-0016) ---
+# São control plane INTERNO: NÃO exigem JWT e NÃO devem ser expostos
+# publicamente (a barreira é a rede). O playerID vem do path.
+
+### [admin] Achievements de um jogador arbitrário (pelo path, sem token)
+# O playerID é o id da conta (o `sub` do JWT), não o handle. Pegue um id real
+# do banco achievements ou do token decodificado; o exemplo abaixo é ilustrativo.
+GET {{achievementsHost}}/admin/players/PLAYER_ID_AQUI/achievements
+
+### [admin] Catálogo de conquistas (sem token)
+GET {{achievementsHost}}/admin/achievements
+
 # --- VS Code REST Client ---
 # O bloco "> {% ... %}" é sintaxe do HTTP Client do JetBrains. No REST Client,
 # remova-o e use diretamente: Authorization: Bearer {{login.response.body.$.token}}

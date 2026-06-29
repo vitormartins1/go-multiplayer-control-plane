@@ -161,3 +161,82 @@ func TestListForPlayer_UsaPlayerIDDoToken_200(t *testing.T) {
 	assert.Equal(t, 10, body.Achievements[1].Target)
 	assert.Nil(t, body.Achievements[1].UnlockedAt)
 }
+
+// errVerifier sempre falha: prova que as rotas /admin não passam pelo auth.
+type errVerifier struct{}
+
+func (errVerifier) Verify(_ context.Context, _ string) (string, error) {
+	return "", errors.New("não deveria ser chamado em /admin")
+}
+
+func TestAdminListForPlayer_UsaPlayerIDDoPath_200(t *testing.T) {
+	at := time.Now().UTC()
+	svc := &fakeService{forPlayer: []domain.PlayerAchievement{
+		{Achievement: domain.Achievement{ID: "first_win", Name: "Primeira Vitória", Target: 1}, Progress: 1, Unlocked: true, UnlockedAt: at},
+	}}
+	srv := newServer(svc, errVerifier{}) // sem auth nas rotas /admin
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/players/player-42/achievements", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "player-42", svc.gotPlayerID, "playerID vem do path, não do JWT")
+
+	var body struct {
+		Achievements []playerAchievementDTO `json:"achievements"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Achievements, 1)
+	assert.True(t, body.Achievements[0].Unlocked)
+}
+
+func TestAdminListForPlayer_SemProgresso_CatalogoZerado(t *testing.T) {
+	svc := &fakeService{forPlayer: []domain.PlayerAchievement{
+		{Achievement: domain.Achievement{ID: "ten_wins", Name: "Veterano", Target: 10}, Progress: 0},
+	}}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/players/novato/achievements", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body struct {
+		Achievements []playerAchievementDTO `json:"achievements"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Achievements, 1)
+	assert.False(t, body.Achievements[0].Unlocked)
+	assert.Equal(t, 0, body.Achievements[0].Progress)
+	assert.Nil(t, body.Achievements[0].UnlockedAt)
+}
+
+func TestAdminListCatalog_200(t *testing.T) {
+	svc := &fakeService{catalog: []domain.Achievement{
+		{ID: "first_win", Name: "Primeira Vitória", Target: 1},
+		{ID: "ten_wins", Name: "Veterano", Target: 10},
+	}}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/achievements", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body struct {
+		Achievements []achievementDTO `json:"achievements"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Len(t, body.Achievements, 2)
+}
+
+func TestAdmin_SemAuthorization_NaoBloqueia(t *testing.T) {
+	svc := &fakeService{forPlayer: []domain.PlayerAchievement{}}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	// sem header Authorization: o /me responde 401; o /admin responde 200.
+	resp := do(t, srv, http.MethodGet, "/admin/players/x/achievements", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
