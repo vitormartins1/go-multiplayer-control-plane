@@ -115,6 +115,23 @@ services:
       tempo:
         condition: service_started
 
+  # session-service: control plane interno (≈ GameLift). gRPC unary
+  # (CreateSession, ReportResult) + HTTP para o JWKS do connect token (ADR-0010).
+  session-service:
+    build:
+      context: ../..
+      dockerfile: services/session-service/Dockerfile
+    ports:
+      - "8087:8080"   # HTTP: /.well-known/jwks.json, /metrics, /healthz
+      - "50052:50051" # gRPC: CreateSession, ReportResult
+    environment:
+      PORT: "8080"
+      GRPC_PORT: "50051"
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16

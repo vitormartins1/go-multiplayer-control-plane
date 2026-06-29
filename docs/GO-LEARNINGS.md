@@ -38,7 +38,7 @@ flowchart LR
 
 **O que é / por que importa:** quando várias goroutines disputam o mesmo recurso, "ler o estado e agir sobre ele" precisa ser **uma operação indivisível**. Em Go, o jeito mais direto é proteger a seção crítica com `sync.Mutex`. É o tipo de problema em que Go é confortável e expressivo.
 
-**Onde no projeto:** `session-service` — alocação de game server (escolher UM server `Ready` e reivindicá-lo sem que duas partidas peguem o mesmo). Ver `docs/ARCHITECTURE.md` §7.
+**Onde no projeto:** `session-service/internal/allocator/static.go` — `Static.Allocate` reivindica UM server livre do pool sem que duas sessões peguem o mesmo. O teste `static_test.go` (`TestAllocate_Concorrente_SemDuplicar`, rodado com `-race`) dispara N `Allocate` em paralelo e garante que nenhum server sai duas vezes. O exemplo abaixo é uma variante didática (com `Region`/estados); o código real usa uma `slice` de slots `{server, allocated}`.
 
 ```go
 package registry
@@ -104,7 +104,7 @@ Ou seja: o conceito (ler-e-reivindicar atômico) é o mesmo; só muda **onde** a
 
 **O que é / por que importa:** assinar dados de forma que **só o backend** (chave privada) consiga produzir uma assinatura válida, mas **qualquer um com a chave pública** consiga verificar — sem segredo compartilhado. Ed25519 é rápido, tem chaves pequenas e está na biblioteca padrão do Go.
 
-**Onde no projeto:** `session-service` cunha o connect token assinado; o Unity Dedicated Server verifica com a chave pública (offline, sem chamar o backend). Ver `docs/ARCHITECTURE.md` §7 "Connect token".
+**Onde no projeto:** `session-service/internal/token/connect_issuer.go` — `ConnectIssuer.Issue` cunha o connect token (JWT EdDSA, claims `sub`/`match_id`/`server`/`exp`) com a chave privada; o `main.go` expõe a pública em `GET /.well-known/jwks.json`. O Unity Dedicated Server verifica offline, sem chamar o backend. O exemplo abaixo mostra o conceito com `ed25519.Sign`/`Verify` cru; o código real usa JWT EdDSA (ver a pegadinha). A chave do session é **própria** — distinta da do `identity-service`, que tem seu próprio par.
 
 ```go
 package token

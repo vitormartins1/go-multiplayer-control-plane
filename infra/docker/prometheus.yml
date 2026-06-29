@@ -26,6 +26,10 @@ scrape_configs:
     static_configs:
       - targets: ["matchmaking-service:8080"]
 
+  - job_name: session-service
+    static_configs:
+      - targets: ["session-service:8080"]
+
   - job_name: identity-postgres
     static_configs:
       - targets: ["identity-postgres-exporter:9187"]
