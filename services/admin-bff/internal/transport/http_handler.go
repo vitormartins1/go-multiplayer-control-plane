@@ -16,6 +16,7 @@ import (
 type AdminService interface {
 	Topology(ctx context.Context) (domain.Topology, error)
 	LiveMetrics(ctx context.Context) (domain.LiveMetrics, error)
+	ServiceMetrics(ctx context.Context, id string) (domain.ServiceMetrics, error)
 	PlayerAchievements(ctx context.Context, playerID string) ([]domain.PlayerAchievement, error)
 }
 
@@ -33,6 +34,7 @@ func NewHandler(svc AdminService) *Handler {
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/topology", h.topology)
 	mux.HandleFunc("GET /api/metrics/live", h.liveMetrics)
+	mux.HandleFunc("GET /api/services/{id}/metrics", h.serviceMetrics)
 	mux.HandleFunc("GET /api/players/{playerID}/achievements", h.playerAchievements)
 }
 
@@ -58,6 +60,24 @@ func (h *Handler) liveMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, lm)
+}
+
+// serviceMetrics: métricas de um domínio. id desconhecido -> 404; Prometheus
+// fora -> 503.
+func (h *Handler) serviceMetrics(w http.ResponseWriter, r *http.Request) {
+	sm, err := h.svc.ServiceMetrics(r.Context(), r.PathValue("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrUnknownService):
+			writeError(w, http.StatusNotFound, "not_found")
+		case errors.Is(err, domain.ErrMetricsUnavailable):
+			writeError(w, http.StatusServiceUnavailable, "metrics_unavailable")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, sm)
 }
 
 // playerAchievements depende do achievements-service: fonte fora -> 502.

@@ -123,6 +123,72 @@ func TestLiveMetrics_PrometheusFora_PropagaErro(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrMetricsUnavailable)
 }
 
+func TestServiceMetrics_REST_UpRedRuntime(t *testing.T) {
+	id := "identity-service"
+	metrics := fakeMetrics{byQuery: map[string][]domain.Sample{
+		`up{job="identity-service"}`:                                     {{Value: 1}},
+		`sum(rate(http_requests_total{service="identity-service"}[5m]))`: {{Value: 12.5}},
+		`sum(rate(http_requests_total{service="identity-service",status=~"5.."}[5m])) / sum(rate(http_requests_total{service="identity-service"}[5m]))`: {{Value: 0.02}},
+		`histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="identity-service"}[5m])) by (le))`:                             {{Value: 0.123}},
+		`go_goroutines{job="identity-service"}`:                 {{Value: 42}},
+		`process_resident_memory_bytes{job="identity-service"}`: {{Value: 1048576}},
+	}}
+	sm, err := New(metrics, &fakeReader{}).ServiceMetrics(context.Background(), id)
+	require.NoError(t, err)
+	require.NotNil(t, sm.Up)
+	assert.True(t, *sm.Up)
+	require.NotNil(t, sm.RequestRate)
+	assert.Equal(t, 12.5, *sm.RequestRate)
+	require.NotNil(t, sm.ErrorRate)
+	assert.Equal(t, 0.02, *sm.ErrorRate)
+	require.NotNil(t, sm.LatencyP95)
+	assert.Equal(t, 0.123, *sm.LatencyP95)
+	require.NotNil(t, sm.Goroutines)
+	assert.Equal(t, 42.0, *sm.Goroutines)
+	require.NotNil(t, sm.MemoryBytes)
+	assert.Equal(t, 1048576.0, *sm.MemoryBytes)
+}
+
+func TestServiceMetrics_GRPC_SemRED_NilButRuntime(t *testing.T) {
+	// session-service (gRPC) não expõe http_requests_total -> RED nil; up+runtime presentes.
+	metrics := fakeMetrics{byQuery: map[string][]domain.Sample{
+		`up{job="session-service"}`:                            {{Value: 1}},
+		`go_goroutines{job="session-service"}`:                 {{Value: 8}},
+		`process_resident_memory_bytes{job="session-service"}`: {{Value: 2048}},
+	}}
+	sm, err := New(metrics, &fakeReader{}).ServiceMetrics(context.Background(), "session-service")
+	require.NoError(t, err)
+	require.NotNil(t, sm.Up)
+	assert.True(t, *sm.Up)
+	assert.Nil(t, sm.RequestRate, "gRPC não tem RED HTTP")
+	assert.Nil(t, sm.ErrorRate)
+	assert.Nil(t, sm.LatencyP95)
+	require.NotNil(t, sm.Goroutines)
+	assert.Equal(t, 8.0, *sm.Goroutines)
+}
+
+func TestServiceMetrics_DownSemRuntime(t *testing.T) {
+	metrics := fakeMetrics{byQuery: map[string][]domain.Sample{
+		`up{job="player-data-service"}`: {{Value: 0}},
+	}}
+	sm, err := New(metrics, &fakeReader{}).ServiceMetrics(context.Background(), "player-data-service")
+	require.NoError(t, err)
+	require.NotNil(t, sm.Up)
+	assert.False(t, *sm.Up)
+	assert.Nil(t, sm.MemoryBytes)
+}
+
+func TestServiceMetrics_IdDesconhecido_ErrUnknownService(t *testing.T) {
+	_, err := New(fakeMetrics{}, &fakeReader{}).ServiceMetrics(context.Background(), "nao-existe")
+	assert.ErrorIs(t, err, domain.ErrUnknownService)
+}
+
+func TestServiceMetrics_PrometheusFora_PropagaErro(t *testing.T) {
+	metrics := fakeMetrics{err: domain.ErrMetricsUnavailable}
+	_, err := New(metrics, &fakeReader{}).ServiceMetrics(context.Background(), "identity-service")
+	assert.ErrorIs(t, err, domain.ErrMetricsUnavailable)
+}
+
 func TestPlayerAchievements_DelegaAoReader(t *testing.T) {
 	reader := &fakeReader{out: []domain.PlayerAchievement{{ID: "first_win", Unlocked: true}}}
 	got, err := New(fakeMetrics{}, reader).PlayerAchievements(context.Background(), "player-7")

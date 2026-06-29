@@ -14,13 +14,16 @@ import (
 )
 
 type fakeService struct {
-	topo    domain.Topology
-	topoErr error
-	live    domain.LiveMetrics
-	liveErr error
-	ach     []domain.PlayerAchievement
-	achErr  error
-	gotID   string
+	topo     domain.Topology
+	topoErr  error
+	live     domain.LiveMetrics
+	liveErr  error
+	svcMet   domain.ServiceMetrics
+	svcErr   error
+	ach      []domain.PlayerAchievement
+	achErr   error
+	gotID    string
+	gotSvcID string
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -28,6 +31,10 @@ func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
 }
 func (f *fakeService) LiveMetrics(context.Context) (domain.LiveMetrics, error) {
 	return f.live, f.liveErr
+}
+func (f *fakeService) ServiceMetrics(_ context.Context, id string) (domain.ServiceMetrics, error) {
+	f.gotSvcID = id
+	return f.svcMet, f.svcErr
 }
 func (f *fakeService) PlayerAchievements(_ context.Context, id string) ([]domain.PlayerAchievement, error) {
 	f.gotID = id
@@ -109,6 +116,60 @@ func TestLiveMetrics_FonteFora_503(t *testing.T) {
 	defer srv.Close()
 
 	resp := get(t, srv, "/api/metrics/live")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+}
+
+func TestServiceMetrics_200_REST(t *testing.T) {
+	up := true
+	rate := 12.5
+	svc := &fakeService{svcMet: domain.ServiceMetrics{ID: "identity-service", Up: &up, RequestRate: &rate}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/services/identity-service/metrics")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "identity-service", svc.gotSvcID)
+
+	var body domain.ServiceMetrics
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.NotNil(t, body.RequestRate)
+	assert.Equal(t, 12.5, *body.RequestRate)
+}
+
+func TestServiceMetrics_200_GRPC_RedNull(t *testing.T) {
+	up := true
+	svc := &fakeService{svcMet: domain.ServiceMetrics{ID: "session-service", Up: &up}} // RED nil
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/services/session-service/metrics")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body domain.ServiceMetrics
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Nil(t, body.RequestRate)
+	assert.Nil(t, body.LatencyP95)
+}
+
+func TestServiceMetrics_IdDesconhecido_404(t *testing.T) {
+	svc := &fakeService{svcErr: domain.ErrUnknownService}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/services/nao-existe/metrics")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestServiceMetrics_FonteFora_503(t *testing.T) {
+	svc := &fakeService{svcErr: domain.ErrMetricsUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/services/identity-service/metrics")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
