@@ -463,3 +463,37 @@ score := *req.Score // aqui, 0 seria um score válido e explícito
 ```
 
 **Pegadinha / nuance:** é o mesmo idioma do ponteiro-como-opcional do #09 (`*time.Time` para `NULL` do SQL) — a forma idiomática de Go expressar "ausência" em valores que têm zero value. Use só onde a distinção importa (campo opcional, checar presença); para campos sempre obrigatórios, o valor direto é mais simples.
+
+---
+
+## 13 — Channels + `select`: coordenando goroutines
+
+**O que é / por que importa:** o jeito idiomático de goroutines conversarem é por **channels**, não só por memória compartilhada com lock. No matchmaking, o handler do stream (uma goroutine por cliente) **espera** o resultado num channel, enquanto o worker de formação (outra goroutine) **envia** o match nesse channel. O `select` deixa uma goroutine aguardar **vários eventos ao mesmo tempo** — o match *ou* o cancelamento do cliente. É o "share memory by communicating" de Go, e é a peça que faltava (o #01 era a outra ponta: lock para estado compartilhado).
+
+**Onde no projeto:** `services/matchmaking-service/internal/service/matchmaker.go` (worker envia em `ticket.ch`) e `internal/transport/grpc_server.go` (`FindMatch` espera com `select`).
+
+```mermaid
+flowchart LR
+    Client([cliente gRPC]) -->|FindMatch| H["handler (1 goroutine/cliente)<br/>Join → espera"]
+    W["worker Run (goroutine)<br/>tryForm a cada tick"] -->|envia match| CH[/"ticket.ch (buf 1)"/]
+    CH -->|select| H
+    Client -. cancela o stream .-> D[/"ctx.Done()"/]
+    D -->|select| H
+    H -->|MATCHED ou fim| Client
+```
+
+```go
+// handler: o match OU o cancelamento, o que vier primeiro
+select {
+case match := <-ch:
+	return stream.Send(&pb.TicketUpdate{Status: pb.Status_STATUS_MATCHED /* ... */})
+case <-stream.Context().Done():
+	return stream.Context().Err() // cliente saiu
+}
+
+// worker: entrega e fecha
+t.ch <- match // buffer 1: não bloqueia mesmo se o cliente já saiu
+close(t.ch)
+```
+
+**Pegadinha / nuance:** o channel com **buffer 1** é deliberado — se o cliente cancelou entre a formação e o envio, `t.ch <- match` não pode **bloquear** o worker (que segura o mutex da fila). O buffer absorve o envio e a mensagem é descartada. E `select` com `<-ctx.Done()` é o padrão universal de "faça X, mas desista se o context cancelar": toda espera deve ter esse braço, senão a goroutine vaza.
