@@ -62,20 +62,32 @@ Content-Type: application/json
 
 { "type": "match_won" }
 
-# --- Admin (interno, sem auth) por jogo — usado pelo admin-bff (ADR-0016/0017) ---
-# Control plane INTERNO: NÃO exige JWT, NÃO expor publicamente. Jogo no path.
+# --- Admin (interno) por jogo — usado pelo admin-bff/session (ADR-0016/0017/0018) ---
+# Control plane INTERNO: exige o header X-Internal-Key (ADR-0018), NÃO o JWT.
+# NÃO expor publicamente. Jogo/jogador no path.
+@internalKey = dev-internal-key
 
 ### [admin] Cadastrar uma conquista no catálogo do jogo
 POST {{achievementsHost}}/admin/games/{{gameId}}/achievements
 Content-Type: application/json
+X-Internal-Key: {{internalKey}}
 
 { "id": "first_blood", "name": "Primeiro Sangue", "description": "Primeiro abate", "eventType": "kill", "target": 1 }
 
 ### [admin] Catálogo do jogo
 GET {{achievementsHost}}/admin/games/{{gameId}}/achievements
+X-Internal-Key: {{internalKey}}
 
 ### [admin] Achievements de um jogador no jogo (playerID = sub do JWT, no path)
 GET {{achievementsHost}}/admin/games/{{gameId}}/players/PLAYER_ID_AQUI/achievements
+X-Internal-Key: {{internalKey}}
+
+### [admin] Server-authoritative: reportar evento em nome do jogador (fan-out)
+POST {{achievementsHost}}/admin/games/{{gameId}}/players/PLAYER_ID_AQUI/events
+Content-Type: application/json
+X-Internal-Key: {{internalKey}}
+
+{ "type": "match_won" }
 
 # --- VS Code REST Client ---
 # O bloco "> {% ... %}" é sintaxe do HTTP Client do JetBrains. No REST Client,

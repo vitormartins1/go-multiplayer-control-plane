@@ -37,10 +37,13 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("GET /achievements", h.auth(http.HandlerFunc(h.listCatalog)))
 	mux.Handle("GET /me/achievements", h.auth(http.HandlerFunc(h.listForPlayer)))
 
-	// Admin (interno, sem auth) por jogo: playerID/gameId vêm do path.
+	// Admin (interno; internal key na borda, ADR-0018) por jogo: gameId/playerID
+	// vêm do path.
 	mux.HandleFunc("POST /admin/games/{gameId}/achievements", h.adminCreateAchievement)
 	mux.HandleFunc("GET /admin/games/{gameId}/achievements", h.adminListCatalog)
 	mux.HandleFunc("GET /admin/games/{gameId}/players/{playerID}/achievements", h.adminListForPlayer)
+	// Server-authoritative: o servidor reporta evento em nome do jogador (sem JWT).
+	mux.HandleFunc("POST /admin/games/{gameId}/players/{playerID}/events", h.adminRecordEvent)
 }
 
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
@@ -133,6 +136,25 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusCreated, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
+}
+
+// adminRecordEvent registra um evento de gameplay em nome do jogador (server-
+// authoritative): gameId/playerID vêm do path, não do JWT. É o que o fan-out do
+// session usa. Reusa a mesma avaliação do POST /events de jogador.
+func (h *Handler) adminRecordEvent(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	unlocked, err := h.svc.RecordEvent(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), domain.Event{Type: req.Type})
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"unlocked": toAchievementDTOs(unlocked)})
 }
 
 // adminListForPlayer devolve o catálogo do jogo {gameId} anotado com o progresso
