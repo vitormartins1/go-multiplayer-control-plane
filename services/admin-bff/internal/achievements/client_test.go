@@ -12,53 +12,66 @@ import (
 	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
 )
 
-func TestForPlayer_MapeiaResposta(t *testing.T) {
+func TestCatalogForGame_Mapeia(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/admin/players/player-42/achievements", r.URL.Path)
-		_, _ = w.Write([]byte(`{"achievements":[
-			{"id":"first_win","name":"Primeira Vitória","description":"Vença uma","progress":1,"target":1,"unlocked":true,"unlocked_at":"2026-06-29T10:00:00Z"},
-			{"id":"ten_wins","name":"Veterano","description":"Vença 10","progress":7,"target":10,"unlocked":false}
-		]}`))
+		assert.Equal(t, "/admin/games/g1/achievements", r.URL.Path)
+		_, _ = w.Write([]byte(`{"achievements":[{"id":"first_win","name":"Primeira","description":"x","target":1}]}`))
 	}))
 	defer srv.Close()
 
-	got, err := New(srv.URL, srv.Client()).ForPlayer(context.Background(), "player-42")
+	cat, err := New(srv.URL, srv.Client()).CatalogForGame(context.Background(), "g1")
 	require.NoError(t, err)
-	require.Len(t, got, 2)
-	assert.Equal(t, "first_win", got[0].ID)
+	require.Len(t, cat, 1)
+	assert.Equal(t, "first_win", cat[0].ID)
+}
+
+func TestPlayerAchievements_Mapeia(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/admin/games/g1/players/p1/achievements", r.URL.Path)
+		_, _ = w.Write([]byte(`{"achievements":[{"id":"first_win","name":"P","description":"x","progress":1,"target":1,"unlocked":true,"unlocked_at":"2026-06-29T10:00:00Z"}]}`))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).PlayerAchievements(context.Background(), "g1", "p1")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
 	assert.True(t, got[0].Unlocked)
 	assert.False(t, got[0].UnlockedAt.IsZero())
-	assert.False(t, got[1].Unlocked)
-	assert.Equal(t, 7, got[1].Progress)
-	assert.True(t, got[1].UnlockedAt.IsZero())
 }
 
-func TestForPlayer_SemProgresso_ListaVazia(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"achievements":[]}`))
+func TestCreateAchievement_201(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/admin/games/g1/achievements", r.URL.Path)
+		assert.Equal(t, http.MethodPost, r.Method)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"speedrun","name":"Speed","description":"x","target":1}`))
 	}))
 	defer srv.Close()
 
-	got, err := New(srv.URL, srv.Client()).ForPlayer(context.Background(), "novato")
+	err := New(srv.URL, srv.Client()).CreateAchievement(context.Background(), "g1", domain.Achievement{
+		ID: "speedrun", Name: "Speed", EventType: "fast_win", Target: 1,
+	})
 	require.NoError(t, err)
-	assert.Empty(t, got)
 }
 
-func TestForPlayer_ServicoFora_ErrAchievementsUnavailable(t *testing.T) {
+func TestCreateAchievement_409_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"achievement_exists"}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).CreateAchievement(context.Background(), "g1", domain.Achievement{ID: "x", Name: "x", EventType: "kill", Target: 1})
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusConflict, ue.Status)
+}
+
+func TestCatalogForGame_Fora_Unavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
 	srv.Close()
 
-	_, err := New(url, &http.Client{}).ForPlayer(context.Background(), "p1")
-	assert.ErrorIs(t, err, domain.ErrAchievementsUnavailable)
-}
-
-func TestForPlayer_HTTP500_ErrAchievementsUnavailable(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	_, err := New(srv.URL, srv.Client()).ForPlayer(context.Background(), "p1")
+	_, err := New(url, &http.Client{}).CatalogForGame(context.Background(), "g1")
 	assert.ErrorIs(t, err, domain.ErrAchievementsUnavailable)
 }

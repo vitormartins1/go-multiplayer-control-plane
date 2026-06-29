@@ -24,14 +24,44 @@ func (f fakeMetrics) Query(_ context.Context, promQL string) ([]domain.Sample, e
 }
 
 type fakeReader struct {
-	out []domain.PlayerAchievement
-	err error
-	got string
+	out       []domain.PlayerAchievement
+	catalog   []domain.Achievement
+	err       error
+	gotGameID string
+	gotPlayer string
+	gotCreate domain.Achievement
 }
 
-func (f *fakeReader) ForPlayer(_ context.Context, playerID string) ([]domain.PlayerAchievement, error) {
-	f.got = playerID
+func (f *fakeReader) CatalogForGame(_ context.Context, gameID string) ([]domain.Achievement, error) {
+	f.gotGameID = gameID
+	return f.catalog, f.err
+}
+func (f *fakeReader) CreateAchievement(_ context.Context, gameID string, a domain.Achievement) error {
+	f.gotGameID, f.gotCreate = gameID, a
+	return f.err
+}
+func (f *fakeReader) PlayerAchievements(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
+	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.out, f.err
+}
+
+type fakeRegistry struct {
+	games   []domain.Game
+	created *domain.Game
+	err     error
+	gotSlug string
+	gotName string
+}
+
+func (f *fakeRegistry) ListGames(_ context.Context) ([]domain.Game, error) {
+	return f.games, f.err
+}
+func (f *fakeRegistry) CreateGame(_ context.Context, slug, name string) (*domain.Game, error) {
+	f.gotSlug, f.gotName = slug, name
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &domain.Game{ID: "g1", Slug: slug, Name: name}, nil
 }
 
 type fakeDirectory struct {
@@ -48,7 +78,7 @@ func (f *fakeDirectory) ListPlayers(_ context.Context, limit, offset int) (domai
 
 func TestPlayers_DelegaERepassaPaginacao(t *testing.T) {
 	dir := &fakeDirectory{page: domain.PlayerPage{Total: 3, Players: []domain.Player{{ID: "a", Handle: "Alice"}}}}
-	page, err := New(fakeMetrics{}, &fakeReader{}, dir).Players(context.Background(), 5, 10)
+	page, err := New(fakeMetrics{}, &fakeReader{}, dir, nil).Players(context.Background(), 5, 10)
 	require.NoError(t, err)
 	assert.Equal(t, 3, page.Total)
 	require.Len(t, page.Players, 1)
@@ -63,7 +93,7 @@ func TestTopology_DerivaUpDeUpJob(t *testing.T) {
 			{Labels: map[string]string{"job": "matchmaking-service"}, Value: 0},
 		},
 	}}
-	topo, err := New(metrics, &fakeReader{}, nil).Topology(context.Background())
+	topo, err := New(metrics, &fakeReader{}, nil, nil).Topology(context.Background())
 	require.NoError(t, err)
 	assert.True(t, topo.SourceAvailable)
 
@@ -82,7 +112,7 @@ func TestTopology_DerivaUpDeUpJob(t *testing.T) {
 
 func TestTopology_PrometheusFora_Degrada(t *testing.T) {
 	metrics := fakeMetrics{err: domain.ErrMetricsUnavailable}
-	topo, err := New(metrics, &fakeReader{}, nil).Topology(context.Background())
+	topo, err := New(metrics, &fakeReader{}, nil, nil).Topology(context.Background())
 	require.NoError(t, err) // degrada, não falha
 	assert.False(t, topo.SourceAvailable)
 	require.NotEmpty(t, topo.Nodes)
@@ -94,7 +124,7 @@ func TestTopology_PrometheusFora_Degrada(t *testing.T) {
 
 func TestTopology_ArestasConhecidas(t *testing.T) {
 	metrics := fakeMetrics{byQuery: map[string][]domain.Sample{"up": {}}}
-	topo, err := New(metrics, &fakeReader{}, nil).Topology(context.Background())
+	topo, err := New(metrics, &fakeReader{}, nil, nil).Topology(context.Background())
 	require.NoError(t, err)
 
 	has := func(from, to string) bool {
@@ -117,7 +147,7 @@ func TestLiveMetrics_AgregaContadores(t *testing.T) {
 		"matchmaking_matches_total":        {{Value: 10}},
 		"matchmaking_matches_failed_total": {{Value: 1}},
 	}}
-	lm, err := New(metrics, &fakeReader{}, nil).LiveMetrics(context.Background())
+	lm, err := New(metrics, &fakeReader{}, nil, nil).LiveMetrics(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, lm.QueueSize)
 	assert.Equal(t, 3.0, *lm.QueueSize)
@@ -131,7 +161,7 @@ func TestLiveMetrics_MetricaAusente_CampoNil(t *testing.T) {
 		"matchmaking_queue_size": {{Value: 5}},
 		// demais ausentes
 	}}
-	lm, err := New(metrics, &fakeReader{}, nil).LiveMetrics(context.Background())
+	lm, err := New(metrics, &fakeReader{}, nil, nil).LiveMetrics(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, lm.QueueSize)
 	assert.Equal(t, 5.0, *lm.QueueSize)
@@ -141,7 +171,7 @@ func TestLiveMetrics_MetricaAusente_CampoNil(t *testing.T) {
 
 func TestLiveMetrics_PrometheusFora_PropagaErro(t *testing.T) {
 	metrics := fakeMetrics{err: domain.ErrMetricsUnavailable}
-	_, err := New(metrics, &fakeReader{}, nil).LiveMetrics(context.Background())
+	_, err := New(metrics, &fakeReader{}, nil, nil).LiveMetrics(context.Background())
 	assert.ErrorIs(t, err, domain.ErrMetricsUnavailable)
 }
 
@@ -155,7 +185,7 @@ func TestServiceMetrics_REST_UpRedRuntime(t *testing.T) {
 		`go_goroutines{job="identity-service"}`:                 {{Value: 42}},
 		`process_resident_memory_bytes{job="identity-service"}`: {{Value: 1048576}},
 	}}
-	sm, err := New(metrics, &fakeReader{}, nil).ServiceMetrics(context.Background(), id)
+	sm, err := New(metrics, &fakeReader{}, nil, nil).ServiceMetrics(context.Background(), id)
 	require.NoError(t, err)
 	require.NotNil(t, sm.Up)
 	assert.True(t, *sm.Up)
@@ -178,7 +208,7 @@ func TestServiceMetrics_GRPC_SemRED_NilButRuntime(t *testing.T) {
 		`go_goroutines{job="session-service"}`:                 {{Value: 8}},
 		`process_resident_memory_bytes{job="session-service"}`: {{Value: 2048}},
 	}}
-	sm, err := New(metrics, &fakeReader{}, nil).ServiceMetrics(context.Background(), "session-service")
+	sm, err := New(metrics, &fakeReader{}, nil, nil).ServiceMetrics(context.Background(), "session-service")
 	require.NoError(t, err)
 	require.NotNil(t, sm.Up)
 	assert.True(t, *sm.Up)
@@ -193,7 +223,7 @@ func TestServiceMetrics_DownSemRuntime(t *testing.T) {
 	metrics := fakeMetrics{byQuery: map[string][]domain.Sample{
 		`up{job="player-data-service"}`: {{Value: 0}},
 	}}
-	sm, err := New(metrics, &fakeReader{}, nil).ServiceMetrics(context.Background(), "player-data-service")
+	sm, err := New(metrics, &fakeReader{}, nil, nil).ServiceMetrics(context.Background(), "player-data-service")
 	require.NoError(t, err)
 	require.NotNil(t, sm.Up)
 	assert.False(t, *sm.Up)
@@ -201,21 +231,52 @@ func TestServiceMetrics_DownSemRuntime(t *testing.T) {
 }
 
 func TestServiceMetrics_IdDesconhecido_ErrUnknownService(t *testing.T) {
-	_, err := New(fakeMetrics{}, &fakeReader{}, nil).ServiceMetrics(context.Background(), "nao-existe")
+	_, err := New(fakeMetrics{}, &fakeReader{}, nil, nil).ServiceMetrics(context.Background(), "nao-existe")
 	assert.ErrorIs(t, err, domain.ErrUnknownService)
 }
 
 func TestServiceMetrics_PrometheusFora_PropagaErro(t *testing.T) {
 	metrics := fakeMetrics{err: domain.ErrMetricsUnavailable}
-	_, err := New(metrics, &fakeReader{}, nil).ServiceMetrics(context.Background(), "identity-service")
+	_, err := New(metrics, &fakeReader{}, nil, nil).ServiceMetrics(context.Background(), "identity-service")
 	assert.ErrorIs(t, err, domain.ErrMetricsUnavailable)
 }
 
-func TestPlayerAchievements_DelegaAoReader(t *testing.T) {
+func TestPlayerAchievements_DelegaComJogoEPlayer(t *testing.T) {
 	reader := &fakeReader{out: []domain.PlayerAchievement{{ID: "first_win", Unlocked: true}}}
-	got, err := New(fakeMetrics{}, reader, nil).PlayerAchievements(context.Background(), "player-7")
+	got, err := New(fakeMetrics{}, reader, nil, nil).PlayerAchievements(context.Background(), "game-9", "player-7")
 	require.NoError(t, err)
-	assert.Equal(t, "player-7", reader.got)
+	assert.Equal(t, "game-9", reader.gotGameID)
+	assert.Equal(t, "player-7", reader.gotPlayer)
 	require.Len(t, got, 1)
 	assert.Equal(t, "first_win", got[0].ID)
+}
+
+func TestGames_DelegaAoRegistry(t *testing.T) {
+	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Slug: "tetris"}}}
+	got, err := New(fakeMetrics{}, &fakeReader{}, nil, reg).Games(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "tetris", got[0].Slug)
+}
+
+func TestCreateGame_DelegaAoRegistry(t *testing.T) {
+	reg := &fakeRegistry{}
+	g, err := New(fakeMetrics{}, &fakeReader{}, nil, reg).CreateGame(context.Background(), "tetris", "Tetris")
+	require.NoError(t, err)
+	assert.Equal(t, "tetris", reg.gotSlug)
+	assert.Equal(t, "g1", g.ID)
+}
+
+func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
+	reader := &fakeReader{catalog: []domain.Achievement{{ID: "first_win"}}}
+	svc := New(fakeMetrics{}, reader, nil, nil)
+
+	cat, err := svc.GameCatalog(context.Background(), "game-9")
+	require.NoError(t, err)
+	require.Len(t, cat, 1)
+	assert.Equal(t, "game-9", reader.gotGameID)
+
+	err = svc.CreateAchievement(context.Background(), "game-9", domain.Achievement{ID: "speedrun", EventType: "fast_win"})
+	require.NoError(t, err)
+	assert.Equal(t, "speedrun", reader.gotCreate.ID)
 }

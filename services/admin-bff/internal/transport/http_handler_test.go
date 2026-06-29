@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,10 +23,17 @@ type fakeService struct {
 	svcErr    error
 	page      domain.PlayerPage
 	pageErr   error
+	games     []domain.Game
+	gamesErr  error
+	createdG  *domain.Game
+	createErr error
+	catalog   []domain.Achievement
+	catErr    error
 	ach       []domain.PlayerAchievement
 	achErr    error
-	gotID     string
 	gotSvcID  string
+	gotGameID string
+	gotPlayer string
 	gotLimit  int
 	gotOffset int
 }
@@ -44,8 +52,25 @@ func (f *fakeService) Players(_ context.Context, limit, offset int) (domain.Play
 	f.gotLimit, f.gotOffset = limit, offset
 	return f.page, f.pageErr
 }
-func (f *fakeService) PlayerAchievements(_ context.Context, id string) ([]domain.PlayerAchievement, error) {
-	f.gotID = id
+func (f *fakeService) Games(context.Context) ([]domain.Game, error) {
+	return f.games, f.gamesErr
+}
+func (f *fakeService) CreateGame(_ context.Context, slug, name string) (*domain.Game, error) {
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
+	return &domain.Game{ID: "g1", Slug: slug, Name: name}, nil
+}
+func (f *fakeService) GameCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
+	f.gotGameID = gameID
+	return f.catalog, f.catErr
+}
+func (f *fakeService) CreateAchievement(_ context.Context, gameID string, _ domain.Achievement) error {
+	f.gotGameID = gameID
+	return f.createErr
+}
+func (f *fakeService) PlayerAchievements(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
+	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.ach, f.achErr
 }
 
@@ -210,20 +235,82 @@ func TestPlayers_IdentityFora_502(t *testing.T) {
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
 
-func TestPlayerAchievements_200(t *testing.T) {
+func post(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
+	t.Helper()
+	resp, err := srv.Client().Post(srv.URL+path, "application/json", strings.NewReader(body))
+	require.NoError(t, err)
+	return resp
+}
+
+func TestGames_200(t *testing.T) {
+	svc := &fakeService{games: []domain.Game{{ID: "g1", Slug: "tetris", Name: "Tetris"}}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var body []domain.Game
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body, 1)
+	assert.Equal(t, "tetris", body[0].Slug)
+}
+
+func TestCreateGame_201(t *testing.T) {
+	srv := newServer(&fakeService{})
+	defer srv.Close()
+	resp := post(t, srv, "/api/games", `{"slug":"tetris","name":"Tetris"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+}
+
+func TestCreateGame_RepassaUpstream409(t *testing.T) {
+	svc := &fakeService{createErr: &domain.UpstreamError{Status: http.StatusConflict, Code: "slug_taken"}}
+	srv := newServer(svc)
+	defer srv.Close()
+	resp := post(t, srv, "/api/games", `{"slug":"tetris","name":"Tetris"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+}
+
+func TestCreateGame_RegistryFora_502(t *testing.T) {
+	svc := &fakeService{createErr: domain.ErrGameRegistryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+	resp := post(t, srv, "/api/games", `{"slug":"tetris","name":"Tetris"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestGameCatalog_200(t *testing.T) {
+	svc := &fakeService{catalog: []domain.Achievement{{ID: "first_win"}}}
+	srv := newServer(svc)
+	defer srv.Close()
+	resp := get(t, srv, "/api/games/game-9/achievements")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+}
+
+func TestCreateAchievement_RepassaUpstream400(t *testing.T) {
+	svc := &fakeService{createErr: &domain.UpstreamError{Status: http.StatusBadRequest, Code: "invalid_achievement"}}
+	srv := newServer(svc)
+	defer srv.Close()
+	resp := post(t, srv, "/api/games/g/achievements", `{"id":"X","name":"n","eventType":"kill","target":1}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestPlayerAchievements_PorJogo_200(t *testing.T) {
 	svc := &fakeService{ach: []domain.PlayerAchievement{{ID: "first_win", Unlocked: true}}}
 	srv := newServer(svc)
 	defer srv.Close()
 
-	resp := get(t, srv, "/api/players/player-7/achievements")
+	resp := get(t, srv, "/api/games/game-9/players/player-7/achievements")
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "player-7", svc.gotID)
-
-	var body []domain.PlayerAchievement
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	require.Len(t, body, 1)
-	assert.Equal(t, "first_win", body[0].ID)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "player-7", svc.gotPlayer)
 }
 
 func TestPlayerAchievements_FonteFora_502(t *testing.T) {
@@ -231,7 +318,7 @@ func TestPlayerAchievements_FonteFora_502(t *testing.T) {
 	srv := newServer(svc)
 	defer srv.Close()
 
-	resp := get(t, srv, "/api/players/x/achievements")
+	resp := get(t, srv, "/api/games/g/players/x/achievements")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }

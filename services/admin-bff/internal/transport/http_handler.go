@@ -19,7 +19,11 @@ type AdminService interface {
 	LiveMetrics(ctx context.Context) (domain.LiveMetrics, error)
 	ServiceMetrics(ctx context.Context, id string) (domain.ServiceMetrics, error)
 	Players(ctx context.Context, limit, offset int) (domain.PlayerPage, error)
-	PlayerAchievements(ctx context.Context, playerID string) ([]domain.PlayerAchievement, error)
+	Games(ctx context.Context) ([]domain.Game, error)
+	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
+	GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error)
+	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
+	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -38,7 +42,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/metrics/live", h.liveMetrics)
 	mux.HandleFunc("GET /api/services/{id}/metrics", h.serviceMetrics)
 	mux.HandleFunc("GET /api/players", h.players)
-	mux.HandleFunc("GET /api/players/{playerID}/achievements", h.playerAchievements)
+	mux.HandleFunc("GET /api/games", h.games)
+	mux.HandleFunc("POST /api/games", h.createGame)
+	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
+	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
+	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
 }
 
 // topology nunca falha por causa do Prometheus: o service degrada (nós unknown).
@@ -108,18 +116,93 @@ func atoiOr(s string, def int) int {
 	return def
 }
 
-// playerAchievements depende do achievements-service: fonte fora -> 502.
-func (h *Handler) playerAchievements(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.PlayerAchievements(r.Context(), r.PathValue("playerID"))
+// games lista os jogos (game-registry).
+func (h *Handler) games(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Games(r.Context())
 	if err != nil {
-		if errors.Is(err, domain.ErrAchievementsUnavailable) {
-			writeError(w, http.StatusBadGateway, "achievements_unavailable")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		writeUpstream(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// createGame registra um jogo; repassa 400/409 do game-registry.
+func (h *Handler) createGame(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug string `json:"slug"`
+		Name string `json:"name"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.svc.CreateGame(r.Context(), req.Slug, req.Name)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, g)
+}
+
+// gameCatalog lê o catálogo de conquistas do jogo (achievements).
+func (h *Handler) gameCatalog(w http.ResponseWriter, r *http.Request) {
+	cat, err := h.svc.GameCatalog(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cat)
+}
+
+// createAchievement cadastra uma conquista no jogo; repassa 400/409.
+func (h *Handler) createAchievement(w http.ResponseWriter, r *http.Request) {
+	var a domain.Achievement
+	if err := decode(r, &a); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if err := h.svc.CreateAchievement(r.Context(), r.PathValue("gameId"), a); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, a)
+}
+
+// playerAchievements: achievements do jogador no jogo (achievements).
+func (h *Handler) playerAchievements(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.PlayerAchievements(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// decode lê o corpo JSON rejeitando campos desconhecidos.
+func decode(r *http.Request, v any) error {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
+}
+
+// writeUpstream traduz erros de upstream: UpstreamError repassa o status (4xx);
+// indisponibilidade (game-registry/achievements) -> 502; resto -> 500.
+func writeUpstream(w http.ResponseWriter, err error) {
+	var ue *domain.UpstreamError
+	switch {
+	case errors.As(err, &ue):
+		code := ue.Code
+		if code == "" {
+			code = "upstream_error"
+		}
+		writeError(w, ue.Status, code)
+	case errors.Is(err, domain.ErrGameRegistryUnavailable):
+		writeError(w, http.StatusBadGateway, "game_registry_unavailable")
+	case errors.Is(err, domain.ErrAchievementsUnavailable):
+		writeError(w, http.StatusBadGateway, "achievements_unavailable")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal")
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
