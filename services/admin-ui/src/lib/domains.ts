@@ -16,7 +16,7 @@ export interface DomainCounter {
 export interface Domain {
   id: string; // "" = visão geral
   label: string;
-  kind: "overview" | "service" | "planned";
+  kind: "overview" | "service" | "planned" | "games";
   counters?: DomainCounter[];
   iter2?: string[];
   hasAchievements?: boolean;
@@ -25,6 +25,7 @@ export interface Domain {
 
 export const DOMAINS: Domain[] = [
   { id: "", label: "Visão geral", kind: "overview" },
+  { id: "games", label: "Games", kind: "games" },
   {
     id: "identity-service",
     label: "User base",

@@ -5,6 +5,7 @@ import { MetricCard } from "./MetricCard";
 import { StatusBadge } from "./StatusBadge";
 import { ErrorState } from "./ErrorState";
 import { Loading } from "./Loading";
+import type { Game } from "../lib/api";
 import { AchievementsPanel } from "./AchievementsPanel";
 import { UsersPanel } from "./UsersPanel";
 
@@ -12,7 +13,15 @@ import { UsersPanel } from "./UsersPanel";
 // saúde + RED do /api/services/{id}/metrics; contadores específicos (do
 // /api/metrics/live); bloco "Iteração 2"; e o painel de achievements quando o
 // domínio o tem.
-export function DomainPage({ domain, refresh }: { domain: Domain; refresh: RefreshOptions }) {
+export function DomainPage({
+  domain,
+  refresh,
+  selectedGame,
+}: {
+  domain: Domain;
+  refresh: RefreshOptions;
+  selectedGame: Game | null;
+}) {
   const metrics = useLive((s) => api.serviceMetrics(domain.id, s), [domain.id], refresh);
   const live = useLive((s) => api.liveMetrics(s), [domain.id], refresh);
 
@@ -64,7 +73,7 @@ export function DomainPage({ domain, refresh }: { domain: Domain; refresh: Refre
       )}
 
       {/* Achievements (só no domínio achievements) */}
-      {domain.hasAchievements && <AchievementsPanel />}
+      {domain.hasAchievements && <AchievementsPanel selectedGame={selectedGame} />}
 
       {/* Roadmap visível */}
       {domain.iter2 && domain.iter2.length > 0 && (

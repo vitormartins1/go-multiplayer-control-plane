@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, HttpError, type PlayerAchievement } from "../lib/api";
+import { api, HttpError, type Game, type PlayerAchievement } from "../lib/api";
 
 type State =
   | { kind: "idle" }
@@ -7,17 +7,17 @@ type State =
   | { kind: "error"; message: string }
   | { kind: "loaded"; items: PlayerAchievement[] };
 
-// AchievementsPanel: busca os achievements de um jogador (sob demanda).
-export function AchievementsPanel() {
+// AchievementsPanel: busca os achievements de um jogador num jogo (sob demanda).
+export function AchievementsPanel({ selectedGame }: { selectedGame: Game | null }) {
   const [playerID, setPlayerID] = useState("");
   const [state, setState] = useState<State>({ kind: "idle" });
 
   async function search() {
     const id = playerID.trim();
-    if (!id) return;
+    if (!id || !selectedGame) return;
     setState({ kind: "loading" });
     try {
-      const items = await api.playerAchievements(id);
+      const items = await api.playerAchievements(selectedGame.id, id);
       setState({ kind: "loaded", items });
     } catch (e) {
       const msg =
@@ -28,9 +28,20 @@ export function AchievementsPanel() {
     }
   }
 
+  if (!selectedGame) {
+    return (
+      <div className="iter2" style={{ borderStyle: "solid", marginTop: 16 }}>
+        <h4>Buscar achievements de um jogador</h4>
+        <p className="muted">Selecione um jogo na seção Games para buscar por jogador.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="iter2" style={{ borderStyle: "solid", marginTop: 16 }}>
-      <h4>Buscar achievements de um jogador</h4>
+      <h4>
+        Buscar achievements de um jogador <span className="muted">· {selectedGame.name}</span>
+      </h4>
       <div className="search-row">
         <input
           placeholder="playerID (id da conta / sub — não o handle)"
