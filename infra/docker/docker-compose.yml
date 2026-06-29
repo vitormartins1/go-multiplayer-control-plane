@@ -171,6 +171,24 @@ services:
       admin-bff:
         condition: service_started
 
+  # game-registry: fonte canônica de jogos (ADR-0017). Fornece o game_id
+  # (multi-tenant). REST + Postgres próprio. Control plane interno.
+  game-registry:
+    build:
+      context: ../..
+      dockerfile: services/game-registry/Dockerfile
+    ports:
+      - "8090:8080" # HTTP: API, /metrics, /healthz
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://dev:dev@game-registry-postgres:5432/game_registry?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      game-registry-postgres:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16
@@ -220,6 +238,23 @@ services:
       - ../../services/player-data-service/migrations/001_create_player_data.sql:/docker-entrypoint-initdb.d/001_create_player_data.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d player_data"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Banco próprio do game-registry (database-per-service, ADR-0015).
+  game-registry-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: game_registry
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5435:5432"
+    volumes:
+      - ../../services/game-registry/migrations/001_create_games.sql:/docker-entrypoint-initdb.d/001_create_games.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -316,3 +351,12 @@ services:
       - "9189:9187"
     depends_on:
       - player-data-postgres
+
+  game-registry-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://dev:dev@game-registry-postgres:5432/game_registry?sslmode=disable
+    ports:
+      - "9190:9187"
+    depends_on:
+      - game-registry-postgres

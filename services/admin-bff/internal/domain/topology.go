@@ -10,6 +10,7 @@ var KnownServices = []ServiceNode{
 	{ID: "leaderboard-service", Label: "Leaderboard"},
 	{ID: "matchmaking-service", Label: "Matchmaking"},
 	{ID: "session-service", Label: "Session"},
+	{ID: "game-registry", Label: "Game Registry"},
 	{ID: "admin-bff", Label: "Admin BFF"},
 }
 

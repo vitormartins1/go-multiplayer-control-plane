@@ -1,0 +1,36 @@
+### game-registry — collection HTTP
+#
+# Fonte canônica de jogos (ADR-0017). Control plane INTERNO: sem auth no MVP,
+# NÃO expor publicamente. Consumido pelo painel admin e por serviços que
+# validam um game_id.
+#
+# Requer a stack no ar:
+#   docker compose -f infra/docker/docker-compose.yml up
+
+@host = http://localhost:8090
+
+### Registrar um jogo -> 201 { id, slug, name, createdAt }
+# @name createGame
+POST {{host}}/games
+Content-Type: application/json
+
+{ "slug": "tetris", "name": "Tetris" }
+
+> {%
+    client.global.set("gameId", response.body.id);
+%}
+
+### Listar jogos (ordenado por nome)
+GET {{host}}/games
+
+### Consultar um jogo por id (validação de game_id por outros serviços)
+GET {{host}}/games/{{gameId}}
+
+### slug inválido -> 400 ; slug duplicado -> 409 ; id inexistente -> 404
+POST {{host}}/games
+Content-Type: application/json
+
+{ "slug": "X", "name": "invalido" }
+
+### Métricas Prometheus (RED + runtime Go)
+GET {{host}}/metrics
