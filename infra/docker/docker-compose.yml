@@ -77,6 +77,25 @@ services:
       tempo:
         condition: service_started
 
+  leaderboard-service:
+    build:
+      context: ../..
+      dockerfile: services/leaderboard-service/Dockerfile
+    ports:
+      - "8085:8080"
+    environment:
+      PORT: "8080"
+      REDIS_ADDR: redis:6379
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+    depends_on:
+      redis:
+        condition: service_started
+      identity-service:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
     image: postgres:16
@@ -142,6 +161,21 @@ services:
     ports:
       - "9000:9000" # API S3
       - "9001:9001" # console web
+
+  # Ranking real-time do leaderboard (Redis sorted sets; ADR-0015).
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
 
   prometheus:
     image: prom/prometheus:latest

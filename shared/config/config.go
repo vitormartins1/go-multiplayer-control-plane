@@ -29,6 +29,9 @@ type Config struct {
 	S3AccessKey string // via S3_ACCESS_KEY
 	S3SecretKey string // via S3_SECRET_KEY
 	S3Bucket    string // via S3_BUCKET
+
+	// Redis — usado por serviços de ranking real-time (ex. leaderboard, ADR-0015).
+	RedisAddr string // via REDIS_ADDR (ex. redis:6379)
 }
 
 // Load lê o ambiente, com defaults convenientes para dev local.
@@ -44,6 +47,7 @@ func Load() Config {
 		S3AccessKey:      os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey:      os.Getenv("S3_SECRET_KEY"),
 		S3Bucket:         os.Getenv("S3_BUCKET"),
+		RedisAddr:        os.Getenv("REDIS_ADDR"),
 	}
 }
 

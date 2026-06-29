@@ -1,0 +1,57 @@
+### leaderboard-service — collection HTTP
+#
+# Requer a stack no ar:
+#   docker compose -f infra/docker/docker-compose.yml up
+#
+# Endpoints exigem um JWT do identity (ADR-0009). O login captura o token.
+# GoLand/IntelliJ: clique no ▶. (VS Code REST Client: ver nota no fim.)
+#
+# Acompanhe: Grafana http://localhost:3000.
+
+@identityHost = http://localhost:8081
+@leaderboardHost = http://localhost:8085
+@handle = Ranker_1
+@password = supersecret
+
+### (uma vez) Criar a conta no identity
+POST {{identityHost}}/accounts
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+### Login no identity -> captura o token
+# @name login
+POST {{identityHost}}/sessions
+Content-Type: application/json
+
+{ "handle": "{{handle}}", "password": "{{password}}" }
+
+> {%
+    client.global.set("token", response.body.token);
+%}
+
+### Submeter um score (highscore: só sobe se for maior)
+POST {{leaderboardHost}}/scores
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "score": 1500 }
+
+### Submeter um score menor (não rebaixa) e depois um maior
+POST {{leaderboardHost}}/scores
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "score": 2500 }
+
+### Ranking global (top N)
+GET {{leaderboardHost}}/leaderboard?limit=10
+Authorization: Bearer {{token}}
+
+### Meu rank + vizinhos (rank ± k)
+GET {{leaderboardHost}}/leaderboard/me?around=3
+Authorization: Bearer {{token}}
+
+# --- VS Code REST Client ---
+# O bloco "> {% ... %}" é sintaxe do JetBrains. No REST Client, remova-o e use
+# Authorization: Bearer {{login.response.body.$.token}}
