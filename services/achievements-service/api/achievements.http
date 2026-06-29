@@ -15,6 +15,9 @@
 @achievementsHost = http://localhost:8082
 @handle = Achiever_1
 @password = supersecret
+# Multi-tenant por jogo (ADR-0017): o data plane envia o jogo no header
+# X-Game-Id. "sandbox" = jogo default da migração (UUID nil).
+@gameId = 00000000-0000-0000-0000-000000000000
 
 ### (uma vez) Criar a conta no identity
 POST {{identityHost}}/accounts
@@ -37,37 +40,42 @@ Content-Type: application/json
 GET {{achievementsHost}}/achievements
 Authorization: Bearer {{token}}
 
-### Enviar evento de gameplay -> desbloqueia (idempotente)
+### Enviar evento de gameplay -> desbloqueia (idempotente). Jogo no header X-Game-Id.
 POST {{achievementsHost}}/events
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 Content-Type: application/json
 
 { "type": "match_won" }
 
-### Minhas conquistas (desbloqueadas + bloqueadas)
+### Minhas conquistas no jogo (desbloqueadas + bloqueadas)
 GET {{achievementsHost}}/me/achievements
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 
 ### Progresso parcial: cada match_won progride "ten_wins" (target 10).
-### Dispare este request várias vezes e veja progress subir em /me/achievements;
-### na 10ª ocorrência, ten_wins é desbloqueada. (first_win já saiu na 1ª.)
+### Dispare várias vezes; na 10ª, ten_wins desbloqueia. (sem X-Game-Id -> 400)
 POST {{achievementsHost}}/events
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 Content-Type: application/json
 
 { "type": "match_won" }
 
-# --- Admin (interno, sem auth) — usado pelo admin-bff (ADR-0016) ---
-# São control plane INTERNO: NÃO exigem JWT e NÃO devem ser expostos
-# publicamente (a barreira é a rede). O playerID vem do path.
+# --- Admin (interno, sem auth) por jogo — usado pelo admin-bff (ADR-0016/0017) ---
+# Control plane INTERNO: NÃO exige JWT, NÃO expor publicamente. Jogo no path.
 
-### [admin] Achievements de um jogador arbitrário (pelo path, sem token)
-# O playerID é o id da conta (o `sub` do JWT), não o handle. Pegue um id real
-# do banco achievements ou do token decodificado; o exemplo abaixo é ilustrativo.
-GET {{achievementsHost}}/admin/players/PLAYER_ID_AQUI/achievements
+### [admin] Cadastrar uma conquista no catálogo do jogo
+POST {{achievementsHost}}/admin/games/{{gameId}}/achievements
+Content-Type: application/json
 
-### [admin] Catálogo de conquistas (sem token)
-GET {{achievementsHost}}/admin/achievements
+{ "id": "first_blood", "name": "Primeiro Sangue", "description": "Primeiro abate", "eventType": "kill", "target": 1 }
+
+### [admin] Catálogo do jogo
+GET {{achievementsHost}}/admin/games/{{gameId}}/achievements
+
+### [admin] Achievements de um jogador no jogo (playerID = sub do JWT, no path)
+GET {{achievementsHost}}/admin/games/{{gameId}}/players/PLAYER_ID_AQUI/achievements
 
 # --- VS Code REST Client ---
 # O bloco "> {% ... %}" é sintaxe do HTTP Client do JetBrains. No REST Client,
