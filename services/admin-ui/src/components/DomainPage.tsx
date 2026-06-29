@@ -6,6 +6,7 @@ import { StatusBadge } from "./StatusBadge";
 import { ErrorState } from "./ErrorState";
 import { Loading } from "./Loading";
 import { AchievementsPanel } from "./AchievementsPanel";
+import { UsersPanel } from "./UsersPanel";
 
 // DomainPage genérico (apenas domínios de serviço; "planned" é tratado no App):
 // saúde + RED do /api/services/{id}/metrics; contadores específicos (do
@@ -51,6 +52,14 @@ export function DomainPage({ domain, refresh }: { domain: Domain; refresh: Refre
               <MetricCard key={c.label} label={c.label} value={live.data ? c.pick(live.data) : undefined} />
             ))}
           </div>
+        </>
+      )}
+
+      {/* User base: lista de usuários (só no domínio identity) */}
+      {domain.hasUsers && (
+        <>
+          <h3 style={{ margin: "18px 0 10px" }}>Usuários</h3>
+          <UsersPanel />
         </>
       )}
 

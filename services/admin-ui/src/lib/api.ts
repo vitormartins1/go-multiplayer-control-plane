@@ -36,6 +36,17 @@ export interface ServiceMetrics {
   memoryBytes: number | null;
 }
 
+export interface Player {
+  id: string;
+  handle: string;
+  createdAt: string;
+}
+
+export interface PlayerPage {
+  total: number;
+  players: Player[];
+}
+
 export interface PlayerAchievement {
   id: string;
   name: string;
@@ -64,6 +75,8 @@ export const api = {
   liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
   serviceMetrics: (id: string, signal?: AbortSignal) =>
     getJSON<ServiceMetrics>(`/api/services/${encodeURIComponent(id)}/metrics`, signal),
+  players: (limit: number, offset: number, signal?: AbortSignal) =>
+    getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
   playerAchievements: (playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerAchievement[]>(`/api/players/${encodeURIComponent(playerID)}/achievements`, signal),
 };
