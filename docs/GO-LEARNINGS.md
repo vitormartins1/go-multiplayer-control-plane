@@ -442,3 +442,24 @@ if err != nil {
 ```
 
 **Pegadinha / nuance:** o `MaxBytesReader` recebe o `w` (ResponseWriter) de propósito — ao estourar, sinaliza a conexão para não seguir lendo um corpo gigante. E o erro de limite é um **tipo concreto** (`*http.MaxBytesError`), pego com `errors.As` (mesmo padrão do #09): é o que permite distinguir "grande demais" (413) de um erro de leitura genérico (400).
+
+---
+
+## 12 — O "zero value problem": ponteiro para distinguir ausente de zero no JSON
+
+**O que é / por que importa:** em Go toda struct nasce com zero values (`0`, `""`, `false`) — não há `null` para tipos básicos. No decode de JSON isso cria ambiguidade: `{"score": 0}` e `{}` produzem o **mesmo** `score == 0`. Para distinguir "enviou zero" de "não enviou", usa-se um **ponteiro** (`*int64`): `nil` = ausente, aponta = valor (mesmo que zero). Vindo de C#, é o papel do `int?` + `[Required]` juntos.
+
+**Onde no projeto:** `services/leaderboard-service/internal/transport/http_handler.go` (`submit`) — um `POST /scores` sem `score` deve dar 400, não virar um score 0 válido.
+
+```go
+var req struct {
+	Score *int64 `json:"score"` // ponteiro: nil quando o campo não veio no JSON
+}
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
+	writeError(w, http.StatusBadRequest, "invalid_score") // ausente -> 400
+	return
+}
+score := *req.Score // aqui, 0 seria um score válido e explícito
+```
+
+**Pegadinha / nuance:** é o mesmo idioma do ponteiro-como-opcional do #09 (`*time.Time` para `NULL` do SQL) — a forma idiomática de Go expressar "ausência" em valores que têm zero value. Use só onde a distinção importa (campo opcional, checar presença); para campos sempre obrigatórios, o valor direto é mais simples.
