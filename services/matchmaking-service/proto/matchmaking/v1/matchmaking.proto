@@ -12,7 +12,9 @@ service Matchmaking {
   rpc FindMatch(FindMatchRequest) returns (stream TicketUpdate);
 }
 
-message FindMatchRequest {}
+message FindMatchRequest {
+  string game_id = 1; // o jogo do cliente (multi-tenant, ADR-0017)
+}
 
 enum Status {
   STATUS_UNSPECIFIED = 0;

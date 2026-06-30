@@ -49,10 +49,11 @@ func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
 	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777").Return("token-p2", nil)
 
 	svc := New(alloc, iss, pub)
-	sess, grants, err := svc.Create(context.Background(), "match-1", []string{"p1", "p2"})
+	sess, grants, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1", "p2"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.1:7777", sess.ServerAddress)
+	assert.Equal(t, "game-1", sess.GameID, "a sessão guarda o game_id")
 	assert.NotEmpty(t, sess.ID)
 	require.Len(t, grants, 2)
 	assert.Equal(t, "p1", grants[0].PlayerID)
@@ -68,7 +69,7 @@ func TestCreate_PoolEsgotado_RetornaErrNoServer(t *testing.T) {
 	alloc.On("Allocate", mock.Anything).Return(domain.Server{}, domain.ErrNoServer)
 
 	svc := New(alloc, &mockIssuer{}, &mockPublisher{})
-	_, _, err := svc.Create(context.Background(), "match-1", []string{"p1"})
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
 
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 	assert.Equal(t, float64(0), svc.ActiveSessions())
@@ -81,7 +82,7 @@ func TestReportResult_PublicaLiberaEncerra(t *testing.T) {
 	alloc.On("Allocate", mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	svc := New(alloc, iss, pub)
-	_, _, err := svc.Create(context.Background(), "match-1", []string{"p1"})
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
 	require.NoError(t, err)
 
 	results := []domain.PlayerResult{{PlayerID: "p1", Score: 10, Won: true}}
@@ -108,7 +109,7 @@ func TestCreate_FalhaAoEmitirToken_LiberaServer(t *testing.T) {
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	svc := New(alloc, iss, &mockPublisher{})
-	_, _, err := svc.Create(context.Background(), "match-1", []string{"p1"})
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
 
 	require.Error(t, err)
 	assert.Equal(t, float64(0), svc.ActiveSessions())

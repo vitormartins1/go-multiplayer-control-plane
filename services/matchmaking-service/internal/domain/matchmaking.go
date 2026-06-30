@@ -29,20 +29,21 @@ type Provisioned struct {
 	Tokens        map[string]string // playerID -> connect token
 }
 
-// Matchmaker é a Port de entrada: enfileira tickets e forma matches.
+// Matchmaker é a Port de entrada: enfileira tickets e forma matches. O
+// gameID escopa a fila — só casa jogadores do mesmo jogo (ADR-0017).
 type Matchmaker interface {
-	// Join enfileira o jogador e devolve um canal por onde o MatchResult chega
-	// quando o match resolve. Cancelar o ctx remove o ticket da fila.
-	Join(ctx context.Context, playerID string) (<-chan MatchResult, error)
+	// Join enfileira o jogador no jogo e devolve um canal por onde o MatchResult
+	// chega quando o match resolve. Cancelar o ctx remove o ticket da fila.
+	Join(ctx context.Context, gameID, playerID string) (<-chan MatchResult, error)
 	// Run executa o loop de formação (em background) até o ctx ser cancelado.
 	Run(ctx context.Context)
 }
 
 // SessionProvisioner é a Port de saída para o session-service: ao formar um
-// match, provisiona a sessão (aloca server + emite os connect tokens).
-// Devolve ErrNoServer quando o session responde ResourceExhausted.
+// match, provisiona a sessão (aloca server + emite os connect tokens) para o
+// jogo. Devolve ErrNoServer quando o session responde ResourceExhausted.
 type SessionProvisioner interface {
-	Provision(ctx context.Context, matchID string, players []string) (Provisioned, error)
+	Provision(ctx context.Context, matchID string, players []string, gameID string) (Provisioned, error)
 }
 
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).

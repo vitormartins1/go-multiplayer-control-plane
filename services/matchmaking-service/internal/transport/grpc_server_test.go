@@ -35,7 +35,7 @@ func (fakeVerifier) Verify(_ context.Context, token string) (string, error) {
 // provisionerFunc adapta uma func à Port domain.SessionProvisioner.
 type provisionerFunc func(matchID string, players []string) (domain.Provisioned, error)
 
-func (f provisionerFunc) Provision(_ context.Context, matchID string, players []string) (domain.Provisioned, error) {
+func (f provisionerFunc) Provision(_ context.Context, matchID string, players []string, _ string) (domain.Provisioned, error) {
 	return f(matchID, players)
 }
 
@@ -90,9 +90,9 @@ func TestFindMatch_SemToken_Unauthenticated(t *testing.T) {
 func TestFindMatch_DoisClientes_MatchedComServerEToken(t *testing.T) {
 	client := setup(t, okProvisioner)
 
-	s1, err := client.FindMatch(authCtx("p1"), &pb.FindMatchRequest{})
+	s1, err := client.FindMatch(authCtx("p1"), &pb.FindMatchRequest{GameId: "game-1"})
 	require.NoError(t, err)
-	s2, err := client.FindMatch(authCtx("p2"), &pb.FindMatchRequest{})
+	s2, err := client.FindMatch(authCtx("p2"), &pb.FindMatchRequest{GameId: "game-1"})
 	require.NoError(t, err)
 
 	// primeiro update: SEARCHING
@@ -124,9 +124,9 @@ func TestFindMatch_SemServer_Failed(t *testing.T) {
 	})
 	client := setup(t, noServer)
 
-	s1, err := client.FindMatch(authCtx("p1"), &pb.FindMatchRequest{})
+	s1, err := client.FindMatch(authCtx("p1"), &pb.FindMatchRequest{GameId: "game-1"})
 	require.NoError(t, err)
-	s2, err := client.FindMatch(authCtx("p2"), &pb.FindMatchRequest{})
+	s2, err := client.FindMatch(authCtx("p2"), &pb.FindMatchRequest{GameId: "game-1"})
 	require.NoError(t, err)
 
 	require.NoError(t, recvSearching(t, s1))

@@ -20,6 +20,7 @@ var _ domain.Matchmaker = (*Matchmaker)(nil)
 const provisionTimeout = 5 * time.Second
 
 type ticket struct {
+	gameID   string // o jogo do ticket — só casa com tickets do mesmo jogo
 	playerID string
 	ch       chan domain.MatchResult // buffer 1: a entrega nunca bloqueia
 }
@@ -51,8 +52,8 @@ func New(matchSize int, interval time.Duration, provisioner domain.SessionProvis
 
 // Join enfileira o jogador (um ticket por jogador) e devolve o canal do Match.
 // Quando o ctx é cancelado (stream fechado), o ticket sai da fila.
-func (m *Matchmaker) Join(ctx context.Context, playerID string) (<-chan domain.MatchResult, error) {
-	t := &ticket{playerID: playerID, ch: make(chan domain.MatchResult, 1)}
+func (m *Matchmaker) Join(ctx context.Context, gameID, playerID string) (<-chan domain.MatchResult, error) {
+	t := &ticket{gameID: gameID, playerID: playerID, ch: make(chan domain.MatchResult, 1)}
 
 	m.mu.Lock()
 	m.removeByPlayerLocked(playerID) // garante um ticket por jogador
@@ -81,17 +82,37 @@ func (m *Matchmaker) Run(ctx context.Context) {
 	}
 }
 
-// tryForm agrupa matchSize tickets (FIFO) e, fora da seção crítica, dispara uma
-// goroutine por match para provisionar a sessão. Manter o provisionamento (I/O
-// gRPC) fora do lock evita que um CreateSession lento bloqueie a fila.
+// tryForm agrupa matchSize tickets do MESMO jogo (FIFO por jogo) e, fora da
+// seção crítica, dispara uma goroutine por match para provisionar a sessão.
+// Jogadores de jogos diferentes nunca entram no mesmo match (ADR-0017).
 func (m *Matchmaker) tryForm() {
 	var formed [][]*ticket
 
 	m.mu.Lock()
-	for len(m.queue) >= m.matchSize {
-		group := m.queue[:m.matchSize:m.matchSize]
-		m.queue = m.queue[m.matchSize:]
-		formed = append(formed, group)
+	// agrupa por jogo preservando a ordem de chegada.
+	byGame := map[string][]*ticket{}
+	for _, t := range m.queue {
+		byGame[t.gameID] = append(byGame[t.gameID], t)
+	}
+	taken := map[*ticket]bool{}
+	for _, ts := range byGame {
+		for len(ts) >= m.matchSize {
+			group := ts[:m.matchSize:m.matchSize]
+			ts = ts[m.matchSize:]
+			for _, t := range group {
+				taken[t] = true
+			}
+			formed = append(formed, group)
+		}
+	}
+	if len(taken) > 0 {
+		kept := m.queue[:0:0]
+		for _, t := range m.queue {
+			if !taken[t] {
+				kept = append(kept, t)
+			}
+		}
+		m.queue = kept
 	}
 	m.mu.Unlock()
 
@@ -104,10 +125,11 @@ func (m *Matchmaker) tryForm() {
 // no sucesso, o connect token do PRÓPRIO jogador; na falha, MatchResult{Failed}.
 func (m *Matchmaker) provision(matchID string, group []*ticket) {
 	players := playerIDs(group)
+	gameID := group[0].gameID // o grupo é de um único jogo
 
 	ctx, cancel := context.WithTimeout(m.baseCtx, provisionTimeout)
 	defer cancel()
-	prov, err := m.provisioner.Provision(ctx, matchID, players)
+	prov, err := m.provisioner.Provision(ctx, matchID, players, gameID)
 	if err != nil {
 		m.deliverFailure(group, matchID, players, reasonFor(err))
 		return

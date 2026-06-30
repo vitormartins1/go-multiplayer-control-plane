@@ -16,7 +16,7 @@ grpcurl -plaintext localhost:50052 list session.v1.Session
 
 # 2. criar uma sessão a partir de um match -> aloca server + connect token por jogador
 grpcurl -plaintext \
-  -d '{"matchId":"match-1","players":["p1","p2"]}' \
+  -d '{"matchId":"match-1","players":["p1","p2"],"gameId":"00000000-0000-0000-0000-000000000000"}' \
   localhost:50052 session.v1.Session/CreateSession
 # -> { "sessionId": "...", "serverAddress": "10.0.0.1:7777",
 #      "grants": [ {"playerId":"p1","connectToken":"<JWT EdDSA>"}, ... ] }

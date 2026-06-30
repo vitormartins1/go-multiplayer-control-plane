@@ -24,7 +24,8 @@ const (
 type CreateSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MatchId       string                 `protobuf:"bytes,1,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"`
-	Players       []string               `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"` // playerIDs do match
+	Players       []string               `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"`             // playerIDs do match
+	GameId        string                 `protobuf:"bytes,3,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // jogo da partida (multi-tenant, ADR-0017)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -71,6 +72,13 @@ func (x *CreateSessionRequest) GetPlayers() []string {
 		return x.Players
 	}
 	return nil
+}
+
+func (x *CreateSessionRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
 }
 
 type CreateSessionResponse struct {
@@ -340,10 +348,11 @@ var File_session_v1_session_proto protoreflect.FileDescriptor
 const file_session_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18session/v1/session.proto\x12\n" +
-	"session.v1\"K\n" +
+	"session.v1\"d\n" +
 	"\x14CreateSessionRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12\x18\n" +
-	"\aplayers\x18\x02 \x03(\tR\aplayers\"\x8f\x01\n" +
+	"\aplayers\x18\x02 \x03(\tR\aplayers\x12\x17\n" +
+	"\agame_id\x18\x03 \x01(\tR\x06gameId\"\x8f\x01\n" +
 	"\x15CreateSessionResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +

@@ -30,10 +30,11 @@ func New(session sessionv1.SessionClient) *Client {
 
 // Provision chama o CreateSession do session e traduz a resposta para o domínio.
 // codes.ResourceExhausted (pool esgotado) vira domain.ErrNoServer.
-func (c *Client) Provision(ctx context.Context, matchID string, players []string) (domain.Provisioned, error) {
+func (c *Client) Provision(ctx context.Context, matchID string, players []string, gameID string) (domain.Provisioned, error) {
 	resp, err := c.session.CreateSession(ctx, &sessionv1.CreateSessionRequest{
 		MatchId: matchID,
 		Players: players,
+		GameId:  gameID,
 	})
 	if err != nil {
 		if status.Code(err) == codes.ResourceExhausted {

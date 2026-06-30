@@ -75,6 +75,7 @@ func (Status) EnumDescriptor() ([]byte, []int) {
 
 type FindMatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // o jogo do cliente (multi-tenant, ADR-0017)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -107,6 +108,13 @@ func (x *FindMatchRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use FindMatchRequest.ProtoReflect.Descriptor instead.
 func (*FindMatchRequest) Descriptor() ([]byte, []int) {
 	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *FindMatchRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
 }
 
 type TicketUpdate struct {
@@ -197,8 +205,9 @@ var File_matchmaking_v1_matchmaking_proto protoreflect.FileDescriptor
 
 const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\n" +
-	" matchmaking/v1/matchmaking.proto\x12\x0ematchmaking.v1\"\x12\n" +
-	"\x10FindMatchRequest\"\xd7\x01\n" +
+	" matchmaking/v1/matchmaking.proto\x12\x0ematchmaking.v1\"+\n" +
+	"\x10FindMatchRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\"\xd7\x01\n" +
 	"\fTicketUpdate\x12.\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x16.matchmaking.v1.StatusR\x06status\x12\x19\n" +
 	"\bmatch_id\x18\x02 \x01(\tR\amatchId\x12\x18\n" +
