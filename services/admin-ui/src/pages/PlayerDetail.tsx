@@ -1,12 +1,16 @@
-import { Anchor, Breadcrumbs, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Anchor, Badge, Breadcrumbs, Group, Stack, Tabs, Text, Title } from "@mantine/core";
 import { IconCloud, IconDatabase, IconTrophy } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 import { PlayerAchievements } from "./PlayerAchievements";
 import { PlayerDataView } from "./PlayerDataView";
 import { CloudSaveView } from "./CloudSaveView";
+import { useGames } from "../lib/games";
 
 export function PlayerDetail() {
   const { playerId = "" } = useParams();
+  // O jogo é o contexto global (header). As abas (dados por-jogo) o consomem.
+  const { activeGame } = useGames();
+  const gameId = activeGame?.id ?? null;
 
   return (
     <Stack>
@@ -16,10 +20,23 @@ export function PlayerDetail() {
         </Anchor>
         <Text>{playerId.slice(0, 8)}…</Text>
       </Breadcrumbs>
-      <Title order={3}>Jogador</Title>
-      <Text c="dimmed" size="sm" mt={-8}>
-        {playerId}
-      </Text>
+      <Group justify="space-between" align="flex-end">
+        <div>
+          <Title order={3}>Jogador</Title>
+          <Text c="dimmed" size="sm" mt={-4}>
+            {playerId}
+          </Text>
+        </div>
+        {activeGame ? (
+          <Badge variant="light" size="lg">
+            Jogo: {activeGame.name}
+          </Badge>
+        ) : (
+          <Badge variant="light" color="gray" size="lg">
+            Nenhum jogo selecionado
+          </Badge>
+        )}
+      </Group>
 
       <Tabs defaultValue="achievements">
         <Tabs.List>
@@ -35,13 +52,13 @@ export function PlayerDetail() {
         </Tabs.List>
 
         <Tabs.Panel value="achievements" pt="md">
-          <PlayerAchievements playerId={playerId} />
+          <PlayerAchievements playerId={playerId} gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="player-data" pt="md">
-          <PlayerDataView playerId={playerId} />
+          <PlayerDataView playerId={playerId} gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="cloud-saves" pt="md">
-          <CloudSaveView playerId={playerId} />
+          <CloudSaveView playerId={playerId} gameId={gameId} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

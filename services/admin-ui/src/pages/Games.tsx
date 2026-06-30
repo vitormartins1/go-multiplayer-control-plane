@@ -1,18 +1,25 @@
-import { Alert, Button, Group, Loader, Modal, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Group, Loader, Modal, SimpleGrid, Stack, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { api, HttpError } from "../lib/api";
-import { useAsync } from "../lib/useAsync";
+import { useGames } from "../lib/games";
+import { GameCover } from "../components/GameCover";
 
 const SLUG_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 export function Games() {
   const nav = useNavigate();
-  const { data: games, loading, error, reload } = useAsync((s) => api.games(s), []);
+  const { games, loading, error, reload, setActiveGameId } = useGames();
   const [opened, { open, close }] = useDisclosure(false);
+
+  // openGame seleciona o jogo como ativo (contexto global) e abre o detalhe.
+  function openGame(id: string) {
+    setActiveGameId(id);
+    nav(`/games/${id}`);
+  }
 
   const form = useForm({
     initialValues: { slug: "", name: "" },
@@ -24,11 +31,12 @@ export function Games() {
 
   async function submit(values: { slug: string; name: string }) {
     try {
-      await api.createGame(values.slug.trim(), values.name.trim());
+      const game = await api.createGame(values.slug.trim(), values.name.trim());
       notifications.show({ color: "green", message: "Jogo registrado." });
       close();
       form.reset();
       reload();
+      setActiveGameId(game.id); // novo jogo vira o ativo
     } catch (e) {
       const msg =
         e instanceof HttpError && e.status === 409
@@ -54,28 +62,23 @@ export function Games() {
         </Group>
       </Group>
 
-      {loading && !games && <Loader />}
+      {loading && games.length === 0 && <Loader />}
       {!!error && <Alert color="red">game-registry indisponível.</Alert>}
-      {games && games.length === 0 && <Text c="dimmed">Nenhum jogo registrado ainda.</Text>}
-      {games && games.length > 0 && (
-        <Table striped highlightOnHover withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Nome</Table.Th>
-              <Table.Th>Slug</Table.Th>
-              <Table.Th>Criado</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {games.map((g) => (
-              <Table.Tr key={g.id} style={{ cursor: "pointer" }} onClick={() => nav(`/games/${g.id}`)}>
-                <Table.Td>{g.name}</Table.Td>
-                <Table.Td c="dimmed">{g.slug}</Table.Td>
-                <Table.Td>{new Date(g.createdAt).toLocaleDateString("pt-BR")}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+      {!loading && games.length === 0 && <Text c="dimmed">Nenhum jogo registrado ainda.</Text>}
+      {games.length > 0 && (
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing="md">
+          {games.map((g) => (
+            <UnstyledButton
+              key={g.id}
+              onClick={() => openGame(g.id)}
+              style={{ transition: "transform 120ms ease" }}
+              onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.03)")}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+            >
+              <GameCover game={g} />
+            </UnstyledButton>
+          ))}
+        </SimpleGrid>
       )}
 
       <Modal opened={opened} onClose={close} title="Registrar jogo">

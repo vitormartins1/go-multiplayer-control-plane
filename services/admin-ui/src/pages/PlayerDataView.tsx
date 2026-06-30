@@ -1,46 +1,30 @@
-import { Alert, Button, Code, Group, Loader, Select, Stack, Table, Text } from "@mantine/core";
+import { Alert, Button, Code, Group, Loader, Stack, Table, Text } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
-import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 
-// PlayerDataView: dado de gameplay do jogador num jogo (player-data). Seletor de
-// jogo (o jogador é global; o dado é por jogo), carregamento on-open + Atualizar.
-export function PlayerDataView({ playerId }: { playerId: string }) {
-  const { data: games } = useAsync((s) => api.games(s), []);
-  const [gameId, setGameId] = useState<string | null>(null);
-
+// PlayerDataView: dado de gameplay do jogador no jogo ativo (gameId vem do
+// contexto global, via PlayerDetail). Sem gameId -> orienta a escolher no header.
+export function PlayerDataView({ playerId, gameId }: { playerId: string; gameId: string | null }) {
   const { data, loading, error, reload } = useAsync(
     (s) => (gameId ? api.playerData(gameId, playerId, s) : Promise.resolve([])),
     [gameId],
   );
 
+  if (!gameId) return <Text c="dimmed">Selecione um jogo no topo para ver o dado do jogador.</Text>;
+
   return (
     <Stack>
-      <Group justify="space-between">
-        <Select
-          label="Jogo"
-          placeholder="Selecione um jogo"
-          data={(games ?? []).map((g) => ({ value: g.id, label: g.name }))}
-          value={gameId}
-          onChange={setGameId}
-          w={280}
-          searchable
-        />
-        {gameId && (
-          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
-            Atualizar
-          </Button>
-        )}
+      <Group justify="flex-end">
+        <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+          Atualizar
+        </Button>
       </Group>
 
-      {!gameId && <Text c="dimmed">Selecione um jogo para ver o dado do jogador.</Text>}
-      {gameId && loading && !data && <Loader />}
-      {gameId && !!error && <Alert color="red">Falha ao carregar (player-data indisponível?).</Alert>}
-      {gameId && data && data.length === 0 && (
-        <Text c="dimmed">Nenhum dado para este jogador neste jogo.</Text>
-      )}
-      {gameId && data && data.length > 0 && (
+      {loading && !data && <Loader />}
+      {!!error && <Alert color="red">Falha ao carregar (player-data indisponível?).</Alert>}
+      {data && data.length === 0 && <Text c="dimmed">Nenhum dado para este jogador neste jogo.</Text>}
+      {data && data.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
