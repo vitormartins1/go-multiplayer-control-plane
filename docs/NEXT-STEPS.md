@@ -23,7 +23,19 @@ ADRs relevantes recentes: 0016 (painel BFF), 0017 (multi-tenant game-registry), 
 2. ~~**`services/cloud-save-service/specs/002-game-scope`**~~ — ✅ **feito**: key S3 `{gameID}/{playerID}` + admin read (`GET /admin/games/{g}/players/{p}/save`, metadados + blob base64) + guard.
 3. ~~**`services/admin-bff/specs/006-player-tabs`**~~ — ✅ **feito**: abas **Player data** e **Cloud saves** do jogador no painel (bff + ui), consumindo os admin reads de 1 e 2.
 
-Com isso, **todo o detalhe do jogador está aceso no painel** (Achievements + Player data + Cloud saves). Próximas frentes ficam no backlog abaixo (sem spec ainda) — a mais natural é **CI (GitHub Actions)** ou abrir uma nova spec SDD. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+Com isso, **todo o detalhe do jogador está aceso no painel** (Achievements + Player data + Cloud saves).
+
+## Painel jogo-cêntrico (melhoria de UX/arquitetura — 2026-06-30)
+
+Sequência iniciada a pedido do usuário (biblioteca de capas + repensar a seleção de jogo). Faseada:
+
+- ✅ **Fase A** (`admin-ui/005-game-library`): Games virou **biblioteca de capas 9:16** (procedural); **jogo ativo global** no header (`GameProvider`/`useGames`, persistido); abas do jogador consomem o contexto (sem `<Select>` repetido).
+- ✅ **Fase B** (`game-registry/002-game-presence`, **ADR-0019**): **player base por jogo** via **presença** (game-registry `game_players`), marcada no **login-into-game** (identity aceita `gameId`, marca best-effort); admin-bff `GET /api/games/{g}/players`; aba **Players** virou jogo-cêntrica (base do jogo ativo).
+- ⏳ **Fase C** (pendente): **capa real** — campo `coverUrl` (URL) no game-registry + repasse admin-bff + `<img>` no `GameCover` com fallback pro procedural. Pequena; branch própria `feat/game-registry/003-...`.
+
+## Backlog (sem spec ainda)
+
+CI (GitHub Actions), Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, edição/remoção de jogos e conquistas no painel, Analytics real. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
 
 ## CI (GitHub Actions) — ainda não existe `.github/workflows/`
 
