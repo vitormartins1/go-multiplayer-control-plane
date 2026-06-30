@@ -62,9 +62,9 @@ type ConnectTokenIssuer interface {
 	JWKS(ctx context.Context) ([]byte, error)
 }
 
-// ResultPublisher é a Port de saída do fan-out do resultado para os serviços
-// de dados. Adapter stub que loga no MVP; o real (HTTP + service-auth) é a
-// próxima feature.
+// ResultPublisher é a Port de saída do fan-out do resultado para os serviços de
+// dados (achievements/...). Recebe o gameID da sessão (multi-tenant, ADR-0017).
+// O adapter real fala HTTP com a internal key (ADR-0018); LogPublisher é fallback.
 type ResultPublisher interface {
-	Publish(ctx context.Context, matchID string, results []PlayerResult) error
+	Publish(ctx context.Context, gameID string, results []PlayerResult) error
 }

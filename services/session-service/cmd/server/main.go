@@ -23,15 +23,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/c130n/game-backend/services/session-service/gen/session/v1"
 	"github.com/c130n/game-backend/services/session-service/internal/allocator"
+	"github.com/c130n/game-backend/services/session-service/internal/domain"
 	"github.com/c130n/game-backend/services/session-service/internal/publisher"
 	"github.com/c130n/game-backend/services/session-service/internal/service"
 	"github.com/c130n/game-backend/services/session-service/internal/token"
 	"github.com/c130n/game-backend/services/session-service/internal/transport"
+	"github.com/c130n/game-backend/shared/auth"
 	"github.com/c130n/game-backend/shared/config"
 	"github.com/c130n/game-backend/shared/logger"
 	"github.com/c130n/game-backend/shared/telemetry"
@@ -77,7 +80,7 @@ func run(log *slog.Logger) error {
 
 	pool := serverPool()
 	log.Info("pool de game servers (mock)", "size", len(pool))
-	svc := service.New(allocator.New(pool), issuer, publisher.New(log))
+	svc := service.New(allocator.New(pool), issuer, buildPublisher(log))
 
 	// métrica custom: sessões ativas é o que interessa observar aqui.
 	prometheus.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
@@ -161,6 +164,27 @@ func serverPool() []string {
 		}
 	}
 	return out
+}
+
+// buildPublisher escolhe o fan-out do resultado: se ACHIEVEMENTS_URL estiver
+// setado, usa o adapter real (HTTP + internal key, ADR-0018, trace via otelhttp);
+// senão, cai no fallback que só loga.
+func buildPublisher(log *slog.Logger) domain.ResultPublisher {
+	achURL := os.Getenv("ACHIEVEMENTS_URL")
+	if achURL == "" {
+		log.Warn("ACHIEVEMENTS_URL ausente — fan-out do resultado só vai logar (fallback)")
+		return publisher.New(log)
+	}
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — o fan-out vai dar 401 no achievements")
+	}
+	client := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
+	}
+	log.Info("fan-out do resultado via achievements", "url", achURL)
+	return publisher.NewAchievements(achURL, client, log)
 }
 
 // buildIssuer carrega a chave Ed25519 do config (PEM PKCS8) ou, em dev, gera uma
