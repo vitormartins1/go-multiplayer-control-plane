@@ -72,7 +72,9 @@ func run(log *slog.Logger) error {
 
 	repo := repository.NewPostgresGameRepository(pool)
 	svc := service.New(repo)
-	handler := transport.NewHandler(svc)
+	presenceRepo := repository.NewPostgresPresenceRepository(pool)
+	presenceSvc := service.NewPresence(presenceRepo)
+	handler := transport.NewHandler(svc, presenceSvc)
 
 	metrics := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)
 

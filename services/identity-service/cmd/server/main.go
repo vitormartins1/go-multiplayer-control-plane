@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/c130n/game-backend/services/identity-service/internal/domain"
+	"github.com/c130n/game-backend/services/identity-service/internal/presence"
 	"github.com/c130n/game-backend/services/identity-service/internal/repository"
 	"github.com/c130n/game-backend/services/identity-service/internal/service"
 	"github.com/c130n/game-backend/services/identity-service/internal/token"
@@ -77,8 +79,28 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
+	// internalKey serve tanto o guard de entrada (/admin) quanto a chamada de
+	// saída ao game-registry (login-into-game, ADR-0018/0019).
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — /admin nega (401) e a presença não será registrada; configure a chave")
+	}
+
+	// notifier de presença: caller serviço-a-serviço para o game-registry. Sem
+	// GAME_REGISTRY_URL, fica nil (login funciona, só não marca presença).
+	var notifier domain.PresenceNotifier
+	if gameRegistryURL := os.Getenv("GAME_REGISTRY_URL"); gameRegistryURL != "" {
+		presenceClient := &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
+		}
+		notifier = presence.New(gameRegistryURL, presenceClient)
+	} else {
+		log.Warn("GAME_REGISTRY_URL ausente — login-into-game não registra presença (ADR-0019)")
+	}
+
 	repo := repository.NewPostgresAccountRepository(pool)
-	svc := service.New(repo, issuer)
+	svc := service.New(repo, issuer, notifier, log)
 	lister := service.NewPlayerLister(repo) // listing admin (003-admin-list-users)
 	handler := transport.NewHandler(svc, issuer, lister)
 
@@ -95,11 +117,7 @@ func run(log *slog.Logger) error {
 	handler.Register(mux)
 
 	// /admin exige a internal key serviço-a-serviço (ADR-0018); /healthz e
-	// /metrics ficam livres para o Prometheus raspar.
-	internalKey := os.Getenv("INTERNAL_API_KEY")
-	if internalKey == "" {
-		log.Warn("INTERNAL_API_KEY ausente — os endpoints /admin vão negar (401); configure a chave")
-	}
+	// /metrics ficam livres para o Prometheus raspar. (internalKey lido acima.)
 	guarded := auth.RequireInternalKey(internalKey, "/admin")(mux)
 
 	// otelhttp é o handler mais externo: abre o span por request e continua o

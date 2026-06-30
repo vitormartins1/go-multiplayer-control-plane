@@ -46,11 +46,13 @@ func (f *fakeReader) PlayerAchievements(_ context.Context, gameID, playerID stri
 }
 
 type fakeRegistry struct {
-	games   []domain.Game
-	created *domain.Game
-	err     error
-	gotSlug string
-	gotName string
+	games     []domain.Game
+	created   *domain.Game
+	players   []domain.GamePlayer
+	err       error
+	gotSlug   string
+	gotName   string
+	gotGameID string
 }
 
 func (f *fakeRegistry) ListGames(_ context.Context) ([]domain.Game, error) {
@@ -62,6 +64,10 @@ func (f *fakeRegistry) CreateGame(_ context.Context, slug, name string) (*domain
 		return nil, f.err
 	}
 	return &domain.Game{ID: "g1", Slug: slug, Name: name}, nil
+}
+func (f *fakeRegistry) PlayersOf(_ context.Context, gameID string) ([]domain.GamePlayer, error) {
+	f.gotGameID = gameID
+	return f.players, f.err
 }
 
 type fakeLeaderboard struct {
@@ -259,6 +265,15 @@ func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	assert.Equal(t, 10, lb.gotLimit)
 	require.Len(t, got, 1)
 	assert.Equal(t, "bob", got[0].PlayerID)
+}
+
+func TestGamePlayers_DelegaAoRegistry(t *testing.T) {
+	reg := &fakeRegistry{players: []domain.GamePlayer{{PlayerID: "p1", Handle: "Alice"}}}
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).GamePlayers(context.Background(), "game-9")
+	require.NoError(t, err)
+	assert.Equal(t, "game-9", reg.gotGameID)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Alice", got[0].Handle)
 }
 
 func TestPlayerData_DelegaComJogoEPlayer(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -24,13 +25,30 @@ const minPasswordLen = 8
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("timing-oracle-guard"), bcrypt.DefaultCost)
 
 type service struct {
-	repo   domain.AccountRepository
-	tokens domain.TokenIssuer
+	repo     domain.AccountRepository
+	tokens   domain.TokenIssuer
+	presence domain.PresenceNotifier // nil-safe: sem notifier, não marca presença
+	log      *slog.Logger
 }
 
-// New cria o AuthService do identity-service.
-func New(repo domain.AccountRepository, tokens domain.TokenIssuer) domain.AuthService {
-	return &service{repo: repo, tokens: tokens}
+// New cria o AuthService do identity-service. notifier pode ser nil (sem
+// login-into-game); quando presente, marca presença best-effort (ADR-0019).
+func New(repo domain.AccountRepository, tokens domain.TokenIssuer, notifier domain.PresenceNotifier, log *slog.Logger) domain.AuthService {
+	return &service{repo: repo, tokens: tokens, presence: notifier, log: log}
+}
+
+// markPresence registra a presença no jogo best-effort: sem gameID/notifier não
+// faz nada; falha só loga (não derruba o login). Ver ADR-0019.
+func (s *service) markPresence(ctx context.Context, gameID, playerID, handle string) {
+	if gameID == "" || s.presence == nil {
+		return
+	}
+	if err := s.presence.MarkPresence(ctx, gameID, playerID, handle); err != nil && s.log != nil {
+		s.log.Warn("presença não registrada (best-effort)",
+			slog.String("err", err.Error()),
+			slog.String("game_id", gameID),
+			slog.String("player_id", playerID))
+	}
 }
 
 func (s *service) Register(ctx context.Context, handle, password string) (*domain.Account, error) {
@@ -58,7 +76,7 @@ func (s *service) Register(ctx context.Context, handle, password string) (*domai
 	return acc, nil
 }
 
-func (s *service) Authenticate(ctx context.Context, handle, password string) (string, error) {
+func (s *service) Authenticate(ctx context.Context, handle, password, gameID string) (string, error) {
 	acc, err := s.repo.FindByHandle(ctx, handle)
 	if errors.Is(err, domain.ErrAccountNotFound) {
 		// gasta tempo de bcrypt para não vazar a inexistência do handle
@@ -75,14 +93,16 @@ func (s *service) Authenticate(ctx context.Context, handle, password string) (st
 	if err != nil {
 		return "", fmt.Errorf("identity service: authenticate: sign: %w", err)
 	}
+	s.markPresence(ctx, gameID, acc.ID, acc.Handle) // login-into-game (ADR-0019)
 	return token, nil
 }
 
-func (s *service) LoginAnonymous(ctx context.Context) (string, error) {
+func (s *service) LoginAnonymous(ctx context.Context, gameID string) (string, error) {
 	subject := "guest-" + uuid.NewString()
 	token, err := s.tokens.Sign(ctx, subject, map[string]any{"anon": true})
 	if err != nil {
 		return "", fmt.Errorf("identity service: login anonymous: sign: %w", err)
 	}
+	s.markPresence(ctx, gameID, subject, subject) // guest: handle = o próprio subject
 	return token, nil
 }

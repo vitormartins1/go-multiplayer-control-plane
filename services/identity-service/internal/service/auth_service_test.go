@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -55,7 +57,7 @@ func TestRegister_HandleSenhaValidos_CriaContaSemVazarSenha(t *testing.T) {
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Account")).
 		Return(nil).
 		Run(func(args mock.Arguments) { captured = args.Get(1).(*domain.Account) })
-	svc := New(repo, new(mockTokens))
+	svc := New(repo, new(mockTokens), nil, nil)
 
 	acc, err := svc.Register(context.Background(), "Vitor_1", "supersecret")
 
@@ -70,7 +72,7 @@ func TestRegister_HandleSenhaValidos_CriaContaSemVazarSenha(t *testing.T) {
 
 func TestRegister_HandleInvalido_RetornaErroSemPersistir(t *testing.T) {
 	repo := new(mockRepo)
-	svc := New(repo, new(mockTokens))
+	svc := New(repo, new(mockTokens), nil, nil)
 
 	_, err := svc.Register(context.Background(), "ab", "supersecret")
 
@@ -80,7 +82,7 @@ func TestRegister_HandleInvalido_RetornaErroSemPersistir(t *testing.T) {
 
 func TestRegister_SenhaFraca_RetornaErroSemPersistir(t *testing.T) {
 	repo := new(mockRepo)
-	svc := New(repo, new(mockTokens))
+	svc := New(repo, new(mockTokens), nil, nil)
 
 	_, err := svc.Register(context.Background(), "Vitor_1", "curta")
 
@@ -91,7 +93,7 @@ func TestRegister_SenhaFraca_RetornaErroSemPersistir(t *testing.T) {
 func TestRegister_HandleDuplicado_RetornaErrHandleTaken(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("Create", mock.Anything, mock.Anything).Return(domain.ErrHandleTaken)
-	svc := New(repo, new(mockTokens))
+	svc := New(repo, new(mockTokens), nil, nil)
 
 	_, err := svc.Register(context.Background(), "Vitor_1", "supersecret")
 
@@ -105,9 +107,9 @@ func TestAuthenticate_CredenciaisCorretas_RetornaToken(t *testing.T) {
 	repo.On("FindByHandle", mock.Anything, "Vitor_1").Return(acc, nil)
 	tokens := new(mockTokens)
 	tokens.On("Sign", mock.Anything, "acc-1", mock.Anything).Return("signed-token", nil)
-	svc := New(repo, tokens)
+	svc := New(repo, tokens, nil, nil)
 
-	token, err := svc.Authenticate(context.Background(), "Vitor_1", "supersecret")
+	token, err := svc.Authenticate(context.Background(), "Vitor_1", "supersecret", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "signed-token", token)
@@ -120,9 +122,9 @@ func TestAuthenticate_SenhaIncorreta_RetornaInvalidCredentials(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("FindByHandle", mock.Anything, "Vitor_1").Return(acc, nil)
 	tokens := new(mockTokens)
-	svc := New(repo, tokens)
+	svc := New(repo, tokens, nil, nil)
 
-	_, err := svc.Authenticate(context.Background(), "Vitor_1", "senhaErrada")
+	_, err := svc.Authenticate(context.Background(), "Vitor_1", "senhaErrada", "")
 
 	assert.ErrorIs(t, err, domain.ErrInvalidCredentials)
 	tokens.AssertNotCalled(t, "Sign")
@@ -132,9 +134,9 @@ func TestAuthenticate_HandleInexistente_RetornaInvalidCredentials(t *testing.T) 
 	repo := new(mockRepo)
 	repo.On("FindByHandle", mock.Anything, "fantasma").Return(nil, domain.ErrAccountNotFound)
 	tokens := new(mockTokens)
-	svc := New(repo, tokens)
+	svc := New(repo, tokens, nil, nil)
 
-	_, err := svc.Authenticate(context.Background(), "fantasma", "supersecret")
+	_, err := svc.Authenticate(context.Background(), "fantasma", "supersecret", "")
 
 	// resposta idêntica ao caso de senha incorreta (não revela existência)
 	assert.ErrorIs(t, err, domain.ErrInvalidCredentials)
@@ -152,9 +154,9 @@ func TestLoginAnonymous_EmiteTokenGuestAnonSemPersistir(t *testing.T) {
 			claims, _ = args.Get(2).(map[string]any)
 		})
 	repo := new(mockRepo)
-	svc := New(repo, tokens)
+	svc := New(repo, tokens, nil, nil)
 
-	token, err := svc.LoginAnonymous(context.Background())
+	token, err := svc.LoginAnonymous(context.Background(), "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "guest-token", token)
@@ -164,16 +166,74 @@ func TestLoginAnonymous_EmiteTokenGuestAnonSemPersistir(t *testing.T) {
 	repo.AssertNotCalled(t, "FindByHandle")
 }
 
+type mockNotifier struct{ mock.Mock }
+
+func (m *mockNotifier) MarkPresence(ctx context.Context, gameID, playerID, handle string) error {
+	return m.Called(ctx, gameID, playerID, handle).Error(0)
+}
+
+func TestAuthenticate_ComGameId_MarcaPresenca(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("supersecret"), bcrypt.DefaultCost)
+	acc := &domain.Account{ID: "acc-1", Handle: "Vitor_1", PasswordHash: string(hash)}
+	repo := new(mockRepo)
+	repo.On("FindByHandle", mock.Anything, "Vitor_1").Return(acc, nil)
+	tokens := new(mockTokens)
+	tokens.On("Sign", mock.Anything, "acc-1", mock.Anything).Return("signed-token", nil)
+	notifier := new(mockNotifier)
+	notifier.On("MarkPresence", mock.Anything, "game-9", "acc-1", "Vitor_1").Return(nil)
+
+	svc := New(repo, tokens, notifier, slog.Default())
+	token, err := svc.Authenticate(context.Background(), "Vitor_1", "supersecret", "game-9")
+
+	require.NoError(t, err)
+	assert.Equal(t, "signed-token", token)
+	notifier.AssertExpectations(t) // presença marcada com (game, playerID, handle)
+}
+
+func TestAuthenticate_SemGameId_NaoMarcaPresenca(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("supersecret"), bcrypt.DefaultCost)
+	acc := &domain.Account{ID: "acc-1", Handle: "Vitor_1", PasswordHash: string(hash)}
+	repo := new(mockRepo)
+	repo.On("FindByHandle", mock.Anything, "Vitor_1").Return(acc, nil)
+	tokens := new(mockTokens)
+	tokens.On("Sign", mock.Anything, "acc-1", mock.Anything).Return("signed-token", nil)
+	notifier := new(mockNotifier)
+
+	svc := New(repo, tokens, notifier, slog.Default())
+	_, err := svc.Authenticate(context.Background(), "Vitor_1", "supersecret", "")
+
+	require.NoError(t, err)
+	notifier.AssertNotCalled(t, "MarkPresence")
+}
+
+func TestAuthenticate_PresencaFalha_NaoDerrubaLogin(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("supersecret"), bcrypt.DefaultCost)
+	acc := &domain.Account{ID: "acc-1", Handle: "Vitor_1", PasswordHash: string(hash)}
+	repo := new(mockRepo)
+	repo.On("FindByHandle", mock.Anything, "Vitor_1").Return(acc, nil)
+	tokens := new(mockTokens)
+	tokens.On("Sign", mock.Anything, "acc-1", mock.Anything).Return("signed-token", nil)
+	notifier := new(mockNotifier)
+	notifier.On("MarkPresence", mock.Anything, "game-9", "acc-1", "Vitor_1").
+		Return(errors.New("game-registry fora"))
+
+	svc := New(repo, tokens, notifier, slog.Default())
+	token, err := svc.Authenticate(context.Background(), "Vitor_1", "supersecret", "game-9")
+
+	require.NoError(t, err) // best-effort: falha de presença não derruba o login
+	assert.Equal(t, "signed-token", token)
+}
+
 func TestLoginAnonymous_GuestsDistintos(t *testing.T) {
 	tokens := new(mockTokens)
 	subs := map[string]bool{}
 	tokens.On("Sign", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
 		Return("t", nil).
 		Run(func(args mock.Arguments) { subs[args.String(1)] = true })
-	svc := New(new(mockRepo), tokens)
+	svc := New(new(mockRepo), tokens, nil, nil)
 
-	_, _ = svc.LoginAnonymous(context.Background())
-	_, _ = svc.LoginAnonymous(context.Background())
+	_, _ = svc.LoginAnonymous(context.Background(), "")
+	_, _ = svc.LoginAnonymous(context.Background(), "")
 
 	assert.Len(t, subs, 2)
 }

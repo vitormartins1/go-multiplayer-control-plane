@@ -80,6 +80,11 @@ func (s *Service) GameLeaderboard(ctx context.Context, gameID string, limit int)
 	return s.leaderboard.TopForGame(ctx, gameID, limit)
 }
 
+// GamePlayers lê a player base do jogo (presença, ADR-0019).
+func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
+	return s.registry.PlayersOf(ctx, gameID)
+}
+
 // Topology monta o mapa de serviços com o status up/down vindo de `up{}`. Se o
 // Prometheus estiver fora, degrada: nós com Up nil e SourceAvailable=false.
 func (s *Service) Topology(ctx context.Context) (domain.Topology, error) {

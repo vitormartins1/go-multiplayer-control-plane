@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
@@ -65,6 +66,25 @@ func (c *Client) CreateGame(ctx context.Context, slug, name string) (*domain.Gam
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
 	}
 	return &g, nil
+}
+
+// PlayersOf lê a player base do jogo (presença, ADR-0019).
+func (c *Client) PlayersOf(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/players"
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if err := classify(resp); err != nil {
+		return nil, err
+	}
+	var players []domain.GamePlayer
+	if err := json.NewDecoder(resp.Body).Decode(&players); err != nil {
+		return nil, fmt.Errorf("gameregistry: decode: %w", err)
+	}
+	return players, nil
 }
 
 // classify mapeia a resposta do upstream: 2xx -> nil; 4xx -> UpstreamError (status
