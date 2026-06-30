@@ -28,46 +28,55 @@ func New(repo domain.PlayerDataRepository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) Get(ctx context.Context, playerID, namespace, key string) ([]byte, error) {
+func (s *Service) Get(ctx context.Context, gameID, playerID, namespace, key string) ([]byte, error) {
 	if err := validateKey(namespace, key); err != nil {
 		return nil, err
 	}
-	v, err := s.repo.Get(ctx, playerID, namespace, key)
+	v, err := s.repo.Get(ctx, gameID, playerID, namespace, key)
 	if err != nil {
 		return nil, fmt.Errorf("player-data service: get: %w", err)
 	}
 	return v, nil
 }
 
-func (s *Service) GetNamespace(ctx context.Context, playerID, namespace string) (map[string][]byte, error) {
+func (s *Service) GetNamespace(ctx context.Context, gameID, playerID, namespace string) (map[string][]byte, error) {
 	if !namespaceRe.MatchString(namespace) {
 		return nil, domain.ErrInvalidKey
 	}
-	m, err := s.repo.GetNamespace(ctx, playerID, namespace)
+	m, err := s.repo.GetNamespace(ctx, gameID, playerID, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("player-data service: get namespace: %w", err)
 	}
 	return m, nil
 }
 
-func (s *Service) Put(ctx context.Context, playerID, namespace, key string, value []byte) error {
+func (s *Service) Put(ctx context.Context, gameID, playerID, namespace, key string, value []byte) error {
 	if err := validateKey(namespace, key); err != nil {
 		return err
 	}
-	if err := s.repo.Put(ctx, playerID, namespace, key, value); err != nil {
+	if err := s.repo.Put(ctx, gameID, playerID, namespace, key, value); err != nil {
 		return fmt.Errorf("player-data service: put: %w", err)
 	}
 	return nil
 }
 
-func (s *Service) Delete(ctx context.Context, playerID, namespace, key string) error {
+func (s *Service) Delete(ctx context.Context, gameID, playerID, namespace, key string) error {
 	if err := validateKey(namespace, key); err != nil {
 		return err
 	}
-	if err := s.repo.Delete(ctx, playerID, namespace, key); err != nil {
+	if err := s.repo.Delete(ctx, gameID, playerID, namespace, key); err != nil {
 		return fmt.Errorf("player-data service: delete: %w", err)
 	}
 	return nil
+}
+
+// ListForPlayer devolve todo o dado de um jogador num jogo (admin read).
+func (s *Service) ListForPlayer(ctx context.Context, gameID, playerID string) ([]domain.Entry, error) {
+	entries, err := s.repo.ListForPlayer(ctx, gameID, playerID)
+	if err != nil {
+		return nil, fmt.Errorf("player-data service: list for player: %w", err)
+	}
+	return entries, nil
 }
 
 // validateKey rejeita namespace/key fora do padrão (ErrInvalidKey).

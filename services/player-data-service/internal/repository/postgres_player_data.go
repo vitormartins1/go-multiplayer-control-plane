@@ -26,10 +26,10 @@ func NewPostgresPlayerDataRepository(pool *pgxpool.Pool) *PostgresPlayerDataRepo
 	return &PostgresPlayerDataRepository{pool: pool}
 }
 
-func (r *PostgresPlayerDataRepository) Get(ctx context.Context, playerID, namespace, key string) ([]byte, error) {
-	const q = `SELECT value FROM player_data WHERE player_id = $1 AND namespace = $2 AND key = $3`
+func (r *PostgresPlayerDataRepository) Get(ctx context.Context, gameID, playerID, namespace, key string) ([]byte, error) {
+	const q = `SELECT value FROM player_data WHERE game_id = $1 AND player_id = $2 AND namespace = $3 AND key = $4`
 	var value []byte
-	err := r.pool.QueryRow(ctx, q, playerID, namespace, key).Scan(&value)
+	err := r.pool.QueryRow(ctx, q, gameID, playerID, namespace, key).Scan(&value)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrNotFound
 	}
@@ -39,9 +39,9 @@ func (r *PostgresPlayerDataRepository) Get(ctx context.Context, playerID, namesp
 	return value, nil
 }
 
-func (r *PostgresPlayerDataRepository) GetNamespace(ctx context.Context, playerID, namespace string) (map[string][]byte, error) {
-	const q = `SELECT key, value FROM player_data WHERE player_id = $1 AND namespace = $2`
-	rows, err := r.pool.Query(ctx, q, playerID, namespace)
+func (r *PostgresPlayerDataRepository) GetNamespace(ctx context.Context, gameID, playerID, namespace string) (map[string][]byte, error) {
+	const q = `SELECT key, value FROM player_data WHERE game_id = $1 AND player_id = $2 AND namespace = $3`
+	rows, err := r.pool.Query(ctx, q, gameID, playerID, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("player-data repository: get namespace: %w", err)
 	}
@@ -59,23 +59,45 @@ func (r *PostgresPlayerDataRepository) GetNamespace(ctx context.Context, playerI
 	return out, rows.Err()
 }
 
-// Put faz upsert do valor. O cast $4::jsonb é necessário: passamos o JSON como
+// Put faz upsert do valor. O cast $5::jsonb é necessário: passamos o JSON como
 // texto e o Postgres o converte para JSONB (lição GO-LEARNINGS #09).
-func (r *PostgresPlayerDataRepository) Put(ctx context.Context, playerID, namespace, key string, value []byte) error {
-	const q = `INSERT INTO player_data (player_id, namespace, key, value, updated_at)
-	           VALUES ($1, $2, $3, $4::jsonb, now())
-	           ON CONFLICT (player_id, namespace, key) DO UPDATE
+func (r *PostgresPlayerDataRepository) Put(ctx context.Context, gameID, playerID, namespace, key string, value []byte) error {
+	const q = `INSERT INTO player_data (game_id, player_id, namespace, key, value, updated_at)
+	           VALUES ($1, $2, $3, $4, $5::jsonb, now())
+	           ON CONFLICT (game_id, player_id, namespace, key) DO UPDATE
 	             SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`
-	if _, err := r.pool.Exec(ctx, q, playerID, namespace, key, string(value)); err != nil {
+	if _, err := r.pool.Exec(ctx, q, gameID, playerID, namespace, key, string(value)); err != nil {
 		return fmt.Errorf("player-data repository: put: %w", err)
 	}
 	return nil
 }
 
-func (r *PostgresPlayerDataRepository) Delete(ctx context.Context, playerID, namespace, key string) error {
-	const q = `DELETE FROM player_data WHERE player_id = $1 AND namespace = $2 AND key = $3`
-	if _, err := r.pool.Exec(ctx, q, playerID, namespace, key); err != nil {
+func (r *PostgresPlayerDataRepository) Delete(ctx context.Context, gameID, playerID, namespace, key string) error {
+	const q = `DELETE FROM player_data WHERE game_id = $1 AND player_id = $2 AND namespace = $3 AND key = $4`
+	if _, err := r.pool.Exec(ctx, q, gameID, playerID, namespace, key); err != nil {
 		return fmt.Errorf("player-data repository: delete: %w", err)
 	}
 	return nil
+}
+
+// ListForPlayer devolve todo o dado de um jogador num jogo (admin read).
+func (r *PostgresPlayerDataRepository) ListForPlayer(ctx context.Context, gameID, playerID string) ([]domain.Entry, error) {
+	const q = `SELECT namespace, key, value FROM player_data
+	           WHERE game_id = $1 AND player_id = $2
+	           ORDER BY namespace, key`
+	rows, err := r.pool.Query(ctx, q, gameID, playerID)
+	if err != nil {
+		return nil, fmt.Errorf("player-data repository: list for player: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.Entry
+	for rows.Next() {
+		var e domain.Entry
+		if err := rows.Scan(&e.Namespace, &e.Key, &e.Value); err != nil {
+			return nil, fmt.Errorf("player-data repository: scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

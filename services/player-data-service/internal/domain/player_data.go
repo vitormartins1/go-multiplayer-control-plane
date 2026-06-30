@@ -8,20 +8,32 @@ package domain
 
 import "context"
 
-// PlayerDataService é a Port de entrada do player-data-service.
+// Entry é uma linha de dado do jogador (namespace/key/value), usada no admin
+// read (ListForPlayer) que alimenta a aba Player data do painel.
+type Entry struct {
+	Namespace string
+	Key       string
+	Value     []byte
+}
+
+// PlayerDataService é a Port de entrada do player-data-service. Todo acesso é
+// escopado por gameID (multi-tenant por jogo, ADR-0017).
 type PlayerDataService interface {
-	Get(ctx context.Context, playerID, namespace, key string) (value []byte, err error)
-	GetNamespace(ctx context.Context, playerID, namespace string) (map[string][]byte, error)
-	Put(ctx context.Context, playerID, namespace, key string, value []byte) error
-	Delete(ctx context.Context, playerID, namespace, key string) error
+	Get(ctx context.Context, gameID, playerID, namespace, key string) (value []byte, err error)
+	GetNamespace(ctx context.Context, gameID, playerID, namespace string) (map[string][]byte, error)
+	Put(ctx context.Context, gameID, playerID, namespace, key string, value []byte) error
+	Delete(ctx context.Context, gameID, playerID, namespace, key string) error
+	// ListForPlayer devolve todo o dado de um jogador num jogo (admin read).
+	ListForPlayer(ctx context.Context, gameID, playerID string) ([]Entry, error)
 }
 
 // PlayerDataRepository é a Port de saída de persistência (implementada em repository).
 type PlayerDataRepository interface {
-	Get(ctx context.Context, playerID, namespace, key string) (value []byte, err error)
-	GetNamespace(ctx context.Context, playerID, namespace string) (map[string][]byte, error)
-	Put(ctx context.Context, playerID, namespace, key string, value []byte) error
-	Delete(ctx context.Context, playerID, namespace, key string) error
+	Get(ctx context.Context, gameID, playerID, namespace, key string) (value []byte, err error)
+	GetNamespace(ctx context.Context, gameID, playerID, namespace string) (map[string][]byte, error)
+	Put(ctx context.Context, gameID, playerID, namespace, key string, value []byte) error
+	Delete(ctx context.Context, gameID, playerID, namespace, key string) error
+	ListForPlayer(ctx context.Context, gameID, playerID string) ([]Entry, error)
 }
 
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).

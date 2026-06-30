@@ -28,12 +28,16 @@ type ctxKey int
 
 const playerIDKey ctxKey = iota
 
-// Register monta as rotas (path params do Go 1.22), todas atrás do auth.
+// Register monta as rotas (path params do Go 1.22). As de jogador ficam atrás
+// do auth (JWT) e pegam o jogo do header X-Game-Id; a admin (jogo/jogador no
+// path) fica fora do JWT — protegida pela internal key no main (ADR-0018).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("PUT /me/data/{namespace}/{key}", h.auth(http.HandlerFunc(h.put)))
 	mux.Handle("GET /me/data/{namespace}/{key}", h.auth(http.HandlerFunc(h.get)))
 	mux.Handle("DELETE /me/data/{namespace}/{key}", h.auth(http.HandlerFunc(h.del)))
 	mux.Handle("GET /me/data/{namespace}", h.auth(http.HandlerFunc(h.getNamespace)))
+
+	mux.HandleFunc("GET /admin/games/{gameId}/players/{playerID}/data", h.adminListForPlayer)
 }
 
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
@@ -55,6 +59,11 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 }
 
 func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
+	gameID := gameHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request")
@@ -64,7 +73,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_value")
 		return
 	}
-	if err := h.svc.Put(r.Context(), playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key"), body); err != nil {
+	if err := h.svc.Put(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key"), body); err != nil {
 		writeDomainError(w, err)
 		return
 	}
@@ -72,7 +81,12 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	v, err := h.svc.Get(r.Context(), playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key"))
+	gameID := gameHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
+	v, err := h.svc.Get(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key"))
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -82,7 +96,12 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getNamespace(w http.ResponseWriter, r *http.Request) {
-	m, err := h.svc.GetNamespace(r.Context(), playerID(r.Context()), r.PathValue("namespace"))
+	gameID := gameHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
+	m, err := h.svc.GetNamespace(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"))
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -95,11 +114,28 @@ func (h *Handler) getNamespace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) del(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.Delete(r.Context(), playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key")); err != nil {
+	gameID := gameHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
+	if err := h.svc.Delete(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key")); err != nil {
 		writeDomainError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminListForPlayer devolve todo o dado do jogador {playerID} no jogo {gameId}
+// (endpoint admin, sem JWT — protegido pela internal key no main). Alimenta a
+// aba Player data do painel.
+func (h *Handler) adminListForPlayer(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.svc.ListForPlayer(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": toEntryDTOs(entries)})
 }
 
 // --- helpers ---
@@ -116,6 +152,27 @@ func bearerToken(r *http.Request) string {
 func playerID(ctx context.Context) string {
 	id, _ := ctx.Value(playerIDKey).(string)
 	return id
+}
+
+// gameHeader lê o jogo do header X-Game-Id (contexto ambiente do data plane).
+func gameHeader(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Game-Id"))
+}
+
+// entryDTO é a forma de saída do admin read. value sai como JSON cru
+// (RawMessage não re-serializa o JSONB do banco).
+type entryDTO struct {
+	Namespace string          `json:"namespace"`
+	Key       string          `json:"key"`
+	Value     json.RawMessage `json:"value"`
+}
+
+func toEntryDTOs(entries []domain.Entry) []entryDTO {
+	out := make([]entryDTO, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, entryDTO{Namespace: e.Namespace, Key: e.Key, Value: json.RawMessage(e.Value)})
+	}
+	return out
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
