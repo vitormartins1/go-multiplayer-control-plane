@@ -24,6 +24,8 @@ type AdminService interface {
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
+	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
+	CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -47,6 +49,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
+	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
+	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/save", h.cloudSave)
 }
 
 // topology nunca falha por causa do Prometheus: o service degrada (nós unknown).
@@ -174,6 +178,30 @@ func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
+// playerData: dado de gameplay do jogador no jogo (player-data).
+func (h *Handler) playerData(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.svc.PlayerData(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if entries == nil {
+		entries = []domain.PlayerDataEntry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// cloudSave: save do jogador no jogo (cloud-save). 404 (sem save) é repassado
+// via UpstreamError pelo writeUpstream.
+func (h *Handler) cloudSave(w http.ResponseWriter, r *http.Request) {
+	save, err := h.svc.CloudSave(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, save)
+}
+
 // decode lê o corpo JSON rejeitando campos desconhecidos.
 func decode(r *http.Request, v any) error {
 	dec := json.NewDecoder(r.Body)
@@ -198,6 +226,10 @@ func writeUpstream(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadGateway, "achievements_unavailable")
 	case errors.Is(err, domain.ErrLeaderboardUnavailable):
 		writeError(w, http.StatusBadGateway, "leaderboard_unavailable")
+	case errors.Is(err, domain.ErrPlayerDataUnavailable):
+		writeError(w, http.StatusBadGateway, "player_data_unavailable")
+	case errors.Is(err, domain.ErrCloudSaveUnavailable):
+		writeError(w, http.StatusBadGateway, "cloud_save_unavailable")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

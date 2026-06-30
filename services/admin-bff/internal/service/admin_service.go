@@ -12,19 +12,42 @@ import (
 	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
 )
 
-// Service agrega as fontes (Prometheus + achievements + identity) para os
-// painéis do admin.
+// Service agrega as fontes (Prometheus + serviços de jogo) para os painéis do
+// admin.
 type Service struct {
 	metrics     domain.MetricsSource
 	reader      domain.AchievementsReader
 	directory   domain.PlayerDirectory
 	registry    domain.GameRegistry
 	leaderboard domain.LeaderboardReader
+	playerData  domain.PlayerDataReader
+	cloudSave   domain.CloudSaveReader
+}
+
+// Deps reúne as Ports de saída do service. Struct (em vez de args posicionais)
+// porque já são 7 dependências: campos nomeados deixam o wire-up e os testes
+// legíveis e evitam erro de ordem.
+type Deps struct {
+	Metrics     domain.MetricsSource
+	Reader      domain.AchievementsReader
+	Directory   domain.PlayerDirectory
+	Registry    domain.GameRegistry
+	Leaderboard domain.LeaderboardReader
+	PlayerData  domain.PlayerDataReader
+	CloudSave   domain.CloudSaveReader
 }
 
 // New cria o service a partir das Ports de saída.
-func New(metrics domain.MetricsSource, reader domain.AchievementsReader, directory domain.PlayerDirectory, registry domain.GameRegistry, leaderboard domain.LeaderboardReader) *Service {
-	return &Service{metrics: metrics, reader: reader, directory: directory, registry: registry, leaderboard: leaderboard}
+func New(d Deps) *Service {
+	return &Service{
+		metrics:     d.Metrics,
+		reader:      d.Reader,
+		directory:   d.Directory,
+		registry:    d.Registry,
+		leaderboard: d.Leaderboard,
+		playerData:  d.PlayerData,
+		cloudSave:   d.CloudSave,
+	}
 }
 
 // Players delega ao directory (API admin do identity-service).
@@ -102,6 +125,17 @@ func (s *Service) LiveMetrics(ctx context.Context) (domain.LiveMetrics, error) {
 // PlayerAchievements delega ao reader (achievements do jogador no jogo).
 func (s *Service) PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
 	return s.reader.PlayerAchievements(ctx, gameID, playerID)
+}
+
+// PlayerData lê o dado de gameplay do jogador no jogo (player-data).
+func (s *Service) PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error) {
+	return s.playerData.ForPlayer(ctx, gameID, playerID)
+}
+
+// CloudSave lê o save do jogador no jogo (cloud-save). 404 (sem save) vira
+// UpstreamError, repassado pelo transport.
+func (s *Service) CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error) {
+	return s.cloudSave.ForPlayer(ctx, gameID, playerID)
 }
 
 // scalar roda uma instant query e devolve o primeiro valor (nil se a métrica

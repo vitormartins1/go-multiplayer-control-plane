@@ -31,6 +31,10 @@ type fakeService struct {
 	achErr    error
 	leaders   []domain.LeaderboardEntry
 	leadErr   error
+	pdata     []domain.PlayerDataEntry
+	pdataErr  error
+	save      domain.CloudSave
+	saveErr   error
 	gotGameID string
 	gotPlayer string
 	gotLimit  int
@@ -71,6 +75,14 @@ func (f *fakeService) PlayerAchievements(_ context.Context, gameID, playerID str
 func (f *fakeService) GameLeaderboard(_ context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
 	f.gotGameID, f.gotLimit = gameID, limit
 	return f.leaders, f.leadErr
+}
+func (f *fakeService) PlayerData(_ context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error) {
+	f.gotGameID, f.gotPlayer = gameID, playerID
+	return f.pdata, f.pdataErr
+}
+func (f *fakeService) CloudSave(_ context.Context, gameID, playerID string) (domain.CloudSave, error) {
+	f.gotGameID, f.gotPlayer = gameID, playerID
+	return f.save, f.saveErr
 }
 
 func newServer(svc AdminService) *httptest.Server {
@@ -291,6 +303,71 @@ func TestGameLeaderboard_Fora_502(t *testing.T) {
 	defer srv.Close()
 
 	resp := get(t, srv, "/api/games/game-9/leaderboard")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestPlayerData_PorJogo_200(t *testing.T) {
+	svc := &fakeService{pdata: []domain.PlayerDataEntry{{Namespace: "inventory", Key: "gold", Value: []byte(`100`)}}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/players/player-7/data")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "player-7", svc.gotPlayer)
+
+	var body []domain.PlayerDataEntry
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body, 1)
+	assert.Equal(t, "gold", body[0].Key)
+	assert.JSONEq(t, `100`, string(body[0].Value))
+}
+
+func TestPlayerData_Fora_502(t *testing.T) {
+	svc := &fakeService{pdataErr: domain.ErrPlayerDataUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g/players/x/data")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestCloudSave_200(t *testing.T) {
+	svc := &fakeService{save: domain.CloudSave{ContentType: "application/json", Size: 9, Blob: "eyJocCI6NTB9"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/players/player-7/save")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "player-7", svc.gotPlayer)
+
+	var body domain.CloudSave
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, 9, body.Size)
+	assert.Equal(t, "eyJocCI6NTB9", body.Blob)
+}
+
+func TestCloudSave_SemSave_Repassa404(t *testing.T) {
+	svc := &fakeService{saveErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "not_found"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g/players/x/save")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestCloudSave_Fora_502(t *testing.T) {
+	svc := &fakeService{saveErr: domain.ErrCloudSaveUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g/players/x/save")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }

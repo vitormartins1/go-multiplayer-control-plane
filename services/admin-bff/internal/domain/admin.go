@@ -5,6 +5,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -135,4 +136,37 @@ type AchievementsReader interface {
 	CreateAchievement(ctx context.Context, gameID string, a Achievement) error
 	// PlayerAchievements lê os achievements de um jogador no jogo.
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]PlayerAchievement, error)
+}
+
+// PlayerDataEntry é uma linha de dado de gameplay do jogador (player-data). O
+// Value é JSON opaco (RawMessage) — o BFF não interpreta o conteúdo.
+type PlayerDataEntry struct {
+	Namespace string          `json:"namespace"`
+	Key       string          `json:"key"`
+	Value     json.RawMessage `json:"value"`
+}
+
+// PlayerDataReader é a Port de saída para a API admin do player-data-service
+// (dado de gameplay por jogo+jogador, ADR-0017).
+type PlayerDataReader interface {
+	// ForPlayer lê todo o dado de um jogador num jogo.
+	// Indisponibilidade -> ErrPlayerDataUnavailable.
+	ForPlayer(ctx context.Context, gameID, playerID string) ([]PlayerDataEntry, error)
+}
+
+// CloudSave é o save de um jogador num jogo (cloud-save): metadados + conteúdo
+// em base64 (o blob é binário; o BFF só repassa).
+type CloudSave struct {
+	ContentType string    `json:"contentType"`
+	Size        int       `json:"size"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Blob        string    `json:"blob"` // base64 (std)
+}
+
+// CloudSaveReader é a Port de saída para a API admin do cloud-save-service
+// (save por jogo+jogador, ADR-0017).
+type CloudSaveReader interface {
+	// ForPlayer lê o save de um jogador num jogo. Ausência (404) vira
+	// UpstreamError(404) (repassado); indisponibilidade -> ErrCloudSaveUnavailable.
+	ForPlayer(ctx context.Context, gameID, playerID string) (CloudSave, error)
 }
