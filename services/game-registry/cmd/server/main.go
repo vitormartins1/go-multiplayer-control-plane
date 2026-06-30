@@ -92,7 +92,7 @@ func run(log *slog.Logger) error {
 	if internalKey == "" {
 		log.Warn("INTERNAL_API_KEY ausente — /games vai negar (401); configure a chave")
 	}
-	guarded := auth.RequireInternalKey(internalKey, "/games")(mux)
+	guarded := auth.RequireInternalKey(internalKey, "/games", "/players")(mux)
 
 	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(guarded)), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {

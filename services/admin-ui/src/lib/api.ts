@@ -151,4 +151,6 @@ export const api = {
     ),
   gamePlayers: (gameId: string, signal?: AbortSignal) =>
     getJSON<GamePlayer[]>(`/api/games/${encodeURIComponent(gameId)}/players`, signal),
+  gamesOfPlayer: (playerID: string, signal?: AbortSignal) =>
+    getJSON<Game[]>(`/api/players/${encodeURIComponent(playerID)}/games`, signal),
 };

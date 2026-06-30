@@ -1,10 +1,11 @@
 import { Anchor, Breadcrumbs, Stack, Tabs, Text, Title } from "@mantine/core";
-import { IconChartBar, IconSettings, IconTrophy } from "@tabler/icons-react";
+import { IconChartBar, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { GameAchievements } from "./GameAchievements";
 import { GameLeaderboards } from "./GameLeaderboards";
+import { GamePlayers } from "./GamePlayers";
 import { ComingSoon } from "../components/ComingSoon";
 
 export function GameDetail() {
@@ -30,6 +31,9 @@ export function GameDetail() {
           <Tabs.Tab value="leaderboards" leftSection={<IconChartBar size={16} />}>
             Leaderboards
           </Tabs.Tab>
+          <Tabs.Tab value="players" leftSection={<IconUsers size={16} />}>
+            Players
+          </Tabs.Tab>
           <Tabs.Tab value="settings" leftSection={<IconSettings size={16} />}>
             Configurações
           </Tabs.Tab>
@@ -40,6 +44,9 @@ export function GameDetail() {
         </Tabs.Panel>
         <Tabs.Panel value="leaderboards" pt="md">
           <GameLeaderboards gameId={gameId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="players" pt="md">
+          <GamePlayers gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="md">
           <ComingSoon what="Configurações do jogo" />

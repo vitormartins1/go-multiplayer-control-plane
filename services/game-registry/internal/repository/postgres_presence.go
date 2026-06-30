@@ -41,6 +41,35 @@ func (r *PostgresPresenceRepository) Upsert(ctx context.Context, gameID, playerI
 	return nil
 }
 
+// GamesByPlayer devolve os jogos em que o player está presente (consulta
+// reversa: JOIN game_players × games), por nome. Mesmas colunas/COALESCE do
+// repo de games (capa, 003).
+func (r *PostgresPresenceRepository) GamesByPlayer(ctx context.Context, playerID string) ([]domain.Game, error) {
+	const q = `SELECT g.id, g.slug, g.name, g.created_at,
+	                  COALESCE(g.image, ''), g.image_source,
+	                  COALESCE(g.generated_image_seed, g.slug), g.generated_image_style
+	           FROM games g
+	           JOIN game_players gp ON gp.game_id = g.id
+	           WHERE gp.player_id = $1
+	           ORDER BY g.name ASC`
+	rows, err := r.pool.Query(ctx, q, playerID)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry repository: games by player: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.Game
+	for rows.Next() {
+		var g domain.Game
+		if err := rows.Scan(&g.ID, &g.Slug, &g.Name, &g.CreatedAt,
+			&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle); err != nil {
+			return nil, fmt.Errorf("game-registry repository: games by player: scan: %w", err)
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 func (r *PostgresPresenceRepository) ListByGame(ctx context.Context, gameID string) ([]domain.Presence, error) {
 	const q = `SELECT player_id, handle, first_seen FROM game_players
 	           WHERE game_id = $1 ORDER BY first_seen ASC`

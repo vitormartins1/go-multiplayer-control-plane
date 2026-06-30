@@ -50,9 +50,10 @@ type fakeRegistry struct {
 	created   *domain.Game
 	players   []domain.GamePlayer
 	err       error
-	gotSlug   string
-	gotName   string
-	gotGameID string
+	gotSlug     string
+	gotName     string
+	gotGameID   string
+	gotPlayerID string
 }
 
 func (f *fakeRegistry) ListGames(_ context.Context) ([]domain.Game, error) {
@@ -68,6 +69,10 @@ func (f *fakeRegistry) CreateGame(_ context.Context, slug, name string) (*domain
 func (f *fakeRegistry) PlayersOf(_ context.Context, gameID string) ([]domain.GamePlayer, error) {
 	f.gotGameID = gameID
 	return f.players, f.err
+}
+func (f *fakeRegistry) GamesOfPlayer(_ context.Context, playerID string) ([]domain.Game, error) {
+	f.gotPlayerID = playerID
+	return f.games, f.err
 }
 
 type fakeLeaderboard struct {
@@ -274,6 +279,15 @@ func TestGamePlayers_DelegaAoRegistry(t *testing.T) {
 	assert.Equal(t, "game-9", reg.gotGameID)
 	require.Len(t, got, 1)
 	assert.Equal(t, "Alice", got[0].Handle)
+}
+
+func TestPlayerGames_DelegaAoRegistry(t *testing.T) {
+	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Slug: "tetris", Name: "Tetris"}}}
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).PlayerGames(context.Background(), "p1")
+	require.NoError(t, err)
+	assert.Equal(t, "p1", reg.gotPlayerID)
+	require.Len(t, got, 1)
+	assert.Equal(t, "tetris", got[0].Slug)
 }
 
 func TestPlayerData_DelegaComJogoEPlayer(t *testing.T) {

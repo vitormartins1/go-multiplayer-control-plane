@@ -22,6 +22,8 @@ type PresenceService interface {
 	Mark(ctx context.Context, gameID, playerID, handle string) error
 	// PlayersOf devolve a base do jogo por first_seen (asc).
 	PlayersOf(ctx context.Context, gameID string) ([]Presence, error)
+	// GamesOf devolve os jogos em que o player está presente (consulta reversa).
+	GamesOf(ctx context.Context, playerID string) ([]Game, error)
 }
 
 // PresenceRepository é a Port de saída de persistência da presença.
@@ -31,4 +33,7 @@ type PresenceRepository interface {
 	Upsert(ctx context.Context, gameID, playerID, handle string) error
 	// ListByGame devolve a base do jogo por first_seen (asc).
 	ListByGame(ctx context.Context, gameID string) ([]Presence, error)
+	// GamesByPlayer devolve os jogos em que o player está presente (JOIN com
+	// games), por nome (asc).
+	GamesByPlayer(ctx context.Context, playerID string) ([]Game, error)
 }

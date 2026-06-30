@@ -43,6 +43,11 @@ func (m *mockPresence) PlayersOf(ctx context.Context, gameID string) ([]domain.P
 	ps, _ := args.Get(0).([]domain.Presence)
 	return ps, args.Error(1)
 }
+func (m *mockPresence) GamesOf(ctx context.Context, playerID string) ([]domain.Game, error) {
+	args := m.Called(ctx, playerID)
+	gs, _ := args.Get(0).([]domain.Game)
+	return gs, args.Error(1)
+}
 
 func newServer(svc domain.GameService) http.Handler {
 	return newServerWith(svc, new(mockPresence))
@@ -154,6 +159,21 @@ func TestMarkPresence_JogoInexistente_404(t *testing.T) {
 	pres.On("Mark", mock.Anything, "nope", "p1", "Alice").Return(domain.ErrGameNotFound)
 	rr := do(newServerWith(new(mockService), pres), http.MethodPut, "/games/nope/players/p1", `{"handle":"Alice"}`)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestPlayerGames_200(t *testing.T) {
+	pres := new(mockPresence)
+	pres.On("GamesOf", mock.Anything, "p1").Return([]domain.Game{
+		{ID: "g1", Slug: "tetris", Name: "Tetris", GeneratedImageSeed: "tetris"},
+	}, nil)
+	rr := do(newServerWith(new(mockService), pres), http.MethodGet, "/players/p1/games", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp []map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, "tetris", resp[0]["slug"])
+	assert.Equal(t, "tetris", resp[0]["generatedImageSeed"])
 }
 
 func TestListPlayers_200(t *testing.T) {

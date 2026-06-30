@@ -128,6 +128,8 @@ type GameRegistry interface {
 	CreateGame(ctx context.Context, slug, name string) (*Game, error)
 	// PlayersOf lê a player base do jogo (presença, ADR-0019).
 	PlayersOf(ctx context.Context, gameID string) ([]GamePlayer, error)
+	// GamesOfPlayer lê os jogos em que o player está presente (consulta reversa).
+	GamesOfPlayer(ctx context.Context, playerID string) ([]Game, error)
 }
 
 // LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).

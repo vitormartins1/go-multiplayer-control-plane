@@ -96,3 +96,18 @@ func TestPlayersOf_HTTP500_Unavailable(t *testing.T) {
 	_, err := New(srv.URL, srv.Client()).PlayersOf(context.Background(), "game-1")
 	assert.ErrorIs(t, err, domain.ErrGameRegistryUnavailable)
 }
+
+func TestGamesOfPlayer_200(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`[{"id":"g1","slug":"tetris","name":"Tetris","generatedImageSeed":"tetris"}]`))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).GamesOfPlayer(context.Background(), "p1")
+	require.NoError(t, err)
+	assert.Equal(t, "/players/p1/games", gotPath)
+	require.Len(t, got, 1)
+	assert.Equal(t, "tetris", got[0].Slug)
+}

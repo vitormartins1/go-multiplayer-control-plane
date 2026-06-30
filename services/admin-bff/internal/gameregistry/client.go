@@ -87,6 +87,25 @@ func (c *Client) PlayersOf(ctx context.Context, gameID string) ([]domain.GamePla
 	return players, nil
 }
 
+// GamesOfPlayer lê os jogos em que o player está presente (consulta reversa).
+func (c *Client) GamesOfPlayer(ctx context.Context, playerID string) ([]domain.Game, error) {
+	u := c.baseURL + "/players/" + url.PathEscape(playerID) + "/games"
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if err := classify(resp); err != nil {
+		return nil, err
+	}
+	var games []domain.Game
+	if err := json.NewDecoder(resp.Body).Decode(&games); err != nil {
+		return nil, fmt.Errorf("gameregistry: decode: %w", err)
+	}
+	return games, nil
+}
+
 // classify mapeia a resposta do upstream: 2xx -> nil; 4xx -> UpstreamError (status
 // + code do corpo); conn/5xx (já tratado no Do) ou 5xx -> ErrGameRegistryUnavailable.
 func classify(resp *http.Response) error {
