@@ -1,7 +1,7 @@
 # Spec: 006-player-tabs
 
 **Serviço:** admin-bff (+ admin-ui)
-**Status:** Draft (preparada — depende de player-data/002 e cloud-save/002)
+**Status:** Implementada (2026-06-30)
 **Data:** 2026-06-30
 
 ## Contexto
@@ -22,9 +22,9 @@ Acende as abas **Player data** e **Cloud saves** do detalhe do jogador no painel
 - admin-ui: `api.playerData(gameId, playerID)`, `api.cloudSave(gameId, playerID)`; componentes `PlayerDataView`, `CloudSaveView` nas abas (com seletor de jogo)
 
 ## Casos de Teste Obrigatórios
-- [ ] (bff) ambos os endpoints 200 + 502 quando upstream fora
-- [ ] (bff) `/save` repassa 404 quando não há save
-- [ ] (ui) abas listam dados; estados vazio/erro; build ok
+- [x] (bff) ambos os endpoints 200 + 502 quando upstream fora
+- [x] (bff) `/save` repassa 404 quando não há save
+- [x] (ui) abas listam dados; estados vazio/erro; build ok
 
 ## Fora do escopo
 - Edição pelo painel (read-only)

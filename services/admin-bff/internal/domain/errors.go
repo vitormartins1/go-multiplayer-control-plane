@@ -21,6 +21,12 @@ var (
 	// ErrLeaderboardUnavailable indica que o leaderboard-service está
 	// inacessível. O transport mapeia -> 502.
 	ErrLeaderboardUnavailable = errors.New("admin: leaderboard source unavailable")
+	// ErrPlayerDataUnavailable indica que o player-data-service está
+	// inacessível. O transport mapeia -> 502.
+	ErrPlayerDataUnavailable = errors.New("admin: player-data source unavailable")
+	// ErrCloudSaveUnavailable indica que o cloud-save-service está inacessível.
+	// O transport mapeia -> 502.
+	ErrCloudSaveUnavailable = errors.New("admin: cloud-save source unavailable")
 )
 
 // UpstreamError carrega um erro de validação (4xx) repassado de um serviço

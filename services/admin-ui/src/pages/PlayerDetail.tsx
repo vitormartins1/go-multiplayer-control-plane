@@ -2,7 +2,8 @@ import { Anchor, Breadcrumbs, Stack, Tabs, Text, Title } from "@mantine/core";
 import { IconCloud, IconDatabase, IconTrophy } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 import { PlayerAchievements } from "./PlayerAchievements";
-import { ComingSoon } from "../components/ComingSoon";
+import { PlayerDataView } from "./PlayerDataView";
+import { CloudSaveView } from "./CloudSaveView";
 
 export function PlayerDetail() {
   const { playerId = "" } = useParams();
@@ -37,10 +38,10 @@ export function PlayerDetail() {
           <PlayerAchievements playerId={playerId} />
         </Tabs.Panel>
         <Tabs.Panel value="player-data" pt="md">
-          <ComingSoon what="Dados do jogador (player-data)" />
+          <PlayerDataView playerId={playerId} />
         </Tabs.Panel>
         <Tabs.Panel value="cloud-saves" pt="md">
-          <ComingSoon what="Cloud saves do jogador" />
+          <CloudSaveView playerId={playerId} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

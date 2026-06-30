@@ -69,6 +69,19 @@ export interface LeaderEntry {
   score: number;
 }
 
+export interface PlayerDataEntry {
+  namespace: string;
+  key: string;
+  value: unknown; // JSON opaco do save de gameplay
+}
+
+export interface CloudSave {
+  contentType: string;
+  size: number;
+  updatedAt: string;
+  blob: string; // base64
+}
+
 // HttpError carrega o status para a UI distinguir 502/409/400 etc.
 export class HttpError extends Error {
   constructor(public status: number) {
@@ -112,6 +125,16 @@ export const api = {
   gameLeaderboard: (gameId: string, limit = 20, signal?: AbortSignal) =>
     getJSON<LeaderEntry[]>(
       `/api/games/${encodeURIComponent(gameId)}/leaderboard?limit=${limit}`,
+      signal,
+    ),
+  playerData: (gameId: string, playerID: string, signal?: AbortSignal) =>
+    getJSON<PlayerDataEntry[]>(
+      `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/data`,
+      signal,
+    ),
+  cloudSave: (gameId: string, playerID: string, signal?: AbortSignal) =>
+    getJSON<CloudSave>(
+      `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/save`,
       signal,
     ),
 };

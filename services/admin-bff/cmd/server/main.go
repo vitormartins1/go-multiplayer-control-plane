@@ -19,9 +19,11 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	achievementsclient "github.com/c130n/game-backend/services/admin-bff/internal/achievements"
+	cloudsaveclient "github.com/c130n/game-backend/services/admin-bff/internal/cloudsave"
 	gameregistryclient "github.com/c130n/game-backend/services/admin-bff/internal/gameregistry"
 	identityclient "github.com/c130n/game-backend/services/admin-bff/internal/identity"
 	leaderboardclient "github.com/c130n/game-backend/services/admin-bff/internal/leaderboard"
+	playerdataclient "github.com/c130n/game-backend/services/admin-bff/internal/playerdata"
 	prometheusclient "github.com/c130n/game-backend/services/admin-bff/internal/prometheus"
 	"github.com/c130n/game-backend/services/admin-bff/internal/service"
 	"github.com/c130n/game-backend/services/admin-bff/internal/transport"
@@ -81,6 +83,14 @@ func run(log *slog.Logger) error {
 	if leaderboardURL == "" {
 		log.Warn("LEADERBOARD_URL ausente — a aba Leaderboards vai falhar; aponte para o leaderboard-service")
 	}
+	playerDataURL := os.Getenv("PLAYER_DATA_URL")
+	if playerDataURL == "" {
+		log.Warn("PLAYER_DATA_URL ausente — a aba Player data vai falhar; aponte para o player-data-service")
+	}
+	cloudSaveURL := os.Getenv("CLOUD_SAVE_URL")
+	if cloudSaveURL == "" {
+		log.Warn("CLOUD_SAVE_URL ausente — a aba Cloud saves vai falhar; aponte para o cloud-save-service")
+	}
 
 	internalKey := os.Getenv("INTERNAL_API_KEY")
 	if internalKey == "" {
@@ -93,12 +103,15 @@ func run(log *slog.Logger) error {
 		Timeout:   5 * time.Second,
 		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
 	}
-	metrics := prometheusclient.New(promURL, httpClient)
-	reader := achievementsclient.New(achURL, httpClient)
-	directory := identityclient.New(identityURL, httpClient)
-	registry := gameregistryclient.New(gameRegistryURL, httpClient)
-	leaderboard := leaderboardclient.New(leaderboardURL, httpClient)
-	svc := service.New(metrics, reader, directory, registry, leaderboard)
+	svc := service.New(service.Deps{
+		Metrics:     prometheusclient.New(promURL, httpClient),
+		Reader:      achievementsclient.New(achURL, httpClient),
+		Directory:   identityclient.New(identityURL, httpClient),
+		Registry:    gameregistryclient.New(gameRegistryURL, httpClient),
+		Leaderboard: leaderboardclient.New(leaderboardURL, httpClient),
+		PlayerData:  playerdataclient.New(playerDataURL, httpClient),
+		CloudSave:   cloudsaveclient.New(cloudSaveURL, httpClient),
+	})
 
 	red := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)
 
