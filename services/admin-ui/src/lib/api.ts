@@ -63,6 +63,12 @@ export interface NewAchievement {
   target: number;
 }
 
+export interface LeaderEntry {
+  rank: number;
+  playerId: string;
+  score: number;
+}
+
 // HttpError carrega o status para a UI distinguir 502/409/400 etc.
 export class HttpError extends Error {
   constructor(public status: number) {
@@ -101,6 +107,11 @@ export const api = {
   playerAchievements: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerAchievement[]>(
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/achievements`,
+      signal,
+    ),
+  gameLeaderboard: (gameId: string, limit = 20, signal?: AbortSignal) =>
+    getJSON<LeaderEntry[]>(
+      `/api/games/${encodeURIComponent(gameId)}/leaderboard?limit=${limit}`,
       signal,
     ),
 };

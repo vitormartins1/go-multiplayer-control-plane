@@ -1,0 +1,69 @@
+// Package leaderboard é o adapter de saída que lê a API admin do
+// leaderboard-service (top-N por jogo, ADR-0017) e satisfaz
+// domain.LeaderboardReader. Indisponibilidade vira domain.ErrLeaderboardUnavailable.
+package leaderboard
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
+)
+
+var _ domain.LeaderboardReader = (*Client)(nil)
+
+// Client lê o leaderboard-service em baseURL (ex.: http://leaderboard-service:8080).
+type Client struct {
+	baseURL string
+	http    *http.Client
+}
+
+// New cria o client. O httpClient permite injetar timeout/transport (otelhttp +
+// internal key).
+func New(baseURL string, httpClient *http.Client) *Client {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 5 * time.Second}
+	}
+	return &Client{baseURL: baseURL, http: httpClient}
+}
+
+// topResponse é o shape de GET /admin/games/{g}/leaderboard.
+type topResponse struct {
+	Entries []struct {
+		Rank     int64  `json:"rank"`
+		PlayerID string `json:"playerId"`
+		Score    int64  `json:"score"`
+	} `json:"entries"`
+}
+
+// TopForGame lê o top-N do jogo.
+func (c *Client) TopForGame(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
+	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/leaderboard"
+	if limit > 0 {
+		u += "?limit=" + strconv.Itoa(limit)
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrLeaderboardUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: status %d", domain.ErrLeaderboardUnavailable, resp.StatusCode)
+	}
+
+	var body topResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("leaderboard: decode: %w", err)
+	}
+	out := make([]domain.LeaderboardEntry, 0, len(body.Entries))
+	for _, e := range body.Entries {
+		out = append(out, domain.LeaderboardEntry{Rank: e.Rank, PlayerID: e.PlayerID, Score: e.Score})
+	}
+	return out, nil
+}

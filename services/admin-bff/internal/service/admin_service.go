@@ -15,15 +15,16 @@ import (
 // Service agrega as fontes (Prometheus + achievements + identity) para os
 // painéis do admin.
 type Service struct {
-	metrics   domain.MetricsSource
-	reader    domain.AchievementsReader
-	directory domain.PlayerDirectory
-	registry  domain.GameRegistry
+	metrics     domain.MetricsSource
+	reader      domain.AchievementsReader
+	directory   domain.PlayerDirectory
+	registry    domain.GameRegistry
+	leaderboard domain.LeaderboardReader
 }
 
 // New cria o service a partir das Ports de saída.
-func New(metrics domain.MetricsSource, reader domain.AchievementsReader, directory domain.PlayerDirectory, registry domain.GameRegistry) *Service {
-	return &Service{metrics: metrics, reader: reader, directory: directory, registry: registry}
+func New(metrics domain.MetricsSource, reader domain.AchievementsReader, directory domain.PlayerDirectory, registry domain.GameRegistry, leaderboard domain.LeaderboardReader) *Service {
+	return &Service{metrics: metrics, reader: reader, directory: directory, registry: registry, leaderboard: leaderboard}
 }
 
 // Players delega ao directory (API admin do identity-service).
@@ -49,6 +50,11 @@ func (s *Service) GameCatalog(ctx context.Context, gameID string) ([]domain.Achi
 // CreateAchievement cadastra uma conquista no jogo (achievements).
 func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error {
 	return s.reader.CreateAchievement(ctx, gameID, a)
+}
+
+// GameLeaderboard lê o top-N do jogo (leaderboard).
+func (s *Service) GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
+	return s.leaderboard.TopForGame(ctx, gameID, limit)
 }
 
 // Topology monta o mapa de serviços com o status up/down vindo de `up{}`. Se o

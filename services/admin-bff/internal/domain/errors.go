@@ -18,6 +18,9 @@ var (
 	// ErrGameRegistryUnavailable indica que o game-registry está inacessível. O
 	// transport mapeia -> 502.
 	ErrGameRegistryUnavailable = errors.New("admin: game-registry source unavailable")
+	// ErrLeaderboardUnavailable indica que o leaderboard-service está
+	// inacessível. O transport mapeia -> 502.
+	ErrLeaderboardUnavailable = errors.New("admin: leaderboard source unavailable")
 )
 
 // UpstreamError carrega um erro de validação (4xx) repassado de um serviço

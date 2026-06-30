@@ -29,6 +29,8 @@ type fakeService struct {
 	catErr    error
 	ach       []domain.PlayerAchievement
 	achErr    error
+	leaders   []domain.LeaderboardEntry
+	leadErr   error
 	gotGameID string
 	gotPlayer string
 	gotLimit  int
@@ -65,6 +67,10 @@ func (f *fakeService) CreateAchievement(_ context.Context, gameID string, _ doma
 func (f *fakeService) PlayerAchievements(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
 	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.ach, f.achErr
+}
+func (f *fakeService) GameLeaderboard(_ context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotLimit = gameID, limit
+	return f.leaders, f.leadErr
 }
 
 func newServer(svc AdminService) *httptest.Server {
@@ -258,6 +264,33 @@ func TestPlayerAchievements_FonteFora_502(t *testing.T) {
 	defer srv.Close()
 
 	resp := get(t, srv, "/api/games/g/players/x/achievements")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestGameLeaderboard_200(t *testing.T) {
+	svc := &fakeService{leaders: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/leaderboard?limit=5")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, 5, svc.gotLimit)
+
+	var body []domain.LeaderboardEntry
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body, 1)
+	assert.Equal(t, "bob", body[0].PlayerID)
+}
+
+func TestGameLeaderboard_Fora_502(t *testing.T) {
+	svc := &fakeService{leadErr: domain.ErrLeaderboardUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/leaderboard")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
