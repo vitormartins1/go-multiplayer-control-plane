@@ -22,17 +22,24 @@ func New(store domain.SaveStore) *Service {
 	return &Service{store: store}
 }
 
-func (s *Service) Save(ctx context.Context, playerID string, snapshot domain.Snapshot) error {
-	if err := s.store.Put(ctx, playerID, snapshot); err != nil {
+func (s *Service) Save(ctx context.Context, gameID, playerID string, snapshot domain.Snapshot) error {
+	if err := s.store.Put(ctx, gameID, playerID, snapshot); err != nil {
 		return fmt.Errorf("cloud-save service: save: %w", err)
 	}
 	return nil
 }
 
-func (s *Service) Load(ctx context.Context, playerID string) (domain.Snapshot, error) {
-	snap, err := s.store.Get(ctx, playerID)
+func (s *Service) Load(ctx context.Context, gameID, playerID string) (domain.Snapshot, error) {
+	snap, err := s.store.Get(ctx, gameID, playerID)
 	if err != nil {
 		return domain.Snapshot{}, fmt.Errorf("cloud-save service: load: %w", err)
 	}
 	return snap, nil
+}
+
+// LoadFor é o read administrativo do save de um jogador num jogo. Mesma
+// operação do Load (escopo por jogo); o nome separa a intenção admin no
+// transport (jogo/jogador vêm do path, não do JWT).
+func (s *Service) LoadFor(ctx context.Context, gameID, playerID string) (domain.Snapshot, error) {
+	return s.Load(ctx, gameID, playerID)
 }

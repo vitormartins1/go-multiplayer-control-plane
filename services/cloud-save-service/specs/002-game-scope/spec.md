@@ -1,7 +1,7 @@
 # Spec: 002-game-scope
 
 **Serviço:** cloud-save-service
-**Status:** Draft (preparada para implementação — ver docs/NEXT-STEPS.md)
+**Status:** Implementada (2026-06-30)
 **Data:** 2026-06-30
 
 ## Contexto
@@ -30,10 +30,10 @@ Padrão de referência: `leaderboard/002-game-scope` (key por jogo no store) e `
 - Guard `auth.RequireInternalKey(key, "/admin")` no main; `INTERNAL_API_KEY` no compose.
 
 ## Casos de Teste Obrigatórios
-- [ ] Save/Load isolados por jogo (save no jogo A não aparece no B)
-- [ ] player-facing sem `X-Game-Id` -> `400`
-- [ ] `GET /admin/games/{g}/players/{p}/save` -> save do jogador; `404` se ausente
-- [ ] `/admin/...` exige internal key
+- [x] Save/Load isolados por jogo (save no jogo A não aparece no B)
+- [x] player-facing sem `X-Game-Id` -> `400`
+- [x] `GET /admin/games/{g}/players/{p}/save` -> save do jogador; `404` se ausente
+- [x] `/admin/...` exige internal key
 
 ## Open Questions (resolver no plan)
 - Admin read devolve o **conteúdo** do snapshot ou só **metadados** (tamanho/updatedAt)? Recomendado: metadados + conteúdo (saves são pequenos no MVP); o painel mostra metadados e um preview/download.
