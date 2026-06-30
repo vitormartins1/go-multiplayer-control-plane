@@ -15,15 +15,15 @@ O **gameplay loop** está fechado e observável no painel:
 
 ADRs relevantes recentes: 0016 (painel BFF), 0017 (multi-tenant game-registry), 0018 (service auth).
 
-## Specs preparadas (prontas para implementar, nesta ordem)
+## Specs preparadas — ✅ TODAS CONCLUÍDAS (2026-06-30)
 
 > Padrão de referência já no repo: `achievements/004-game-scope`, `achievements/003-admin-read`, `leaderboard/002-game-scope`, `admin-bff/005-leaderboard-panel`.
 
-1. ~~**`services/player-data-service/specs/002-game-scope`**~~ — ✅ **feito** (2026-06-30): game_id na PK + admin read (`GET /admin/games/{g}/players/{p}/data`) + guard internal key.
-2. ~~**`services/cloud-save-service/specs/002-game-scope`**~~ — ✅ **feito** (2026-06-30): key S3 `{gameID}/{playerID}` + admin read (`GET /admin/games/{g}/players/{p}/save`, metadados + blob base64) + guard.
-3. **`services/admin-bff/specs/006-player-tabs`** — acende as abas **Player data** e **Cloud saves** do jogador no painel (bff + ui). **Depende de 1 e 2 (ambas feitas) → próximo.**
+1. ~~**`services/player-data-service/specs/002-game-scope`**~~ — ✅ **feito**: game_id na PK + admin read (`GET /admin/games/{g}/players/{p}/data`) + guard internal key.
+2. ~~**`services/cloud-save-service/specs/002-game-scope`**~~ — ✅ **feito**: key S3 `{gameID}/{playerID}` + admin read (`GET /admin/games/{g}/players/{p}/save`, metadados + blob base64) + guard.
+3. ~~**`services/admin-bff/specs/006-player-tabs`**~~ — ✅ **feito**: abas **Player data** e **Cloud saves** do jogador no painel (bff + ui), consumindo os admin reads de 1 e 2.
 
-Cada uma tem spec/plan/tasks. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+Com isso, **todo o detalhe do jogador está aceso no painel** (Achievements + Player data + Cloud saves). Próximas frentes ficam no backlog abaixo (sem spec ainda) — a mais natural é **CI (GitHub Actions)** ou abrir uma nova spec SDD. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
 
 ## CI (GitHub Actions) — ainda não existe `.github/workflows/`
 
