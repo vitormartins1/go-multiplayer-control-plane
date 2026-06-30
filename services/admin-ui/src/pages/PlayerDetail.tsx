@@ -5,6 +5,7 @@ import { PlayerAchievements } from "./PlayerAchievements";
 import { PlayerDataView } from "./PlayerDataView";
 import { CloudSaveView } from "./CloudSaveView";
 import { useGames } from "../lib/games";
+import { PlayerAvatar } from "../components/PlayerAvatar";
 
 export function PlayerDetail() {
   const { playerId = "" } = useParams();
@@ -21,12 +22,15 @@ export function PlayerDetail() {
         <Text>{playerId.slice(0, 8)}…</Text>
       </Breadcrumbs>
       <Group justify="space-between" align="flex-end">
-        <div>
-          <Title order={3}>Jogador</Title>
-          <Text c="dimmed" size="sm" mt={-4}>
-            {playerId}
-          </Text>
-        </div>
+        <Group>
+          <PlayerAvatar seed={playerId} size={48} />
+          <div>
+            <Title order={3}>Jogador</Title>
+            <Text c="dimmed" size="sm" mt={-4}>
+              {playerId}
+            </Text>
+          </div>
+        </Group>
         {activeGame ? (
           <Badge variant="light" size="lg">
             Jogo: {activeGame.name}
