@@ -1,12 +1,27 @@
 import { AspectRatio, Box, Text } from "@mantine/core";
+import { useMemo } from "react";
+import { createAvatar, type Style } from "@dicebear/core";
+import { glass, rings, shapes } from "@dicebear/collection";
 import type { Game } from "../lib/api";
 
-// hueFromSlug deriva um matiz estável (0–359) do slug — mesma capa para o mesmo
-// jogo sempre. Hash simples (djb2-ish) suficiente para espalhar as cores.
-function hueFromSlug(slug: string): number {
-  let h = 0;
-  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) | 0;
-  return Math.abs(h) % 360;
+// Estilos suportados (abstratos/geométricos, não-avatar). O backend manda o
+// nome em generatedImageStyle; trocar/adicionar gerador é só mexer aqui.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const STYLES: Record<string, Style<any>> = { shapes, glass, rings };
+const DEFAULT_STYLE = "shapes";
+
+// coverSeed: a seed determinística da capa. Cai no slug se o backend não mandou
+// generatedImageSeed (registros antigos / respostas sem o campo).
+export function coverSeed(game: Game): string {
+  return game.generatedImageSeed || game.slug;
+}
+
+// coverDataUri gera a imagem determinística (DiceBear) como data-URI SVG. Se no
+// futuro houver upload (imageSource="upload" + image), usa a imagem direto.
+function coverDataUri(game: Game): string {
+  if (game.imageSource === "upload" && game.image) return game.image;
+  const style = STYLES[game.generatedImageStyle ?? DEFAULT_STYLE] ?? shapes;
+  return createAvatar(style, { seed: coverSeed(game) }).toDataUri();
 }
 
 function initial(name: string): string {
@@ -18,12 +33,11 @@ interface GameCoverProps {
   variant?: "cover" | "mini";
 }
 
-// GameCover é a capa procedural de um jogo (placeholder até existir coverUrl
-// real no game-registry). "cover" = card 9:16 da biblioteca; "mini" = swatch
+// GameCover é a capa procedural/determinística de um jogo (003-generated-cover).
+// "cover" = card 9:16 da biblioteca (imagem + faixa com o nome); "mini" = swatch
 // quadrado para o seletor do header.
 export function GameCover({ game, variant = "cover" }: GameCoverProps) {
-  const hue = hueFromSlug(game.slug);
-  const gradient = `linear-gradient(135deg, hsl(${hue}, 58%, 38%), hsl(${(hue + 40) % 360}, 62%, 20%))`;
+  const uri = useMemo(() => coverDataUri(game), [game.id, game.generatedImageSeed, game.generatedImageStyle, game.slug, game.image, game.imageSource]);
 
   if (variant === "mini") {
     return (
@@ -31,18 +45,14 @@ export function GameCover({ game, variant = "cover" }: GameCoverProps) {
         w={28}
         h={28}
         style={{
-          background: gradient,
           borderRadius: 6,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          overflow: "hidden",
           flexShrink: 0,
+          backgroundImage: `url("${uri}")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
         }}
-      >
-        <Text fw={700} size="sm" c="white">
-          {initial(game.name)}
-        </Text>
-      </Box>
+      />
     );
   }
 
@@ -50,26 +60,35 @@ export function GameCover({ game, variant = "cover" }: GameCoverProps) {
     <AspectRatio ratio={9 / 16}>
       <Box
         style={{
-          background: gradient,
           borderRadius: 10,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          padding: 12,
           overflow: "hidden",
+          position: "relative",
+          backgroundImage: `url("${uri}")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
         }}
       >
-        <Text fw={800} size="3rem" c="rgba(255,255,255,0.92)" lh={1} style={{ textShadow: "0 2px 8px rgba(0,0,0,0.35)" }}>
-          {initial(game.name)}
-        </Text>
-        <div>
-          <Text fw={700} c="white" lineClamp={2} style={{ textShadow: "0 1px 4px rgba(0,0,0,0.5)" }}>
+        {/* faixa inferior para leitura do nome sobre a imagem */}
+        <Box
+          style={{
+            position: "absolute",
+            insetInline: 0,
+            bottom: 0,
+            padding: "24px 12px 10px",
+            background: "linear-gradient(to top, rgba(0,0,0,0.78), rgba(0,0,0,0))",
+          }}
+        >
+          <Text fw={700} c="white" lineClamp={2} style={{ textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>
             {game.name}
           </Text>
-          <Text size="xs" c="rgba(255,255,255,0.7)">
+          <Text size="xs" c="rgba(255,255,255,0.75)">
             {game.slug}
           </Text>
-        </div>
+        </Box>
+        {/* acessibilidade: inicial não visível, só rótulo */}
+        <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+          {initial(game.name)}
+        </span>
       </Box>
     </AspectRatio>
   );

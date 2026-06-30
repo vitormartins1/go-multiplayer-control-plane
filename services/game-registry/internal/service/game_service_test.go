@@ -43,6 +43,31 @@ func TestRegister_Valido_CriaComIDeCreatedAt(t *testing.T) {
 	assert.Equal(t, g.ID, captured.ID)
 }
 
+func TestRegister_AssociaImagemGerada(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Game")).Return(nil)
+
+	g, err := New(repo).Register(context.Background(), "tetris", "Tetris")
+	require.NoError(t, err)
+	assert.Equal(t, "generated", g.ImageSource)
+	assert.Equal(t, "tetris", g.GeneratedImageSeed, "seed default = slug")
+	assert.Equal(t, "shapes", g.GeneratedImageStyle)
+	assert.Empty(t, g.Image, "sem upload no MVP")
+}
+
+func TestRegister_SeedDeterministicaPorSlug(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("Create", mock.Anything, mock.Anything).Return(nil)
+	svc := New(repo)
+
+	a1, _ := svc.Register(context.Background(), "tetris", "Tetris")
+	a2, _ := svc.Register(context.Background(), "tetris", "Tetris de novo")
+	b, _ := svc.Register(context.Background(), "arkanoid", "Arkanoid")
+
+	assert.Equal(t, a1.GeneratedImageSeed, a2.GeneratedImageSeed, "mesmo slug -> mesma seed")
+	assert.NotEqual(t, a1.GeneratedImageSeed, b.GeneratedImageSeed, "slugs diferentes -> seeds diferentes")
+}
+
 func TestRegister_SlugInvalido_ErrInvalidSlug(t *testing.T) {
 	cases := []string{"Tetris", "a", "-tetris", "tetris-", "te tris", "tétris", ""}
 	for _, slug := range cases {

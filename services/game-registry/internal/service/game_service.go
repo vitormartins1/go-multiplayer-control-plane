@@ -22,6 +22,10 @@ var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$`)
 
 const maxNameLen = 100
 
+// defaultImageStyle é o estilo do gerador de capa (cliente). Trocar aqui muda
+// o default de novos cadastros; o front mapeia o nome -> coleção (ADR/spec 003).
+const defaultImageStyle = "shapes"
+
 type service struct {
 	repo domain.GameRepository
 }
@@ -40,7 +44,17 @@ func (s *service) Register(ctx context.Context, slug, name string) (*domain.Game
 		return nil, domain.ErrInvalidName
 	}
 
-	g := &domain.Game{ID: uuid.NewString(), Slug: slug, Name: name, CreatedAt: time.Now().UTC()}
+	// Sem upload no MVP: associa metadados de capa gerada (seed = slug). Ver
+	// spec 003-generated-cover.
+	g := &domain.Game{
+		ID:                  uuid.NewString(),
+		Slug:                slug,
+		Name:                name,
+		CreatedAt:           time.Now().UTC(),
+		ImageSource:         "generated",
+		GeneratedImageSeed:  slug,
+		GeneratedImageStyle: defaultImageStyle,
+	}
 	if err := s.repo.Create(ctx, g); err != nil {
 		return nil, fmt.Errorf("game-registry service: register: %w", err)
 	}

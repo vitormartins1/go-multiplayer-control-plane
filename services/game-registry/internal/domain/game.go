@@ -12,11 +12,20 @@ import (
 
 // Game é um jogo registrado no backend. O id (UUID) é a chave canônica usada
 // pelos outros serviços; o slug é a chave humana estável.
+//
+// Capa (feature 003-generated-cover): sem upload no MVP, a imagem é gerada no
+// cliente a partir de GeneratedImageSeed (default = slug) no estilo
+// GeneratedImageStyle. Image (URL/data-uri) e ImageSource ("generated" | futuro
+// "upload") deixam o espaço para upload futuro.
 type Game struct {
-	ID        string
-	Slug      string
-	Name      string
-	CreatedAt time.Time
+	ID                  string
+	Slug                string
+	Name                string
+	CreatedAt           time.Time
+	Image               string // vazio = sem upload (reservado)
+	ImageSource         string // "generated" no MVP
+	GeneratedImageSeed  string // seed determinística (default = slug)
+	GeneratedImageStyle string // estilo do gerador (default = "shapes")
 }
 
 // GameService é a Port de entrada do game-registry.
