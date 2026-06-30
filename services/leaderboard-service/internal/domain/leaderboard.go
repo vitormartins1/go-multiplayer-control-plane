@@ -11,23 +11,25 @@ type Entry struct {
 	Score    int64
 }
 
-// LeaderboardService é a Port de entrada do leaderboard-service.
+// LeaderboardService é a Port de entrada do leaderboard-service. Tudo é
+// escopado por gameID (ranking por jogo, ADR-0017).
 type LeaderboardService interface {
 	// Submit aplica highscore e retorna a entry do jogador após a submissão.
-	Submit(ctx context.Context, playerID string, score int64) (Entry, error)
-	Top(ctx context.Context, limit int) ([]Entry, error)
-	Around(ctx context.Context, playerID string, k int) ([]Entry, error)
+	Submit(ctx context.Context, gameID, playerID string, score int64) (Entry, error)
+	Top(ctx context.Context, gameID string, limit int) ([]Entry, error)
+	Around(ctx context.Context, gameID, playerID string, k int) ([]Entry, error)
 }
 
-// LeaderboardStore é a Port de saída (implementada por um adapter Redis).
+// LeaderboardStore é a Port de saída (implementada por um adapter Redis). Cada
+// jogo é um sorted set próprio (key por gameID).
 type LeaderboardStore interface {
-	Submit(ctx context.Context, playerID string, score int64) error // highscore (ZADD GT)
+	Submit(ctx context.Context, gameID, playerID string, score int64) error // highscore (ZADD GT)
 	// Rank devolve a posição (0-based, ordem do Redis) e o score do jogador;
 	// ErrNotRanked se ele ainda não tem score.
-	Rank(ctx context.Context, playerID string) (rank int64, score int64, err error)
-	Top(ctx context.Context, limit int) ([]Entry, error)
+	Rank(ctx context.Context, gameID, playerID string) (rank int64, score int64, err error)
+	Top(ctx context.Context, gameID string, limit int) ([]Entry, error)
 	// Range devolve as entradas das posições [start, stop] (0-based, inclusivo).
-	Range(ctx context.Context, start, stop int64) ([]Entry, error)
+	Range(ctx context.Context, gameID string, start, stop int64) ([]Entry, error)
 }
 
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).

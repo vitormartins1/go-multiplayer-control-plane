@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	serviceName    = "leaderboard-service"
-	leaderboardKey = "leaderboard:global"
+	serviceName          = "leaderboard-service"
+	leaderboardKeyPrefix = "leaderboard" // key do Redis vira "leaderboard:<gameID>"
 )
 
 func main() {
@@ -60,7 +60,7 @@ func run(log *slog.Logger) error {
 		}
 	}()
 
-	store := storage.NewRedisStore(cfg.RedisAddr, leaderboardKey)
+	store := storage.NewRedisStore(cfg.RedisAddr, leaderboardKeyPrefix)
 	if err := pingWithRetry(context.Background(), store, log); err != nil {
 		return fmt.Errorf("redis: %w", err)
 	}
@@ -83,7 +83,14 @@ func run(log *slog.Logger) error {
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	handler.Register(mux)
 
-	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(mux)), "http.server",
+	// /admin (submit server-side + top-N) exige a internal key (ADR-0018).
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — os endpoints /admin vão negar (401); configure a chave")
+	}
+	guarded := auth.RequireInternalKey(internalKey, "/admin")(mux)
+
+	traced := otelhttp.NewHandler(middleware.RouteSpanName(metrics.Wrap(guarded)), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return r.URL.Path != "/healthz" && r.URL.Path != "/metrics"
 		}),

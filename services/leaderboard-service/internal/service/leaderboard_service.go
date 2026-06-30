@@ -29,29 +29,29 @@ func New(store domain.LeaderboardStore) *Service {
 	return &Service{store: store}
 }
 
-// Submit aplica o highscore e devolve a posição/score do jogador.
-func (s *Service) Submit(ctx context.Context, playerID string, score int64) (domain.Entry, error) {
-	if err := s.store.Submit(ctx, playerID, score); err != nil {
+// Submit aplica o highscore e devolve a posição/score do jogador no jogo.
+func (s *Service) Submit(ctx context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
+	if err := s.store.Submit(ctx, gameID, playerID, score); err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: submit: %w", err)
 	}
-	rank0, best, err := s.store.Rank(ctx, playerID)
+	rank0, best, err := s.store.Rank(ctx, gameID, playerID)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: rank: %w", err)
 	}
 	return domain.Entry{Rank: rank0 + 1, PlayerID: playerID, Score: best}, nil
 }
 
-func (s *Service) Top(ctx context.Context, limit int) ([]domain.Entry, error) {
-	entries, err := s.store.Top(ctx, clampLimit(limit))
+func (s *Service) Top(ctx context.Context, gameID string, limit int) ([]domain.Entry, error) {
+	entries, err := s.store.Top(ctx, gameID, clampLimit(limit))
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: top: %w", err)
 	}
 	return entries, nil
 }
 
-func (s *Service) Around(ctx context.Context, playerID string, k int) ([]domain.Entry, error) {
+func (s *Service) Around(ctx context.Context, gameID, playerID string, k int) ([]domain.Entry, error) {
 	k = clampAround(k)
-	rank0, _, err := s.store.Rank(ctx, playerID)
+	rank0, _, err := s.store.Rank(ctx, gameID, playerID)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: around: %w", err) // ErrNotRanked propaga
 	}
@@ -60,7 +60,7 @@ func (s *Service) Around(ctx context.Context, playerID string, k int) ([]domain.
 		start = 0
 	}
 	stop := rank0 + int64(k)
-	entries, err := s.store.Range(ctx, start, stop)
+	entries, err := s.store.Range(ctx, gameID, start, stop)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: around range: %w", err)
 	}

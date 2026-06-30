@@ -89,6 +89,7 @@ services:
       PORT: "8080"
       REDIS_ADDR: redis:6379
       IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço nos /admin (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
       redis:
