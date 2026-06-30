@@ -31,6 +31,8 @@ Sequência iniciada a pedido do usuário (biblioteca de capas + repensar a sele�
 
 - ✅ **Fase A** (`admin-ui/005-game-library`): Games virou **biblioteca de capas 9:16** (procedural); **jogo ativo global** no header (`GameProvider`/`useGames`, persistido); abas do jogador consomem o contexto (sem `<Select>` repetido).
 - ✅ **Fase B** (`game-registry/002-game-presence`, **ADR-0019**): **player base por jogo** via **presença** (game-registry `game_players`), marcada no **login-into-game** (identity aceita `gameId`, marca best-effort); admin-bff `GET /api/games/{g}/players`; aba **Players** virou jogo-cêntrica (base do jogo ativo).
+- ✅ **Navegação player-cêntrica** (`game-registry/004-games-of-player`): **review do modelo** — identidade global + presença (ADR-0017/0019) está certa; o ruído era o "jogo ativo global" no header (removido). Agora **dois eixos**: **Games** (abre um jogo → aba Players = base do jogo/presença) e **Players** (base global do identity, com avatares) → abrir um player → **seletor escopado aos jogos DELE** (`GET /api/players/{id}/games`, consulta reversa). Sem `GameProvider`/`GameSwitcher`.
+- ✅ **Avatares** (`admin-ui/006-player-avatars`): DiceBear `adventurer` por jogador (seed = playerId).
 - ✅ **Fase C** (`game-registry/003-generated-cover`): **capa determinística por seed** — game-registry guarda metadados (`image`, `imageSource='generated'`, `generatedImageSeed=slug`, `generatedImageStyle='shapes'`); o admin-ui gera a imagem no cliente via **DiceBear** (`GameCover`). Abordagem "cliente gera" (não backend). Espaço p/ upload futuro (`image`/`imageSource`) e troca de estilo deixados abertos. Registros antigos via COALESCE.
 
 ## Backlog (sem spec ainda)
