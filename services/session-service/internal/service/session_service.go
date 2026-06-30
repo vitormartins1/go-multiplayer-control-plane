@@ -84,11 +84,15 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, results []do
 	delete(s.sessions, matchID)
 	s.mu.Unlock()
 
-	if err := s.publisher.Publish(ctx, matchID, results); err != nil {
-		return fmt.Errorf("session service: report result: publish: %w", err)
-	}
+	// Libera o server PRIMEIRO: o fim da partida não pode depender do fan-out
+	// (senão um achievements fora vazaria o server).
 	if err := s.allocator.Release(ctx, sess.ServerID); err != nil {
 		return fmt.Errorf("session service: report result: release: %w", err)
+	}
+	// Fan-out do resultado para os serviços de dados (best-effort no adapter):
+	// usa o game_id da sessão (ADR-0017).
+	if err := s.publisher.Publish(ctx, sess.GameID, results); err != nil {
+		return fmt.Errorf("session service: report result: publish: %w", err)
 	}
 	return nil
 }

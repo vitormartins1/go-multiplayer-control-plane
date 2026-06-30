@@ -36,8 +36,8 @@ func (m *mockIssuer) JWKS(ctx context.Context) ([]byte, error) {
 
 type mockPublisher struct{ mock.Mock }
 
-func (m *mockPublisher) Publish(ctx context.Context, matchID string, results []domain.PlayerResult) error {
-	return m.Called(ctx, matchID, results).Error(0)
+func (m *mockPublisher) Publish(ctx context.Context, gameID string, results []domain.PlayerResult) error {
+	return m.Called(ctx, gameID, results).Error(0)
 }
 
 func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
@@ -86,7 +86,7 @@ func TestReportResult_PublicaLiberaEncerra(t *testing.T) {
 	require.NoError(t, err)
 
 	results := []domain.PlayerResult{{PlayerID: "p1", Score: 10, Won: true}}
-	pub.On("Publish", mock.Anything, "match-1", results).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", results).Return(nil) // recebe o game_id da sessão
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", results))
