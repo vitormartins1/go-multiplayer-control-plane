@@ -29,24 +29,28 @@ type fakeService struct {
 	topEntries    []domain.Entry
 	aroundEntries []domain.Entry
 	aroundErr     error
+	gotGameID     string
 	gotPlayerID   string
 	gotScore      int64
 	gotLimit      int
 	gotK          int
 }
 
-func (f *fakeService) Submit(_ context.Context, playerID string, score int64) (domain.Entry, error) {
+func (f *fakeService) Submit(_ context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
+	f.gotGameID = gameID
 	f.gotPlayerID = playerID
 	f.gotScore = score
 	return f.submitEntry, nil
 }
 
-func (f *fakeService) Top(_ context.Context, limit int) ([]domain.Entry, error) {
+func (f *fakeService) Top(_ context.Context, gameID string, limit int) ([]domain.Entry, error) {
+	f.gotGameID = gameID
 	f.gotLimit = limit
 	return f.topEntries, nil
 }
 
-func (f *fakeService) Around(_ context.Context, playerID string, k int) ([]domain.Entry, error) {
+func (f *fakeService) Around(_ context.Context, gameID, playerID string, k int) ([]domain.Entry, error) {
+	f.gotGameID = gameID
 	f.gotPlayerID = playerID
 	f.gotK = k
 	return f.aroundEntries, f.aroundErr
@@ -71,6 +75,7 @@ func do(t *testing.T, srv *httptest.Server, method, path, token, body string) *h
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}
+	r.Header.Set("X-Game-Id", "g1") // player-facing: jogo no header (ADR-0017)
 	resp, err := srv.Client().Do(r)
 	require.NoError(t, err)
 	return resp
@@ -86,6 +91,7 @@ func TestSubmit_200(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, int64(1500), svc.gotScore)
 	assert.Equal(t, "p1", svc.gotPlayerID)
+	assert.Equal(t, "g1", svc.gotGameID, "jogo do header X-Game-Id")
 
 	var got entryDTO
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
@@ -158,4 +164,49 @@ func TestAuth_TokenInvalido_401(t *testing.T) {
 	resp := do(t, srv, http.MethodPost, "/scores", "qualquer", `{"score":1}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestSubmit_SemGameId_400(t *testing.T) {
+	srv := newServer(&fakeService{}, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	// requisição direta SEM o header X-Game-Id (não usa o helper do()).
+	r, _ := http.NewRequest(http.MethodPost, srv.URL+"/scores", strings.NewReader(`{"score":1}`))
+	r.Header.Set("Authorization", "Bearer tok")
+	resp, err := srv.Client().Do(r)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminSubmit_200_ServerAuthoritative(t *testing.T) {
+	svc := &fakeService{submitEntry: domain.Entry{Rank: 1, PlayerID: "p9", Score: 42}}
+	srv := newServer(svc, fakeVerifier{}) // sem JWT (internal key valida na borda, fora do handler)
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/game-9/players/p9/scores", "", `{"score":42}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID, "jogo do path")
+	assert.Equal(t, "p9", svc.gotPlayerID, "jogador do path (não JWT)")
+	assert.Equal(t, int64(42), svc.gotScore)
+}
+
+func TestAdminTop_200_PorJogo(t *testing.T) {
+	svc := &fakeService{topEntries: []domain.Entry{{Rank: 1, PlayerID: "p9", Score: 42}}}
+	srv := newServer(svc, fakeVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/games/game-9/leaderboard?limit=5", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, 5, svc.gotLimit)
+
+	var body struct {
+		Entries []entryDTO `json:"entries"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Entries, 1)
+	assert.Equal(t, "p9", body.Entries[0].PlayerID)
 }

@@ -28,11 +28,15 @@ type ctxKey int
 
 const playerIDKey ctxKey = iota
 
-// Register monta as rotas, todas atrás do auth.
+// Register monta as rotas. Player-facing atrás do JWT (jogo no header X-Game-Id);
+// admin (internal key na borda, ADR-0018) com jogo/jogador no path.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /scores", h.auth(http.HandlerFunc(h.submit)))
 	mux.Handle("GET /leaderboard", h.auth(http.HandlerFunc(h.top)))
 	mux.Handle("GET /leaderboard/me", h.auth(http.HandlerFunc(h.me)))
+
+	mux.HandleFunc("POST /admin/games/{gameId}/players/{playerID}/scores", h.adminSubmit)
+	mux.HandleFunc("GET /admin/games/{gameId}/leaderboard", h.adminTop)
 }
 
 func (h *Handler) auth(next http.Handler) http.Handler {
@@ -53,6 +57,11 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 }
 
 func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
+	gameID := gameFromHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
 	var req struct {
 		Score *int64 `json:"score"` // ponteiro: distingue ausente de zero
 	}
@@ -60,7 +69,7 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
-	entry, err := h.svc.Submit(r.Context(), playerID(r.Context()), *req.Score)
+	entry, err := h.svc.Submit(r.Context(), gameID, playerID(r.Context()), *req.Score)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -69,8 +78,13 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) top(w http.ResponseWriter, r *http.Request) {
+	gameID := gameFromHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit")) // 0/erro -> service aplica o default
-	entries, err := h.svc.Top(r.Context(), limit)
+	entries, err := h.svc.Top(r.Context(), gameID, limit)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -79,13 +93,47 @@ func (h *Handler) top(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
+	gameID := gameFromHeader(r)
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "missing_game")
+		return
+	}
 	k := -1 // ausente -> service aplica o default; "0" é válido (só o jogador)
 	if v := r.URL.Query().Get("around"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			k = n
 		}
 	}
-	entries, err := h.svc.Around(r.Context(), playerID(r.Context()), k)
+	entries, err := h.svc.Around(r.Context(), gameID, playerID(r.Context()), k)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
+}
+
+// adminSubmit aplica o highscore de um jogador no ranking do jogo
+// (server-authoritative: jogo/jogador no path, sem JWT). É o que o fan-out usa.
+func (h *Handler) adminSubmit(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Score *int64 `json:"score"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
+		writeError(w, http.StatusBadRequest, "invalid_score")
+		return
+	}
+	entry, err := h.svc.Submit(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toDTO(entry))
+}
+
+// adminTop devolve o top-N do jogo (consumo do painel).
+func (h *Handler) adminTop(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	entries, err := h.svc.Top(r.Context(), r.PathValue("gameId"), limit)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -107,6 +155,11 @@ func bearerToken(r *http.Request) string {
 func playerID(ctx context.Context) string {
 	id, _ := ctx.Value(playerIDKey).(string)
 	return id
+}
+
+// gameFromHeader lê o jogo do header X-Game-Id (contexto do cliente, ADR-0017).
+func gameFromHeader(r *http.Request) string {
+	return r.Header.Get("X-Game-Id")
 }
 
 type entryDTO struct {
