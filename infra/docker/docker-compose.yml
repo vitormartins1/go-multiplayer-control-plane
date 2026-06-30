@@ -159,6 +159,7 @@ services:
       ACHIEVEMENTS_URL: http://achievements-service:8080
       IDENTITY_URL: http://identity-service:8080
       GAME_REGISTRY_URL: http://game-registry:8080
+      LEADERBOARD_URL: http://leaderboard-service:8080 # aba Leaderboards do painel (ADR-0016)
       INTERNAL_API_KEY: dev-internal-key # injeta nos callers serviço-a-serviço (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:

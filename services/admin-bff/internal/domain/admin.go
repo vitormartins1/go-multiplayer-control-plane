@@ -112,6 +112,20 @@ type GameRegistry interface {
 	CreateGame(ctx context.Context, slug, name string) (*Game, error)
 }
 
+// LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).
+type LeaderboardEntry struct {
+	Rank     int64  `json:"rank"`
+	PlayerID string `json:"playerId"`
+	Score    int64  `json:"score"`
+}
+
+// LeaderboardReader é a Port de saída para a API admin do leaderboard-service
+// (top-N por jogo, ADR-0017).
+type LeaderboardReader interface {
+	// TopForGame lê o top-N do jogo. Indisponibilidade -> ErrLeaderboardUnavailable.
+	TopForGame(ctx context.Context, gameID string, limit int) ([]LeaderboardEntry, error)
+}
+
 // AchievementsReader é a Port de saída para a API admin do achievements-service,
 // agora por jogo (multi-tenant, ADR-0017).
 type AchievementsReader interface {

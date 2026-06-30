@@ -64,6 +64,18 @@ func (f *fakeRegistry) CreateGame(_ context.Context, slug, name string) (*domain
 	return &domain.Game{ID: "g1", Slug: slug, Name: name}, nil
 }
 
+type fakeLeaderboard struct {
+	entries   []domain.LeaderboardEntry
+	err       error
+	gotGameID string
+	gotLimit  int
+}
+
+func (f *fakeLeaderboard) TopForGame(_ context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotLimit = gameID, limit
+	return f.entries, f.err
+}
+
 type fakeDirectory struct {
 	page      domain.PlayerPage
 	err       error
@@ -78,7 +90,7 @@ func (f *fakeDirectory) ListPlayers(_ context.Context, limit, offset int) (domai
 
 func TestPlayers_DelegaERepassaPaginacao(t *testing.T) {
 	dir := &fakeDirectory{page: domain.PlayerPage{Total: 3, Players: []domain.Player{{ID: "a", Handle: "Alice"}}}}
-	page, err := New(fakeMetrics{}, &fakeReader{}, dir, nil).Players(context.Background(), 5, 10)
+	page, err := New(fakeMetrics{}, &fakeReader{}, dir, nil, nil).Players(context.Background(), 5, 10)
 	require.NoError(t, err)
 	assert.Equal(t, 3, page.Total)
 	require.Len(t, page.Players, 1)
@@ -93,7 +105,7 @@ func TestTopology_DerivaUpDeUpJob(t *testing.T) {
 			{Labels: map[string]string{"job": "matchmaking-service"}, Value: 0},
 		},
 	}}
-	topo, err := New(metrics, &fakeReader{}, nil, nil).Topology(context.Background())
+	topo, err := New(metrics, &fakeReader{}, nil, nil, nil).Topology(context.Background())
 	require.NoError(t, err)
 	assert.True(t, topo.SourceAvailable)
 
@@ -112,7 +124,7 @@ func TestTopology_DerivaUpDeUpJob(t *testing.T) {
 
 func TestTopology_PrometheusFora_Degrada(t *testing.T) {
 	metrics := fakeMetrics{err: domain.ErrMetricsUnavailable}
-	topo, err := New(metrics, &fakeReader{}, nil, nil).Topology(context.Background())
+	topo, err := New(metrics, &fakeReader{}, nil, nil, nil).Topology(context.Background())
 	require.NoError(t, err) // degrada, não falha
 	assert.False(t, topo.SourceAvailable)
 	require.NotEmpty(t, topo.Nodes)
@@ -124,7 +136,7 @@ func TestTopology_PrometheusFora_Degrada(t *testing.T) {
 
 func TestTopology_ArestasConhecidas(t *testing.T) {
 	metrics := fakeMetrics{byQuery: map[string][]domain.Sample{"up": {}}}
-	topo, err := New(metrics, &fakeReader{}, nil, nil).Topology(context.Background())
+	topo, err := New(metrics, &fakeReader{}, nil, nil, nil).Topology(context.Background())
 	require.NoError(t, err)
 
 	has := func(from, to string) bool {
@@ -147,7 +159,7 @@ func TestLiveMetrics_AgregaContadores(t *testing.T) {
 		"matchmaking_matches_total":        {{Value: 10}},
 		"matchmaking_matches_failed_total": {{Value: 1}},
 	}}
-	lm, err := New(metrics, &fakeReader{}, nil, nil).LiveMetrics(context.Background())
+	lm, err := New(metrics, &fakeReader{}, nil, nil, nil).LiveMetrics(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, lm.QueueSize)
 	assert.Equal(t, 3.0, *lm.QueueSize)
@@ -161,7 +173,7 @@ func TestLiveMetrics_MetricaAusente_CampoNil(t *testing.T) {
 		"matchmaking_queue_size": {{Value: 5}},
 		// demais ausentes
 	}}
-	lm, err := New(metrics, &fakeReader{}, nil, nil).LiveMetrics(context.Background())
+	lm, err := New(metrics, &fakeReader{}, nil, nil, nil).LiveMetrics(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, lm.QueueSize)
 	assert.Equal(t, 5.0, *lm.QueueSize)
@@ -171,13 +183,13 @@ func TestLiveMetrics_MetricaAusente_CampoNil(t *testing.T) {
 
 func TestLiveMetrics_PrometheusFora_PropagaErro(t *testing.T) {
 	metrics := fakeMetrics{err: domain.ErrMetricsUnavailable}
-	_, err := New(metrics, &fakeReader{}, nil, nil).LiveMetrics(context.Background())
+	_, err := New(metrics, &fakeReader{}, nil, nil, nil).LiveMetrics(context.Background())
 	assert.ErrorIs(t, err, domain.ErrMetricsUnavailable)
 }
 
 func TestPlayerAchievements_DelegaComJogoEPlayer(t *testing.T) {
 	reader := &fakeReader{out: []domain.PlayerAchievement{{ID: "first_win", Unlocked: true}}}
-	got, err := New(fakeMetrics{}, reader, nil, nil).PlayerAchievements(context.Background(), "game-9", "player-7")
+	got, err := New(fakeMetrics{}, reader, nil, nil, nil).PlayerAchievements(context.Background(), "game-9", "player-7")
 	require.NoError(t, err)
 	assert.Equal(t, "game-9", reader.gotGameID)
 	assert.Equal(t, "player-7", reader.gotPlayer)
@@ -187,7 +199,7 @@ func TestPlayerAchievements_DelegaComJogoEPlayer(t *testing.T) {
 
 func TestGames_DelegaAoRegistry(t *testing.T) {
 	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Slug: "tetris"}}}
-	got, err := New(fakeMetrics{}, &fakeReader{}, nil, reg).Games(context.Background())
+	got, err := New(fakeMetrics{}, &fakeReader{}, nil, reg, nil).Games(context.Background())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "tetris", got[0].Slug)
@@ -195,7 +207,7 @@ func TestGames_DelegaAoRegistry(t *testing.T) {
 
 func TestCreateGame_DelegaAoRegistry(t *testing.T) {
 	reg := &fakeRegistry{}
-	g, err := New(fakeMetrics{}, &fakeReader{}, nil, reg).CreateGame(context.Background(), "tetris", "Tetris")
+	g, err := New(fakeMetrics{}, &fakeReader{}, nil, reg, nil).CreateGame(context.Background(), "tetris", "Tetris")
 	require.NoError(t, err)
 	assert.Equal(t, "tetris", reg.gotSlug)
 	assert.Equal(t, "g1", g.ID)
@@ -203,7 +215,7 @@ func TestCreateGame_DelegaAoRegistry(t *testing.T) {
 
 func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
 	reader := &fakeReader{catalog: []domain.Achievement{{ID: "first_win"}}}
-	svc := New(fakeMetrics{}, reader, nil, nil)
+	svc := New(fakeMetrics{}, reader, nil, nil, nil)
 
 	cat, err := svc.GameCatalog(context.Background(), "game-9")
 	require.NoError(t, err)
@@ -213,4 +225,14 @@ func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
 	err = svc.CreateAchievement(context.Background(), "game-9", domain.Achievement{ID: "speedrun", EventType: "fast_win"})
 	require.NoError(t, err)
 	assert.Equal(t, "speedrun", reader.gotCreate.ID)
+}
+
+func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
+	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
+	got, err := New(fakeMetrics{}, &fakeReader{}, nil, nil, lb).GameLeaderboard(context.Background(), "game-9", 10)
+	require.NoError(t, err)
+	assert.Equal(t, "game-9", lb.gotGameID)
+	assert.Equal(t, 10, lb.gotLimit)
+	require.Len(t, got, 1)
+	assert.Equal(t, "bob", got[0].PlayerID)
 }

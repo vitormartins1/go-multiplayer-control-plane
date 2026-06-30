@@ -23,6 +23,7 @@ type AdminService interface {
 	GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error)
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
+	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -45,6 +46,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
+	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
 }
 
 // topology nunca falha por causa do Prometheus: o service degrada (nós unknown).
@@ -158,6 +160,20 @@ func (h *Handler) playerAchievements(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
+// gameLeaderboard lê o top-N do jogo (leaderboard).
+func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
+	limit := atoiOr(r.URL.Query().Get("limit"), 0)
+	entries, err := h.svc.GameLeaderboard(r.Context(), r.PathValue("gameId"), limit)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if entries == nil {
+		entries = []domain.LeaderboardEntry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
 // decode lê o corpo JSON rejeitando campos desconhecidos.
 func decode(r *http.Request, v any) error {
 	dec := json.NewDecoder(r.Body)
@@ -180,6 +196,8 @@ func writeUpstream(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadGateway, "game_registry_unavailable")
 	case errors.Is(err, domain.ErrAchievementsUnavailable):
 		writeError(w, http.StatusBadGateway, "achievements_unavailable")
+	case errors.Is(err, domain.ErrLeaderboardUnavailable):
+		writeError(w, http.StatusBadGateway, "leaderboard_unavailable")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

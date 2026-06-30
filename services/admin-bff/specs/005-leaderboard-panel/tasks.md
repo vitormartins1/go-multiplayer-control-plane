@@ -3,16 +3,16 @@
 **Data:** 2026-06-30
 
 ## admin-bff
-- [ ] domain: `LeaderboardEntry` + Port `LeaderboardReader`; `ErrLeaderboardUnavailable`
-- [ ] adapter `internal/leaderboard` (+ httptest)
-- [ ] service: campo + `New` + `GameLeaderboard`
-- [ ] transport: rota `GET /api/games/{gameId}/leaderboard` + `writeUpstream` (502) + testes
-- [ ] main: `LEADERBOARD_URL` + client; compose
+- [x] domain: `LeaderboardEntry` + Port `LeaderboardReader`; `ErrLeaderboardUnavailable`
+- [x] adapter `internal/leaderboard` (+ httptest)
+- [x] service: campo + `New` + `GameLeaderboard`
+- [x] transport: rota `GET /api/games/{gameId}/leaderboard` + `writeUpstream` (502) + testes
+- [x] main: `LEADERBOARD_URL` + client; compose
 
 ## admin-ui
-- [ ] `lib/api.ts`: `LeaderEntry` + `gameLeaderboard`
-- [ ] `pages/GameLeaderboards.tsx`; `GameDetail` usa na aba Leaderboards
-- [ ] `npm run build`
+- [x] `lib/api.ts`: `LeaderEntry` + `gameLeaderboard`
+- [x] `pages/GameLeaderboards.tsx`; `GameDetail` usa na aba Leaderboards
+- [x] `npm run build`
 
 ## verificação
-- [ ] `go test ./... -race` + `go build ./...`; rebuild Docker; abrir Games/(jogo)/Leaderboards
+- [x] `go test ./... -race` + `go build ./...`; rebuild Docker; abrir Games/(jogo)/Leaderboards

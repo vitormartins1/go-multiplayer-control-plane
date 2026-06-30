@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { GameAchievements } from "./GameAchievements";
+import { GameLeaderboards } from "./GameLeaderboards";
 import { ComingSoon } from "../components/ComingSoon";
 
 export function GameDetail() {
@@ -38,7 +39,7 @@ export function GameDetail() {
           <GameAchievements gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="leaderboards" pt="md">
-          <ComingSoon what="Leaderboards do jogo" />
+          <GameLeaderboards gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="md">
           <ComingSoon what="Configurações do jogo" />

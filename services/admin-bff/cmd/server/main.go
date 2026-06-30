@@ -21,6 +21,7 @@ import (
 	achievementsclient "github.com/c130n/game-backend/services/admin-bff/internal/achievements"
 	gameregistryclient "github.com/c130n/game-backend/services/admin-bff/internal/gameregistry"
 	identityclient "github.com/c130n/game-backend/services/admin-bff/internal/identity"
+	leaderboardclient "github.com/c130n/game-backend/services/admin-bff/internal/leaderboard"
 	prometheusclient "github.com/c130n/game-backend/services/admin-bff/internal/prometheus"
 	"github.com/c130n/game-backend/services/admin-bff/internal/service"
 	"github.com/c130n/game-backend/services/admin-bff/internal/transport"
@@ -76,6 +77,10 @@ func run(log *slog.Logger) error {
 	if gameRegistryURL == "" {
 		log.Warn("GAME_REGISTRY_URL ausente — a gestão de jogos vai falhar; aponte para o game-registry")
 	}
+	leaderboardURL := os.Getenv("LEADERBOARD_URL")
+	if leaderboardURL == "" {
+		log.Warn("LEADERBOARD_URL ausente — a aba Leaderboards vai falhar; aponte para o leaderboard-service")
+	}
 
 	internalKey := os.Getenv("INTERNAL_API_KEY")
 	if internalKey == "" {
@@ -92,7 +97,8 @@ func run(log *slog.Logger) error {
 	reader := achievementsclient.New(achURL, httpClient)
 	directory := identityclient.New(identityURL, httpClient)
 	registry := gameregistryclient.New(gameRegistryURL, httpClient)
-	svc := service.New(metrics, reader, directory, registry)
+	leaderboard := leaderboardclient.New(leaderboardURL, httpClient)
+	svc := service.New(metrics, reader, directory, registry, leaderboard)
 
 	red := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)
 
