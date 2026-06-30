@@ -77,6 +77,35 @@ func TestPresence_JogoInexistente_ErrGameNotFound(t *testing.T) {
 	assert.True(t, errors.Is(err, domain.ErrGameNotFound))
 }
 
+func TestPresence_GamesByPlayer_SoOsJogosDoPlayer(t *testing.T) {
+	pool := newPresencePool(t)
+	games := NewPostgresGameRepository(pool)
+	pres := NewPostgresPresenceRepository(pool)
+	ctx := context.Background()
+
+	ga := newGame("game-a", "Game A")
+	gb := newGame("game-b", "Game B")
+	gc := newGame("game-c", "Game C")
+	require.NoError(t, games.Create(ctx, ga))
+	require.NoError(t, games.Create(ctx, gb))
+	require.NoError(t, games.Create(ctx, gc))
+
+	// p1 está em A e B; p2 só em C.
+	require.NoError(t, pres.Upsert(ctx, ga.ID, "p1", "Alice"))
+	require.NoError(t, pres.Upsert(ctx, gb.ID, "p1", "Alice"))
+	require.NoError(t, pres.Upsert(ctx, gc.ID, "p2", "Bob"))
+
+	got, err := pres.GamesByPlayer(ctx, "p1")
+	require.NoError(t, err)
+	require.Len(t, got, 2) // só A e B, por nome
+	assert.Equal(t, "Game A", got[0].Name)
+	assert.Equal(t, "Game B", got[1].Name)
+
+	none, err := pres.GamesByPlayer(ctx, "fantasma")
+	require.NoError(t, err)
+	assert.Empty(t, none, "player sem presença -> nenhum jogo")
+}
+
 func TestPresence_ListByGame_IsoladoEOrdenado(t *testing.T) {
 	pool := newPresencePool(t)
 	games := NewPostgresGameRepository(pool)

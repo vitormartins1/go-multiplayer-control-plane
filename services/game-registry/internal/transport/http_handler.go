@@ -31,6 +31,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Presença por jogo (ADR-0019): marca (login-into-game) e lista a base.
 	mux.HandleFunc("PUT /games/{gameId}/players/{playerID}", h.markPresence)
 	mux.HandleFunc("GET /games/{gameId}/players", h.listPlayers)
+	// Consulta reversa (004): jogos em que o player está presente.
+	mux.HandleFunc("GET /players/{playerID}/games", h.playerGames)
 }
 
 type gameDTO struct {
@@ -127,6 +129,21 @@ func (h *Handler) listPlayers(w http.ResponseWriter, r *http.Request) {
 	out := make([]presenceDTO, len(players))
 	for i, p := range players {
 		out[i] = presenceDTO{PlayerID: p.PlayerID, Handle: p.Handle, FirstSeen: p.FirstSeen}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// playerGames devolve os jogos em que o player {playerID} está presente
+// (consulta reversa da presença, feature 004).
+func (h *Handler) playerGames(w http.ResponseWriter, r *http.Request) {
+	games, err := h.presence.GamesOf(r.Context(), r.PathValue("playerID"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	out := make([]gameDTO, len(games))
+	for i := range games {
+		out[i] = toDTO(&games[i])
 	}
 	writeJSON(w, http.StatusOK, out)
 }

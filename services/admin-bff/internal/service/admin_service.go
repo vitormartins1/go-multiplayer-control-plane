@@ -85,6 +85,11 @@ func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.Game
 	return s.registry.PlayersOf(ctx, gameID)
 }
 
+// PlayerGames lê os jogos em que o player está presente (consulta reversa).
+func (s *Service) PlayerGames(ctx context.Context, playerID string) ([]domain.Game, error) {
+	return s.registry.GamesOfPlayer(ctx, playerID)
+}
+
 // Topology monta o mapa de serviços com o status up/down vindo de `up{}`. Se o
 // Prometheus estiver fora, degrada: nós com Up nil e SourceAvailable=false.
 func (s *Service) Topology(ctx context.Context) (domain.Topology, error) {

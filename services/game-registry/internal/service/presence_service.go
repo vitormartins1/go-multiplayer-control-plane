@@ -32,3 +32,11 @@ func (s *presenceService) PlayersOf(ctx context.Context, gameID string) ([]domai
 	}
 	return players, nil
 }
+
+func (s *presenceService) GamesOf(ctx context.Context, playerID string) ([]domain.Game, error) {
+	games, err := s.repo.GamesByPlayer(ctx, playerID)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: games of: %w", err)
+	}
+	return games, nil
+}
