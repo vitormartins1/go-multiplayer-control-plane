@@ -4,6 +4,7 @@ import { IconRefresh } from "@tabler/icons-react";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { useGames } from "../lib/games";
+import { PlayerAvatar } from "../components/PlayerAvatar";
 
 // Players é jogo-cêntrico (ADR-0019): lista a player base do jogo ativo
 // (presença). Sem jogo ativo, orienta a escolher no header. Clicar num jogador
@@ -58,7 +59,12 @@ export function Players() {
                 style={{ cursor: "pointer" }}
                 onClick={() => nav(`/players/${p.playerId}`)}
               >
-                <Table.Td>{p.handle}</Table.Td>
+                <Table.Td>
+                  <Group gap="sm" wrap="nowrap">
+                    <PlayerAvatar seed={p.playerId} />
+                    <span>{p.handle}</span>
+                  </Group>
+                </Table.Td>
                 <Table.Td c="dimmed">{p.playerId.slice(0, 8)}…</Table.Td>
                 <Table.Td>{new Date(p.firstSeen).toLocaleString("pt-BR")}</Table.Td>
               </Table.Tr>
