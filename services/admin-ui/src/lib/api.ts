@@ -82,6 +82,12 @@ export interface CloudSave {
   blob: string; // base64
 }
 
+export interface GamePlayer {
+  playerId: string;
+  handle: string;
+  firstSeen: string;
+}
+
 // HttpError carrega o status para a UI distinguir 502/409/400 etc.
 export class HttpError extends Error {
   constructor(public status: number) {
@@ -137,4 +143,6 @@ export const api = {
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/save`,
       signal,
     ),
+  gamePlayers: (gameId: string, signal?: AbortSignal) =>
+    getJSON<GamePlayer[]>(`/api/games/${encodeURIComponent(gameId)}/players`, signal),
 };

@@ -105,12 +105,23 @@ type PlayerDirectory interface {
 	ListPlayers(ctx context.Context, limit, offset int) (PlayerPage, error)
 }
 
-// GameRegistry é a Port de saída para o game-registry (gestão de jogos).
+// GamePlayer é uma entrada da player base de um jogo (presença, ADR-0019):
+// o jogador que "está" no jogo, com o handle desnormalizado do login.
+type GamePlayer struct {
+	PlayerID  string    `json:"playerId"`
+	Handle    string    `json:"handle"`
+	FirstSeen time.Time `json:"firstSeen"`
+}
+
+// GameRegistry é a Port de saída para o game-registry (gestão de jogos +
+// presença por jogo).
 type GameRegistry interface {
 	ListGames(ctx context.Context) ([]Game, error)
 	// CreateGame registra um jogo. Erro de validação do upstream vira
 	// UpstreamError (status repassado); indisponibilidade -> ErrGameRegistryUnavailable.
 	CreateGame(ctx context.Context, slug, name string) (*Game, error)
+	// PlayersOf lê a player base do jogo (presença, ADR-0019).
+	PlayersOf(ctx context.Context, gameID string) ([]GamePlayer, error)
 }
 
 // LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).

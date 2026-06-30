@@ -35,6 +35,8 @@ type fakeService struct {
 	pdataErr  error
 	save      domain.CloudSave
 	saveErr   error
+	gplayers  []domain.GamePlayer
+	gplayErr  error
 	gotGameID string
 	gotPlayer string
 	gotLimit  int
@@ -83,6 +85,10 @@ func (f *fakeService) PlayerData(_ context.Context, gameID, playerID string) ([]
 func (f *fakeService) CloudSave(_ context.Context, gameID, playerID string) (domain.CloudSave, error) {
 	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.save, f.saveErr
+}
+func (f *fakeService) GamePlayers(_ context.Context, gameID string) ([]domain.GamePlayer, error) {
+	f.gotGameID = gameID
+	return f.gplayers, f.gplayErr
 }
 
 func newServer(svc AdminService) *httptest.Server {
@@ -303,6 +309,32 @@ func TestGameLeaderboard_Fora_502(t *testing.T) {
 	defer srv.Close()
 
 	resp := get(t, srv, "/api/games/game-9/leaderboard")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestGamePlayers_200(t *testing.T) {
+	svc := &fakeService{gplayers: []domain.GamePlayer{{PlayerID: "p1", Handle: "Alice"}}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/players")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+
+	var body []domain.GamePlayer
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body, 1)
+	assert.Equal(t, "Alice", body[0].Handle)
+}
+
+func TestGamePlayers_Fora_502(t *testing.T) {
+	svc := &fakeService{gplayErr: domain.ErrGameRegistryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/players")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }

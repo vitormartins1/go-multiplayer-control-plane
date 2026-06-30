@@ -26,6 +26,7 @@ type AdminService interface {
 	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
 	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
 	CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error)
+	GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -51,6 +52,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/save", h.cloudSave)
+	mux.HandleFunc("GET /api/games/{gameId}/players", h.gamePlayers)
 }
 
 // topology nunca falha por causa do Prometheus: o service degrada (nós unknown).
@@ -176,6 +178,19 @@ func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
 		entries = []domain.LeaderboardEntry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// gamePlayers: a player base do jogo (presença, ADR-0019).
+func (h *Handler) gamePlayers(w http.ResponseWriter, r *http.Request) {
+	players, err := h.svc.GamePlayers(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if players == nil {
+		players = []domain.GamePlayer{}
+	}
+	writeJSON(w, http.StatusOK, players)
 }
 
 // playerData: dado de gameplay do jogador no jogo (player-data).

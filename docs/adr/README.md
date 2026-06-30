@@ -22,3 +22,4 @@
 | [0016](0016-admin-panel-bff.md) | Painel admin — BFF em Go + SPA, agregação via APIs/Prometheus | Accepted | 2026-06-29 | admin-bff, admin-ui, infra |
 | [0017](0017-multi-tenant-game-registry.md) | Multi-tenant por jogo — game-registry + dimensão game_id | Accepted | 2026-06-29 | game-registry, achievements, admin-bff, admin-ui, infra |
 | [0018](0018-service-to-service-auth.md) | Autenticação serviço-a-serviço (internal API key) | Accepted | 2026-06-29 | todos, infra |
+| [0019](0019-game-presence.md) | Presença por jogo (player base por jogo) sobre identidade global | Accepted | 2026-06-30 | game-registry, identity, admin-bff, admin-ui |

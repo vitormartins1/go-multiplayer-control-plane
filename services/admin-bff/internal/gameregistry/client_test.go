@@ -70,3 +70,29 @@ func TestListGames_HTTP500_Unavailable(t *testing.T) {
 	_, err := New(srv.URL, srv.Client()).ListGames(context.Background())
 	assert.ErrorIs(t, err, domain.ErrGameRegistryUnavailable)
 }
+
+func TestPlayersOf_200(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`[{"playerId":"p1","handle":"Alice","firstSeen":"2026-06-30T12:00:00Z"}]`))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).PlayersOf(context.Background(), "game-1")
+	require.NoError(t, err)
+	assert.Equal(t, "/games/game-1/players", gotPath)
+	require.Len(t, got, 1)
+	assert.Equal(t, "p1", got[0].PlayerID)
+	assert.Equal(t, "Alice", got[0].Handle)
+}
+
+func TestPlayersOf_HTTP500_Unavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).PlayersOf(context.Background(), "game-1")
+	assert.ErrorIs(t, err, domain.ErrGameRegistryUnavailable)
+}

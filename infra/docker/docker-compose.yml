@@ -11,10 +11,13 @@ services:
       PORT: "8080"
       DATABASE_URL: postgres://dev:dev@identity-postgres:5432/identity?sslmode=disable
       INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018)
+      GAME_REGISTRY_URL: http://game-registry:8080 # presença no login-into-game (ADR-0019)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
       identity-postgres:
         condition: service_healthy
+      game-registry:
+        condition: service_started
       tempo:
         condition: service_started
 
@@ -280,6 +283,7 @@ services:
     volumes:
       - ../../services/game-registry/migrations/001_create_games.sql:/docker-entrypoint-initdb.d/001_create_games.sql:ro
       - ../../services/game-registry/migrations/002_seed_sandbox.sql:/docker-entrypoint-initdb.d/002_seed_sandbox.sql:ro
+      - ../../services/game-registry/migrations/003_create_game_players.sql:/docker-entrypoint-initdb.d/003_create_game_players.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s

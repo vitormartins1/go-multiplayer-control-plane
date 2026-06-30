@@ -25,13 +25,13 @@ func (m *mockAuth) Register(ctx context.Context, handle, password string) (*doma
 	return acc, args.Error(1)
 }
 
-func (m *mockAuth) Authenticate(ctx context.Context, handle, password string) (string, error) {
-	args := m.Called(ctx, handle, password)
+func (m *mockAuth) Authenticate(ctx context.Context, handle, password, gameID string) (string, error) {
+	args := m.Called(ctx, handle, password, gameID)
 	return args.String(0), args.Error(1)
 }
 
-func (m *mockAuth) LoginAnonymous(ctx context.Context) (string, error) {
-	args := m.Called(ctx)
+func (m *mockAuth) LoginAnonymous(ctx context.Context, gameID string) (string, error) {
+	args := m.Called(ctx, gameID)
 	return args.String(0), args.Error(1)
 }
 
@@ -110,7 +110,7 @@ func TestRegister_HandleDuplicado_409(t *testing.T) {
 
 func TestLogin_Valido_200ComToken(t *testing.T) {
 	auth := new(mockAuth)
-	auth.On("Authenticate", mock.Anything, "Vitor_1", "supersecret").Return("signed-token", nil)
+	auth.On("Authenticate", mock.Anything, "Vitor_1", "supersecret", mock.Anything).Return("signed-token", nil)
 	srv := newServer(auth, new(mockTokens))
 
 	rr := do(srv, http.MethodPost, "/sessions", `{"handle":"Vitor_1","password":"supersecret"}`)
@@ -123,7 +123,7 @@ func TestLogin_Valido_200ComToken(t *testing.T) {
 
 func TestLogin_CredenciaisInvalidas_401(t *testing.T) {
 	auth := new(mockAuth)
-	auth.On("Authenticate", mock.Anything, mock.Anything, mock.Anything).Return("", domain.ErrInvalidCredentials)
+	auth.On("Authenticate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("", domain.ErrInvalidCredentials)
 	srv := newServer(auth, new(mockTokens))
 
 	rr := do(srv, http.MethodPost, "/sessions", `{"handle":"x","password":"y"}`)
@@ -143,7 +143,7 @@ func TestJWKS_200(t *testing.T) {
 
 func TestLoginAnonymous_200ComToken(t *testing.T) {
 	auth := new(mockAuth)
-	auth.On("LoginAnonymous", mock.Anything).Return("guest-token", nil)
+	auth.On("LoginAnonymous", mock.Anything, mock.Anything).Return("guest-token", nil)
 	srv := newServer(auth, new(mockTokens))
 
 	rr := do(srv, http.MethodPost, "/sessions/anonymous", "")

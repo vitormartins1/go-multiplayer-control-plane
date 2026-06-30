@@ -33,9 +33,24 @@ func (m *mockService) Get(ctx context.Context, id string) (*domain.Game, error) 
 	return g, args.Error(1)
 }
 
+type mockPresence struct{ mock.Mock }
+
+func (m *mockPresence) Mark(ctx context.Context, gameID, playerID, handle string) error {
+	return m.Called(ctx, gameID, playerID, handle).Error(0)
+}
+func (m *mockPresence) PlayersOf(ctx context.Context, gameID string) ([]domain.Presence, error) {
+	args := m.Called(ctx, gameID)
+	ps, _ := args.Get(0).([]domain.Presence)
+	return ps, args.Error(1)
+}
+
 func newServer(svc domain.GameService) http.Handler {
+	return newServerWith(svc, new(mockPresence))
+}
+
+func newServerWith(svc domain.GameService, presence domain.PresenceService) http.Handler {
 	mux := http.NewServeMux()
-	NewHandler(svc).Register(mux)
+	NewHandler(svc, presence).Register(mux)
 	return mux
 }
 
@@ -105,4 +120,32 @@ func TestGet_Inexistente_404(t *testing.T) {
 	svc.On("Get", mock.Anything, "nope").Return(nil, domain.ErrGameNotFound)
 	rr := do(newServer(svc), http.MethodGet, "/games/nope", "")
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestMarkPresence_204(t *testing.T) {
+	pres := new(mockPresence)
+	pres.On("Mark", mock.Anything, "g1", "p1", "Alice").Return(nil)
+	rr := do(newServerWith(new(mockService), pres), http.MethodPut, "/games/g1/players/p1", `{"handle":"Alice"}`)
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	pres.AssertExpectations(t)
+}
+
+func TestMarkPresence_JogoInexistente_404(t *testing.T) {
+	pres := new(mockPresence)
+	pres.On("Mark", mock.Anything, "nope", "p1", "Alice").Return(domain.ErrGameNotFound)
+	rr := do(newServerWith(new(mockService), pres), http.MethodPut, "/games/nope/players/p1", `{"handle":"Alice"}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestListPlayers_200(t *testing.T) {
+	pres := new(mockPresence)
+	pres.On("PlayersOf", mock.Anything, "g1").Return([]domain.Presence{{PlayerID: "p1", Handle: "Alice"}}, nil)
+	rr := do(newServerWith(new(mockService), pres), http.MethodGet, "/games/g1/players", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp []map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, "p1", resp[0]["playerId"])
+	assert.Equal(t, "Alice", resp[0]["handle"])
 }

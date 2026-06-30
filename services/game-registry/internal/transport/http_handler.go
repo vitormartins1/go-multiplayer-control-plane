@@ -12,14 +12,15 @@ import (
 )
 
 // Handler expõe os endpoints HTTP do game-registry. É control plane interno
-// (consumido pelo painel admin e por serviços) — sem auth no MVP.
+// (consumido pelo painel admin e por serviços), atrás da internal key (ADR-0018).
 type Handler struct {
-	games domain.GameService
+	games    domain.GameService
+	presence domain.PresenceService
 }
 
-// NewHandler cria o handler a partir da Port de entrada.
-func NewHandler(games domain.GameService) *Handler {
-	return &Handler{games: games}
+// NewHandler cria o handler a partir das Ports de entrada.
+func NewHandler(games domain.GameService, presence domain.PresenceService) *Handler {
+	return &Handler{games: games, presence: presence}
 }
 
 // Register monta as rotas no mux fornecido.
@@ -27,6 +28,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /games", h.create)
 	mux.HandleFunc("GET /games", h.list)
 	mux.HandleFunc("GET /games/{id}", h.get)
+	// Presença por jogo (ADR-0019): marca (login-into-game) e lista a base.
+	mux.HandleFunc("PUT /games/{gameId}/players/{playerID}", h.markPresence)
+	mux.HandleFunc("GET /games/{gameId}/players", h.listPlayers)
 }
 
 type gameDTO struct {
@@ -77,6 +81,43 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toDTO(g))
+}
+
+// markPresence registra a presença do jogador {playerID} no jogo {gameId}
+// (upsert idempotente). Chamado pelo identity no login-into-game.
+func (h *Handler) markPresence(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Handle string `json:"handle"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if err := h.presence.Mark(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), req.Handle); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type presenceDTO struct {
+	PlayerID  string    `json:"playerId"`
+	Handle    string    `json:"handle"`
+	FirstSeen time.Time `json:"firstSeen"`
+}
+
+// listPlayers devolve a player base do jogo {gameId} (presença).
+func (h *Handler) listPlayers(w http.ResponseWriter, r *http.Request) {
+	players, err := h.presence.PlayersOf(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	out := make([]presenceDTO, len(players))
+	for i, p := range players {
+		out[i] = presenceDTO{PlayerID: p.PlayerID, Handle: p.Handle, FirstSeen: p.FirstSeen}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // --- helpers ---

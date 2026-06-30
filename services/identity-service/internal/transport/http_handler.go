@@ -39,6 +39,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 type credentials struct {
 	Handle   string `json:"handle"`
 	Password string `json:"password"`
+	// GameId é opcional (login "dentro do jogo", ADR-0019): quando presente,
+	// marca presença best-effort no game-registry após autenticar.
+	GameId string `json:"gameId"`
 }
 
 type accountResponse struct {
@@ -67,7 +70,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	token, err := h.auth.Authenticate(r.Context(), req.Handle, req.Password)
+	token, err := h.auth.Authenticate(r.Context(), req.Handle, req.Password, req.GameId)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -76,7 +79,17 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) loginAnonymous(w http.ResponseWriter, r *http.Request) {
-	token, err := h.auth.LoginAnonymous(r.Context())
+	// Corpo é opcional; quando presente pode trazer o gameId (login-into-game).
+	var req struct {
+		GameId string `json:"gameId"`
+	}
+	if r.ContentLength > 0 {
+		if err := decode(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request")
+			return
+		}
+	}
+	token, err := h.auth.LoginAnonymous(r.Context(), req.GameId)
 	if err != nil {
 		writeDomainError(w, err)
 		return
