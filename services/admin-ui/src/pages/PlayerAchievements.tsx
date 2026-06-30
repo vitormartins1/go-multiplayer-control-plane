@@ -1,39 +1,30 @@
-import { Alert, Group, Loader, Select, Stack, Table, Text } from "@mantine/core";
-import { useState } from "react";
+import { Alert, Button, Group, Loader, Stack, Table, Text } from "@mantine/core";
+import { IconRefresh } from "@tabler/icons-react";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 
-// PlayerAchievements: progresso do jogador num jogo (seletor de jogo).
-export function PlayerAchievements({ playerId }: { playerId: string }) {
-  const { data: games } = useAsync((s) => api.games(s), []);
-  const [gameId, setGameId] = useState<string | null>(null);
-
-  const ach = useAsync(
+// PlayerAchievements: progresso do jogador no jogo ativo (gameId vem do contexto
+// global, via PlayerDetail). Sem gameId -> orienta a escolher no header.
+export function PlayerAchievements({ playerId, gameId }: { playerId: string; gameId: string | null }) {
+  const { data, loading, error, reload } = useAsync(
     (s) => (gameId ? api.playerAchievements(gameId, playerId, s) : Promise.resolve([])),
     [gameId],
   );
 
+  if (!gameId) return <Text c="dimmed">Selecione um jogo no topo para ver o progresso do jogador.</Text>;
+
   return (
     <Stack>
-      <Group>
-        <Select
-          label="Jogo"
-          placeholder="Selecione um jogo"
-          data={(games ?? []).map((g) => ({ value: g.id, label: g.name }))}
-          value={gameId}
-          onChange={setGameId}
-          w={280}
-          searchable
-        />
+      <Group justify="flex-end">
+        <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+          Atualizar
+        </Button>
       </Group>
 
-      {!gameId && <Text c="dimmed">Selecione um jogo para ver o progresso do jogador.</Text>}
-      {gameId && ach.loading && <Loader />}
-      {gameId && !!ach.error && <Alert color="red">Falha ao carregar (achievements indisponível?).</Alert>}
-      {gameId && ach.data && ach.data.length === 0 && (
-        <Text c="dimmed">Nenhum progresso para este jogador neste jogo.</Text>
-      )}
-      {gameId && ach.data && ach.data.length > 0 && (
+      {loading && !data && <Loader />}
+      {!!error && <Alert color="red">Falha ao carregar (achievements indisponível?).</Alert>}
+      {data && data.length === 0 && <Text c="dimmed">Nenhum progresso para este jogador neste jogo.</Text>}
+      {data && data.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -43,7 +34,7 @@ export function PlayerAchievements({ playerId }: { playerId: string }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {ach.data.map((a) => (
+            {data.map((a) => (
               <Table.Tr key={a.id}>
                 <Table.Td>{a.name}</Table.Td>
                 <Table.Td>

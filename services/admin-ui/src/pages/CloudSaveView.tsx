@@ -1,6 +1,5 @@
-import { Alert, Button, Code, Group, Loader, Select, Stack, Table, Text } from "@mantine/core";
+import { Alert, Button, Code, Group, Loader, Stack, Table, Text } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
-import { useState } from "react";
 import { api, HttpError, type CloudSave } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 
@@ -24,16 +23,15 @@ function decodePreview(contentType: string, blobB64: string): string | null {
   return null; // binário/desconhecido
 }
 
-// CloudSaveView: save do jogador num jogo (cloud-save). Seletor de jogo,
-// carregamento on-open + Atualizar. 404 (sem save) vira estado vazio.
-export function CloudSaveView({ playerId }: { playerId: string }) {
-  const { data: games } = useAsync((s) => api.games(s), []);
-  const [gameId, setGameId] = useState<string | null>(null);
-
+// CloudSaveView: save do jogador no jogo ativo (gameId vem do contexto global,
+// via PlayerDetail). Sem gameId -> orienta a escolher; 404 (sem save) = vazio.
+export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: string | null }) {
   const { data, loading, error, reload } = useAsync(
     (s) => (gameId ? api.cloudSave(gameId, playerId, s) : Promise.resolve<CloudSave | null>(null)),
     [gameId],
   );
+
+  if (!gameId) return <Text c="dimmed">Selecione um jogo no topo para ver o save do jogador.</Text>;
 
   const notFound = error instanceof HttpError && error.status === 404;
   const otherError = !!error && !notFound;
@@ -41,28 +39,16 @@ export function CloudSaveView({ playerId }: { playerId: string }) {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Select
-          label="Jogo"
-          placeholder="Selecione um jogo"
-          data={(games ?? []).map((g) => ({ value: g.id, label: g.name }))}
-          value={gameId}
-          onChange={setGameId}
-          w={280}
-          searchable
-        />
-        {gameId && (
-          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
-            Atualizar
-          </Button>
-        )}
+      <Group justify="flex-end">
+        <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+          Atualizar
+        </Button>
       </Group>
 
-      {!gameId && <Text c="dimmed">Selecione um jogo para ver o save do jogador.</Text>}
-      {gameId && loading && !data && <Loader />}
-      {gameId && otherError && <Alert color="red">Falha ao carregar (cloud-save indisponível?).</Alert>}
-      {gameId && notFound && <Text c="dimmed">Nenhum save para este jogador neste jogo.</Text>}
-      {gameId && data && (
+      {loading && !data && <Loader />}
+      {otherError && <Alert color="red">Falha ao carregar (cloud-save indisponível?).</Alert>}
+      {notFound && <Text c="dimmed">Nenhum save para este jogador neste jogo.</Text>}
+      {data && (
         <Stack gap="xs">
           <Table withTableBorder>
             <Table.Tbody>

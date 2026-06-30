@@ -10,6 +10,7 @@ import "@xyflow/react/dist/style.css";
 import "./index.css";
 
 import { App } from "./App";
+import { GameProvider } from "./lib/games";
 
 const theme = createTheme({
   primaryColor: "blue",
@@ -21,7 +22,9 @@ createRoot(document.getElementById("root")!).render(
     <MantineProvider theme={theme} defaultColorScheme="dark">
       <Notifications />
       <BrowserRouter>
-        <App />
+        <GameProvider>
+          <App />
+        </GameProvider>
       </BrowserRouter>
     </MantineProvider>
   </StrictMode>,
