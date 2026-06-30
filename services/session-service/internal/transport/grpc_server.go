@@ -26,7 +26,7 @@ func NewServer(svc domain.SessionService) *Server {
 
 // CreateSession aloca um server, emite os connect tokens e registra a sessão.
 func (s *Server) CreateSession(ctx context.Context, req *pb.CreateSessionRequest) (*pb.CreateSessionResponse, error) {
-	sess, grants, err := s.svc.Create(ctx, req.GetMatchId(), req.GetPlayers())
+	sess, grants, err := s.svc.Create(ctx, req.GetMatchId(), req.GetGameId(), req.GetPlayers())
 	if err != nil {
 		if errors.Is(err, domain.ErrNoServer) {
 			return nil, status.Error(codes.ResourceExhausted, "no server available")

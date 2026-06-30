@@ -26,10 +26,15 @@ func NewServer(mm domain.Matchmaker) *Server {
 	return &Server{mm: mm}
 }
 
-// FindMatch enfileira o jogador e transmite o status do ticket até o match.
-func (s *Server) FindMatch(_ *pb.FindMatchRequest, stream pb.Matchmaking_FindMatchServer) error {
+// FindMatch enfileira o jogador no jogo e transmite o status do ticket até o
+// match. O game_id vem do request (contexto do cliente, ADR-0017).
+func (s *Server) FindMatch(req *pb.FindMatchRequest, stream pb.Matchmaking_FindMatchServer) error {
+	gameID := req.GetGameId()
+	if gameID == "" {
+		return status.Error(codes.InvalidArgument, "game_id é obrigatório")
+	}
 	playerID := playerIDFromContext(stream.Context())
-	ch, err := s.mm.Join(stream.Context(), playerID)
+	ch, err := s.mm.Join(stream.Context(), gameID, playerID)
 	if err != nil {
 		return status.Error(codes.Internal, "join")
 	}

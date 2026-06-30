@@ -23,10 +23,12 @@ import (
 // ErrNoServer.
 type fakeSessionServer struct {
 	sessionv1.UnimplementedSessionServer
-	full bool // true: pool esgotado -> ResourceExhausted
+	full      bool // true: pool esgotado -> ResourceExhausted
+	gotGameID string
 }
 
 func (f *fakeSessionServer) CreateSession(_ context.Context, req *sessionv1.CreateSessionRequest) (*sessionv1.CreateSessionResponse, error) {
+	f.gotGameID = req.GetGameId()
 	if f.full {
 		return nil, status.Error(codes.ResourceExhausted, "no server available")
 	}
@@ -57,11 +59,13 @@ func setup(t *testing.T, srvImpl sessionv1.SessionServer) *Client {
 }
 
 func TestProvision_Sucesso_TokenPorJogador(t *testing.T) {
-	c := setup(t, &fakeSessionServer{})
+	fake := &fakeSessionServer{}
+	c := setup(t, fake)
 
-	got, err := c.Provision(context.Background(), "match-1", []string{"p1", "p2"})
+	got, err := c.Provision(context.Background(), "match-1", []string{"p1", "p2"}, "game-1")
 	require.NoError(t, err)
 
+	assert.Equal(t, "game-1", fake.gotGameID, "game_id repassado ao CreateSession")
 	assert.Equal(t, "10.0.0.1:7777", got.ServerAddress)
 	require.Len(t, got.Tokens, 2)
 	assert.Equal(t, "tok-p1", got.Tokens["p1"])
@@ -71,6 +75,6 @@ func TestProvision_Sucesso_TokenPorJogador(t *testing.T) {
 func TestProvision_PoolEsgotado_ErrNoServer(t *testing.T) {
 	c := setup(t, &fakeSessionServer{full: true})
 
-	_, err := c.Provision(context.Background(), "m1", []string{"p1"})
+	_, err := c.Provision(context.Background(), "m1", []string{"p1"}, "game-1")
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }

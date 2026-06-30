@@ -39,7 +39,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 
 // Create aloca um game server, emite um connect token por jogador e registra a
 // sessão. Se a emissão falhar, o server alocado é devolvido ao pool.
-func (s *Service) Create(ctx context.Context, matchID string, players []string) (*domain.Session, []domain.ConnectGrant, error) {
+func (s *Service) Create(ctx context.Context, matchID, gameID string, players []string) (*domain.Session, []domain.ConnectGrant, error) {
 	server, err := s.allocator.Allocate(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("session service: create: allocate: %w", err)
@@ -59,6 +59,7 @@ func (s *Service) Create(ctx context.Context, matchID string, players []string) 
 	sess := &domain.Session{
 		ID:            uuid.NewString(),
 		MatchID:       matchID,
+		GameID:        gameID,
 		Players:       players,
 		ServerID:      server.ID,
 		ServerAddress: server.Address,

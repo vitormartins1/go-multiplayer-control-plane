@@ -8,6 +8,7 @@ import "context"
 type Session struct {
 	ID            string
 	MatchID       string
+	GameID        string // jogo da partida (multi-tenant, ADR-0017)
 	Players       []string
 	ServerID      string
 	ServerAddress string
@@ -37,7 +38,7 @@ type PlayerResult struct {
 type SessionService interface {
 	// Create aloca um game server, emite um connect token por jogador e registra
 	// a sessão. Devolve ErrNoServer se o pool esgotar.
-	Create(ctx context.Context, matchID string, players []string) (*Session, []ConnectGrant, error)
+	Create(ctx context.Context, matchID, gameID string, players []string) (*Session, []ConnectGrant, error)
 	// ReportResult dispara o fan-out do resultado, libera o server e encerra a
 	// sessão. Devolve ErrSessionNotFound se não houver sessão para o match.
 	ReportResult(ctx context.Context, matchID string, results []PlayerResult) error

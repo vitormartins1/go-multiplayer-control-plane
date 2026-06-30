@@ -22,7 +22,7 @@ grpcurl -plaintext localhost:50051 list matchmaking.v1.Matchmaking
 #    rode DOIS terminais com tokens de jogadores diferentes:
 grpcurl -plaintext \
   -H "authorization: Bearer $TOKEN" \
-  -d '{}' \
+  -d '{"gameId":"00000000-0000-0000-0000-000000000000"}' \
   localhost:50051 matchmaking.v1.Matchmaking/FindMatch
 # -> { "status": "STATUS_SEARCHING" }
 # -> { "status": "STATUS_MATCHED", "matchId": "...", "players": [...],
