@@ -166,25 +166,35 @@ func serverPool() []string {
 	return out
 }
 
-// buildPublisher escolhe o fan-out do resultado: se ACHIEVEMENTS_URL estiver
-// setado, usa o adapter real (HTTP + internal key, ADR-0018, trace via otelhttp);
-// senão, cai no fallback que só loga.
+// buildPublisher monta o fan-out do resultado: um sink por destino configurado
+// (achievements via ACHIEVEMENTS_URL, leaderboard via LEADERBOARD_URL), agrupados
+// num Composite (fan-out N sinks). Sem nenhum destino, cai no fallback de log.
+// Todos compartilham um client com a internal key (ADR-0018) + trace (otelhttp).
 func buildPublisher(log *slog.Logger) domain.ResultPublisher {
-	achURL := os.Getenv("ACHIEVEMENTS_URL")
-	if achURL == "" {
-		log.Warn("ACHIEVEMENTS_URL ausente — fan-out do resultado só vai logar (fallback)")
-		return publisher.New(log)
-	}
 	internalKey := os.Getenv("INTERNAL_API_KEY")
-	if internalKey == "" {
-		log.Warn("INTERNAL_API_KEY ausente — o fan-out vai dar 401 no achievements")
-	}
 	client := &http.Client{
 		Timeout:   5 * time.Second,
 		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
 	}
-	log.Info("fan-out do resultado via achievements", "url", achURL)
-	return publisher.NewAchievements(achURL, client, log)
+
+	var sinks []domain.ResultPublisher
+	if u := os.Getenv("ACHIEVEMENTS_URL"); u != "" {
+		log.Info("fan-out: achievements", "url", u)
+		sinks = append(sinks, publisher.NewAchievements(u, client, log))
+	}
+	if u := os.Getenv("LEADERBOARD_URL"); u != "" {
+		log.Info("fan-out: leaderboard", "url", u)
+		sinks = append(sinks, publisher.NewLeaderboard(u, client, log))
+	}
+
+	if len(sinks) == 0 {
+		log.Warn("nenhum destino de fan-out (ACHIEVEMENTS_URL/LEADERBOARD_URL) — só vai logar (fallback)")
+		return publisher.New(log)
+	}
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — o fan-out vai dar 401 nos destinos")
+	}
+	return publisher.NewComposite(log, sinks...)
 }
 
 // buildIssuer carrega a chave Ed25519 do config (PEM PKCS8) ou, em dev, gera uma

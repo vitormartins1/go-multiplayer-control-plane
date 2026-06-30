@@ -133,11 +133,14 @@ services:
     environment:
       PORT: "8080"
       GRPC_PORT: "50051"
-      ACHIEVEMENTS_URL: http://achievements-service:8080 # fan-out do resultado (ADR-0010)
+      ACHIEVEMENTS_URL: http://achievements-service:8080 # fan-out -> achievements (ADR-0010)
+      LEADERBOARD_URL: http://leaderboard-service:8080 # fan-out -> leaderboard (ADR-0010)
       INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço no fan-out (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
       achievements-service:
+        condition: service_started
+      leaderboard-service:
         condition: service_started
       tempo:
         condition: service_started
