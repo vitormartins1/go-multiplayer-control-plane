@@ -32,6 +32,7 @@ func newPresencePool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithInitScripts(
 			"../../migrations/001_create_games.sql",
 			"../../migrations/003_create_game_players.sql",
+			"../../migrations/004_add_cover_metadata.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)

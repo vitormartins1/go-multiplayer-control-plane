@@ -28,7 +28,10 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithDatabase("game_registry"),
 		tcpostgres.WithUsername("dev"),
 		tcpostgres.WithPassword("dev"),
-		tcpostgres.WithInitScripts("../../migrations/001_create_games.sql"),
+		tcpostgres.WithInitScripts(
+			"../../migrations/001_create_games.sql",
+			"../../migrations/004_add_cover_metadata.sql",
+		),
 		tcpostgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
@@ -86,4 +89,41 @@ func TestPostgresGameRepository_FindByID_Inexistente_ErrGameNotFound(t *testing.
 	repo := NewPostgresGameRepository(newTestPool(t))
 	_, err := repo.FindByID(context.Background(), "nao-existe")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+func TestPostgresGameRepository_CapaRoundTrip(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+
+	g := newGame("tetris", "Tetris")
+	g.ImageSource = "generated"
+	g.GeneratedImageSeed = "tetris"
+	g.GeneratedImageStyle = "shapes"
+	require.NoError(t, repo.Create(ctx, g))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "generated", got.ImageSource)
+	assert.Equal(t, "tetris", got.GeneratedImageSeed)
+	assert.Equal(t, "shapes", got.GeneratedImageStyle)
+	assert.Empty(t, got.Image, "sem upload -> image vazio (NULLIF gravou NULL, COALESCE leu '')")
+}
+
+func TestPostgresGameRepository_RegistroAntigoSemSeed_CaiNoSlug(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresGameRepository(pool)
+	ctx := context.Background()
+
+	// simula um registro "antigo": insere direto com seed/image NULL.
+	_, err := pool.Exec(ctx,
+		`INSERT INTO games (id, slug, name, created_at, image, generated_image_seed)
+		 VALUES ($1, 'legado', 'Jogo Legado', now(), NULL, NULL)`, "old-1")
+	require.NoError(t, err)
+
+	got, err := repo.FindByID(ctx, "old-1")
+	require.NoError(t, err)
+	assert.Equal(t, "legado", got.GeneratedImageSeed, "seed NULL -> slug (COALESCE)")
+	assert.Equal(t, "generated", got.ImageSource, "default da migration")
+	assert.Equal(t, "shapes", got.GeneratedImageStyle, "default da migration")
+	assert.Empty(t, got.Image)
 }

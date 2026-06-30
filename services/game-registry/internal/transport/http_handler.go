@@ -38,10 +38,21 @@ type gameDTO struct {
 	Slug      string    `json:"slug"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Capa (003-generated-cover): metadados; a imagem é gerada no cliente.
+	Image               string `json:"image"`               // "" = sem upload (reservado)
+	ImageSource         string `json:"imageSource"`         // "generated" no MVP
+	GeneratedImageSeed  string `json:"generatedImageSeed"`  // default = slug
+	GeneratedImageStyle string `json:"generatedImageStyle"` // default = "shapes"
 }
 
 func toDTO(g *domain.Game) gameDTO {
-	return gameDTO{ID: g.ID, Slug: g.Slug, Name: g.Name, CreatedAt: g.CreatedAt}
+	return gameDTO{
+		ID: g.ID, Slug: g.Slug, Name: g.Name, CreatedAt: g.CreatedAt,
+		Image:               g.Image,
+		ImageSource:         g.ImageSource,
+		GeneratedImageSeed:  g.GeneratedImageSeed,
+		GeneratedImageStyle: g.GeneratedImageStyle,
+	}
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

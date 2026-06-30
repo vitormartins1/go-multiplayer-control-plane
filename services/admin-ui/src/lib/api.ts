@@ -46,6 +46,12 @@ export interface Game {
   slug: string;
   name: string;
   createdAt: string;
+  // Capa (003-generated-cover): metadados; a imagem é gerada no cliente a partir
+  // da seed. Opcionais p/ compatibilidade com respostas antigas.
+  image?: string;
+  imageSource?: string;
+  generatedImageSeed?: string;
+  generatedImageStyle?: string;
 }
 
 export interface CatalogAchievement {

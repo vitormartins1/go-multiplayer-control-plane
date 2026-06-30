@@ -66,12 +66,18 @@ type Player struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// Game é um jogo registrado (fonte: game-registry — ADR-0017).
+// Game é um jogo registrado (fonte: game-registry — ADR-0017). Os campos de
+// capa (003-generated-cover) são repassados ao admin-ui, que gera a imagem
+// determinística a partir da seed.
 type Game struct {
-	ID        string    `json:"id"`
-	Slug      string    `json:"slug"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID                  string    `json:"id"`
+	Slug                string    `json:"slug"`
+	Name                string    `json:"name"`
+	CreatedAt           time.Time `json:"createdAt"`
+	Image               string    `json:"image"`
+	ImageSource         string    `json:"imageSource"`
+	GeneratedImageSeed  string    `json:"generatedImageSeed"`
+	GeneratedImageStyle string    `json:"generatedImageStyle"`
 }
 
 // Achievement é uma entrada do catálogo de conquistas de um jogo. EventType é

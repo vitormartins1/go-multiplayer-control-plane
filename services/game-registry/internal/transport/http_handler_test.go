@@ -75,6 +75,25 @@ func TestCreate_Valido_201(t *testing.T) {
 	assert.Equal(t, "tetris", resp["slug"])
 }
 
+func TestCreate_ExpoeMetadadosDeCapa(t *testing.T) {
+	svc := new(mockService)
+	g := &domain.Game{
+		ID: "id-1", Slug: "tetris", Name: "Tetris",
+		ImageSource: "generated", GeneratedImageSeed: "tetris", GeneratedImageStyle: "shapes",
+	}
+	svc.On("Register", mock.Anything, "tetris", "Tetris").Return(g, nil)
+
+	rr := do(newServer(svc), http.MethodPost, "/games", `{"slug":"tetris","name":"Tetris"}`)
+	require.Equal(t, http.StatusCreated, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, "generated", resp["imageSource"])
+	assert.Equal(t, "tetris", resp["generatedImageSeed"])
+	assert.Equal(t, "shapes", resp["generatedImageStyle"])
+	assert.Equal(t, "", resp["image"])
+}
+
 func TestCreate_SlugInvalido_400(t *testing.T) {
 	svc := new(mockService)
 	svc.On("Register", mock.Anything, mock.Anything, mock.Anything).Return(nil, domain.ErrInvalidSlug)
