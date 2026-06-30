@@ -20,8 +20,8 @@ ADRs relevantes recentes: 0016 (painel BFF), 0017 (multi-tenant game-registry), 
 > Padrão de referência já no repo: `achievements/004-game-scope`, `achievements/003-admin-read`, `leaderboard/002-game-scope`, `admin-bff/005-leaderboard-panel`.
 
 1. ~~**`services/player-data-service/specs/002-game-scope`**~~ — ✅ **feito** (2026-06-30): game_id na PK + admin read (`GET /admin/games/{g}/players/{p}/data`) + guard internal key.
-2. **`services/cloud-save-service/specs/002-game-scope`** — game-scope (key S3 `{gameID}/{playerID}`) + admin read (`GET /admin/games/{g}/players/{p}/save`) + guard. **← próximo**
-3. **`services/admin-bff/specs/006-player-tabs`** — acende as abas **Player data** e **Cloud saves** do jogador no painel (bff + ui). **Depende de 1 e 2.**
+2. ~~**`services/cloud-save-service/specs/002-game-scope`**~~ — ✅ **feito** (2026-06-30): key S3 `{gameID}/{playerID}` + admin read (`GET /admin/games/{g}/players/{p}/save`, metadados + blob base64) + guard.
+3. **`services/admin-bff/specs/006-player-tabs`** — acende as abas **Player data** e **Cloud saves** do jogador no painel (bff + ui). **Depende de 1 e 2 (ambas feitas) → próximo.**
 
 Cada uma tem spec/plan/tasks. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
 
