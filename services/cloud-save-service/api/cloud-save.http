@@ -3,16 +3,21 @@
 # Requer a stack no ar:
 #   docker compose -f infra/docker/docker-compose.yml up
 #
-# Endpoints exigem um JWT do identity (ADR-0009). O login captura o token.
+# Endpoints de jogador exigem JWT do identity (ADR-0009) + header X-Game-Id
+# (multi-tenant por jogo, ADR-0017). O login captura o token.
 # GoLand/IntelliJ: clique no ▶. (VS Code REST Client: ver nota no fim.)
 #
 # Acompanhe: Grafana http://localhost:3000 e o console do MinIO
-# http://localhost:9001 (minioadmin/minioadmin), bucket cloud-save.
+# http://localhost:9001 (minioadmin/minioadmin), bucket cloud-save
+# (keys ficam como {gameID}/{playerID}).
 
 @identityHost = http://localhost:8081
 @cloudSaveHost = http://localhost:8084
 @handle = Save_1
 @password = supersecret
+
+# Jogo no header X-Game-Id. "sandbox" = jogo default da migração (UUID nil).
+@gameId = 00000000-0000-0000-0000-000000000000
 
 ### (uma vez) Criar a conta no identity
 POST {{identityHost}}/accounts
@@ -34,6 +39,7 @@ Content-Type: application/json
 ### Salvar o save (blob — aqui um JSON, mas o serviço trata como opaco)
 PUT {{cloudSaveHost}}/me/save
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 Content-Type: application/json
 
 { "level": 7, "hp": 50, "inventory": ["sword", "shield"] }
@@ -41,13 +47,31 @@ Content-Type: application/json
 ### Carregar o save (volta no mesmo Content-Type)
 GET {{cloudSaveHost}}/me/save
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 
 ### Sobrescrever (last-write-wins)
 PUT {{cloudSaveHost}}/me/save
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 Content-Type: application/json
 
 { "level": 8, "hp": 100 }
+
+### Sem X-Game-Id -> 400 missing_game
+GET {{cloudSaveHost}}/me/save
+Authorization: Bearer {{token}}
+
+### --- Admin (control plane INTERNO) ---
+# Exige o header X-Internal-Key (ADR-0018), NÃO o JWT. Devolve metadados +
+# blob em base64. Alimenta a aba Cloud saves do painel.
+@internalKey = dev-internal-key
+
+### Save do jogador {playerID} no jogo {gameId} (404 se não houver)
+GET {{cloudSaveHost}}/admin/games/{{gameId}}/players/guest-123/save
+X-Internal-Key: {{internalKey}}
+
+### Sem a internal key -> 401
+GET {{cloudSaveHost}}/admin/games/{{gameId}}/players/guest-123/save
 
 # --- VS Code REST Client ---
 # O bloco "> {% ... %}" é sintaxe do JetBrains. No REST Client, remova-o e use

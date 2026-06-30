@@ -33,34 +33,37 @@ func newTestStore(t *testing.T) *S3Store {
 	return store
 }
 
+const gA = "game-a"
+
 func TestPutGet_RoundTrip(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	snap := domain.Snapshot{Blob: []byte("save-bytes-\x00\x01"), ContentType: "application/json"}
 
-	require.NoError(t, store.Put(ctx, "p1", snap))
+	require.NoError(t, store.Put(ctx, gA, "p1", snap))
 
-	got, err := store.Get(ctx, "p1")
+	got, err := store.Get(ctx, gA, "p1")
 	require.NoError(t, err)
 	assert.Equal(t, snap.Blob, got.Blob)
 	assert.Equal(t, "application/json", got.ContentType)
+	assert.False(t, got.UpdatedAt.IsZero(), "UpdatedAt deve vir do LastModified do S3")
 }
 
 func TestPut_Sobrescreve(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	require.NoError(t, store.Put(ctx, "p1", domain.Snapshot{Blob: []byte("v1"), ContentType: "text/plain"}))
-	require.NoError(t, store.Put(ctx, "p1", domain.Snapshot{Blob: []byte("v2"), ContentType: "text/plain"}))
+	require.NoError(t, store.Put(ctx, gA, "p1", domain.Snapshot{Blob: []byte("v1"), ContentType: "text/plain"}))
+	require.NoError(t, store.Put(ctx, gA, "p1", domain.Snapshot{Blob: []byte("v2"), ContentType: "text/plain"}))
 
-	got, err := store.Get(ctx, "p1")
+	got, err := store.Get(ctx, gA, "p1")
 	require.NoError(t, err)
 	assert.Equal(t, []byte("v2"), got.Blob)
 }
 
 func TestGet_Inexistente_ErrNotFound(t *testing.T) {
 	store := newTestStore(t)
-	_, err := store.Get(context.Background(), "fantasma")
+	_, err := store.Get(context.Background(), gA, "fantasma")
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
 }
 
@@ -68,8 +71,29 @@ func TestData_IsoladoPorJogador(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	require.NoError(t, store.Put(ctx, "p1", domain.Snapshot{Blob: []byte("p1-save"), ContentType: "text/plain"}))
+	require.NoError(t, store.Put(ctx, gA, "p1", domain.Snapshot{Blob: []byte("p1-save"), ContentType: "text/plain"}))
 
-	_, err := store.Get(ctx, "p2")
+	_, err := store.Get(ctx, gA, "p2")
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+}
+
+func TestData_IsoladoPorJogo(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// mesmo jogador, jogos diferentes -> saves independentes (prefixo da key).
+	require.NoError(t, store.Put(ctx, "game-a", "p1", domain.Snapshot{Blob: []byte("a-save"), ContentType: "text/plain"}))
+	require.NoError(t, store.Put(ctx, "game-b", "p1", domain.Snapshot{Blob: []byte("b-save"), ContentType: "text/plain"}))
+
+	a, err := store.Get(ctx, "game-a", "p1")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("a-save"), a.Blob)
+
+	b, err := store.Get(ctx, "game-b", "p1")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("b-save"), b.Blob)
+
+	// save do jogo A não aparece no jogo C.
+	_, err = store.Get(ctx, "game-c", "p1")
 	assert.True(t, errors.Is(err, domain.ErrNotFound))
 }

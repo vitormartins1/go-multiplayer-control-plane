@@ -21,10 +21,16 @@ import (
 // garante em tempo de compilação que satisfazemos a Port.
 var _ domain.SaveStore = (*S3Store)(nil)
 
-// S3Store guarda saves como objetos (key = playerID) num bucket S3/MinIO.
+// S3Store guarda saves como objetos num bucket S3/MinIO. A key é escopada por
+// jogo: `{gameID}/{playerID}` (multi-tenant por jogo, ADR-0017).
 type S3Store struct {
 	client *s3.Client
 	bucket string
+}
+
+// objectKey monta a key do save escopada por jogo (prefixo {gameID}/).
+func objectKey(gameID, playerID string) string {
+	return gameID + "/" + playerID
 }
 
 // NewS3Store cria o store apontando para um endpoint S3-compatible e garante
@@ -59,10 +65,10 @@ func (s *S3Store) ensureBucket(ctx context.Context) error {
 	return nil
 }
 
-func (s *S3Store) Put(ctx context.Context, playerID string, snapshot domain.Snapshot) error {
+func (s *S3Store) Put(ctx context.Context, gameID, playerID string, snapshot domain.Snapshot) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(playerID),
+		Key:         aws.String(objectKey(gameID, playerID)),
 		Body:        bytes.NewReader(snapshot.Blob),
 		ContentType: aws.String(snapshot.ContentType),
 	})
@@ -72,10 +78,10 @@ func (s *S3Store) Put(ctx context.Context, playerID string, snapshot domain.Snap
 	return nil
 }
 
-func (s *S3Store) Get(ctx context.Context, playerID string) (domain.Snapshot, error) {
+func (s *S3Store) Get(ctx context.Context, gameID, playerID string) (domain.Snapshot, error) {
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(playerID),
+		Key:    aws.String(objectKey(gameID, playerID)),
 	})
 	if err != nil {
 		var nsk *types.NoSuchKey
@@ -90,5 +96,9 @@ func (s *S3Store) Get(ctx context.Context, playerID string) (domain.Snapshot, er
 	if err != nil {
 		return domain.Snapshot{}, fmt.Errorf("cloud-save storage: read: %w", err)
 	}
-	return domain.Snapshot{Blob: blob, ContentType: aws.ToString(out.ContentType)}, nil
+	return domain.Snapshot{
+		Blob:        blob,
+		ContentType: aws.ToString(out.ContentType),
+		UpdatedAt:   aws.ToTime(out.LastModified),
+	}, nil
 }
