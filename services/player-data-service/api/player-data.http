@@ -3,7 +3,8 @@
 # Requer a stack no ar:
 #   docker compose -f infra/docker/docker-compose.yml up
 #
-# Todos os endpoints exigem um JWT do identity (ADR-0009). O login captura o token.
+# Endpoints de jogador exigem JWT do identity (ADR-0009) + header X-Game-Id
+# (multi-tenant por jogo, ADR-0017). O login captura o token.
 # GoLand/IntelliJ: clique no ▶. (VS Code REST Client: ver nota no fim.)
 #
 # Acompanhe: Grafana http://localhost:3000 e o banco em localhost:5434
@@ -13,6 +14,9 @@
 @playerDataHost = http://localhost:8083
 @handle = Data_1
 @password = supersecret
+
+# Jogo no header X-Game-Id. "sandbox" = jogo default da migração (UUID nil).
+@gameId = 00000000-0000-0000-0000-000000000000
 
 ### (uma vez) Criar a conta no identity
 POST {{identityHost}}/accounts
@@ -34,6 +38,7 @@ Content-Type: application/json
 ### Gravar um valor (inventory/gold)
 PUT {{playerDataHost}}/me/data/inventory/gold
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 Content-Type: application/json
 
 { "amount": 100 }
@@ -41,6 +46,7 @@ Content-Type: application/json
 ### Gravar outro (inventory/potions)
 PUT {{playerDataHost}}/me/data/inventory/potions
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 Content-Type: application/json
 
 5
@@ -48,14 +54,32 @@ Content-Type: application/json
 ### Ler um valor
 GET {{playerDataHost}}/me/data/inventory/gold
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
 
 ### Ler o namespace inteiro -> { "gold": ..., "potions": ... }
 GET {{playerDataHost}}/me/data/inventory
+Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
+
+### Sem X-Game-Id -> 400 missing_game
+GET {{playerDataHost}}/me/data/inventory/gold
 Authorization: Bearer {{token}}
 
 ### Remover um valor (DELETE é idempotente)
 DELETE {{playerDataHost}}/me/data/inventory/gold
 Authorization: Bearer {{token}}
+X-Game-Id: {{gameId}}
+
+### --- Admin (control plane INTERNO) ---
+# Exige o header X-Internal-Key (ADR-0018), NÃO o JWT. Alimenta o painel.
+@internalKey = dev-internal-key
+
+### Todo o dado do jogador {playerID} no jogo {gameId}
+GET {{playerDataHost}}/admin/games/{{gameId}}/players/guest-123/data
+X-Internal-Key: {{internalKey}}
+
+### Sem a internal key -> 401
+GET {{playerDataHost}}/admin/games/{{gameId}}/players/guest-123/data
 
 # --- VS Code REST Client ---
 # O bloco "> {% ... %}" é sintaxe do HTTP Client do JetBrains. No REST Client,

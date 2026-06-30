@@ -49,6 +49,7 @@ services:
       DATABASE_URL: postgres://dev:dev@player-data-postgres:5432/player_data?sslmode=disable
       IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço nos /admin (ADR-0018)
     depends_on:
       player-data-postgres:
         condition: service_healthy
@@ -253,6 +254,7 @@ services:
       - "5434:5432"
     volumes:
       - ../../services/player-data-service/migrations/001_create_player_data.sql:/docker-entrypoint-initdb.d/001_create_player_data.sql:ro
+      - ../../services/player-data-service/migrations/002_add_game_scope.sql:/docker-entrypoint-initdb.d/002_add_game_scope.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d player_data"]
       interval: 5s

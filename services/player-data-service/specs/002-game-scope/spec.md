@@ -1,7 +1,7 @@
 # Spec: 002-game-scope
 
 **Serviço:** player-data-service
-**Status:** Draft (preparada para implementação — ver docs/NEXT-STEPS.md)
+**Status:** Implementada (2026-06-30)
 **Data:** 2026-06-30
 
 ## Contexto
@@ -30,11 +30,11 @@ Padrão de referência: `achievements/004-game-scope` (migration com backfill sa
 - Guard `auth.RequireInternalKey(key, "/admin")` no main; `INTERNAL_API_KEY` no compose.
 
 ## Casos de Teste Obrigatórios
-- [ ] Put/Get isolados por jogo (dado no jogo A não aparece no B)
-- [ ] player-facing sem `X-Game-Id` -> `400`
-- [ ] `GET /admin/games/{g}/players/{p}/data` -> lista do jogador no jogo
-- [ ] `/admin/...` exige internal key
-- [ ] migration aplica (backfill sandbox; PK nova) — testcontainers
+- [x] Put/Get isolados por jogo (dado no jogo A não aparece no B)
+- [x] player-facing sem `X-Game-Id` -> `400`
+- [x] `GET /admin/games/{g}/players/{p}/data` -> lista do jogador no jogo
+- [x] `/admin/...` exige internal key
+- [x] migration aplica (backfill sandbox; PK nova) — testcontainers
 
 ## Open Questions (resolver no plan)
 - Admin read: tudo do jogador (`ListForPlayer`) **ou** por namespace (`GET .../data/{namespace}`)? Recomendado: `ListForPlayer` (painel mostra tudo numa tabela; menos cliques).
