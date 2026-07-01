@@ -5,6 +5,7 @@ package transport
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -83,11 +84,11 @@ func (h *Handler) loginAnonymous(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		GameId string `json:"gameId"`
 	}
-	if r.ContentLength > 0 {
-		if err := decode(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request")
-			return
-		}
+	// Corpo vazio -> io.EOF, tolerado (gameId fica ""). Assim não depende do
+	// Content-Length (cobre também Transfer-Encoding: chunked).
+	if err := decode(r, &req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
 	}
 	token, err := h.auth.LoginAnonymous(r.Context(), req.GameId)
 	if err != nil {

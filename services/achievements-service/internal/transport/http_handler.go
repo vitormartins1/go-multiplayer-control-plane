@@ -137,7 +137,7 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
+	writeJSON(w, http.StatusCreated, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
 }
 
 // adminUpdateAchievement edita uma conquista do catálogo do jogo (admin).
@@ -159,7 +159,7 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
+	writeJSON(w, http.StatusOK, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
 }
 
 // adminDeleteAchievement remove uma conquista do catálogo do jogo (admin).

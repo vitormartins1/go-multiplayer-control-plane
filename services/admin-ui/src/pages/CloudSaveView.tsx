@@ -28,7 +28,7 @@ function decodePreview(contentType: string, blobB64: string): string | null {
 export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: string | null }) {
   const { data, loading, error, reload } = useAsync(
     (s) => (gameId ? api.cloudSave(gameId, playerId, s) : Promise.resolve<CloudSave | null>(null)),
-    [gameId],
+    [gameId, playerId],
   );
 
   if (!gameId) return <Text c="dimmed">Selecione um jogo no topo para ver o save do jogador.</Text>;
