@@ -1,4 +1,5 @@
-import { AppShell, Group, NavLink, Title } from "@mantine/core";
+import { AppShell, Center, Group, Loader, NavLink, Title } from "@mantine/core";
+import { lazy, Suspense } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   IconChartBar,
@@ -7,12 +8,15 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 
-import { Overview } from "./pages/Overview";
-import { Games } from "./pages/Games";
-import { GameDetail } from "./pages/GameDetail";
-import { Players } from "./pages/Players";
-import { PlayerDetail } from "./pages/PlayerDetail";
-import { Analytics } from "./pages/Analytics";
+// Rotas carregadas sob demanda (code-splitting): cada página vira um chunk
+// próprio, então os deps pesados (DiceBear nas capas/avatares, @xyflow no mapa
+// de topologia) só baixam ao navegar. Named exports -> mapeados p/ default.
+const Overview = lazy(() => import("./pages/Overview").then((m) => ({ default: m.Overview })));
+const Games = lazy(() => import("./pages/Games").then((m) => ({ default: m.Games })));
+const GameDetail = lazy(() => import("./pages/GameDetail").then((m) => ({ default: m.GameDetail })));
+const Players = lazy(() => import("./pages/Players").then((m) => ({ default: m.Players })));
+const PlayerDetail = lazy(() => import("./pages/PlayerDetail").then((m) => ({ default: m.PlayerDetail })));
+const Analytics = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.Analytics })));
 
 const NAV = [
   { to: "/", label: "Visão geral", icon: IconLayoutDashboard },
@@ -47,15 +51,23 @@ export function App() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/games" element={<Games />} />
-          <Route path="/games/:gameId" element={<GameDetail />} />
-          <Route path="/players" element={<Players />} />
-          <Route path="/players/:playerId" element={<PlayerDetail />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense
+          fallback={
+            <Center h={200}>
+              <Loader />
+            </Center>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Overview />} />
+            <Route path="/games" element={<Games />} />
+            <Route path="/games/:gameId" element={<GameDetail />} />
+            <Route path="/players" element={<Players />} />
+            <Route path="/players/:playerId" element={<PlayerDetail />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </AppShell.Main>
     </AppShell>
   );
