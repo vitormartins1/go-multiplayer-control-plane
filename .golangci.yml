@@ -1,0 +1,11 @@
+# golangci-lint v2. Linters padrão (errcheck, govet, ineffassign, staticcheck,
+# unused). Produção fica estrita; nos testes o errcheck é dispensado — checar
+# cada resp.Body.Close()/retorno ignorado em teste é ruído, não risco.
+version: "2"
+
+linters:
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
