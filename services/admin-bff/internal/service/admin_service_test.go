@@ -55,10 +55,9 @@ func (f *fakeReader) PlayerAchievements(_ context.Context, gameID, playerID stri
 }
 
 type fakeRegistry struct {
-	games     []domain.Game
-	created   *domain.Game
-	players   []domain.GamePlayer
-	err       error
+	games       []domain.Game
+	players     []domain.GamePlayer
+	err         error
 	gotSlug     string
 	gotName     string
 	gotGameID   string

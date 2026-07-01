@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela runs anteriores do mesmo ref (economiza minutos em pushes rápidos).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go · build / vet / test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # módulo único (ADR-0001): uma versão pra tudo
+          cache: true
+      - run: go build ./...
+      - run: go vet ./...
+      # unit tests (os de integração ficam atrás da tag `integration`, no job abaixo)
+      - run: go test ./... -race -cover
+
+  integration:
+    name: Go · integração (testcontainers)
+    runs-on: ubuntu-latest # tem Docker pré-instalado (testcontainers sobe Postgres/MinIO)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -tags=integration ./... -count=1
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # instala a versão fixada (mesma validada localmente) — determinístico
+      - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      - run: golangci-lint run ./...
+
+  frontend:
+    name: admin-ui · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/admin-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: services/admin-ui/package-lock.json
+      - run: npm ci
+      - run: npm run build # tsc --noEmit && vite build

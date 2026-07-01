@@ -23,7 +23,6 @@ type fakeService struct {
 	pageErr   error
 	games     []domain.Game
 	gamesErr  error
-	createdG  *domain.Game
 	createErr error
 	catalog   []domain.Achievement
 	catErr    error
