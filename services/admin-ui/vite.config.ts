@@ -13,4 +13,17 @@ export default defineConfig({
       "/api": { target: bff, changeOrigin: true },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Isola os vendors pesados em chunks próprios (cacheáveis à parte e
+        // carregados só com as rotas que os usam, via lazy no App).
+        manualChunks: {
+          dicebear: ["@dicebear/core", "@dicebear/collection"],
+          xyflow: ["@xyflow/react"],
+          mantine: ["@mantine/core", "@mantine/hooks", "@mantine/form", "@mantine/notifications"],
+        },
+      },
+    },
+  },
 });
