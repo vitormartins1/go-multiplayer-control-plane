@@ -1,64 +1,70 @@
-# NEXT-STEPS — handoff (2026-06-30)
+# NEXT-STEPS — handoff (atualizado 2026-06-30)
 
-Ponto de retomada após limpar o contexto. Resume **o que está pronto**, **as specs preparadas** (prontas para implementar) e **o backlog**.
+Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
-## Estado atual (main verde, stack local de pé)
+## Estado atual (`main` verde, stack local de pé)
 
-O **gameplay loop** está fechado e observável no painel:
+Gameplay loop fechado e observável no painel:
 
 `FindMatch(game_id) → match por jogo → CreateSession(game_id) → ReportResult → fan-out (achievements + leaderboard) → painel`
 
-- **Multi-tenant por jogo** (ADR-0017) ponta a ponta: game-registry + achievements + leaderboard escopados por `game_id`.
-- **Auth serviço-a-serviço** (ADR-0018): internal key (`X-Internal-Key`) nos `/admin`; `shared/auth` (`RequireInternalKey` + `InternalKeyTransport`). Chave dev no compose: `dev-internal-key`.
-- **Fan-out** do resultado: `session` → `CompositePublisher` → achievements (match_played/match_won) + leaderboard (score). Best-effort.
-- **Painel** (admin-bff + admin-ui, Mantine): Visão geral (mapa+saúde), Games (detalhe: Achievements, Leaderboards), Players (detalhe: Achievements; Player data/Cloud saves ainda "em breve"), Analytics ("em breve"). URL: http://localhost:8089.
+- **Multi-tenant por jogo** (ADR-0017) ponta a ponta: game-registry + achievements + leaderboard + player-data + cloud-save escopados por `game_id`.
+- **Auth serviço-a-serviço** (ADR-0018): internal key (`X-Internal-Key`) nos control planes; `shared/auth` (`RequireInternalKey` + `InternalKeyTransport`). Chave dev: `dev-internal-key`.
+- **Presença por jogo** (ADR-0019): identidade continua **global**; cada jogo tem uma player base explícita (`game_players` no game-registry), marcada no **login-into-game** (identity aceita `gameId` opcional, marca best-effort com timeout de 2s).
+- **Fan-out** do resultado: `session` → `CompositePublisher` → achievements + leaderboard. Best-effort.
+- **Painel jogo-cêntrico** (admin-bff + admin-ui, Mantine) em http://localhost:8089 — ver seção abaixo.
 
-ADRs relevantes recentes: 0016 (painel BFF), 0017 (multi-tenant game-registry), 0018 (service auth).
+10 serviços Go construídos: identity, game-registry, achievements, player-data, cloud-save, leaderboard, matchmaking (gRPC), session (gRPC), admin-bff, admin-ui. Observabilidade: Prometheus + Grafana + Tempo.
 
-## Specs preparadas — ✅ TODAS CONCLUÍDAS (2026-06-30)
+ADRs recentes: 0016 (painel BFF), 0017 (multi-tenant), 0018 (service auth), **0019 (presença por jogo)**.
 
-> Padrão de referência já no repo: `achievements/004-game-scope`, `achievements/003-admin-read`, `leaderboard/002-game-scope`, `admin-bff/005-leaderboard-panel`.
+## ⚠️ Pendente de você (ações fora do código)
 
-1. ~~**`services/player-data-service/specs/002-game-scope`**~~ — ✅ **feito**: game_id na PK + admin read (`GET /admin/games/{g}/players/{p}/data`) + guard internal key.
-2. ~~**`services/cloud-save-service/specs/002-game-scope`**~~ — ✅ **feito**: key S3 `{gameID}/{playerID}` + admin read (`GET /admin/games/{g}/players/{p}/save`, metadados + blob base64) + guard.
-3. ~~**`services/admin-bff/specs/006-player-tabs`**~~ — ✅ **feito**: abas **Player data** e **Cloud saves** do jogador no painel (bff + ui), consumindo os admin reads de 1 e 2.
+1. **Push pro GitHub** — o repo ainda é **local**. Criar `github.com/vitormartins1/go-game-backend`, `git remote add origin …`, `git push -u origin main`. **Só então o CI (GitHub Actions) roda de verdade.** Reproduzi os 4 jobs verdes localmente, mas o ambiente do Actions nunca rodou (testcontainers às vezes pede ajuste no runner).
+2. **Nomes de repo decididos:** `go-game-backend` (este) e `go-game-unity` (o data plane Unity, repo separado — ADR-0010). O module path já foi renomeado de `c130n/game-backend` → **`github.com/vitormartins1/go-game-backend`**.
 
-Com isso, **todo o detalhe do jogador está aceso no painel** (Achievements + Player data + Cloud saves).
+## Painel jogo-cêntrico (✅ completo)
 
-## Painel jogo-cêntrico (melhoria de UX/arquitetura — 2026-06-30)
+Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Não há mais "jogo ativo global" no header.
 
-Sequência iniciada a pedido do usuário (biblioteca de capas + repensar a seleção de jogo). Faseada:
+- **Games** (`admin-ui/005-game-library` + `003-generated-cover`): biblioteca de **capas 9:16** geradas no cliente por **DiceBear** a partir de `generatedImageSeed` (=slug); metadados no game-registry (`image`/`imageSource`/`generatedImageSeed`/`generatedImageStyle`) deixam espaço p/ upload futuro. Abrir um jogo → abas **Achievements** (CRUD completo, `achievements/006-catalog-crud`), **Leaderboards**, **Players** (base do jogo = presença), Configurações (ComingSoon).
+- **Players**: base **global** do identity (paginada) + **avatares DiceBear** `adventurer` (seed = playerId, `admin-ui/006-player-avatars`). Abrir um player → **seletor escopado aos jogos DELE** (`GET /api/players/{id}/games`, consulta reversa da presença, `game-registry/004-games-of-player`) → abas Achievements/Player data/Cloud saves.
 
-- ✅ **Fase A** (`admin-ui/005-game-library`): Games virou **biblioteca de capas 9:16** (procedural); **jogo ativo global** no header (`GameProvider`/`useGames`, persistido); abas do jogador consomem o contexto (sem `<Select>` repetido).
-- ✅ **Fase B** (`game-registry/002-game-presence`, **ADR-0019**): **player base por jogo** via **presença** (game-registry `game_players`), marcada no **login-into-game** (identity aceita `gameId`, marca best-effort); admin-bff `GET /api/games/{g}/players`; aba **Players** virou jogo-cêntrica (base do jogo ativo).
-- ✅ **Navegação player-cêntrica** (`game-registry/004-games-of-player`): **review do modelo** — identidade global + presença (ADR-0017/0019) está certa; o ruído era o "jogo ativo global" no header (removido). Agora **dois eixos**: **Games** (abre um jogo → aba Players = base do jogo/presença) e **Players** (base global do identity, com avatares) → abrir um player → **seletor escopado aos jogos DELE** (`GET /api/players/{id}/games`, consulta reversa). Sem `GameProvider`/`GameSwitcher`.
-- ✅ **Avatares** (`admin-ui/006-player-avatars`): DiceBear `adventurer` por jogador (seed = playerId).
-- ✅ **Fase C** (`game-registry/003-generated-cover`): **capa determinística por seed** — game-registry guarda metadados (`image`, `imageSource='generated'`, `generatedImageSeed=slug`, `generatedImageStyle='shapes'`); o admin-ui gera a imagem no cliente via **DiceBear** (`GameCover`). Abordagem "cliente gera" (não backend). Espaço p/ upload futuro (`image`/`imageSource`) e troca de estilo deixados abertos. Registros antigos via COALESCE.
+## O que foi feito nesta sessão (para referência)
 
-## Backlog (sem spec ainda)
+Todas mergeadas na `main` (branch por feature, `--no-ff`):
 
-Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, **analytics-service** (Fase 9 do ROADMAP — único serviço não construído; acende a aba Analytics), infra/deploy (Terraform → AWS, a tese de custo), **cleanup admin-bff** (helper `internal/upstream` compartilhado: `do()`/`classify()`/`errorCode()`/default-client hoje duplicados nos 4 adapters + presence client do identity — do code-review). Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+- `player-data/002-game-scope`, `cloud-save/002-game-scope`, `admin-bff/006-player-tabs` — game-scope + admin read + abas Player data/Cloud saves.
+- `admin-ui/005-game-library` — biblioteca de capas + (depois removido) jogo ativo global.
+- `game-registry/002-game-presence` (**ADR-0019**) — presença + login-into-game + Players por jogo.
+- `game-registry/003-generated-cover` — capa determinística por seed (DiceBear no cliente).
+- `admin-ui/006-player-avatars` — avatar humanoide por jogador.
+- `game-registry/004-games-of-player` — **review do modelo**: navegação player-cêntrica, remove o jogo ativo global, base por jogo no GameDetail, consulta reversa.
+- `achievements/006-catalog-crud` — editar/remover conquistas (delete transacional: apaga progresso + catálogo).
+- **chore**: module path renomeado (regenerar proto com `buf` — um `sed` cru corrompe o `rawDesc`); **CI GitHub Actions**; **code-splitting** do admin-ui (lazy routes + `manualChunks`: bundle 941kB → entry 28kB, DiceBear/xyflow saem do boot).
+- **code-review** (`high`, `fd25bf4..HEAD`): 4 finders em paralelo. Corrigidos: 4 bugs de dados obsoletos no painel (deps `playerId` + reset do jogo ao trocar de jogador), PUT de conquista devolve `eventType`, loginAnonymous tolera corpo vazio/chunked, `markPresence` com timeout 2s. Rastreio cross-file e convenções vieram limpos.
 
-**Painel — CRUD:** ✅ **editar/remover conquistas** (`achievements/006-catalog-crud`). ⏳ **editar/remover jogo** pendente — *rename* é simples (cabe na aba Configurações do GameDetail, hoje ComingSoon); *delete* precisa de decisão (dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/presence — cascata cross-service, provável ADR).
+## Backlog priorizado (sem spec ainda)
 
-## CI (GitHub Actions) — ✅ criado (`.github/workflows/ci.yml`)
+Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Ordem sugerida:
 
-Jobs em push na `main` e em PR: **go** (build/vet/`test -race -cover`), **integration** (`test -tags=integration`, testcontainers), **lint** (`golangci-lint` v2.12.2 pinado + `.golangci.yml`) e **frontend** (`npm ci` + build). Um job Go cobre tudo (módulo único, ADR-0001). Reproduzido verde localmente.
+1. **Push pro GitHub** (acima) → CI passa a rodar.
+2. **Fan-out resiliente** — hoje `ReportResult → achievements/leaderboard` e a presença são best-effort síncronos (logam falha). Evoluir p/ **outbox/retry** (ou fila) para garantir entrega. Provável ADR (SQS/outbox table). *É o ponto mais frágil do sistema.*
+3. **analytics-service** (Fase 9 do ROADMAP — **único serviço não construído**; ≈ Game Analytics Pipeline). Ingestão de eventos + agregação; acende a aba **Analytics** do painel (hoje "em breve"). SDD do zero.
+4. **Editar/remover jogo** no painel — *rename* é simples (cabe na aba Configurações do GameDetail, hoje ComingSoon). *Delete* precisa de decisão: dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/presença (cascata cross-service, provável ADR).
+5. **Leaderboard**: seasons/janelas por período + paginação.
+6. **Cleanup admin-bff** (do code-review, não é bug): `do()`/`classify()`/`errorCode()`/default-client duplicados nos 4 adapters + o presence client do identity → extrair um helper `internal/upstream` parametrizado pelo erro sentinela.
+7. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço (identidade, expiração, revogação). Quando houver múltiplos ambientes/consumidores. Abrir ADR.
+8. **Infra / deploy — o fim, e o payoff da tese (ADR-0008):** não existe `infra/terraform/` ainda (tudo é Docker Compose, local-first deliberado). Terraform → LocalStack → AWS; compute por serviço (ADR-0005: Lambda/Fargate/ECS/EC2/EKS); medir custo/performance vs AWS GameKit.
+9. **Data plane / o jogo (repo `go-game-unity`, não-Go):** Unity Dedicated Server + Netcode + Agones/EKS (ADR-0010/0011/0012). Onde o gameplay realtime roda.
 
-**Pendente do usuário:** o repo ainda é **local** — o CI só dispara depois de criar `github.com/vitormartins1/go-game-backend` e fazer o `git push`. O module path já foi renomeado de `c130n/game-backend` para `vitormartins1/go-game-backend`.
+## Gotchas operacionais
 
-## Backlog (ADR-level, quando sair do MVP)
-
-- **Service JWT (evolução do ADR-0018)**: trocar a internal key compartilhada por tokens de serviço (identidade por serviço, expiração, revogação). Hoje é uma chave única (fail-closed). Abrir ADR quando houver múltiplos ambientes/consumidores.
-- **Fan-out resiliente**: hoje é best-effort síncrono (loga falhas). Evoluir para **outbox/retry** (ou fila) para garantir entrega do resultado a achievements/leaderboard. Abrir ADR (provável SQS/outbox table).
-- **Leaderboard**: seasons/janelas por período; paginação.
-- **Painel**: editar/remover jogos e conquistas; Analytics real.
-
-## Gotchas operacionais (já documentados, mas para lembrar)
-
-- **Migrations Postgres** só rodam em **volume novo**: ao mudar/adicionar migration, `docker compose ... down -v` do `<svc>-postgres` (e remontar a migration no volume do compose).
+- **Migrations Postgres** só rodam em **volume novo**: ao mudar/adicionar migration, `docker compose ... rm -sfv <svc> <svc>-postgres` (apaga o volume anônimo) e remontar a migration no volume do compose. `game-registry-postgres` já teve 3 recriações (migrations 003/004).
+- **Proto**: após mexer no module path / `.proto`, **regenerar com `buf`** (`PATH="$(go env GOPATH)/bin:$PATH" buf generate` dentro do serviço) — um `sed` no `.pb.go` corrompe o `rawDesc` (go_package tem prefixo de tamanho).
+- **golangci-lint** não está instalado por padrão: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2` (o CI usa a mesma versão pinada). Config em `.golangci.yml` (v2): errcheck dispensado só nos `_test.go`.
 - **Prometheus** não raspa job novo sem `docker compose restart prometheus`; **Grafana** provisioning só no boot (restart do container).
-- **buf**: `PATH="$(go env GOPATH)/bin:$PATH" buf generate` dentro do serviço.
 - **Processo órfão** segurando porta gRPC (50051/50052) de algum `go run` antigo: matar antes de `up`.
 - **/metrics e /healthz** ficam **fora** do guard da internal key (Prometheus precisa raspar).
 - Internal key dev: `dev-internal-key` (header `X-Internal-Key`).
+- **admin-ui bundle**: DiceBear `adventurer` é pesado (~280kB); já mitigado com code-splitting (só carrega em Games/Players).
