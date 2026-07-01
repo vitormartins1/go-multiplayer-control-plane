@@ -58,6 +58,7 @@ export interface CatalogAchievement {
   id: string;
   name: string;
   description: string;
+  eventType: string;
   target: number;
 }
 
@@ -108,13 +109,26 @@ async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
+  return sendJSON<T>("POST", path, body);
+}
+
+async function putJSON<T>(path: string, body: unknown): Promise<T> {
+  return sendJSON<T>("PUT", path, body);
+}
+
+async function sendJSON<T>(method: string, path: string, body: unknown): Promise<T> {
   const resp = await fetch(path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!resp.ok) throw new HttpError(resp.status);
   return (await resp.json()) as T;
+}
+
+async function del(path: string): Promise<void> {
+  const resp = await fetch(path, { method: "DELETE" });
+  if (!resp.ok) throw new HttpError(resp.status);
 }
 
 export const api = {
@@ -129,6 +143,13 @@ export const api = {
     getJSON<CatalogAchievement[]>(`/api/games/${encodeURIComponent(gameId)}/achievements`, signal),
   createAchievement: (gameId: string, a: NewAchievement) =>
     postJSON<CatalogAchievement>(`/api/games/${encodeURIComponent(gameId)}/achievements`, a),
+  updateAchievement: (gameId: string, id: string, a: Omit<NewAchievement, "id">) =>
+    putJSON<CatalogAchievement>(
+      `/api/games/${encodeURIComponent(gameId)}/achievements/${encodeURIComponent(id)}`,
+      a,
+    ),
+  deleteAchievement: (gameId: string, id: string) =>
+    del(`/api/games/${encodeURIComponent(gameId)}/achievements/${encodeURIComponent(id)}`),
   playerAchievements: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerAchievement[]>(
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/achievements`,

@@ -75,3 +75,45 @@ func TestCatalogForGame_Fora_Unavailable(t *testing.T) {
 	_, err := New(url, &http.Client{}).CatalogForGame(context.Background(), "g1")
 	assert.ErrorIs(t, err, domain.ErrAchievementsUnavailable)
 }
+
+func TestUpdateAchievement_PUT_200(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).UpdateAchievement(context.Background(), "g1", "first_win",
+		domain.Achievement{Name: "N", EventType: "e", Target: 2})
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPut, gotMethod)
+	assert.Equal(t, "/admin/games/g1/achievements/first_win", gotPath)
+}
+
+func TestUpdateAchievement_404_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"achievement_not_found"}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).UpdateAchievement(context.Background(), "g1", "x", domain.Achievement{Name: "N", EventType: "e", Target: 1})
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusNotFound, ue.Status)
+}
+
+func TestDeleteAchievement_DELETE_204(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).DeleteAchievement(context.Background(), "g1", "first_win")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodDelete, gotMethod)
+	assert.Equal(t, "/admin/games/g1/achievements/first_win", gotPath)
+}

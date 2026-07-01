@@ -40,11 +40,55 @@ func (m *mockRepo) RecordProgress(ctx context.Context, gameID, playerID, achieve
 func (m *mockRepo) CreateAchievement(ctx context.Context, a *domain.Achievement) error {
 	return m.Called(ctx, a).Error(0)
 }
+func (m *mockRepo) UpdateAchievement(ctx context.Context, a *domain.Achievement) error {
+	return m.Called(ctx, a).Error(0)
+}
+func (m *mockRepo) DeleteAchievement(ctx context.Context, gameID, id string) error {
+	return m.Called(ctx, gameID, id).Error(0)
+}
 
 var (
 	firstWin = domain.Achievement{GameID: gameID, ID: "first_win", Name: "Primeira Vitória", Description: "Vença uma", EventType: "match_won", Target: 1}
 	tenWins  = domain.Achievement{GameID: gameID, ID: "ten_wins", Name: "Veterano", Description: "Vença 10", EventType: "match_won", Target: 10}
 )
+
+func TestUpdateAchievement_Valido_DelegaComChave(t *testing.T) {
+	repo := new(mockRepo)
+	var captured *domain.Achievement
+	repo.On("UpdateAchievement", mock.Anything, mock.AnythingOfType("*domain.Achievement")).
+		Return(nil).
+		Run(func(args mock.Arguments) { captured = args.Get(1).(*domain.Achievement) })
+
+	a, err := New(repo).UpdateAchievement(context.Background(), gameID, "first_win",
+		domain.Achievement{Name: "  Novo Nome  ", EventType: "match_won", Target: 3})
+	require.NoError(t, err)
+	assert.Equal(t, gameID, captured.GameID)
+	assert.Equal(t, "first_win", captured.ID, "id/gameID vêm do path, não do corpo")
+	assert.Equal(t, "Novo Nome", a.Name, "name trimado")
+	assert.Equal(t, 3, a.Target)
+}
+
+func TestUpdateAchievement_NameVazio_ErrInvalid(t *testing.T) {
+	_, err := New(new(mockRepo)).UpdateAchievement(context.Background(), gameID, "first_win",
+		domain.Achievement{Name: "  ", EventType: "match_won", Target: 1})
+	assert.ErrorIs(t, err, domain.ErrInvalidAchievement)
+}
+
+func TestUpdateAchievement_Inexistente_PropagaNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateAchievement", mock.Anything, mock.Anything).Return(domain.ErrAchievementNotFound)
+	_, err := New(repo).UpdateAchievement(context.Background(), gameID, "fantasma",
+		domain.Achievement{Name: "X", EventType: "e", Target: 1})
+	assert.ErrorIs(t, err, domain.ErrAchievementNotFound)
+}
+
+func TestDeleteAchievement_DelegaAoRepo(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("DeleteAchievement", mock.Anything, gameID, "first_win").Return(nil)
+	err := New(repo).DeleteAchievement(context.Background(), gameID, "first_win")
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
+}
 
 func TestRecordEvent_AtingeMeta_RetornaDesbloqueada(t *testing.T) {
 	repo := &mockRepo{}

@@ -75,6 +75,16 @@ func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain
 	return s.reader.CreateAchievement(ctx, gameID, a)
 }
 
+// UpdateAchievement edita uma conquista do jogo (achievements).
+func (s *Service) UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error {
+	return s.reader.UpdateAchievement(ctx, gameID, id, a)
+}
+
+// DeleteAchievement remove uma conquista do jogo (achievements).
+func (s *Service) DeleteAchievement(ctx context.Context, gameID, id string) error {
+	return s.reader.DeleteAchievement(ctx, gameID, id)
+}
+
 // GameLeaderboard lê o top-N do jogo (leaderboard).
 func (s *Service) GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
 	return s.leaderboard.TopForGame(ctx, gameID, limit)

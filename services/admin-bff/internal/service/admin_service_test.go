@@ -29,6 +29,7 @@ type fakeReader struct {
 	err       error
 	gotGameID string
 	gotPlayer string
+	gotID     string
 	gotCreate domain.Achievement
 }
 
@@ -38,6 +39,14 @@ func (f *fakeReader) CatalogForGame(_ context.Context, gameID string) ([]domain.
 }
 func (f *fakeReader) CreateAchievement(_ context.Context, gameID string, a domain.Achievement) error {
 	f.gotGameID, f.gotCreate = gameID, a
+	return f.err
+}
+func (f *fakeReader) UpdateAchievement(_ context.Context, gameID, id string, a domain.Achievement) error {
+	f.gotGameID, f.gotID, f.gotCreate = gameID, id, a
+	return f.err
+}
+func (f *fakeReader) DeleteAchievement(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotID = gameID, id
 	return f.err
 }
 func (f *fakeReader) PlayerAchievements(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
