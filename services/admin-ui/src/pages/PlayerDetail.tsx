@@ -16,10 +16,13 @@ export function PlayerDetail() {
   const { data: games, loading, error } = useAsync((s) => api.gamesOfPlayer(playerId, s), [playerId]);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // ao carregar os jogos do player, seleciona o primeiro (se ainda não há escolha).
+  // Seleciona o primeiro jogo sempre que a lista muda (inclui trocar de jogador:
+  // o router reusa o componente, então precisamos re-selecionar — senão o jogo
+  // do jogador anterior ficaria preso). Seleção manual persiste dentro do mesmo
+  // jogador (a lista só refaz quando playerId muda).
   useEffect(() => {
-    if (games && games.length > 0 && !gameId) setGameId(games[0].id);
-  }, [games, gameId]);
+    setGameId(games && games.length > 0 ? games[0].id : null);
+  }, [games]);
 
   return (
     <Stack>

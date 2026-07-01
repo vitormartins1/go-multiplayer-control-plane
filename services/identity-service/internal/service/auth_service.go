@@ -43,6 +43,9 @@ func (s *service) markPresence(ctx context.Context, gameID, playerID, handle str
 	if gameID == "" || s.presence == nil {
 		return
 	}
+	// Bounded: um game-registry pendurado não deve segurar o login (best-effort).
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	if err := s.presence.MarkPresence(ctx, gameID, playerID, handle); err != nil && s.log != nil {
 		s.log.Warn("presença não registrada (best-effort)",
 			slog.String("err", err.Error()),

@@ -8,7 +8,7 @@ import { useAsync } from "../lib/useAsync";
 export function PlayerAchievements({ playerId, gameId }: { playerId: string; gameId: string | null }) {
   const { data, loading, error, reload } = useAsync(
     (s) => (gameId ? api.playerAchievements(gameId, playerId, s) : Promise.resolve([])),
-    [gameId],
+    [gameId, playerId],
   );
 
   if (!gameId) return <Text c="dimmed">Selecione um jogo no topo para ver o progresso do jogador.</Text>;
