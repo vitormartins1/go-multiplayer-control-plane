@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
 )
 
 // fakeProvisioner permite trocar o comportamento por teste (sucesso/falha).

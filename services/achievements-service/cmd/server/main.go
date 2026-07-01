@@ -20,14 +20,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/c130n/game-backend/services/achievements-service/internal/repository"
-	"github.com/c130n/game-backend/services/achievements-service/internal/service"
-	"github.com/c130n/game-backend/services/achievements-service/internal/transport"
-	"github.com/c130n/game-backend/shared/auth"
-	"github.com/c130n/game-backend/shared/config"
-	"github.com/c130n/game-backend/shared/logger"
-	"github.com/c130n/game-backend/shared/middleware"
-	"github.com/c130n/game-backend/shared/telemetry"
+	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/repository"
+	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/service"
+	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/transport"
+	"github.com/vitormartins1/go-game-backend/shared/auth"
+	"github.com/vitormartins1/go-game-backend/shared/config"
+	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-game-backend/shared/middleware"
+	"github.com/vitormartins1/go-game-backend/shared/telemetry"
 )
 
 const serviceName = "achievements-service"

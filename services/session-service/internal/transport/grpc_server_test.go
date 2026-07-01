@@ -16,11 +16,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	pb "github.com/c130n/game-backend/services/session-service/gen/session/v1"
-	"github.com/c130n/game-backend/services/session-service/internal/allocator"
-	"github.com/c130n/game-backend/services/session-service/internal/publisher"
-	"github.com/c130n/game-backend/services/session-service/internal/service"
-	"github.com/c130n/game-backend/services/session-service/internal/token"
+	pb "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/allocator"
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/publisher"
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/service"
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/token"
 )
 
 func setup(t *testing.T, addresses []string) (pb.SessionClient, *token.ConnectIssuer) {

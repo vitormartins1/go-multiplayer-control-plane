@@ -1,4 +1,4 @@
-module github.com/c130n/game-backend
+module github.com/vitormartins1/go-game-backend
 
 go 1.25.0
 

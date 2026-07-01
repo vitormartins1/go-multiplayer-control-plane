@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/domain"
-	sessionv1 "github.com/c130n/game-backend/services/session-service/gen/session/v1"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
+	sessionv1 "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
 )
 
 var _ domain.SessionProvisioner = (*Client)(nil)

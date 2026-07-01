@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/c130n/game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
 )
 
 var _ domain.GameRepository = (*PostgresGameRepository)(nil)

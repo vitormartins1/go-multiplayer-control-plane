@@ -221,7 +221,7 @@ const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\x0eSTATUS_MATCHED\x10\x02\x12\x11\n" +
 	"\rSTATUS_FAILED\x10\x032\\\n" +
 	"\vMatchmaking\x12M\n" +
-	"\tFindMatch\x12 .matchmaking.v1.FindMatchRequest\x1a\x1c.matchmaking.v1.TicketUpdate0\x01B]Z[github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
+	"\tFindMatch\x12 .matchmaking.v1.FindMatchRequest\x1a\x1c.matchmaking.v1.TicketUpdate0\x01BhZfgithub.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
 
 var (
 	file_matchmaking_v1_matchmaking_proto_rawDescOnce sync.Once

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/domain"
 )
 
 // Handler expõe os endpoints HTTP do achievements-service.

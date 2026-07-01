@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/c130n/game-backend/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/identity-service/internal/domain"
 )
 
 type mockRepo struct{ mock.Mock }

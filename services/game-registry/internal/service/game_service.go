@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/c130n/game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
 )
 
 var _ domain.GameService = (*service)(nil)

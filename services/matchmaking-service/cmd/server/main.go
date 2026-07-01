@@ -22,15 +22,15 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
-	pb "github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1"
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/service"
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/sessionclient"
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/transport"
-	sessionv1 "github.com/c130n/game-backend/services/session-service/gen/session/v1"
-	"github.com/c130n/game-backend/shared/auth"
-	"github.com/c130n/game-backend/shared/config"
-	"github.com/c130n/game-backend/shared/logger"
-	"github.com/c130n/game-backend/shared/telemetry"
+	pb "github.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/service"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/sessionclient"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/transport"
+	sessionv1 "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
+	"github.com/vitormartins1/go-game-backend/shared/auth"
+	"github.com/vitormartins1/go-game-backend/shared/config"
+	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-game-backend/shared/telemetry"
 )
 
 const (

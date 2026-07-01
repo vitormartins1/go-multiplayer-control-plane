@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/c130n/game-backend/services/matchmaking-service/gen/matchmaking/v1"
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/domain"
+	pb "github.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
 )
 
 // Server implementa o serviço gRPC Matchmaking.

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
 )
 
 var _ domain.LeaderboardReader = (*Client)(nil)
