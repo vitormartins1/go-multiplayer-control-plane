@@ -72,6 +72,14 @@ func (f *fakeService) CreateAchievement(_ context.Context, gameID string, _ doma
 	f.gotGameID = gameID
 	return f.createErr
 }
+func (f *fakeService) UpdateAchievement(_ context.Context, gameID, id string, _ domain.Achievement) error {
+	f.gotGameID, f.gotPlayer = gameID, id
+	return f.createErr
+}
+func (f *fakeService) DeleteAchievement(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotPlayer = gameID, id
+	return f.createErr
+}
 func (f *fakeService) PlayerAchievements(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
 	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.ach, f.achErr
@@ -268,6 +276,56 @@ func TestCreateAchievement_RepassaUpstream400(t *testing.T) {
 	resp := post(t, srv, "/api/games/g/achievements", `{"id":"X","name":"n","eventType":"kill","target":1}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestUpdateAchievement_200(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/game-9/achievements/first_win", strings.NewReader(`{"name":"N","eventType":"e","target":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	r2, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer r2.Body.Close()
+	require.Equal(t, http.StatusOK, r2.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "first_win", svc.gotPlayer)
+}
+
+func TestUpdateAchievement_RepassaUpstream404(t *testing.T) {
+	svc := &fakeService{createErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "achievement_not_found"}}
+	srv := newServer(svc)
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g/achievements/x", strings.NewReader(`{"name":"N","eventType":"e","target":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestDeleteAchievement_204(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/game-9/achievements/first_win", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "first_win", svc.gotPlayer)
+}
+
+func TestDeleteAchievement_RepassaUpstream404(t *testing.T) {
+	svc := &fakeService{createErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "achievement_not_found"}}
+	srv := newServer(svc)
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/g/achievements/x", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestPlayerAchievements_PorJogo_200(t *testing.T) {

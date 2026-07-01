@@ -52,6 +52,13 @@ type AchievementService interface {
 	// ErrInvalidAchievement em entrada inválida; ErrAchievementExists se o id
 	// já existir nesse jogo.
 	CreateAchievement(ctx context.Context, gameID string, a Achievement) (*Achievement, error)
+	// UpdateAchievement edita name/description/eventType/target da conquista
+	// (id e gameID são a chave, não mudam). ErrInvalidAchievement em entrada
+	// inválida; ErrAchievementNotFound se não existir.
+	UpdateAchievement(ctx context.Context, gameID, id string, a Achievement) (*Achievement, error)
+	// DeleteAchievement remove a conquista e o progresso dos jogadores nela.
+	// ErrAchievementNotFound se não existir.
+	DeleteAchievement(ctx context.Context, gameID, id string) error
 }
 
 // AchievementRepository é a Port de saída de persistência (implementada em
@@ -68,6 +75,12 @@ type AchievementRepository interface {
 	// CreateAchievement persiste uma conquista no catálogo do jogo;
 	// ErrAchievementExists em violação de unicidade (game_id, id).
 	CreateAchievement(ctx context.Context, a *Achievement) error
+	// UpdateAchievement atualiza name/description/event_type/target da conquista
+	// (game_id, id); ErrAchievementNotFound se não existir.
+	UpdateAchievement(ctx context.Context, a *Achievement) error
+	// DeleteAchievement remove a conquista (game_id, id) e o progresso dos
+	// jogadores nela (transação); ErrAchievementNotFound se não existir.
+	DeleteAchievement(ctx context.Context, gameID, id string) error
 }
 
 // TokenVerifier é a Port de saída que valida o JWT do identity e devolve o

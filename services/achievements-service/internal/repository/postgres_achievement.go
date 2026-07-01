@@ -117,6 +117,49 @@ func (r *PostgresAchievementRepository) CreateAchievement(ctx context.Context, a
 	return nil
 }
 
+// UpdateAchievement atualiza os campos mutáveis da conquista (game_id, id).
+// Zero linhas afetadas -> ErrAchievementNotFound.
+func (r *PostgresAchievementRepository) UpdateAchievement(ctx context.Context, a *domain.Achievement) error {
+	const q = `UPDATE achievements
+	           SET name = $3, description = $4, event_type = $5, target = $6
+	           WHERE game_id = $1 AND id = $2`
+	tag, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.Target)
+	if err != nil {
+		return fmt.Errorf("achievements repository: update achievement: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrAchievementNotFound
+	}
+	return nil
+}
+
+// DeleteAchievement remove a conquista (game_id, id) e o progresso dos jogadores
+// nela numa transação (a FK player_achievements -> achievements é RESTRICT).
+// Zero linhas no catálogo -> ErrAchievementNotFound.
+func (r *PostgresAchievementRepository) DeleteAchievement(ctx context.Context, gameID, id string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("achievements repository: delete achievement: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM player_achievements WHERE game_id = $1 AND achievement_id = $2`, gameID, id); err != nil {
+		return fmt.Errorf("achievements repository: delete progress: %w", err)
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM achievements WHERE game_id = $1 AND id = $2`, gameID, id)
+	if err != nil {
+		return fmt.Errorf("achievements repository: delete achievement: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrAchievementNotFound
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("achievements repository: delete achievement: commit: %w", err)
+	}
+	return nil
+}
+
 func scanAchievements(rows pgx.Rows) ([]domain.Achievement, error) {
 	var out []domain.Achievement
 	for rows.Next() {

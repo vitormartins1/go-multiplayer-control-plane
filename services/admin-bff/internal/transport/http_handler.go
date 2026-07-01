@@ -22,6 +22,8 @@ type AdminService interface {
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
 	GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error)
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
+	UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error
+	DeleteAchievement(ctx context.Context, gameID, id string) error
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
 	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
@@ -49,6 +51,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
+	mux.HandleFunc("PUT /api/games/{gameId}/achievements/{id}", h.updateAchievement)
+	mux.HandleFunc("DELETE /api/games/{gameId}/achievements/{id}", h.deleteAchievement)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
@@ -156,6 +160,29 @@ func (h *Handler) createAchievement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, a)
+}
+
+// updateAchievement edita uma conquista do jogo; repassa 400/404.
+func (h *Handler) updateAchievement(w http.ResponseWriter, r *http.Request) {
+	var a domain.Achievement
+	if err := decode(r, &a); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), a); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+// deleteAchievement remove uma conquista do jogo; repassa 404.
+func (h *Handler) deleteAchievement(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.DeleteAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // playerAchievements: achievements do jogador no jogo (achievements).

@@ -11,4 +11,6 @@ var (
 	ErrInvalidAchievement = errors.New("achievements: conquista inválida")
 	// ErrAchievementExists: id (slug) já existe no jogo.
 	ErrAchievementExists = errors.New("achievements: conquista já existe no jogo")
+	// ErrAchievementNotFound: conquista (game_id, id) não existe (update/delete).
+	ErrAchievementNotFound = errors.New("achievements: conquista não encontrada")
 )

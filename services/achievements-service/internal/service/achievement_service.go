@@ -124,3 +124,34 @@ func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain
 	}
 	return &a, nil
 }
+
+// UpdateAchievement edita os campos mutáveis da conquista (id/gameID são a
+// chave). Valida name/eventType/target como na criação; o slug não é revalidado
+// (vem do path, já existente).
+func (s *Service) UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) (*domain.Achievement, error) {
+	a.Name = strings.TrimSpace(a.Name)
+	if a.Name == "" || len(a.Name) > maxAchievementNameLen {
+		return nil, domain.ErrInvalidAchievement
+	}
+	if a.EventType == "" {
+		return nil, domain.ErrInvalidAchievement
+	}
+	if a.Target < 1 {
+		a.Target = 1
+	}
+	a.GameID = gameID
+	a.ID = id
+
+	if err := s.repo.UpdateAchievement(ctx, &a); err != nil {
+		return nil, fmt.Errorf("achievements service: update achievement: %w", err)
+	}
+	return &a, nil
+}
+
+// DeleteAchievement remove a conquista e o progresso dos jogadores nela.
+func (s *Service) DeleteAchievement(ctx context.Context, gameID, id string) error {
+	if err := s.repo.DeleteAchievement(ctx, gameID, id); err != nil {
+		return fmt.Errorf("achievements service: delete achievement: %w", err)
+	}
+	return nil
+}

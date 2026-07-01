@@ -153,6 +153,10 @@ type AchievementsReader interface {
 	CatalogForGame(ctx context.Context, gameID string) ([]Achievement, error)
 	// CreateAchievement cadastra uma conquista no jogo. Validação -> UpstreamError.
 	CreateAchievement(ctx context.Context, gameID string, a Achievement) error
+	// UpdateAchievement edita uma conquista do jogo. 400/404 -> UpstreamError.
+	UpdateAchievement(ctx context.Context, gameID, id string, a Achievement) error
+	// DeleteAchievement remove uma conquista do jogo. 404 -> UpstreamError.
+	DeleteAchievement(ctx context.Context, gameID, id string) error
 	// PlayerAchievements lê os achievements de um jogador no jogo.
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]PlayerAchievement, error)
 }

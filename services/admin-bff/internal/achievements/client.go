@@ -42,6 +42,7 @@ type catalogResponse struct {
 		ID          string `json:"id"`
 		Name        string `json:"name"`
 		Description string `json:"description"`
+		EventType   string `json:"eventType"`
 		Target      int    `json:"target"`
 	} `json:"achievements"`
 }
@@ -61,7 +62,7 @@ func (c *Client) CatalogForGame(ctx context.Context, gameID string) ([]domain.Ac
 	}
 	out := make([]domain.Achievement, 0, len(body.Achievements))
 	for _, a := range body.Achievements {
-		out = append(out, domain.Achievement{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
+		out = append(out, domain.Achievement{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
 	}
 	return out, nil
 }
@@ -75,6 +76,34 @@ func (c *Client) CreateAchievement(ctx context.Context, gameID string, a domain.
 	})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.gamePath(gameID, "/achievements"), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+// UpdateAchievement edita uma conquista do jogo (PUT). 400/404 -> UpstreamError.
+func (c *Client) UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error {
+	body, _ := json.Marshal(map[string]any{
+		"name": a.Name, "description": a.Description, "eventType": a.EventType, "target": a.Target,
+	})
+	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(id))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+// DeleteAchievement remove uma conquista do jogo (DELETE). 404 -> UpstreamError.
+func (c *Client) DeleteAchievement(ctx context.Context, gameID, id string) error {
+	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(id))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return err

@@ -33,10 +33,15 @@ type fakeService struct {
 	forPlayer   []domain.PlayerAchievement
 	recordErr   error
 	createErr   error
+	updateErr   error
+	deleteErr   error
 	gotPlayerID string
 	gotGameID   string
 	gotEvent    domain.Event
 	gotCreate   domain.Achievement
+	gotUpdate   domain.Achievement
+	gotUpdateID string
+	gotDeleteID string
 }
 
 func (f *fakeService) ListCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
@@ -61,6 +66,20 @@ func (f *fakeService) CreateAchievement(_ context.Context, gameID string, a doma
 	}
 	a.GameID = gameID
 	return &a, nil
+}
+
+func (f *fakeService) UpdateAchievement(_ context.Context, gameID, id string, a domain.Achievement) (*domain.Achievement, error) {
+	f.gotGameID, f.gotUpdateID, f.gotUpdate = gameID, id, a
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	a.GameID, a.ID = gameID, id
+	return &a, nil
+}
+
+func (f *fakeService) DeleteAchievement(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotDeleteID = gameID, id
+	return f.deleteErr
 }
 
 func newServer(svc domain.AchievementService, v domain.TokenVerifier) *httptest.Server {
@@ -230,6 +249,69 @@ func TestAdminCreateAchievement_JaExiste_409(t *testing.T) {
 	resp := do(t, srv, http.MethodPost, "/admin/games/g/achievements", "", "", `{"id":"first_win","name":"P","eventType":"match_won","target":1}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+}
+
+func TestAdminUpdateAchievement_200(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPut, "/admin/games/game-9/achievements/first_win", "", "",
+		`{"name":"Novo","description":"y","eventType":"match_won","target":5}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "first_win", svc.gotUpdateID)
+	assert.Equal(t, 5, svc.gotUpdate.Target)
+
+	var body achievementDTO
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "first_win", body.ID)
+	assert.Equal(t, "Novo", body.Name)
+}
+
+func TestAdminUpdateAchievement_Inexistente_404(t *testing.T) {
+	svc := &fakeService{updateErr: domain.ErrAchievementNotFound}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPut, "/admin/games/g/achievements/fantasma", "", "",
+		`{"name":"X","eventType":"e","target":1}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestAdminUpdateAchievement_Invalido_400(t *testing.T) {
+	svc := &fakeService{updateErr: domain.ErrInvalidAchievement}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPut, "/admin/games/g/achievements/x", "", "",
+		`{"name":"","eventType":"","target":0}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminDeleteAchievement_204(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodDelete, "/admin/games/game-9/achievements/first_win", "", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "game-9", svc.gotGameID)
+	assert.Equal(t, "first_win", svc.gotDeleteID)
+}
+
+func TestAdminDeleteAchievement_Inexistente_404(t *testing.T) {
+	svc := &fakeService{deleteErr: domain.ErrAchievementNotFound}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodDelete, "/admin/games/g/achievements/fantasma", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestAdmin_SemAuthorization_NaoBloqueia(t *testing.T) {

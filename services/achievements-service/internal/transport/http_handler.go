@@ -40,6 +40,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Admin (interno; internal key na borda, ADR-0018) por jogo: gameId/playerID
 	// vêm do path.
 	mux.HandleFunc("POST /admin/games/{gameId}/achievements", h.adminCreateAchievement)
+	mux.HandleFunc("PUT /admin/games/{gameId}/achievements/{id}", h.adminUpdateAchievement)
+	mux.HandleFunc("DELETE /admin/games/{gameId}/achievements/{id}", h.adminDeleteAchievement)
 	mux.HandleFunc("GET /admin/games/{gameId}/achievements", h.adminListCatalog)
 	mux.HandleFunc("GET /admin/games/{gameId}/players/{playerID}/achievements", h.adminListForPlayer)
 	// Server-authoritative: o servidor reporta evento em nome do jogador (sem JWT).
@@ -138,6 +140,37 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
 }
 
+// adminUpdateAchievement edita uma conquista do catálogo do jogo (admin).
+func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		EventType   string `json:"eventType"`
+		Target      int    `json:"target"`
+	}
+	if err := decodeStrict(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	a, err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.Achievement{
+		Name: req.Name, Description: req.Description, EventType: req.EventType, Target: req.Target,
+	})
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
+}
+
+// adminDeleteAchievement remove uma conquista do catálogo do jogo (admin).
+func (h *Handler) adminDeleteAchievement(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.DeleteAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // adminRecordEvent registra um evento de gameplay em nome do jogador (server-
 // authoritative): gameId/playerID vêm do path, não do JWT. É o que o fan-out do
 // session usa. Reusa a mesma avaliação do POST /events de jogador.
@@ -210,6 +243,7 @@ type achievementDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	EventType   string `json:"eventType"` // exposto para o painel editar (006-catalog-crud)
 	Target      int    `json:"target"`
 }
 
@@ -226,7 +260,7 @@ type playerAchievementDTO struct {
 func toAchievementDTOs(in []domain.Achievement) []achievementDTO {
 	out := make([]achievementDTO, 0, len(in))
 	for _, a := range in {
-		out = append(out, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, Target: a.Target})
+		out = append(out, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
 	}
 	return out
 }
@@ -266,6 +300,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid_achievement")
 	case errors.Is(err, domain.ErrAchievementExists):
 		writeError(w, http.StatusConflict, "achievement_exists")
+	case errors.Is(err, domain.ErrAchievementNotFound):
+		writeError(w, http.StatusNotFound, "achievement_not_found")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}
