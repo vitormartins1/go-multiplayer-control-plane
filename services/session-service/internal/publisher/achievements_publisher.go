@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/c130n/game-backend/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 )
 
 var _ domain.ResultPublisher = (*Achievements)(nil)

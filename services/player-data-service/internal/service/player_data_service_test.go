@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c130n/game-backend/services/player-data-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/player-data-service/internal/domain"
 )
 
 type mockRepo struct{ mock.Mock }

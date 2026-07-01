@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/c130n/game-backend/services/achievements-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/domain"
 )
 
 // garante em tempo de compilação que satisfazemos a Port.

@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/c130n/game-backend/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
 )
 
 var _ domain.Matchmaker = (*Matchmaker)(nil)

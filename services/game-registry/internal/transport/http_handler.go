@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/c130n/game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
 )
 
 // Handler expõe os endpoints HTTP do game-registry. É control plane interno

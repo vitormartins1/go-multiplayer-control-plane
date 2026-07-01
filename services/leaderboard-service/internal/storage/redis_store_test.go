@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	"github.com/c130n/game-backend/services/leaderboard-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/domain"
 )
 
 func newTestStore(t *testing.T) *RedisStore {

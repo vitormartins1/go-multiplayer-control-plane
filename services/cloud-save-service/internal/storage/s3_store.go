@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/c130n/game-backend/services/cloud-save-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/cloud-save-service/internal/domain"
 )
 
 // garante em tempo de compilação que satisfazemos a Port.

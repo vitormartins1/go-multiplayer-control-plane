@@ -80,7 +80,7 @@ Monorepo de **módulo único** (um `go.mod` na raiz): cada serviço vira um bin�
 ```
 game-backend/                              ← raiz do monorepo (módulo único)
 │
-├── go.mod                                 ← módulo único: github.com/c130n/game-backend
+├── go.mod                                 ← módulo único: github.com/vitormartins1/go-game-backend
 ├── go.sum
 │
 ├── services/

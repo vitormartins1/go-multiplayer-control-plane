@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/c130n/game-backend/services/player-data-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/player-data-service/internal/domain"
 )
 
 // garante em tempo de compilação que satisfazemos a Port.

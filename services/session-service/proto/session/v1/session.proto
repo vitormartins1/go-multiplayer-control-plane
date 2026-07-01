@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package session.v1;
 
-option go_package = "github.com/c130n/game-backend/services/session-service/gen/session/v1;sessionv1";
+option go_package = "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1;sessionv1";
 
 // Session orquestra frota/sessão (≈ GameLift). A partir de um match, aloca um
 // game server, emite um connect token Ed25519 por jogador e recebe o resultado

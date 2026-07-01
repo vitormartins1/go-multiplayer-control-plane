@@ -371,7 +371,7 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x03won\x18\x03 \x01(\bR\x03won2\xb2\x01\n" +
 	"\aSession\x12T\n" +
 	"\rCreateSession\x12 .session.v1.CreateSessionRequest\x1a!.session.v1.CreateSessionResponse\x12Q\n" +
-	"\fReportResult\x12\x1f.session.v1.ReportResultRequest\x1a .session.v1.ReportResultResponseBQZOgithub.com/c130n/game-backend/services/session-service/gen/session/v1;sessionv1b\x06proto3"
+	"\fReportResult\x12\x1f.session.v1.ReportResultRequest\x1a .session.v1.ReportResultResponseB\\ZZgithub.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1;sessionv1b\x06proto3"
 
 var (
 	file_session_v1_session_proto_rawDescOnce sync.Once

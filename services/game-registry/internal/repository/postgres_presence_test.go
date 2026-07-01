@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/c130n/game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
 )
 
 // newPresencePool sobe um Postgres com as migrations 001 (games) + 003

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/c130n/game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
 )
 
 // AdminService é a Port de entrada consumida pelo handler.

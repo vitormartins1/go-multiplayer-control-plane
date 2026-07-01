@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/c130n/game-backend/services/player-data-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/player-data-service/internal/domain"
 )
 
 const gA = "game-a"

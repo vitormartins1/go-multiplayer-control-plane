@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/c130n/game-backend/services/leaderboard-service/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/domain"
 )
 
 const (
