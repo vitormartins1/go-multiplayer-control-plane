@@ -37,7 +37,9 @@ Sequência iniciada a pedido do usuário (biblioteca de capas + repensar a sele�
 
 ## Backlog (sem spec ainda)
 
-CI (GitHub Actions), Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, edição/remoção de jogos e conquistas no painel, Analytics real. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+CI (GitHub Actions), Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, Analytics real. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+
+**Painel — CRUD:** ✅ **editar/remover conquistas** (`achievements/006-catalog-crud`). ⏳ **editar/remover jogo** pendente — *rename* é simples (cabe na aba Configurações do GameDetail, hoje ComingSoon); *delete* precisa de decisão (dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/presence — cascata cross-service, provável ADR).
 
 ## CI (GitHub Actions) — ainda não existe `.github/workflows/`
 
