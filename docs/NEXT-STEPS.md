@@ -37,21 +37,15 @@ Sequência iniciada a pedido do usuário (biblioteca de capas + repensar a sele�
 
 ## Backlog (sem spec ainda)
 
-CI (GitHub Actions), Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, Analytics real. Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, **analytics-service** (Fase 9 do ROADMAP — único serviço não construído; acende a aba Analytics), infra/deploy (Terraform → AWS, a tese de custo). Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
 
 **Painel — CRUD:** ✅ **editar/remover conquistas** (`achievements/006-catalog-crud`). ⏳ **editar/remover jogo** pendente — *rename* é simples (cabe na aba Configurações do GameDetail, hoje ComingSoon); *delete* precisa de decisão (dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/presence — cascata cross-service, provável ADR).
 
-## CI (GitHub Actions) — ainda não existe `.github/workflows/`
+## CI (GitHub Actions) — ✅ criado (`.github/workflows/ci.yml`)
 
-A `main` está verde mas sem guarda automática. Plano (criar quando quiser):
+Jobs em push na `main` e em PR: **go** (build/vet/`test -race -cover`), **integration** (`test -tags=integration`, testcontainers), **lint** (`golangci-lint` v2.12.2 pinado + `.golangci.yml`) e **frontend** (`npm ci` + build). Um job Go cobre tudo (módulo único, ADR-0001). Reproduzido verde localmente.
 
-- **Workflow `ci.yml`** em PR e push para `main`:
-  - job **go**: setup Go 1.22, cache de módulos, `go build ./...`, `go vet ./...`, `go test ./... -race -cover` (testes de integração ficam atrás da tag `integration` — rodar só onde houver Docker disponível; ou um job separado com service containers).
-  - job **lint**: `golangci-lint run ./...`.
-  - job **front**: setup Node, `npm ci` + `npm run build` em `services/admin-ui`.
-- Opcional: matriz/seletivo por serviço só faz sentido com multi-módulo; como é **módulo único** (ADR-0001), um job Go cobre tudo.
-- Testes de integração usam **testcontainers** (Docker-in-Actions: usar runner com Docker; ou marcar como opcional).
-- Não é fluxo SDD (infra). Pode virar um `docs/adr` se a escolha de pipeline for relevante.
+**Pendente do usuário:** o repo ainda é **local** — o CI só dispara depois de criar `github.com/vitormartins1/go-game-backend` e fazer o `git push`. O module path já foi renomeado de `c130n/game-backend` para `vitormartins1/go-game-backend`.
 
 ## Backlog (ADR-level, quando sair do MVP)
 
