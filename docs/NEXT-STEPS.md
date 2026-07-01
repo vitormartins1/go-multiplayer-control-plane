@@ -37,7 +37,7 @@ Sequência iniciada a pedido do usuário (biblioteca de capas + repensar a sele�
 
 ## Backlog (sem spec ainda)
 
-Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, **analytics-service** (Fase 9 do ROADMAP — único serviço não construído; acende a aba Analytics), infra/deploy (Terraform → AWS, a tese de custo). Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
+Service JWT (evolução do 0018), fan-out resiliente (outbox/retry), leaderboard seasons/paginação, **analytics-service** (Fase 9 do ROADMAP — único serviço não construído; acende a aba Analytics), infra/deploy (Terraform → AWS, a tese de custo), **cleanup admin-bff** (helper `internal/upstream` compartilhado: `do()`/`classify()`/`errorCode()`/default-client hoje duplicados nos 4 adapters + presence client do identity — do code-review). Implementar uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff`, conforme `docs/GIT-WORKFLOW.md`.
 
 **Painel — CRUD:** ✅ **editar/remover conquistas** (`achievements/006-catalog-crud`). ⏳ **editar/remover jogo** pendente — *rename* é simples (cabe na aba Configurações do GameDetail, hoje ComingSoon); *delete* precisa de decisão (dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/presence — cascata cross-service, provável ADR).
 
