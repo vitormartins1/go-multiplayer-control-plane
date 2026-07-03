@@ -26,12 +26,12 @@
 
 ## Verificação integrada (com o data plane, spec 005-agones)
 
-- [ ] CreateSession → GameServer Allocated com annotations; endereço real na resposta
-- [ ] Fleet esgotada → ResourceExhausted
-- [ ] ReportResult (grpcurl) → CLOSED(result) + GameServer deletado
-- [ ] TTL vencido → CLOSED(ttl) + GameServer deletado
-- [ ] Chave da annotation validada par a par com o Unity (lado k8s validado via kubectl: sem prefixo, specs fixados; falta o lado Unity via sidecar)
+- [x] CreateSession → GameServer Allocated com annotations; endereço real na resposta
+- [x] Fleet esgotada → ResourceExhausted
+- [x] ReportResult (grpcurl) → CLOSED(result) + GameServer deletado
+- [x] TTL vencido → CLOSED(ttl) + GameServer deletado
+- [x] Chave da annotation validada par a par com o Unity: sem prefixo (annotations cruas); gate rearmado com match_id no teste integrado
 
 ## Fechamento
 
-- [ ] CI verde (modo static sem cluster) · README do serviço atualizado · commits `feat(session)/...`, merge --no-ff
+- [x] CI verde (modo static sem cluster) · README do serviço atualizado · commits `feat(session)/...`, merge --no-ff
