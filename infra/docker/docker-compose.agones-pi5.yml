@@ -1,0 +1,20 @@
+# Override do compose para alocar no cluster do Pi 5 (go-game-dataplane
+# spec 007-homelab-pi5). Igual ao docker-compose.agones.yml, com duas
+# diferenças: o kubeconfig aponta para https://<PI_IP>:6443 e NÃO há
+# DEV_PUBLIC_HOST — o endereço devolvido pelo allocator é o IP real do Pi
+# na LAN, alcançável direto pelo client (comportamento de produção).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.agones-pi5.yml up -d session-service
+#
+# Pré-requisito: go-game-dataplane/tools/pi5/fetch-kubeconfig.sh já rodou —
+# ele gera o kubeconfig-compose-pi5.yaml (gitignored).
+services:
+  session-service:
+    environment:
+      ALLOCATOR_MODE: agones
+      KUBECONFIG: /kubeconfig
+      AGONES_NAMESPACE: default
+      AGONES_FLEET: packet-arena
+      SESSION_TTL: 30m
+    volumes:
+      - ../../../go-game-dataplane/tools/pi5/kubeconfig-compose-pi5.yaml:/kubeconfig:ro
