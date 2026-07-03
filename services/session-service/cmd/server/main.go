@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -85,7 +86,8 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	svc := service.New(alloc, issuer, buildPublisher(log))
+	svc := service.New(alloc, issuer, buildPublisher(log),
+		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)))
 
 	// métricas custom: sessões ativas + fechamentos por motivo (spec 004).
 	prometheus.MustRegister(
@@ -129,6 +131,8 @@ func run(log *slog.Logger) error {
 		_, _ = w.Write(b)
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
+	// superfície admin (spec 005): a aba Sessions do painel lê via BFF.
+	transport.NewAdminHandler(svc).Register(mux)
 	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -228,6 +232,20 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// intEnv lê um inteiro da env; inválido/ausente cai no default (com log).
+func intEnv(key string, def int, log *slog.Logger) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		log.Warn("inteiro inválido — usando default", "env", key, "valor", raw, "default", def)
+		return def
+	}
+	return n
 }
 
 // durationEnv lê uma duração da env; inválida/ausente cai no default (com log).

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -29,6 +30,11 @@ type Service struct {
 	mu       sync.Mutex
 	sessions map[string]*domain.Session // matchID -> sessão ativa
 	closed   map[domain.CloseReason]float64
+
+	// histórico bounded de fechadas (spec 005): ring em memória, best-effort
+	// de dev — some no restart, persistência é evolução.
+	history      []*domain.Session
+	historyLimit int
 }
 
 // Option configura o Service na construção (só testes precisam disso).
@@ -39,15 +45,25 @@ func WithClock(now func() time.Time) Option {
 	return func(s *Service) { s.now = now }
 }
 
+// WithHistoryLimit define o tamanho do histórico de fechadas (default 200).
+func WithHistoryLimit(n int) Option {
+	return func(s *Service) {
+		if n > 0 {
+			s.historyLimit = n
+		}
+	}
+}
+
 // New cria o service a partir das Ports de saída.
 func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, publisher domain.ResultPublisher, opts ...Option) *Service {
 	s := &Service{
-		allocator: allocator,
-		issuer:    issuer,
-		publisher: publisher,
-		now:       time.Now,
-		sessions:  make(map[string]*domain.Session),
-		closed:    make(map[domain.CloseReason]float64),
+		allocator:    allocator,
+		issuer:       issuer,
+		publisher:    publisher,
+		now:          time.Now,
+		sessions:     make(map[string]*domain.Session),
+		closed:       make(map[domain.CloseReason]float64),
+		historyLimit: 200,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -123,6 +139,10 @@ func (s *Service) closeSession(ctx context.Context, matchID string, reason domai
 	sess.ClosedAt = s.now()
 	sess.CloseReason = reason
 	s.closed[reason]++
+	s.history = append(s.history, sess)
+	if len(s.history) > s.historyLimit {
+		s.history = s.history[len(s.history)-s.historyLimit:]
+	}
 	s.mu.Unlock()
 
 	if err := s.allocator.Release(ctx, sess.ServerID); err != nil {
@@ -166,6 +186,30 @@ func (s *Service) RunSweeper(ctx context.Context, ttl, interval time.Duration, l
 			}
 		}
 	}
+}
+
+// SessionsByGame devolve as sessões do jogo para a superfície admin (spec 005):
+// abertas (do mapa de ativas) e fechadas (do histórico bounded), ambas em ordem
+// da mais recente para a mais antiga. Devolve cópias — o chamador não enxerga
+// o estado interno.
+func (s *Service) SessionsByGame(gameID string) (active, closed []domain.Session) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, sess := range s.sessions {
+		if sess.GameID == gameID {
+			active = append(active, *sess)
+		}
+	}
+	sort.Slice(active, func(i, j int) bool { return active[i].OpenedAt.After(active[j].OpenedAt) })
+
+	// o ring guarda em ordem de fechamento; percorrer de trás = mais recente primeiro.
+	for i := len(s.history) - 1; i >= 0; i-- {
+		if s.history[i].GameID == gameID {
+			closed = append(closed, *s.history[i])
+		}
+	}
+	return active, closed
 }
 
 // ActiveSessions devolve o número de sessões ativas (métrica).

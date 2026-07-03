@@ -1,0 +1,103 @@
+package transport
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
+)
+
+type fakeDirectory struct {
+	active, closed []domain.Session
+	gotGameID      string
+}
+
+func (f *fakeDirectory) SessionsByGame(gameID string) ([]domain.Session, []domain.Session) {
+	f.gotGameID = gameID
+	return f.active, f.closed
+}
+
+func newAdminMux(dir *fakeDirectory) *http.ServeMux {
+	mux := http.NewServeMux()
+	NewAdminHandler(dir).Register(mux)
+	return mux
+}
+
+func doGet(t *testing.T, mux *http.ServeMux, url string) (*httptest.ResponseRecorder, sessionsResponse) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
+	var body sessionsResponse
+	if rec.Code == http.StatusOK {
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	}
+	return rec, body
+}
+
+func TestAdminSessions_AtivaEFechada_CamposCompletos(t *testing.T) {
+	opened := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	closedAt := opened.Add(10 * time.Minute)
+	dir := &fakeDirectory{
+		active: []domain.Session{{
+			ID: "s1", MatchID: "m1", GameID: "g1", Players: []string{"p1", "p2"},
+			ServerAddress: "127.0.0.1:7103", State: domain.SessionOpen, OpenedAt: opened,
+		}},
+		closed: []domain.Session{{
+			ID: "s0", MatchID: "m0", GameID: "g1", Players: []string{"p3"},
+			ServerAddress: "127.0.0.1:7100", State: domain.SessionClosed,
+			OpenedAt: opened.Add(-time.Hour), ClosedAt: closedAt, CloseReason: domain.CloseTTL,
+		}},
+	}
+
+	rec, body := doGet(t, newAdminMux(dir), "/admin/games/g1/sessions")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "g1", dir.gotGameID)
+	require.Len(t, body.Active, 1)
+	assert.Equal(t, "s1", body.Active[0].SessionID)
+	assert.Equal(t, "open", body.Active[0].State)
+	assert.Equal(t, []string{"p1", "p2"}, body.Active[0].Players)
+	assert.Equal(t, "127.0.0.1:7103", body.Active[0].ServerAddress)
+	assert.Nil(t, body.Active[0].ClosedAt, "aberta não tem closedAt")
+	require.Len(t, body.Closed, 1)
+	assert.Equal(t, "ttl", body.Closed[0].CloseReason)
+	require.NotNil(t, body.Closed[0].ClosedAt)
+	assert.Equal(t, closedAt, *body.Closed[0].ClosedAt)
+}
+
+func TestAdminSessions_FiltroState(t *testing.T) {
+	dir := &fakeDirectory{
+		active: []domain.Session{{ID: "s1", GameID: "g1", State: domain.SessionOpen}},
+		closed: []domain.Session{{ID: "s0", GameID: "g1", State: domain.SessionClosed}},
+	}
+	mux := newAdminMux(dir)
+
+	_, open := doGet(t, mux, "/admin/games/g1/sessions?state=open")
+	assert.Len(t, open.Active, 1)
+	assert.Empty(t, open.Closed)
+
+	_, closed := doGet(t, mux, "/admin/games/g1/sessions?state=closed")
+	assert.Empty(t, closed.Active)
+	assert.Len(t, closed.Closed, 1)
+
+	rec, _ := doGet(t, mux, "/admin/games/g1/sessions?state=zumbi")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAdminSessions_JogoSemSessao_200ComListasVazias(t *testing.T) {
+	rec, body := doGet(t, newAdminMux(&fakeDirectory{}), "/admin/games/deserto/sessions")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.NotNil(t, body.Active)
+	assert.Empty(t, body.Active)
+	assert.Empty(t, body.Closed)
+	// contrato do JSON: listas presentes (não null) mesmo vazias.
+	assert.Contains(t, rec.Body.String(), `"active":[]`)
+	assert.Contains(t, rec.Body.String(), `"closed":[]`)
+}
