@@ -18,10 +18,10 @@ Expor as sessões de um jogo (session-service `005-admin-sessions`) para a aba *
 
 ## Casos de Teste / Aceite
 
-- [ ] Proxy feliz: active/closed com campos completos e handles resolvidos
-- [ ] Identity fora → resposta ok com handles vazios (best-effort de verdade)
-- [ ] Session fora → 502 `sessions_unavailable`
-- [ ] `state=` repassado; httptest cobrindo tudo (fakes dos dois upstreams)
+- [x] Proxy feliz: active/closed com campos completos e handles resolvidos
+- [x] Identity fora → resposta ok com handles vazios (best-effort de verdade)
+- [x] Session fora → 502 `sessions_unavailable`
+- [x] `state=` repassado; httptest cobrindo tudo (fakes dos dois upstreams)
 
 ## Fora do escopo
 

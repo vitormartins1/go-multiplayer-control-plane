@@ -30,6 +30,7 @@ type AdminService interface {
 	CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error)
 	GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error)
 	PlayerGames(ctx context.Context, playerID string) ([]domain.Game, error)
+	GameSessions(ctx context.Context, gameID, state string) (domain.GameSessions, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -58,6 +59,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/save", h.cloudSave)
 	mux.HandleFunc("GET /api/games/{gameId}/players", h.gamePlayers)
+	mux.HandleFunc("GET /api/games/{gameId}/sessions", h.gameSessions)
 	mux.HandleFunc("GET /api/players/{playerID}/games", h.playerGames)
 }
 
@@ -235,6 +237,23 @@ func (h *Handler) playerGames(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, games)
 }
 
+// gameSessions: partidas do jogo (session-service), players enriquecidos com
+// handle (best-effort no service). state= repassado como filtro.
+func (h *Handler) gameSessions(w http.ResponseWriter, r *http.Request) {
+	sessions, err := h.svc.GameSessions(r.Context(), r.PathValue("gameId"), r.URL.Query().Get("state"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if sessions.Active == nil {
+		sessions.Active = []domain.GameSession{}
+	}
+	if sessions.Closed == nil {
+		sessions.Closed = []domain.GameSession{}
+	}
+	writeJSON(w, http.StatusOK, sessions)
+}
+
 // playerData: dado de gameplay do jogador no jogo (player-data).
 func (h *Handler) playerData(w http.ResponseWriter, r *http.Request) {
 	entries, err := h.svc.PlayerData(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"))
@@ -287,6 +306,8 @@ func writeUpstream(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadGateway, "player_data_unavailable")
 	case errors.Is(err, domain.ErrCloudSaveUnavailable):
 		writeError(w, http.StatusBadGateway, "cloud_save_unavailable")
+	case errors.Is(err, domain.ErrSessionsUnavailable):
+		writeError(w, http.StatusBadGateway, "sessions_unavailable")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

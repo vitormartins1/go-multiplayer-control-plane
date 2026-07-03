@@ -22,6 +22,7 @@ type Service struct {
 	leaderboard domain.LeaderboardReader
 	playerData  domain.PlayerDataReader
 	cloudSave   domain.CloudSaveReader
+	sessions    domain.SessionsReader
 }
 
 // Deps reúne as Ports de saída do service. Struct (em vez de args posicionais)
@@ -35,6 +36,7 @@ type Deps struct {
 	Leaderboard domain.LeaderboardReader
 	PlayerData  domain.PlayerDataReader
 	CloudSave   domain.CloudSaveReader
+	Sessions    domain.SessionsReader
 }
 
 // New cria o service a partir das Ports de saída.
@@ -47,6 +49,7 @@ func New(d Deps) *Service {
 		leaderboard: d.Leaderboard,
 		playerData:  d.PlayerData,
 		cloudSave:   d.CloudSave,
+		sessions:    d.Sessions,
 	}
 }
 
@@ -98,6 +101,52 @@ func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.Game
 // PlayerGames lê os jogos em que o player está presente (consulta reversa).
 func (s *Service) PlayerGames(ctx context.Context, playerID string) ([]domain.Game, error) {
 	return s.registry.GamesOfPlayer(ctx, playerID)
+}
+
+// GameSessions lê as sessões do jogo (session-service) e enriquece os players
+// com o handle do identity — best-effort: identity fora não derruba a resposta
+// (handle vazio, id sempre presente). Session fora -> ErrSessionsUnavailable.
+func (s *Service) GameSessions(ctx context.Context, gameID, state string) (domain.GameSessions, error) {
+	sessions, err := s.sessions.SessionsByGame(ctx, gameID, state)
+	if err != nil {
+		return domain.GameSessions{}, err
+	}
+
+	handles := s.handlesByID(ctx)
+	enrich := func(list []domain.GameSession) {
+		for i := range list {
+			for j := range list[i].Players {
+				list[i].Players[j].Handle = handles[list[i].Players[j].ID]
+			}
+		}
+	}
+	enrich(sessions.Active)
+	enrich(sessions.Closed)
+	return sessions, nil
+}
+
+// handlesByID monta o mapa playerID -> handle paginando o ListPlayers do
+// identity (não há lookup por id — validado na spec). Bounded a poucas páginas:
+// suficiente para a base de dev; falha em qualquer página -> mapa parcial/vazio
+// (best-effort de verdade).
+func (s *Service) handlesByID(ctx context.Context) map[string]string {
+	const pageSize = 200 // maxLimit do identity
+	const maxPages = 5
+
+	handles := make(map[string]string)
+	for page := 0; page < maxPages; page++ {
+		result, err := s.directory.ListPlayers(ctx, pageSize, page*pageSize)
+		if err != nil {
+			return handles
+		}
+		for _, p := range result.Players {
+			handles[p.ID] = p.Handle
+		}
+		if (page+1)*pageSize >= result.Total {
+			break
+		}
+	}
+	return handles
 }
 
 // Topology monta o mapa de serviços com o status up/down vindo de `up{}`. Se o

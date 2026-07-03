@@ -36,12 +36,15 @@ type fakeService struct {
 	saveErr   error
 	gplayers  []domain.GamePlayer
 	gplayErr  error
-	pgames    []domain.Game
-	pgamesErr error
-	gotGameID string
-	gotPlayer string
-	gotLimit  int
-	gotOffset int
+	pgames      []domain.Game
+	pgamesErr   error
+	sessions    domain.GameSessions
+	sessionsErr error
+	gotGameID   string
+	gotPlayer   string
+	gotLimit    int
+	gotOffset   int
+	gotState    string
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -102,6 +105,10 @@ func (f *fakeService) GamePlayers(_ context.Context, gameID string) ([]domain.Ga
 func (f *fakeService) PlayerGames(_ context.Context, playerID string) ([]domain.Game, error) {
 	f.gotPlayer = playerID
 	return f.pgames, f.pgamesErr
+}
+func (f *fakeService) GameSessions(_ context.Context, gameID, state string) (domain.GameSessions, error) {
+	f.gotGameID, f.gotState = gameID, state
+	return f.sessions, f.sessionsErr
 }
 
 func newServer(svc AdminService) *httptest.Server {
@@ -491,4 +498,54 @@ func TestCloudSave_Fora_502(t *testing.T) {
 	resp := get(t, srv, "/api/games/g/players/x/save")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestGameSessions_200_RepassaGameIDEState(t *testing.T) {
+	svc := &fakeService{sessions: domain.GameSessions{
+		Active: []domain.GameSession{{
+			SessionID: "s1", MatchID: "m1", State: "open",
+			Players:       []domain.SessionPlayer{{ID: "p1", Handle: "alice"}},
+			ServerAddress: "127.0.0.1:7103",
+		}},
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/sessions?state=open")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Equal(t, "open", svc.gotState, "state repassado ao service")
+
+	var body struct {
+		Active []struct {
+			SessionID string `json:"sessionId"`
+			Players   []struct {
+				ID     string `json:"id"`
+				Handle string `json:"handle"`
+			} `json:"players"`
+		} `json:"active"`
+		Closed []any `json:"closed"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Active, 1)
+	assert.Equal(t, "s1", body.Active[0].SessionID)
+	require.Len(t, body.Active[0].Players, 1)
+	assert.Equal(t, "alice", body.Active[0].Players[0].Handle)
+	assert.NotNil(t, body.Closed, "listas presentes mesmo vazias")
+}
+
+func TestGameSessions_SessionFora_502(t *testing.T) {
+	svc := &fakeService{sessionsErr: domain.ErrSessionsUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/sessions")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	var body map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "sessions_unavailable", body["error"])
 }

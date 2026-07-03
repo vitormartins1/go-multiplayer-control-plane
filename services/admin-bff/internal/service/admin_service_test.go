@@ -317,3 +317,57 @@ func TestCloudSave_DelegaComJogoEPlayer(t *testing.T) {
 	assert.Equal(t, 9, got.Size)
 	assert.Equal(t, "eyJocCI6NTB9", got.Blob)
 }
+
+type fakeSessions struct {
+	sessions  domain.GameSessions
+	err       error
+	gotGameID string
+	gotState  string
+}
+
+func (f *fakeSessions) SessionsByGame(_ context.Context, gameID, state string) (domain.GameSessions, error) {
+	f.gotGameID, f.gotState = gameID, state
+	return f.sessions, f.err
+}
+
+func TestGameSessions_EnriqueceHandlesBestEffort(t *testing.T) {
+	sessions := &fakeSessions{sessions: domain.GameSessions{
+		Active: []domain.GameSession{{SessionID: "s1", Players: []domain.SessionPlayer{{ID: "p1"}, {ID: "p-desconhecido"}}}},
+		Closed: []domain.GameSession{{SessionID: "s0", Players: []domain.SessionPlayer{{ID: "p2"}}}},
+	}}
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 2, Players: []domain.Player{
+		{ID: "p1", Handle: "alice"}, {ID: "p2", Handle: "bob"},
+	}}}
+	svc := New(Deps{Sessions: sessions, Directory: dir})
+
+	got, err := svc.GameSessions(context.Background(), "g1", "open")
+
+	require.NoError(t, err)
+	assert.Equal(t, "g1", sessions.gotGameID)
+	assert.Equal(t, "open", sessions.gotState)
+	assert.Equal(t, "alice", got.Active[0].Players[0].Handle)
+	assert.Equal(t, "", got.Active[0].Players[1].Handle, "id sem cadastro fica com handle vazio")
+	assert.Equal(t, "bob", got.Closed[0].Players[0].Handle)
+}
+
+func TestGameSessions_IdentityFora_HandlesVazios_SemErro(t *testing.T) {
+	sessions := &fakeSessions{sessions: domain.GameSessions{
+		Active: []domain.GameSession{{SessionID: "s1", Players: []domain.SessionPlayer{{ID: "p1"}}}},
+	}}
+	dir := &fakeDirectory{err: domain.ErrIdentityUnavailable}
+	svc := New(Deps{Sessions: sessions, Directory: dir})
+
+	got, err := svc.GameSessions(context.Background(), "g1", "")
+
+	require.NoError(t, err, "identity fora não derruba a resposta (best-effort)")
+	assert.Equal(t, "p1", got.Active[0].Players[0].ID, "id sempre presente")
+	assert.Equal(t, "", got.Active[0].Players[0].Handle)
+}
+
+func TestGameSessions_SessionFora_PropagaErro(t *testing.T) {
+	sessions := &fakeSessions{err: domain.ErrSessionsUnavailable}
+	svc := New(Deps{Sessions: sessions, Directory: &fakeDirectory{}})
+
+	_, err := svc.GameSessions(context.Background(), "g1", "")
+	assert.ErrorIs(t, err, domain.ErrSessionsUnavailable)
+}
