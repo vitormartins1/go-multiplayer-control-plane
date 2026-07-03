@@ -32,12 +32,12 @@ Depende da spec `004-agones-allocator` (estado OPEN/CLOSED + motivo). Acrescenta
 
 ## Casos de Teste / Aceite
 
-- [ ] Sessão criada → aparece em `active` com players/server/openedAt
-- [ ] Fechou por `result` e por `ttl` → aparece em `closed` com motivo e `closedAt`
-- [ ] Histórico respeita o limite (mais antiga sai primeiro)
-- [ ] Filtro `state=` e filtro por `gameID` corretos (multi-tenant: sessão de outro jogo não vaza)
-- [ ] Restart → histórico vazio, `active` reconstruída do estado em memória (vazia também — documentado)
-- [ ] Testes httptest do handler
+- [x] Sessão criada → aparece em `active` com players/server/openedAt
+- [x] Fechou por `result` e por `ttl` → aparece em `closed` com motivo e `closedAt`
+- [x] Histórico respeita o limite (mais antiga sai primeiro)
+- [x] Filtro `state=` e filtro por `gameID` corretos (multi-tenant: sessão de outro jogo não vaza)
+- [x] Restart → histórico vazio, `active` reconstruída do estado em memória (vazia também — documentado)
+- [x] Testes httptest do handler
 
 ## Fora do escopo
 

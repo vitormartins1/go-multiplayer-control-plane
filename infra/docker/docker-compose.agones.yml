@@ -1,0 +1,23 @@
+# Override do compose para o allocator Agones (spec 004-agones-allocator).
+# O default do compose segue static (quem não subiu o k3d não quebra); este
+# arquivo liga o modo agones apontando para o cluster k3d local do data plane:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.agones.yml up -d session-service
+#
+# Pré-requisito: go-game-dataplane/tools/k3d/up.sh já rodou — ele gera o
+# kubeconfig-compose.yaml (API server via host.docker.internal:6550, gitignored).
+services:
+  session-service:
+    environment:
+      ALLOCATOR_MODE: agones
+      KUBECONFIG: /kubeconfig
+      AGONES_NAMESPACE: default
+      AGONES_FLEET: packet-arena
+      # Endereço do Agones é o IP interno do node k3d; o client no Mac alcança
+      # via loopback (portas UDP 7100-7139 mapeadas pelo k3d).
+      DEV_PUBLIC_HOST: 127.0.0.1
+      SESSION_TTL: 30m
+    volumes:
+      - ../../../go-game-dataplane/tools/k3d/kubeconfig-compose.yaml:/kubeconfig:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway

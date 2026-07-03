@@ -167,6 +167,7 @@ services:
       LEADERBOARD_URL: http://leaderboard-service:8080 # aba Leaderboards do painel (ADR-0016)
       PLAYER_DATA_URL: http://player-data-service:8080 # aba Player data do painel (ADR-0016)
       CLOUD_SAVE_URL: http://cloud-save-service:8080 # aba Cloud saves do painel (ADR-0016)
+      SESSION_URL: http://session-service:8080 # aba Sessions do painel (spec 007)
       INTERNAL_API_KEY: dev-internal-key # injeta nos callers serviço-a-serviço (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:

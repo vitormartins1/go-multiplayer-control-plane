@@ -2,7 +2,26 @@
 // session-service. Zero dependências externas. Ver ADR-0002.
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// SessionState é o estado do ciclo de vida da sessão (spec 004).
+type SessionState string
+
+// CloseReason é o motivo do fechamento da sessão (spec 004).
+type CloseReason string
+
+const (
+	SessionOpen   SessionState = "open"
+	SessionClosed SessionState = "closed"
+
+	// CloseResult: fechada por ReportResult (fim de partida reportado).
+	CloseResult CloseReason = "result"
+	// CloseTTL: fechada pelo sweeper (aberta há mais que SESSION_TTL).
+	CloseTTL CloseReason = "ttl"
+)
 
 // Session é uma partida em andamento: o match alocado a um game server.
 type Session struct {
@@ -12,6 +31,11 @@ type Session struct {
 	Players       []string
 	ServerID      string
 	ServerAddress string
+
+	State       SessionState
+	OpenedAt    time.Time
+	ClosedAt    time.Time // zero enquanto OPEN
+	CloseReason CloseReason
 }
 
 // Server é um game server do pool (mock no MVP; Agones no deploy — ADR-0011).
@@ -44,11 +68,14 @@ type SessionService interface {
 	ReportResult(ctx context.Context, matchID string, results []PlayerResult) error
 }
 
-// ServerAllocator é a Port de saída do pool de game servers. O adapter mock
-// aloca de um pool fixo em memória; o real (Agones) entra no deploy (ADR-0011).
+// ServerAllocator é a Port de saída do pool de game servers. O adapter static
+// aloca de um pool fixo em memória; o Agones cria uma GameServerAllocation
+// (ADR-0011, spec 004) levando os metadados da partida para o GameServer.
 type ServerAllocator interface {
-	// Allocate reserva um game server livre. ErrNoServer se o pool esgotar.
-	Allocate(ctx context.Context) (Server, error)
+	// Allocate reserva um game server livre para a partida. matchID/gameID viram
+	// annotations do GameServer no Agones (o static ignora). ErrNoServer se o
+	// pool esgotar.
+	Allocate(ctx context.Context, matchID, gameID string) (Server, error)
 	// Release devolve o server ao pool, liberando-o para nova alocação.
 	Release(ctx context.Context, serverID string) error
 }

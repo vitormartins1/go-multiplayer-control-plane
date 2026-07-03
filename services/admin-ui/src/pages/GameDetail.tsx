@@ -1,11 +1,12 @@
 import { Anchor, Breadcrumbs, Stack, Tabs, Text, Title } from "@mantine/core";
-import { IconChartBar, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
+import { IconChartBar, IconServer2, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { GameAchievements } from "./GameAchievements";
 import { GameLeaderboards } from "./GameLeaderboards";
 import { GamePlayers } from "./GamePlayers";
+import { GameSessions } from "./GameSessions";
 import { ComingSoon } from "../components/ComingSoon";
 
 export function GameDetail() {
@@ -23,7 +24,9 @@ export function GameDetail() {
       </Breadcrumbs>
       <Title order={3}>{game?.name ?? "Jogo"}</Title>
 
-      <Tabs defaultValue="achievements">
+      {/* keepMounted=false: painel desmontado ao trocar de aba — o polling da
+          aba Sessions só roda com ela visível. */}
+      <Tabs defaultValue="achievements" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="achievements" leftSection={<IconTrophy size={16} />}>
             Achievements
@@ -33,6 +36,9 @@ export function GameDetail() {
           </Tabs.Tab>
           <Tabs.Tab value="players" leftSection={<IconUsers size={16} />}>
             Players
+          </Tabs.Tab>
+          <Tabs.Tab value="sessions" leftSection={<IconServer2 size={16} />}>
+            Sessions
           </Tabs.Tab>
           <Tabs.Tab value="settings" leftSection={<IconSettings size={16} />}>
             Configurações
@@ -47,6 +53,9 @@ export function GameDetail() {
         </Tabs.Panel>
         <Tabs.Panel value="players" pt="md">
           <GamePlayers gameId={gameId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="sessions" pt="md">
+          <GameSessions gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="md">
           <ComingSoon what="Configurações do jogo" />

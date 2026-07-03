@@ -55,4 +55,4 @@ Também dá **ciclo de vida** à sessão: hoje ela só morre via `ReportResult` 
 ## Decisões pendentes
 
 - **k8s API × allocator gRPC**: recomendação k8s API (`GameServerAllocation` via client-go) — sem mTLS/cert bootstrap local; allocator gRPC volta quando houver multi-cluster (EKS). Confirmar no plan.
-- Chave exata das annotations no GameServer (metadata da allocation × prefixo `agones.dev/sdk-`) — validar empiricamente com o data plane e fixar nos dois specs.
+- ~~Chave exata das annotations no GameServer~~ **Resolvido** (validado empiricamente no k3d, Agones 1.58, 2026-07-03): metadata da allocation aterrissa **sem prefixo** — chaves `match_id`/`game_id` cruas em `objectMeta.annotations`. Fixado nos dois specs.

@@ -24,11 +24,11 @@ Aba **Sessions** na página do jogo (`GameDetail`): ver as partidas do jogo — 
 
 ## Casos de Teste / Aceite
 
-- [ ] Partida aberta aparece ao vivo (com o fluxo real rodando no data plane) e some/vira `closed` quando fecha
-- [ ] Motivo de fechamento visível (`result`/`ttl`)
-- [ ] Polling atualiza sem interação; sair da aba para o polling
-- [ ] Filtro estado funciona; empty state e erro ok
-- [ ] Visual consistente com as outras abas (Mantine, mesmo espaçamento/badges)
+- [x] Partida aberta aparece ao vivo (com o fluxo real rodando no data plane) e some/vira `closed` quando fecha
+- [x] Motivo de fechamento visível (`result`/`ttl`)
+- [x] Polling atualiza sem interação; sair da aba para o polling
+- [x] Filtro estado funciona; empty state e erro ok
+- [x] Visual consistente com as outras abas (Mantine, mesmo espaçamento/badges)
 
 ## Fora do escopo
 

@@ -24,4 +24,5 @@ var KnownEdges = []Edge{
 	{From: "matchmaking-service", To: "identity-service", Label: "valida JWT"},
 	{From: "matchmaking-service", To: "session-service", Label: "provisiona sessão"},
 	{From: "admin-bff", To: "achievements-service", Label: "lê achievements"},
+	{From: "admin-bff", To: "session-service", Label: "lê sessões"},
 }
