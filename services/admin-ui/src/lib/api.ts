@@ -95,6 +95,27 @@ export interface GamePlayer {
   firstSeen: string;
 }
 
+export interface SessionPlayer {
+  id: string;
+  handle: string; // vazio quando o identity não resolveu (best-effort do BFF)
+}
+
+export interface GameSession {
+  sessionId: string;
+  matchId: string;
+  state: "open" | "closed";
+  players: SessionPlayer[];
+  serverAddress: string;
+  openedAt: string;
+  closedAt?: string;
+  closeReason?: "result" | "ttl";
+}
+
+export interface GameSessions {
+  active: GameSession[];
+  closed: GameSession[];
+}
+
 // HttpError carrega o status para a UI distinguir 502/409/400 etc.
 export class HttpError extends Error {
   constructor(public status: number) {
@@ -174,4 +195,6 @@ export const api = {
     getJSON<GamePlayer[]>(`/api/games/${encodeURIComponent(gameId)}/players`, signal),
   gamesOfPlayer: (playerID: string, signal?: AbortSignal) =>
     getJSON<Game[]>(`/api/players/${encodeURIComponent(playerID)}/games`, signal),
+  gameSessions: (gameId: string, signal?: AbortSignal) =>
+    getJSON<GameSessions>(`/api/games/${encodeURIComponent(gameId)}/sessions`, signal),
 };
