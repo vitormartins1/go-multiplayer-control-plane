@@ -15,13 +15,13 @@ func TestAllocate_ServersDistintos_AteEsgotar(t *testing.T) {
 	pool := New([]string{"10.0.0.1:7777", "10.0.0.2:7777"})
 	ctx := context.Background()
 
-	s1, err := pool.Allocate(ctx)
+	s1, err := pool.Allocate(ctx, "match-1", "game-1")
 	require.NoError(t, err)
-	s2, err := pool.Allocate(ctx)
+	s2, err := pool.Allocate(ctx, "match-1", "game-1")
 	require.NoError(t, err)
 	assert.NotEqual(t, s1.ID, s2.ID, "dois Allocate não recebem o mesmo server")
 
-	_, err = pool.Allocate(ctx)
+	_, err = pool.Allocate(ctx, "match-1", "game-1")
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }
 
@@ -29,14 +29,14 @@ func TestRelease_ReabreVaga(t *testing.T) {
 	pool := New([]string{"10.0.0.1:7777"})
 	ctx := context.Background()
 
-	s1, err := pool.Allocate(ctx)
+	s1, err := pool.Allocate(ctx, "match-1", "game-1")
 	require.NoError(t, err)
-	_, err = pool.Allocate(ctx)
+	_, err = pool.Allocate(ctx, "match-1", "game-1")
 	require.ErrorIs(t, err, domain.ErrNoServer)
 
 	require.NoError(t, pool.Release(ctx, s1.ID))
 
-	s2, err := pool.Allocate(ctx)
+	s2, err := pool.Allocate(ctx, "match-1", "game-1")
 	require.NoError(t, err)
 	assert.Equal(t, s1.ID, s2.ID, "o server liberado volta a ser alocável")
 }
@@ -54,7 +54,7 @@ func TestAllocate_Concorrente_SemDuplicar(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, err := pool.Allocate(context.Background())
+			s, err := pool.Allocate(context.Background(), "match-1", "game-1")
 			require.NoError(t, err)
 			mu.Lock()
 			assert.False(t, seen[s.ID], "server %s alocado duas vezes", s.ID)

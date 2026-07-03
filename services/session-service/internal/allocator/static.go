@@ -37,8 +37,9 @@ func New(addresses []string) *Static {
 	return &Static{slots: slots}
 }
 
-// Allocate reserva o primeiro server livre. ErrNoServer se o pool esgotar.
-func (s *Static) Allocate(_ context.Context) (domain.Server, error) {
+// Allocate reserva o primeiro server livre; matchID/gameID só interessam ao
+// adapter Agones (annotations). ErrNoServer se o pool esgotar.
+func (s *Static) Allocate(_ context.Context, _, _ string) (domain.Server, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, sl := range s.slots {

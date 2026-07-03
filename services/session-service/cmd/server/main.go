@@ -26,6 +26,9 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	pb "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/allocator"
@@ -78,14 +81,26 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	pool := serverPool()
-	log.Info("pool de game servers (mock)", "size", len(pool))
-	svc := service.New(allocator.New(pool), issuer, buildPublisher(log))
+	alloc, err := buildAllocator(log)
+	if err != nil {
+		return err
+	}
+	svc := service.New(alloc, issuer, buildPublisher(log))
 
-	// métrica custom: sessões ativas é o que interessa observar aqui.
-	prometheus.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "session_active_sessions", Help: "Sessões de jogo ativas.",
-	}, svc.ActiveSessions))
+	// métricas custom: sessões ativas + fechamentos por motivo (spec 004).
+	prometheus.MustRegister(
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "session_active_sessions", Help: "Sessões de jogo ativas.",
+		}, svc.ActiveSessions),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
+			ConstLabels: prometheus.Labels{"reason": string(domain.CloseResult)},
+		}, func() float64 { return svc.ClosedTotal(domain.CloseResult) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
+			ConstLabels: prometheus.Labels{"reason": string(domain.CloseTTL)},
+		}, func() float64 { return svc.ClosedTotal(domain.CloseTTL) }),
+	)
 
 	grpcSrv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
@@ -119,6 +134,11 @@ func run(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Sweeper de TTL (spec 004): sessões abandonadas fecham sozinhas e o
+	// GameServer é reciclado. Morre com o ctx no shutdown.
+	sessionTTL := durationEnv("SESSION_TTL", 30*time.Minute, log)
+	go svc.RunSweeper(ctx, sessionTTL, time.Minute, log)
+
 	errCh := make(chan error, 2)
 	go func() {
 		log.Info("grpc server iniciando", "addr", grpcLis.Addr().String())
@@ -148,6 +168,80 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("encerrado")
 	return nil
+}
+
+// buildAllocator monta o ServerAllocator conforme ALLOCATOR_MODE (spec 004):
+// `static` (default) mantém o pool mock em memória; `agones` cria
+// GameServerAllocations no cluster (kubeconfig via KUBECONFIG ou in-cluster).
+// DEV_PUBLIC_HOST (dev) decora qualquer modo reescrevendo o host devolvido.
+func buildAllocator(log *slog.Logger) (domain.ServerAllocator, error) {
+	var alloc domain.ServerAllocator
+	switch mode := os.Getenv("ALLOCATOR_MODE"); mode {
+	case "", "static":
+		pool := serverPool()
+		log.Info("allocator static (pool mock)", "size", len(pool))
+		alloc = allocator.New(pool)
+	case "agones":
+		restCfg, err := kubeRestConfig()
+		if err != nil {
+			return nil, fmt.Errorf("allocator agones: %w", err)
+		}
+		client, err := dynamic.NewForConfig(restCfg)
+		if err != nil {
+			return nil, fmt.Errorf("allocator agones: client: %w", err)
+		}
+		namespace := envOr("AGONES_NAMESPACE", "default")
+		fleet := envOr("AGONES_FLEET", "packet-arena")
+		log.Info("allocator agones", "namespace", namespace, "fleet", fleet)
+		alloc = allocator.NewAgones(client, namespace, fleet)
+	default:
+		return nil, fmt.Errorf("ALLOCATOR_MODE inválido: %q (static|agones)", mode)
+	}
+
+	if host := os.Getenv("DEV_PUBLIC_HOST"); host != "" {
+		log.Warn("DEV_PUBLIC_HOST ativo — host dos endereços alocados reescrito (config de dev)", "host", host)
+		alloc = allocator.WithPublicHost(alloc, host)
+	}
+	return alloc, nil
+}
+
+// kubeRestConfig resolve a config do k8s: KUBECONFIG (dev/compose, arquivo
+// montado) ou in-cluster (deploy no k3s).
+func kubeRestConfig() (*rest.Config, error) {
+	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
+		cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("kubeconfig %q: %w", kubeconfig, err)
+		}
+		return cfg, nil
+	}
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("in-cluster config (defina KUBECONFIG fora do cluster): %w", err)
+	}
+	return cfg, nil
+}
+
+// envOr lê a env ou devolve o default.
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// durationEnv lê uma duração da env; inválida/ausente cai no default (com log).
+func durationEnv(key string, def time.Duration, log *slog.Logger) time.Duration {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Warn("duração inválida — usando default", "env", key, "valor", raw, "default", def)
+		return def
+	}
+	return d
 }
 
 // serverPool lê o pool de game servers do ambiente (SERVER_POOL, lista separada
