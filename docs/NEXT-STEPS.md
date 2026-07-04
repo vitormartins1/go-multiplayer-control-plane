@@ -1,4 +1,4 @@
-# NEXT-STEPS — handoff (atualizado 2026-07-05)
+# NEXT-STEPS — handoff (atualizado 2026-07-04)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
@@ -40,15 +40,22 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 
 ## O que foi feito nesta sessão (para referência)
 
-Commit `1947ce4` na `main`:
+**Admin-UI — expansão do painel (sem specs formais — usaram endpoints já existentes):**
 
-- **Review de observabilidade Grafana**: levantamento completo (serviços × dashboards × exporters) — nenhum exporter faltando; lacunas identificadas foram métricas customizadas do matchmaking/session/analytics sem dashboard.
-- **Dashboard `game-lifecycle.json`**: funil completo — fila de matchmaking, matches formados/falhas, sessões ativas, sessões encerradas por motivo, consumo fan-out (achievements + leaderboard consumers) e latência p95 do processamento.
-- **Dashboard `analytics-workers.json`**: workers ativos, ingest vs processamento (eventos/s), resultado por linha (ok/dup/error), backpressure.
-- **Importação CSV de conquistas** (specs `admin-bff/011` + `admin-ui/014`): feature completa — BFF orquestra criações sequenciais com resultado por linha; parser CSV nativo no frontend; validação pré-envio (regex, campos obrigatórios, IDs duplicados no arquivo, ≤ 500 linhas, ≤ 200 KB); modais de erro e resultado. 9 testes unitários novos (4 no client, 5 no handler).
+- **Analytics por jogo** (`GameAnalytics.tsx`): aba Analytics no GameDetail; filtra o `analyticsOverview` cross-game pelo `gameId` e exibe 4 StatCards (partidas, jogadores únicos, vitórias, score médio).
+- **JSON viewer** (Player Data e Cloud Save): valores objeto/array renderizados como `<Code block>` com scroll; primitivos inline — facilita inspeção de dados de gameplay.
+- **Busca de jogadores** (`Players.tsx`): `TextInput` filtra a lista local por handle; paginação oculta durante busca ativa.
+- **Ajuste de score no leaderboard** (feature 8): novo endpoint `PUT /admin/games/{g}/players/{p}/scores` no **leaderboard-service** (Redis `ZADD` sem GT — admin pode diminuir) + passthrough no **admin-bff** + modal com `NumberInput` na UI. Distingue de `adminSubmit` (highscore via `ZADD GT`).
+- **Histórico de progresso de conquista** (feature 7): novo endpoint `GET /admin/games/{g}/achievements/{id}/progress` no **achievements-service** (query `player_achievements ORDER BY progress DESC`) + passthrough no **admin-bff** + modal na aba Achievements mostrando todos os jogadores com progress, status (desbloqueado/em progresso) e data.
+- **CountBadge** (badges de contagem nas abas): suporta até 3 caracteres; cap em 999 (não "99+"); removido o prop `circle` do Mantine que espremía o conteúdo.
+
+**Admin-bff cleanup:**
+
+- Extraído `internal/upstream` (`DefaultClient`, `ErrorCode`, `Do`) — lógica de classificação 2xx/4xx/5xx centralizada; 5 adapters (achievements, cloudsave, playerdata, leaderboard, gameregistry) sem mais `do()`/`classify()`/`errorCode()` locais. Build + testes com `-race` verdes.
 
 *Sessões anteriores (histórico):*
 
+- Commit `1947ce4`: Review Grafana, dashboards `game-lifecycle.json` + `analytics-workers.json`, importação CSV de conquistas (specs `admin-bff/011` + `admin-ui/014`).
 - `player-data/002-game-scope`, `cloud-save/002-game-scope`, `admin-bff/006-player-tabs`, `admin-ui/005-game-library`, `game-registry/002-004`, `achievements/006-catalog-crud`, chore module path + CI + code-splitting, code-review `high`.
 
 ## Backlog priorizado (sem spec ainda)
@@ -61,7 +68,7 @@ Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-
 4. ✅ **Importação CSV de conquistas — FEITA** (specs `admin-bff/011` + `admin-ui/014`, commit `1947ce4`).
 5. **Remover jogo** no painel — *rename* ✅ feito. *Delete* segue **adiado** por precisar de decisão sobre dado órfão (cascata cross-service). **Precisa de ADR** — opções: *soft delete* (mais barato) vs *hard cascade*. A aba Configurações já avisa "remover ainda não disponível".
 6. **Leaderboard**: seasons/janelas por período + paginação.
-7. **Cleanup admin-bff** (do code-review, não é bug): `do()`/`classify()`/`errorCode()`/default-client duplicados nos 4 adapters → extrair helper `internal/upstream`.
+7. ✅ **Cleanup admin-bff — FEITO**: extraído `internal/upstream` (`Do`, `ErrorCode`, `DefaultClient`) — 5 adapters (achievements, cloudsave, playerdata, leaderboard, gameregistry) sem mais `do()`/`classify()`/`errorCode()` locais.
 8. **SQS queue depth no Grafana** (observabilidade futura): visibilidade de profundidade de fila e DLQ requer `yet-another-cloudwatch-exporter` (YACE). Métricas do lado consumidor já estão no dashboard `game-lifecycle`. Implementar quando chegar em produção AWS.
 9. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR.
 10. **Infra / deploy — payoff da tese (ADR-0008):** falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005); medir custo/performance vs AWS GameKit.

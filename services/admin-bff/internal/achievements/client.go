@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/upstream"
 )
 
 var _ domain.AchievementsReader = (*Client)(nil)
@@ -28,7 +29,7 @@ type Client struct {
 // New cria o client. O httpClient permite injetar timeout/transport (otelhttp).
 func New(baseURL string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 5 * time.Second}
+		httpClient = upstream.DefaultClient()
 	}
 	return &Client{baseURL: baseURL, http: httpClient}
 }
@@ -51,7 +52,7 @@ type catalogResponse struct {
 // CatalogForGame lê o catálogo de conquistas do jogo.
 func (c *Client) CatalogForGame(ctx context.Context, gameID string) ([]domain.Achievement, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.gamePath(gameID, "/achievements"), nil)
-	resp, err := c.do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ func (c *Client) CreateAchievement(ctx context.Context, gameID string, a domain.
 	})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.gamePath(gameID, "/achievements"), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func (c *Client) UpdateAchievement(ctx context.Context, gameID, id string, a dom
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(id))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
 	if err != nil {
 		return err
 	}
@@ -105,7 +106,7 @@ func (c *Client) UpdateAchievement(ctx context.Context, gameID, id string, a dom
 func (c *Client) DeleteAchievement(ctx context.Context, gameID, id string) error {
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(id))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
-	resp, err := c.do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
 	if err != nil {
 		return err
 	}
@@ -130,7 +131,7 @@ type playerAchievementsResponse struct {
 func (c *Client) PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
 	u := c.gamePath(gameID, "/players/"+url.PathEscape(playerID)+"/achievements")
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	resp, err := c.do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
 	if err != nil {
 		return nil, err
 	}
@@ -152,25 +153,6 @@ func (c *Client) PlayerAchievements(ctx context.Context, gameID, playerID string
 		out = append(out, pa)
 	}
 	return out, nil
-}
-
-// do executa a request e classifica a resposta (2xx ok; 4xx -> UpstreamError;
-// conn/5xx -> ErrAchievementsUnavailable). Devolve a resposta só no caminho ok.
-func (c *Client) do(req *http.Request) (*http.Response, error) {
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrAchievementsUnavailable, err)
-	}
-	switch {
-	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return resp, nil
-	case resp.StatusCode >= 400 && resp.StatusCode < 500:
-		defer func() { _ = resp.Body.Close() }()
-		return nil, &domain.UpstreamError{Status: resp.StatusCode, Code: errorCode(resp)}
-	default:
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("%w: status %d", domain.ErrAchievementsUnavailable, resp.StatusCode)
-	}
 }
 
 // ImportAchievements cadastra conquistas em lote processando cada item
@@ -219,7 +201,7 @@ type progressResponse struct {
 func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(achievementID)+"/progress")
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	resp, err := c.do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
 	if err != nil {
 		return nil, err
 	}
@@ -240,10 +222,3 @@ func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID 
 	return out, nil
 }
 
-func errorCode(resp *http.Response) string {
-	var body struct {
-		Error string `json:"error"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&body)
-	return body.Error
-}

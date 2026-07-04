@@ -11,9 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/upstream"
 )
 
 var _ domain.LeaderboardReader = (*Client)(nil)
@@ -28,7 +28,7 @@ type Client struct {
 // internal key).
 func New(baseURL string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 5 * time.Second}
+		httpClient = upstream.DefaultClient()
 	}
 	return &Client{baseURL: baseURL, http: httpClient}
 }
@@ -51,14 +51,11 @@ func (c *Client) SetScore(ctx context.Context, gameID, playerID string, score in
 		c.baseURL+"/admin/games/"+url.PathEscape(gameID)+"/players/"+url.PathEscape(playerID)+"/scores",
 		bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrLeaderboardUnavailable)
 	if err != nil {
-		return domain.LeaderboardEntry{}, fmt.Errorf("%w: %v", domain.ErrLeaderboardUnavailable, err)
+		return domain.LeaderboardEntry{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return domain.LeaderboardEntry{}, fmt.Errorf("%w: status %d", domain.ErrLeaderboardUnavailable, resp.StatusCode)
-	}
 	var e struct {
 		Rank     int64  `json:"rank"`
 		PlayerID string `json:"playerId"`
@@ -77,14 +74,11 @@ func (c *Client) TopForGame(ctx context.Context, gameID string, limit int) ([]do
 		u += "?limit=" + strconv.Itoa(limit)
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrLeaderboardUnavailable)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrLeaderboardUnavailable, err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%w: status %d", domain.ErrLeaderboardUnavailable, resp.StatusCode)
-	}
 
 	var body topResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {

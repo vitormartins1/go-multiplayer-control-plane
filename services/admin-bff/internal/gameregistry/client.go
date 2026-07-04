@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/upstream"
 )
 
 var _ domain.GameRegistry = (*Client)(nil)
@@ -27,21 +27,18 @@ type Client struct {
 // New cria o client. O httpClient permite injetar timeout/transport (otelhttp).
 func New(baseURL string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 5 * time.Second}
+		httpClient = upstream.DefaultClient()
 	}
 	return &Client{baseURL: baseURL, http: httpClient}
 }
 
 func (c *Client) ListGames(ctx context.Context) ([]domain.Game, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/games", nil)
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := classify(resp); err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	var games []domain.Game
 	if err := json.NewDecoder(resp.Body).Decode(&games); err != nil {
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
@@ -53,14 +50,11 @@ func (c *Client) CreateGame(ctx context.Context, slug, name string) (*domain.Gam
 	body, _ := json.Marshal(map[string]string{"slug": slug, "name": name})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/games", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := classify(resp); err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	var g domain.Game
 	if err := json.NewDecoder(resp.Body).Decode(&g); err != nil {
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
@@ -73,14 +67,11 @@ func (c *Client) RenameGame(ctx context.Context, id, name string) (*domain.Game,
 	body, _ := json.Marshal(map[string]string{"name": name})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/games/"+url.PathEscape(id), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := classify(resp); err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	var g domain.Game
 	if err := json.NewDecoder(resp.Body).Decode(&g); err != nil {
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
@@ -92,14 +83,11 @@ func (c *Client) RenameGame(ctx context.Context, id, name string) (*domain.Game,
 func (c *Client) PlayersOf(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/players"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := classify(resp); err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	var players []domain.GamePlayer
 	if err := json.NewDecoder(resp.Body).Decode(&players); err != nil {
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
@@ -111,39 +99,14 @@ func (c *Client) PlayersOf(ctx context.Context, gameID string) ([]domain.GamePla
 func (c *Client) GamesOfPlayer(ctx context.Context, playerID string) ([]domain.Game, error) {
 	u := c.baseURL + "/players/" + url.PathEscape(playerID) + "/games"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	resp, err := c.http.Do(req)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := classify(resp); err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	var games []domain.Game
 	if err := json.NewDecoder(resp.Body).Decode(&games); err != nil {
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
 	}
 	return games, nil
-}
-
-// classify mapeia a resposta do upstream: 2xx -> nil; 4xx -> UpstreamError (status
-// + code do corpo); conn/5xx (já tratado no Do) ou 5xx -> ErrGameRegistryUnavailable.
-func classify(resp *http.Response) error {
-	switch {
-	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return nil
-	case resp.StatusCode >= 400 && resp.StatusCode < 500:
-		return &domain.UpstreamError{Status: resp.StatusCode, Code: errorCode(resp)}
-	default:
-		return fmt.Errorf("%w: status %d", domain.ErrGameRegistryUnavailable, resp.StatusCode)
-	}
-}
-
-// errorCode extrai o campo "error" do corpo, se houver.
-func errorCode(resp *http.Response) string {
-	var body struct {
-		Error string `json:"error"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&body)
-	return body.Error
 }
