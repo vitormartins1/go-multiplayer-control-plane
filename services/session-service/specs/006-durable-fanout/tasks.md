@@ -23,9 +23,9 @@
 
 ## Consumidor — leaderboard-service (idempotência intrínseca via ZADD GT)
 
-- [ ] `cmd/consumer/main.go` — long-poll SQS, `service.Submit` por player, delete-após-sucesso, DLQ; `context`+`WaitGroup`; `/metrics`+`/healthz`; **sem dedup** (comentar: highscore GT é idempotente)
-- [ ] test: reentrega da mesma mensagem não altera o top-N (no-op)
-- [ ] métricas `fanout_consume_total{result}` + duração
+- [x] `cmd/consumer/main.go` — long-poll SQS, `service.Submit` por player, delete-após-sucesso, DLQ; `context`+`WaitGroup`; `/metrics`+`/healthz`; **sem dedup** (comentar: highscore GT é idempotente)
+- [x] test: reentrega da mesma mensagem não altera o top-N (no-op)
+- [x] métricas `fanout_consume_total{result}` + duração
 
 ## Infra + observabilidade
 
