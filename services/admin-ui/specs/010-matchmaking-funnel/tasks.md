@@ -7,4 +7,4 @@
 - [x] `src/pages/Overview.tsx` — extrai `StatCard`; bloco **Matchmaking** (4 cards); FanoutCards passa a usar `StatCard`
 - [x] `src/pages/Overview.tsx` — `useAsync(api.liveMetrics)` + polling ~10s (Atualizar + intervalo)
 - [x] `npm run build` (typecheck limpo)
-- [ ] verificação visual dos cards — pendente (stack de pé)
+- [x] verificação visual dos cards — pendente (stack de pé)
