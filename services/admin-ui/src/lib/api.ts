@@ -118,6 +118,14 @@ export interface GameSessions {
   closed: GameSession[];
 }
 
+// LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.
+export interface LiveMetrics {
+  queueSize: number | null;
+  activeSessions: number | null;
+  matchesTotal: number | null;
+  matchesFailed: number | null;
+}
+
 // FanoutHealth: sinais do fan-out durável (ADR-0020). null = métrica ausente/fonte fora.
 export interface FanoutHealth {
   publishOk: number | null;
@@ -165,6 +173,7 @@ async function del(path: string): Promise<void> {
 
 export const api = {
   topology: (signal?: AbortSignal) => getJSON<Topology>("/api/topology", signal),
+  liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
 
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
