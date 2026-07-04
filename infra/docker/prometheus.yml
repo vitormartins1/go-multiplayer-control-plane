@@ -19,6 +19,15 @@ scrape_configs:
     static_configs:
       - targets: ["leaderboard-consumer:8080"]
 
+  # analytics-service (ADR-0021): worker pool (analytics_events_*) + read API.
+  - job_name: analytics-service
+    static_configs:
+      - targets: ["analytics-service:8080"]
+
+  - job_name: analytics-postgres
+    static_configs:
+      - targets: ["analytics-postgres-exporter:9187"]
+
   - job_name: player-data-service
     static_configs:
       - targets: ["player-data-service:8080"]
