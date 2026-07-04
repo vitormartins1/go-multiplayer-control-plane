@@ -21,6 +21,8 @@ const (
 	CloseResult CloseReason = "result"
 	// CloseTTL: fechada pelo sweeper (aberta há mais que SESSION_TTL).
 	CloseTTL CloseReason = "ttl"
+	// CloseAdmin: encerrada por um operador no console (spec 007).
+	CloseAdmin CloseReason = "admin"
 )
 
 // Session é uma partida em andamento: o match alocado a um game server.
