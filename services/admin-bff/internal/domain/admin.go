@@ -169,6 +169,9 @@ type LeaderboardEntry struct {
 type LeaderboardReader interface {
 	// TopForGame lê o top-N do jogo. Indisponibilidade -> ErrLeaderboardUnavailable.
 	TopForGame(ctx context.Context, gameID string, limit int) ([]LeaderboardEntry, error)
+	// SetScore substitui o score do jogador independente do valor atual (admin override).
+	// Indisponibilidade -> ErrLeaderboardUnavailable.
+	SetScore(ctx context.Context, gameID, playerID string, score int64) (LeaderboardEntry, error)
 }
 
 // AchievementsReader é a Port de saída para a API admin do achievements-service,

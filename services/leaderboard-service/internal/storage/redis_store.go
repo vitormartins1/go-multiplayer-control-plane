@@ -52,6 +52,15 @@ func (s *RedisStore) Submit(ctx context.Context, gameID, playerID string, score 
 	return nil
 }
 
+// ForceScore substitui o score independente do valor atual (admin override, ZADD sem GT).
+func (s *RedisStore) ForceScore(ctx context.Context, gameID, playerID string, score int64) error {
+	err := s.client.ZAdd(ctx, s.key(gameID), redis.Z{Score: float64(score), Member: playerID}).Err()
+	if err != nil {
+		return fmt.Errorf("leaderboard storage: force score: %w", err)
+	}
+	return nil
+}
+
 // Rank devolve a posição (0-based) e o score do jogador; ErrNotRanked se ausente.
 func (s *RedisStore) Rank(ctx context.Context, gameID, playerID string) (int64, int64, error) {
 	res, err := s.client.ZRevRankWithScore(ctx, s.key(gameID), playerID).Result()

@@ -243,6 +243,11 @@ export const api = {
       `/api/games/${encodeURIComponent(gameId)}/leaderboard?limit=${limit}`,
       signal,
     ),
+  setLeaderboardScore: (gameId: string, playerId: string, score: number) =>
+    putJSON<LeaderEntry>(
+      `/api/games/${encodeURIComponent(gameId)}/leaderboard/${encodeURIComponent(playerId)}/score`,
+      { score },
+    ),
   playerData: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerDataEntry[]>(
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/data`,

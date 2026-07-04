@@ -36,6 +36,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("GET /leaderboard/me", h.auth(http.HandlerFunc(h.me)))
 
 	mux.HandleFunc("POST /admin/games/{gameId}/players/{playerID}/scores", h.adminSubmit)
+	mux.HandleFunc("PUT /admin/games/{gameId}/players/{playerID}/scores", h.adminForceScore)
 	mux.HandleFunc("GET /admin/games/{gameId}/leaderboard", h.adminTop)
 }
 
@@ -123,6 +124,23 @@ func (h *Handler) adminSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entry, err := h.svc.Submit(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toDTO(entry))
+}
+
+// adminForceScore substitui o score do jogador independente do valor atual (admin override).
+func (h *Handler) adminForceScore(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Score *int64 `json:"score"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
+		writeError(w, http.StatusBadRequest, "invalid_score")
+		return
+	}
+	entry, err := h.svc.ForceSubmit(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
 	if err != nil {
 		writeDomainError(w, err)
 		return

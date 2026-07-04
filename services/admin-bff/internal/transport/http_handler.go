@@ -28,6 +28,7 @@ type AdminService interface {
 	ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error)
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
+	SetLeaderboardScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error)
 	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
 	CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error)
 	GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error)
@@ -64,6 +65,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/games/{gameId}/achievements/{id}", h.deleteAchievement)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
+	mux.HandleFunc("PUT /api/games/{gameId}/leaderboard/{playerID}/score", h.setLeaderboardScore)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/save", h.cloudSave)
 	mux.HandleFunc("GET /api/games/{gameId}/players", h.gamePlayers)
@@ -264,6 +266,23 @@ func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
 		entries = []domain.LeaderboardEntry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// setLeaderboardScore substitui o score do jogador (admin override, force-set).
+func (h *Handler) setLeaderboardScore(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Score *int64 `json:"score"`
+	}
+	if err := decode(r, &req); err != nil || req.Score == nil {
+		writeError(w, http.StatusBadRequest, "invalid_score")
+		return
+	}
+	entry, err := h.svc.SetLeaderboardScore(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, entry)
 }
 
 // gamePlayers: a player base do jogo (presença, ADR-0019).

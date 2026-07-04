@@ -28,6 +28,10 @@ func (m *mockStore) Top(ctx context.Context, gameID string, limit int) ([]domain
 	return e, args.Error(1)
 }
 
+func (m *mockStore) ForceScore(ctx context.Context, gameID, playerID string, score int64) error {
+	return m.Called(ctx, gameID, playerID, score).Error(0)
+}
+
 func (m *mockStore) Range(ctx context.Context, gameID string, start, stop int64) ([]domain.Entry, error) {
 	args := m.Called(ctx, gameID, start, stop)
 	e, _ := args.Get(0).([]domain.Entry)

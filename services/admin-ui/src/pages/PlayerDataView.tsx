@@ -34,15 +34,25 @@ export function PlayerDataView({ playerId, gameId }: { playerId: string; gameId:
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.map((e) => (
-              <Table.Tr key={`${e.namespace}/${e.key}`}>
-                <Table.Td>{e.namespace}</Table.Td>
-                <Table.Td>{e.key}</Table.Td>
-                <Table.Td>
-                  <Code>{JSON.stringify(e.value)}</Code>
-                </Table.Td>
-              </Table.Tr>
-            ))}
+            {data.map((e) => {
+              const isPrimitive = e.value === null || typeof e.value !== "object";
+              const formatted = isPrimitive ? String(e.value) : JSON.stringify(e.value, null, 2);
+              return (
+                <Table.Tr key={`${e.namespace}/${e.key}`}>
+                  <Table.Td>{e.namespace}</Table.Td>
+                  <Table.Td>{e.key}</Table.Td>
+                  <Table.Td>
+                    {isPrimitive ? (
+                      <Code>{formatted}</Code>
+                    ) : (
+                      <Code block style={{ maxHeight: 200, overflow: "auto" }}>
+                        {formatted}
+                      </Code>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
       )}

@@ -1,10 +1,11 @@
 import { Anchor, Badge, Breadcrumbs, Group, Stack, Tabs, Text, Title } from "@mantine/core";
-import { IconChartBar, IconServer2, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
+import { IconChartBar, IconChartPie, IconServer2, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { GameAchievements } from "./GameAchievements";
+import { GameAnalytics } from "./GameAnalytics";
 import { GameLeaderboards } from "./GameLeaderboards";
 import { GamePlayers } from "./GamePlayers";
 import { GameSessions } from "./GameSessions";
@@ -92,6 +93,9 @@ export function GameDetail() {
           >
             Sessions
           </Tabs.Tab>
+          <Tabs.Tab value="analytics" leftSection={<IconChartPie size={16} />}>
+            Analytics
+          </Tabs.Tab>
           <Tabs.Tab value="settings" leftSection={<IconSettings size={16} />}>
             Configurações
           </Tabs.Tab>
@@ -108,6 +112,9 @@ export function GameDetail() {
         </Tabs.Panel>
         <Tabs.Panel value="sessions" pt="md">
           <GameSessions gameId={gameId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="analytics" pt="md">
+          <GameAnalytics gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="md">
           {game ? (

@@ -150,6 +150,11 @@ func (f *fakeService) AnalyticsOverview(context.Context) (domain.AnalyticsOvervi
 	return f.analytics, f.analyticsErr
 }
 
+func (f *fakeService) SetLeaderboardScore(_ context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotPlayer = gameID, playerID
+	return domain.LeaderboardEntry{Rank: 1, PlayerID: playerID, Score: score}, f.leadErr
+}
+
 func newServer(svc AdminService) *httptest.Server {
 	mux := http.NewServeMux()
 	NewHandler(svc).Register(mux)

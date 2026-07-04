@@ -16,6 +16,8 @@ type Entry struct {
 type LeaderboardService interface {
 	// Submit aplica highscore e retorna a entry do jogador após a submissão.
 	Submit(ctx context.Context, gameID, playerID string, score int64) (Entry, error)
+	// ForceSubmit substitui o score independente do valor atual (admin override).
+	ForceSubmit(ctx context.Context, gameID, playerID string, score int64) (Entry, error)
 	Top(ctx context.Context, gameID string, limit int) ([]Entry, error)
 	Around(ctx context.Context, gameID, playerID string, k int) ([]Entry, error)
 }
@@ -24,6 +26,8 @@ type LeaderboardService interface {
 // jogo é um sorted set próprio (key por gameID).
 type LeaderboardStore interface {
 	Submit(ctx context.Context, gameID, playerID string, score int64) error // highscore (ZADD GT)
+	// ForceScore substitui o score independente do valor atual (ZADD sem GT).
+	ForceScore(ctx context.Context, gameID, playerID string, score int64) error
 	// Rank devolve a posição (0-based, ordem do Redis) e o score do jogador;
 	// ErrNotRanked se ele ainda não tem score.
 	Rank(ctx context.Context, gameID, playerID string) (rank int64, score int64, err error)

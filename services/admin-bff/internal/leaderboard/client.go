@@ -4,6 +4,7 @@
 package leaderboard
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,6 +40,34 @@ type topResponse struct {
 		PlayerID string `json:"playerId"`
 		Score    int64  `json:"score"`
 	} `json:"entries"`
+}
+
+// SetScore substitui o score do jogador independente do valor atual (admin override).
+func (c *Client) SetScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error) {
+	payload, _ := json.Marshal(struct {
+		Score int64 `json:"score"`
+	}{score})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut,
+		c.baseURL+"/admin/games/"+url.PathEscape(gameID)+"/players/"+url.PathEscape(playerID)+"/scores",
+		bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return domain.LeaderboardEntry{}, fmt.Errorf("%w: %v", domain.ErrLeaderboardUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.LeaderboardEntry{}, fmt.Errorf("%w: status %d", domain.ErrLeaderboardUnavailable, resp.StatusCode)
+	}
+	var e struct {
+		Rank     int64  `json:"rank"`
+		PlayerID string `json:"playerId"`
+		Score    int64  `json:"score"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&e); err != nil {
+		return domain.LeaderboardEntry{}, fmt.Errorf("leaderboard: decode: %w", err)
+	}
+	return domain.LeaderboardEntry{Rank: e.Rank, PlayerID: e.PlayerID, Score: e.Score}, nil
 }
 
 // TopForGame lê o top-N do jogo.

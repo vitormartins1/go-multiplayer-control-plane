@@ -120,6 +120,11 @@ func (s *Service) GameLeaderboard(ctx context.Context, gameID string, limit int)
 	return s.leaderboard.TopForGame(ctx, gameID, limit)
 }
 
+// SetLeaderboardScore substitui o score do jogador (admin override, sem ZADD GT).
+func (s *Service) SetLeaderboardScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error) {
+	return s.leaderboard.SetScore(ctx, gameID, playerID, score)
+}
+
 // GamePlayers lê a player base do jogo (presença, ADR-0019).
 func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	return s.registry.PlayersOf(ctx, gameID)

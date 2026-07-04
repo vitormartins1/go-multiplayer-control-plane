@@ -41,6 +41,18 @@ func (s *Service) Submit(ctx context.Context, gameID, playerID string, score int
 	return domain.Entry{Rank: rank0 + 1, PlayerID: playerID, Score: best}, nil
 }
 
+// ForceSubmit substitui o score independente do valor atual (admin override).
+func (s *Service) ForceSubmit(ctx context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
+	if err := s.store.ForceScore(ctx, gameID, playerID, score); err != nil {
+		return domain.Entry{}, fmt.Errorf("leaderboard service: force submit: %w", err)
+	}
+	rank0, best, err := s.store.Rank(ctx, gameID, playerID)
+	if err != nil {
+		return domain.Entry{}, fmt.Errorf("leaderboard service: rank after force: %w", err)
+	}
+	return domain.Entry{Rank: rank0 + 1, PlayerID: playerID, Score: best}, nil
+}
+
 func (s *Service) Top(ctx context.Context, gameID string, limit int) ([]domain.Entry, error) {
 	entries, err := s.store.Top(ctx, gameID, clampLimit(limit))
 	if err != nil {

@@ -106,6 +106,11 @@ func (f *fakeLeaderboard) TopForGame(_ context.Context, gameID string, limit int
 	return f.entries, f.err
 }
 
+func (f *fakeLeaderboard) SetScore(_ context.Context, gameID, _ string, _ int64) (domain.LeaderboardEntry, error) {
+	f.gotGameID = gameID
+	return domain.LeaderboardEntry{}, f.err
+}
+
 type fakeDirectory struct {
 	page      domain.PlayerPage
 	err       error

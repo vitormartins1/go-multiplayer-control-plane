@@ -43,6 +43,13 @@ func (f *fakeService) Submit(_ context.Context, gameID, playerID string, score i
 	return f.submitEntry, nil
 }
 
+func (f *fakeService) ForceSubmit(_ context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
+	f.gotGameID = gameID
+	f.gotPlayerID = playerID
+	f.gotScore = score
+	return f.submitEntry, nil
+}
+
 func (f *fakeService) Top(_ context.Context, gameID string, limit int) ([]domain.Entry, error) {
 	f.gotGameID = gameID
 	f.gotLimit = limit
