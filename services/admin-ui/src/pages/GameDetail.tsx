@@ -14,8 +14,8 @@ import { GameSettings } from "./GameSettings";
 function CountBadge({ count, color = "gray" }: { count?: number; color?: string }) {
   if (count == null) return null;
   return (
-    <Badge size="xs" variant="filled" color={color} circle>
-      {count > 99 ? "99+" : count}
+    <Badge size="xs" variant="filled" color={color}>
+      {count > 999 ? "99+" : count}
     </Badge>
   );
 }
