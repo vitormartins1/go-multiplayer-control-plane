@@ -26,6 +26,7 @@ type AdminService interface {
 	UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error
 	DeleteAchievement(ctx context.Context, gameID, id string) error
 	ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error)
+	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error)
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
 	SetLeaderboardScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error)
@@ -59,6 +60,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
+	mux.HandleFunc("GET /api/games/{gameId}/achievements/{id}/progress", h.achievementProgress)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements/import", h.importAchievements)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
 	mux.HandleFunc("PUT /api/games/{gameId}/achievements/{id}", h.updateAchievement)
@@ -179,6 +181,19 @@ func (h *Handler) gameCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, cat)
+}
+
+// achievementProgress devolve o progresso de todos os jogadores na conquista.
+func (h *Handler) achievementProgress(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.svc.AchievementProgress(r.Context(), r.PathValue("gameId"), r.PathValue("id"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if entries == nil {
+		entries = []domain.AchievementProgressEntry{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"progress": entries})
 }
 
 // createAchievement cadastra uma conquista no jogo; repassa 400/409.

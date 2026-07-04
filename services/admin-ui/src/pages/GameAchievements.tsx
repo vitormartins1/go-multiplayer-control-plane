@@ -17,9 +17,9 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconDownload, IconPencil, IconPlus, IconRefresh, IconTrash, IconUpload } from "@tabler/icons-react";
+import { IconChartBar, IconDownload, IconPencil, IconPlus, IconRefresh, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useRef, useState, type ChangeEvent } from "react";
-import { api, HttpError, type CatalogAchievement, type ImportResponse } from "../lib/api";
+import { api, HttpError, type AchievementProgressEntry, type CatalogAchievement, type ImportResponse } from "../lib/api";
 import { CSV_TEMPLATE, parseCSV, type ParseError } from "../lib/csv";
 import { useAsync } from "../lib/useAsync";
 import { AchievementIcon } from "../components/AchievementIcon";
@@ -37,6 +37,25 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResponse | null>(null);
   const [importErrors, setImportErrors] = useState<ParseError[]>([]);
+
+  // Progresso da conquista
+  const [progressAchievement, setProgressAchievement] = useState<CatalogAchievement | null>(null);
+  const [progressEntries, setProgressEntries] = useState<AchievementProgressEntry[]>([]);
+  const [progressLoading, setProgressLoading] = useState(false);
+
+  async function openProgress(a: CatalogAchievement) {
+    setProgressAchievement(a);
+    setProgressEntries([]);
+    setProgressLoading(true);
+    try {
+      const { progress } = await api.achievementProgress(gameId, a.id);
+      setProgressEntries(progress);
+    } catch {
+      notifications.show({ color: "red", message: "Falha ao carregar o progresso." });
+    } finally {
+      setProgressLoading(false);
+    }
+  }
 
   const form = useForm({
     initialValues: { id: "", name: "", description: "", eventType: "", target: 1 },
@@ -223,6 +242,9 @@ export function GameAchievements({ gameId }: { gameId: string }) {
                 <Table.Td>{a.target}</Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">
+                    <ActionIcon variant="subtle" color="blue" onClick={() => openProgress(a)} aria-label="Ver progresso">
+                      <IconChartBar size={16} />
+                    </ActionIcon>
                     <ActionIcon variant="subtle" color="gray" onClick={() => openEdit(a)} aria-label="Editar">
                       <IconPencil size={16} />
                     </ActionIcon>
@@ -353,6 +375,66 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             </Group>
           </Stack>
         )}
+      </Modal>
+
+      {/* Progresso da conquista (todos os jogadores) */}
+      <Modal
+        opened={!!progressAchievement}
+        onClose={() => { setProgressAchievement(null); setProgressEntries([]); }}
+        title={progressAchievement ? `Progresso — ${progressAchievement.name}` : "Progresso"}
+        size="lg"
+      >
+        <Stack>
+          {progressLoading && <Loader />}
+          {!progressLoading && progressEntries.length === 0 && (
+            <Text c="dimmed">Nenhum jogador iniciou esta conquista ainda.</Text>
+          )}
+          {!progressLoading && progressEntries.length > 0 && (
+            <>
+              <Group gap="md">
+                <Badge color="green">
+                  {progressEntries.filter((e) => e.unlocked).length} desbloqueada{progressEntries.filter((e) => e.unlocked).length !== 1 ? "s" : ""}
+                </Badge>
+                <Badge color="blue">
+                  {progressEntries.filter((e) => !e.unlocked).length} em progresso
+                </Badge>
+              </Group>
+              <Table striped withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Jogador</Table.Th>
+                    <Table.Th ta="center">Progresso</Table.Th>
+                    <Table.Th ta="center">Status</Table.Th>
+                    <Table.Th>Desbloqueado em</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {progressEntries.map((e) => (
+                    <Table.Tr key={e.playerId}>
+                      <Table.Td c="dimmed">{e.playerId.slice(0, 8)}…</Table.Td>
+                      <Table.Td ta="center">
+                        {e.progress}/{progressAchievement?.target ?? "?"}
+                      </Table.Td>
+                      <Table.Td ta="center">
+                        <Badge color={e.unlocked ? "green" : "orange"} variant="light">
+                          {e.unlocked ? "desbloqueado" : "em progresso"}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td c="dimmed">
+                        {e.unlockedAt ? new Date(e.unlockedAt).toLocaleString("pt-BR") : "—"}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => { setProgressAchievement(null); setProgressEntries([]); }}>
+              Fechar
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
       {/* Confirmar remoção */}

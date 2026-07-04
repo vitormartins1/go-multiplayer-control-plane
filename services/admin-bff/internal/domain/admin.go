@@ -174,6 +174,15 @@ type LeaderboardReader interface {
 	SetScore(ctx context.Context, gameID, playerID string, score int64) (LeaderboardEntry, error)
 }
 
+// AchievementProgressEntry é uma linha do relatório de progresso de uma conquista:
+// todos os jogadores com seu progresso/desbloqueio naquela conquista.
+type AchievementProgressEntry struct {
+	PlayerID   string    `json:"playerId"`
+	Progress   int       `json:"progress"`
+	Unlocked   bool      `json:"unlocked"`
+	UnlockedAt time.Time `json:"unlockedAt,omitempty"`
+}
+
 // AchievementsReader é a Port de saída para a API admin do achievements-service,
 // agora por jogo (multi-tenant, ADR-0017).
 type AchievementsReader interface {
@@ -190,6 +199,8 @@ type AchievementsReader interface {
 	// ImportAchievements cadastra conquistas em lote (spec 011). Processa cada
 	// item sequencialmente e retorna o resultado por linha — nunca falha no total.
 	ImportAchievements(ctx context.Context, gameID string, items []Achievement) (ImportResponse, error)
+	// AchievementProgress devolve o progresso de todos os jogadores na conquista.
+	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]AchievementProgressEntry, error)
 }
 
 // PlayerDataEntry é uma linha de dado de gameplay do jogador (player-data). O

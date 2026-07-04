@@ -25,6 +25,15 @@ type PlayerProgress struct {
 	UnlockedAt    time.Time // zero = em progresso (ainda não desbloqueada)
 }
 
+// AchievementProgressEntry é uma linha do relatório de progresso de uma
+// conquista: quantos jogadores a desbloquearam, quantos estão em progresso.
+type AchievementProgressEntry struct {
+	PlayerID   string
+	Progress   int
+	Unlocked   bool
+	UnlockedAt time.Time // zero quando ainda em progresso
+}
+
 // PlayerAchievement é uma conquista do catálogo anotada com o estado do jogador.
 type PlayerAchievement struct {
 	Achievement
@@ -59,6 +68,9 @@ type PlayerEvents struct {
 type AchievementService interface {
 	ListCatalog(ctx context.Context, gameID string) ([]Achievement, error)
 	ListForPlayer(ctx context.Context, gameID, playerID string) ([]PlayerAchievement, error)
+	// ProgressForAchievement devolve o progresso de todos os jogadores na
+	// conquista {achievementID} do jogo {gameID} (admin, painel).
+	ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]AchievementProgressEntry, error)
 	// RecordEvent avalia o evento, incrementa o progresso das conquistas cujo
 	// critério casa e desbloqueia as que atingem a meta; retorna apenas as
 	// recém-desbloqueadas. Escopo: gameID.
@@ -83,6 +95,9 @@ type AchievementRepository interface {
 	// FindByEventType retorna as conquistas do jogo disparadas por um event_type.
 	FindByEventType(ctx context.Context, gameID, eventType string) ([]Achievement, error)
 	ListPlayerProgress(ctx context.Context, gameID, playerID string) ([]PlayerProgress, error)
+	// ProgressForAchievement devolve o progresso de todos os jogadores na
+	// conquista {achievementID} do jogo, ordenado por progresso desc.
+	ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]AchievementProgressEntry, error)
 	// RecordProgress incrementa o progresso do jogador na conquista de forma
 	// atômica e desbloqueia ao atingir target; é no-op se já desbloqueada.
 	// justUnlocked indica se foi desbloqueada nesta chamada.

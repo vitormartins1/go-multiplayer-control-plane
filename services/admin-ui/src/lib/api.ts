@@ -89,6 +89,13 @@ export interface LeaderEntry {
   score: number;
 }
 
+export interface AchievementProgressEntry {
+  playerId: string;
+  progress: number;
+  unlocked: boolean;
+  unlockedAt?: string;
+}
+
 export interface PlayerDataEntry {
   namespace: string;
   key: string;
@@ -247,6 +254,11 @@ export const api = {
     putJSON<LeaderEntry>(
       `/api/games/${encodeURIComponent(gameId)}/leaderboard/${encodeURIComponent(playerId)}/score`,
       { score },
+    ),
+  achievementProgress: (gameId: string, achievementId: string, signal?: AbortSignal) =>
+    getJSON<{ progress: AchievementProgressEntry[] }>(
+      `/api/games/${encodeURIComponent(gameId)}/achievements/${encodeURIComponent(achievementId)}/progress`,
+      signal,
     ),
   playerData: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerDataEntry[]>(

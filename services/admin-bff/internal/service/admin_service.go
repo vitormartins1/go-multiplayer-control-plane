@@ -125,6 +125,11 @@ func (s *Service) SetLeaderboardScore(ctx context.Context, gameID, playerID stri
 	return s.leaderboard.SetScore(ctx, gameID, playerID, score)
 }
 
+// AchievementProgress devolve o progresso de todos os jogadores na conquista.
+func (s *Service) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
+	return s.reader.AchievementProgress(ctx, gameID, achievementID)
+}
+
 // GamePlayers lê a player base do jogo (presença, ADR-0019).
 func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	return s.registry.PlayersOf(ctx, gameID)

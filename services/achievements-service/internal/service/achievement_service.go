@@ -129,6 +129,15 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 	return dup, nil
 }
 
+// ProgressForAchievement devolve o progresso de todos os jogadores na conquista.
+func (s *Service) ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
+	entries, err := s.repo.ProgressForAchievement(ctx, gameID, achievementID)
+	if err != nil {
+		return nil, fmt.Errorf("achievements service: progress for achievement: %w", err)
+	}
+	return entries, nil
+}
+
 // CreateAchievement valida e adiciona uma conquista ao catálogo do jogo (admin).
 func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) (*domain.Achievement, error) {
 	if !slugRE.MatchString(a.ID) {

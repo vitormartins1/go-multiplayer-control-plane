@@ -58,6 +58,11 @@ func (f *fakeReader) ImportAchievements(_ context.Context, gameID string, _ []do
 	return domain.ImportResponse{}, f.err
 }
 
+func (f *fakeReader) AchievementProgress(_ context.Context, gameID, _ string) ([]domain.AchievementProgressEntry, error) {
+	f.gotGameID = gameID
+	return nil, f.err
+}
+
 type fakeRegistry struct {
 	games       []domain.Game
 	players     []domain.GamePlayer

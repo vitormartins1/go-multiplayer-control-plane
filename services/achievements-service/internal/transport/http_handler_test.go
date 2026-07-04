@@ -82,6 +82,11 @@ func (f *fakeService) DeleteAchievement(_ context.Context, gameID, id string) er
 	return f.deleteErr
 }
 
+func (f *fakeService) ProgressForAchievement(_ context.Context, gameID, _ string) ([]domain.AchievementProgressEntry, error) {
+	f.gotGameID = gameID
+	return nil, nil
+}
+
 func newServer(svc domain.AchievementService, v domain.TokenVerifier) *httptest.Server {
 	mux := http.NewServeMux()
 	NewHandler(svc, v).Register(mux)

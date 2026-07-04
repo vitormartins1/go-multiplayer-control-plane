@@ -205,6 +205,41 @@ func (c *Client) ImportAchievements(ctx context.Context, gameID string, items []
 	return resp, nil
 }
 
+// progressResponse é o shape de GET .../achievements/{id}/progress.
+type progressResponse struct {
+	Progress []struct {
+		PlayerID   string     `json:"playerId"`
+		Progress   int        `json:"progress"`
+		Unlocked   bool       `json:"unlocked"`
+		UnlockedAt *time.Time `json:"unlockedAt"`
+	} `json:"progress"`
+}
+
+// AchievementProgress devolve o progresso de todos os jogadores na conquista.
+func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
+	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(achievementID)+"/progress")
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var body progressResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("achievements: decode progress: %w", err)
+	}
+	out := make([]domain.AchievementProgressEntry, 0, len(body.Progress))
+	for _, p := range body.Progress {
+		e := domain.AchievementProgressEntry{PlayerID: p.PlayerID, Progress: p.Progress, Unlocked: p.Unlocked}
+		if p.UnlockedAt != nil {
+			e.UnlockedAt = *p.UnlockedAt
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 func errorCode(resp *http.Response) string {
 	var body struct {
 		Error string `json:"error"`

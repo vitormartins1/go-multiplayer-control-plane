@@ -155,6 +155,11 @@ func (f *fakeService) SetLeaderboardScore(_ context.Context, gameID, playerID st
 	return domain.LeaderboardEntry{Rank: 1, PlayerID: playerID, Score: score}, f.leadErr
 }
 
+func (f *fakeService) AchievementProgress(_ context.Context, gameID, _ string) ([]domain.AchievementProgressEntry, error) {
+	f.gotGameID = gameID
+	return nil, nil
+}
+
 func newServer(svc AdminService) *httptest.Server {
 	mux := http.NewServeMux()
 	NewHandler(svc).Register(mux)

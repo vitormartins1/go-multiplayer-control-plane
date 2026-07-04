@@ -46,6 +46,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/games/{gameId}/players/{playerID}/achievements", h.adminListForPlayer)
 	// Server-authoritative: o servidor reporta evento em nome do jogador (sem JWT).
 	mux.HandleFunc("POST /admin/games/{gameId}/players/{playerID}/events", h.adminRecordEvent)
+	// Progresso de todos os jogadores em uma conquista (painel admin).
+	mux.HandleFunc("GET /admin/games/{gameId}/achievements/{id}/progress", h.adminAchievementProgress)
 }
 
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
@@ -201,6 +203,25 @@ func (h *Handler) adminListForPlayer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
 }
 
+// adminAchievementProgress devolve o progresso de todos os jogadores na conquista.
+func (h *Handler) adminAchievementProgress(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.svc.ProgressForAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	dtos := make([]achievementProgressDTO, 0, len(entries))
+	for _, e := range entries {
+		dto := achievementProgressDTO{PlayerID: e.PlayerID, Progress: e.Progress, Unlocked: e.Unlocked}
+		if e.Unlocked {
+			at := e.UnlockedAt
+			dto.UnlockedAt = &at
+		}
+		dtos = append(dtos, dto)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"progress": dtos})
+}
+
 // adminListCatalog devolve o catálogo de conquistas do jogo {gameId} (sem JWT).
 func (h *Handler) adminListCatalog(w http.ResponseWriter, r *http.Request) {
 	cat, err := h.svc.ListCatalog(r.Context(), r.PathValue("gameId"))
@@ -245,6 +266,13 @@ type achievementDTO struct {
 	Description string `json:"description"`
 	EventType   string `json:"eventType"` // exposto para o painel editar (006-catalog-crud)
 	Target      int    `json:"target"`
+}
+
+type achievementProgressDTO struct {
+	PlayerID   string     `json:"playerId"`
+	Progress   int        `json:"progress"`
+	Unlocked   bool       `json:"unlocked"`
+	UnlockedAt *time.Time `json:"unlockedAt,omitempty"`
 }
 
 type playerAchievementDTO struct {

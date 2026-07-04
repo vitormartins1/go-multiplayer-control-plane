@@ -42,6 +42,12 @@ func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string,
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *mockRepo) ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
+	args := m.Called(ctx, gameID, achievementID)
+	e, _ := args.Get(0).([]domain.AchievementProgressEntry)
+	return e, args.Error(1)
+}
+
 func (m *mockRepo) CreateAchievement(ctx context.Context, a *domain.Achievement) error {
 	return m.Called(ctx, a).Error(0)
 }

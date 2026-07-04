@@ -65,6 +65,34 @@ func findByEventType(ctx context.Context, q querier, gameID, eventType string) (
 	return scanAchievements(rows)
 }
 
+// ProgressForAchievement devolve o progresso de todos os jogadores na conquista.
+func (r *PostgresAchievementRepository) ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
+	const q = `SELECT player_id, progress, unlocked_at
+	           FROM player_achievements
+	           WHERE game_id = $1 AND achievement_id = $2
+	           ORDER BY progress DESC, player_id ASC`
+	rows, err := r.pool.Query(ctx, q, gameID, achievementID)
+	if err != nil {
+		return nil, fmt.Errorf("achievements repository: progress for achievement: %w", err)
+	}
+	defer rows.Close()
+
+	var out []domain.AchievementProgressEntry
+	for rows.Next() {
+		var e domain.AchievementProgressEntry
+		var unlockedAt *time.Time
+		if err := rows.Scan(&e.PlayerID, &e.Progress, &unlockedAt); err != nil {
+			return nil, fmt.Errorf("achievements repository: progress for achievement scan: %w", err)
+		}
+		if unlockedAt != nil {
+			e.Unlocked = true
+			e.UnlockedAt = *unlockedAt
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (r *PostgresAchievementRepository) ListPlayerProgress(ctx context.Context, gameID, playerID string) ([]domain.PlayerProgress, error) {
 	const q = `SELECT achievement_id, progress, unlocked_at
 	           FROM player_achievements WHERE game_id = $1 AND player_id = $2`
