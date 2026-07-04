@@ -103,17 +103,28 @@ export interface SessionPlayer {
 export interface GameSession {
   sessionId: string;
   matchId: string;
+  gameId?: string; // preenchido no board global (Rooms); vazio na aba por-jogo
+  gameName?: string; // idem — resolvido pelo BFF
   state: "open" | "closed";
   players: SessionPlayer[];
   serverAddress: string;
   openedAt: string;
   closedAt?: string;
-  closeReason?: "result" | "ttl";
+  closeReason?: "result" | "ttl" | "admin";
 }
 
 export interface GameSessions {
   active: GameSession[];
   closed: GameSession[];
+}
+
+// FanoutHealth: sinais do fan-out durável (ADR-0020). null = métrica ausente/fonte fora.
+export interface FanoutHealth {
+  publishOk: number | null;
+  publishError: number | null;
+  consumeOk: number | null;
+  consumeDup: number | null;
+  consumeError: number | null;
 }
 
 // HttpError carrega o status para a UI distinguir 502/409/400 etc.
@@ -197,4 +208,10 @@ export const api = {
     getJSON<Game[]>(`/api/players/${encodeURIComponent(playerID)}/games`, signal),
   gameSessions: (gameId: string, signal?: AbortSignal) =>
     getJSON<GameSessions>(`/api/games/${encodeURIComponent(gameId)}/sessions`, signal),
+
+  // Rooms Console (board global de salas + force-close + saúde do fan-out).
+  rooms: (signal?: AbortSignal) => getJSON<GameSessions>("/api/rooms", signal),
+  closeRoom: (matchId: string) =>
+    postJSON<GameSession>(`/api/rooms/${encodeURIComponent(matchId)}/close`, {}),
+  fanoutHealth: (signal?: AbortSignal) => getJSON<FanoutHealth>("/api/health/fanout", signal),
 };

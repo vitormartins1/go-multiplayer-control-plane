@@ -14,6 +14,7 @@ import {
 } from "@mantine/core";
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 
 const POLL_MS = 5000;
@@ -220,9 +221,7 @@ function SessionRow({
                     {s.closeReason && (
                       <Stack gap={2}>
                         <Text size="xs" c="dimmed" fw={600}>MOTIVO</Text>
-                        <Text size="xs">
-                          {s.closeReason === "ttl" ? "TTL expirado (sessão abandonada)" : "Resultado reportado"}
-                        </Text>
+                        <Text size="xs">{closeReasonLabel(s.closeReason)}</Text>
                       </Stack>
                     )}
                   </Group>
@@ -236,15 +235,3 @@ function SessionRow({
   );
 }
 
-function truncate(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 12)}…` : id;
-}
-
-function formatDuration(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  if (min >= 60) return `${Math.floor(min / 60)}h ${min % 60}min`;
-  if (min > 0) return `${min}min ${sec}s`;
-  return `${sec}s`;
-}
