@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { Alert, Button, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Button, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
 import { api, type FanoutHealth, type LiveMetrics } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { TopologyGraph } from "../components/TopologyGraph";
 import { StatusBadge } from "../components/StatusBadge";
+import { StatCard } from "../components/StatCard";
 
 const LIVE_POLL_MS = 10000;
 
@@ -100,20 +101,6 @@ export function Overview() {
 
 const fmtMetric = (v: number | null | undefined) => (v == null ? "—" : String(v));
 const isBad = (v: number | null | undefined) => v != null && v > 0;
-
-// StatCard é um card de métrica (label + valor), reusado pelos blocos ao vivo.
-function StatCard({ label, value, bad }: { label: string; value: string; bad?: boolean }) {
-  return (
-    <Card withBorder padding="sm">
-      <Text size="xs" c="dimmed">
-        {label}
-      </Text>
-      <Text size="xl" fw={700} c={bad ? "red" : undefined}>
-        {value}
-      </Text>
-    </Card>
-  );
-}
 
 function MatchmakingCards({ m }: { m: LiveMetrics | undefined }) {
   return (

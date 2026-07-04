@@ -118,6 +118,21 @@ export interface GameSessions {
   closed: GameSession[];
 }
 
+// Analytics: overview cross-game (ADR-0021).
+export interface AnalyticsGameStat {
+  gameId: string;
+  gameName: string;
+  matches: number;
+  uniquePlayers: number;
+  wins: number;
+  avgScore: number;
+}
+
+export interface AnalyticsOverview {
+  totals: { matches: number; uniquePlayers: number; games: number };
+  games: AnalyticsGameStat[];
+}
+
 // LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.
 export interface LiveMetrics {
   queueSize: number | null;
@@ -174,6 +189,8 @@ async function del(path: string): Promise<void> {
 export const api = {
   topology: (signal?: AbortSignal) => getJSON<Topology>("/api/topology", signal),
   liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
+  analyticsOverview: (signal?: AbortSignal) =>
+    getJSON<AnalyticsOverview>("/api/analytics/overview", signal),
 
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
