@@ -39,6 +39,21 @@ type Event struct {
 	Type string
 }
 
+// MatchResult é o resultado de um jogador numa partida, entrada do fan-out
+// durável (consumidor SQS, ADR-0020). O service traduz em eventos de gameplay.
+type MatchResult struct {
+	PlayerID string
+	Won      bool
+}
+
+// PlayerEvents são os eventos de gameplay de um jogador já traduzidos pelo
+// service (ex.: match_played, match_won). O repo aplica todos numa transação
+// idempotente por matchID.
+type PlayerEvents struct {
+	PlayerID   string
+	EventTypes []string
+}
+
 // AchievementService é a Port de entrada do achievements-service. Tudo é
 // escopado por gameID (multi-tenant, ADR-0017).
 type AchievementService interface {
@@ -72,6 +87,10 @@ type AchievementRepository interface {
 	// atômica e desbloqueia ao atingir target; é no-op se já desbloqueada.
 	// justUnlocked indica se foi desbloqueada nesta chamada.
 	RecordProgress(ctx context.Context, gameID, playerID, achievementID string, target int, at time.Time) (justUnlocked bool, err error)
+	// ApplyMatchResult aplica os eventos da partida numa única transação e de
+	// forma idempotente por matchID (SQS entrega at-least-once, ADR-0020).
+	// dup=true se a partida já havia sido processada (no-op).
+	ApplyMatchResult(ctx context.Context, gameID, matchID string, players []PlayerEvents, at time.Time) (dup bool, err error)
 	// CreateAchievement persiste uma conquista no catálogo do jogo;
 	// ErrAchievementExists em violação de unicidade (game_id, id).
 	CreateAchievement(ctx context.Context, a *Achievement) error

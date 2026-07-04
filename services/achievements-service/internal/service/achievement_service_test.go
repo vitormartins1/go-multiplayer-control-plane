@@ -37,6 +37,11 @@ func (m *mockRepo) RecordProgress(ctx context.Context, gameID, playerID, achieve
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string, players []domain.PlayerEvents, at time.Time) (bool, error) {
+	args := m.Called(ctx, gameID, matchID, players, at)
+	return args.Bool(0), args.Error(1)
+}
+
 func (m *mockRepo) CreateAchievement(ctx context.Context, a *domain.Achievement) error {
 	return m.Called(ctx, a).Error(0)
 }
@@ -51,6 +56,41 @@ var (
 	firstWin = domain.Achievement{GameID: gameID, ID: "first_win", Name: "Primeira Vitória", Description: "Vença uma", EventType: "match_won", Target: 1}
 	tenWins  = domain.Achievement{GameID: gameID, ID: "ten_wins", Name: "Veterano", Description: "Vença 10", EventType: "match_won", Target: 10}
 )
+
+// ApplyMatchResult traduz o resultado bruto em eventos: match_played p/ todos,
+// match_won só p/ quem venceu. A idempotência é do repo (tx + processed_matches);
+// aqui validamos só a tradução delegada.
+func TestApplyMatchResult_TraduzEventosPorVitoria(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+
+	results := []domain.MatchResult{
+		{PlayerID: "p1", Won: true},
+		{PlayerID: "p2", Won: false},
+	}
+	want := []domain.PlayerEvents{
+		{PlayerID: "p1", EventTypes: []string{"match_played", "match_won"}},
+		{PlayerID: "p2", EventTypes: []string{"match_played"}},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-1", want, mock.Anything).Return(false, nil)
+
+	dup, err := svc.ApplyMatchResult(context.Background(), gameID, "match-1", results)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	repo.AssertExpectations(t)
+}
+
+// Partida já processada -> o repo devolve dup=true; o service propaga (no-op).
+func TestApplyMatchResult_Duplicada_PropagaDup(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-1", mock.Anything, mock.Anything).Return(true, nil)
+
+	dup, err := svc.ApplyMatchResult(context.Background(), gameID, "match-1", []domain.MatchResult{{PlayerID: "p1", Won: true}})
+	require.NoError(t, err)
+	assert.True(t, dup)
+	repo.AssertExpectations(t)
+}
 
 func TestUpdateAchievement_Valido_DelegaComChave(t *testing.T) {
 	repo := new(mockRepo)

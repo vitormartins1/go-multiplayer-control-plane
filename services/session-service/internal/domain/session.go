@@ -89,9 +89,11 @@ type ConnectTokenIssuer interface {
 	JWKS(ctx context.Context) ([]byte, error)
 }
 
-// ResultPublisher é a Port de saída do fan-out do resultado para os serviços de
-// dados (achievements/...). Recebe o gameID da sessão (multi-tenant, ADR-0017).
-// O adapter real fala HTTP com a internal key (ADR-0018); LogPublisher é fallback.
+// ResultPublisher é a Port de saída do fan-out do resultado. O adapter real
+// (SNSPublisher) publica o resultado bruto no tópico match-results; cada sink
+// consome sua fila SQS com idempotência por matchID (ADR-0020). LogPublisher é
+// o fallback de dev. Recebe gameID (multi-tenant, ADR-0017) e matchID (chave de
+// idempotência que viaja no envelope).
 type ResultPublisher interface {
-	Publish(ctx context.Context, gameID string, results []PlayerResult) error
+	Publish(ctx context.Context, gameID, matchID string, results []PlayerResult) error
 }

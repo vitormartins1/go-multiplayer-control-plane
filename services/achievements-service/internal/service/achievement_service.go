@@ -23,6 +23,13 @@ var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,38}[a-z0-9]$`)
 
 const maxAchievementNameLen = 100
 
+// Eventos de gameplay derivados do resultado da partida (fan-out durável,
+// ADR-0020). Devem casar com o event_type cadastrado no catálogo (spec 002).
+const (
+	eventMatchPlayed = "match_played"
+	eventMatchWon    = "match_won"
+)
+
 // Service implementa as regras de catálogo e desbloqueio de conquistas.
 type Service struct {
 	repo domain.AchievementRepository
@@ -100,6 +107,26 @@ func (s *Service) RecordEvent(ctx context.Context, gameID, playerID string, even
 		}
 	}
 	return unlocked, nil
+}
+
+// ApplyMatchResult traduz o resultado bruto da partida em eventos de gameplay
+// (match_played p/ todos; match_won p/ quem venceu) e delega ao repo a aplicação
+// idempotente por matchID. Consumido pelo fan-out durável (SQS, ADR-0020).
+// dup=true quando a partida já havia sido processada (no-op).
+func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, results []domain.MatchResult) (bool, error) {
+	players := make([]domain.PlayerEvents, 0, len(results))
+	for _, r := range results {
+		events := []string{eventMatchPlayed}
+		if r.Won {
+			events = append(events, eventMatchWon)
+		}
+		players = append(players, domain.PlayerEvents{PlayerID: r.PlayerID, EventTypes: events})
+	}
+	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply match result: %w", err)
+	}
+	return dup, nil
 }
 
 // CreateAchievement valida e adiciona uma conquista ao catálogo do jogo (admin).

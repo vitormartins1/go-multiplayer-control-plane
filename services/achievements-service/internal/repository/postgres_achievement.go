@@ -18,6 +18,15 @@ import (
 // garante em tempo de compilação que satisfazemos a Port.
 var _ domain.AchievementRepository = (*PostgresAchievementRepository)(nil)
 
+// querier abstrai *pgxpool.Pool e pgx.Tx (ambos expõem Query/QueryRow/Exec) para
+// reusar as mesmas queries dentro ou fora de transação — usado pelo fan-out
+// idempotente (ApplyMatchResult) sem duplicar SQL.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // PostgresAchievementRepository persiste catálogo e progresso em PostgreSQL.
 // Tudo é escopado por game_id (multi-tenant, ADR-0017).
 type PostgresAchievementRepository struct {
@@ -41,9 +50,14 @@ func (r *PostgresAchievementRepository) ListCatalog(ctx context.Context, gameID 
 }
 
 func (r *PostgresAchievementRepository) FindByEventType(ctx context.Context, gameID, eventType string) ([]domain.Achievement, error) {
-	const q = `SELECT game_id, id, name, description, event_type, target
-	           FROM achievements WHERE game_id = $1 AND event_type = $2 ORDER BY id`
-	rows, err := r.pool.Query(ctx, q, gameID, eventType)
+	return findByEventType(ctx, r.pool, gameID, eventType)
+}
+
+// findByEventType roda a busca num querier (pool ou tx).
+func findByEventType(ctx context.Context, q querier, gameID, eventType string) ([]domain.Achievement, error) {
+	const sql = `SELECT game_id, id, name, description, event_type, target
+	             FROM achievements WHERE game_id = $1 AND event_type = $2 ORDER BY id`
+	rows, err := q.Query(ctx, sql, gameID, eventType)
 	if err != nil {
 		return nil, fmt.Errorf("achievements repository: find by event type: %w", err)
 	}
@@ -81,6 +95,11 @@ func (r *PostgresAchievementRepository) ListPlayerProgress(ctx context.Context, 
 // regride o unlocked_at. justUnlocked é true só quando o desbloqueio acontece
 // nesta chamada. Escopado por game_id.
 func (r *PostgresAchievementRepository) RecordProgress(ctx context.Context, gameID, playerID, achievementID string, target int, at time.Time) (bool, error) {
+	return recordProgress(ctx, r.pool, gameID, playerID, achievementID, target, at)
+}
+
+// recordProgress roda o incremento atômico num querier (pool ou tx).
+func recordProgress(ctx context.Context, qr querier, gameID, playerID, achievementID string, target int, at time.Time) (bool, error) {
 	const q = `INSERT INTO player_achievements (game_id, player_id, achievement_id, progress, unlocked_at)
 	           VALUES ($1, $2, $3, 1, CASE WHEN 1 >= $4 THEN $5::timestamptz ELSE NULL END)
 	           ON CONFLICT (game_id, player_id, achievement_id) DO UPDATE
@@ -91,7 +110,7 @@ func (r *PostgresAchievementRepository) RecordProgress(ctx context.Context, game
 	             WHERE player_achievements.unlocked_at IS NULL
 	           RETURNING unlocked_at`
 	var unlockedAt *time.Time
-	err := r.pool.QueryRow(ctx, q, gameID, playerID, achievementID, target, at).Scan(&unlockedAt)
+	err := qr.QueryRow(ctx, q, gameID, playerID, achievementID, target, at).Scan(&unlockedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil // WHERE barrou: já estava desbloqueada
 	}
@@ -99,6 +118,43 @@ func (r *PostgresAchievementRepository) RecordProgress(ctx context.Context, game
 		return false, fmt.Errorf("achievements repository: record progress: %w", err)
 	}
 	return unlockedAt != nil, nil // desbloqueou nesta chamada?
+}
+
+// ApplyMatchResult aplica os eventos da partida numa única transação, idempotente
+// por matchID (ADR-0020). A marca em processed_matches + o progresso vivem na
+// MESMA tx: reprocessar (entrega at-least-once do SQS) é no-op e um crash no meio
+// não deixa a partida "processada" sem efeito.
+func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, gameID, matchID string, players []domain.PlayerEvents, at time.Time) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("achievements repository: apply match: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO processed_matches (match_id, game_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		matchID, gameID)
+	if err != nil {
+		return false, fmt.Errorf("achievements repository: apply match: mark: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processada: no-op idempotente
+	}
+
+	for _, pe := range players {
+		for _, et := range pe.EventTypes {
+			matches, err := findByEventType(ctx, tx, gameID, et)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range matches {
+				if _, err := recordProgress(ctx, tx, gameID, pe.PlayerID, a.ID, a.Target, at); err != nil {
+					return false, err
+				}
+			}
+		}
+	}
+	return false, tx.Commit(ctx)
 }
 
 // CreateAchievement adiciona uma conquista ao catálogo do jogo (admin).

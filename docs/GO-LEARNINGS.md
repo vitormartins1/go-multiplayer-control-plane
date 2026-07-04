@@ -588,3 +588,49 @@ if subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 { /* 401 */ }
 ```
 
 **Pegadinha / nuance:** o contrato do `RoundTripper` diz que ele **não deve modificar o request original** — daí o `r.Clone(ctx)` antes de setar o header (mutar direto pode corromper retries/concorrência). E o middleware aplica o check **por prefixo de path** (`/admin`), deixando `/healthz` e `/metrics` livres — senão o Prometheus não conseguiria raspar. "Fail closed": chave não configurada → nega as rotas protegidas (em vez de liberar por engano).
+
+## 17 — Um `querier` que é pool **ou** transação (idempotência com pgx)
+
+**O que é / por que importa:** para o fan-out durável (ADR-0020) o consumidor precisa aplicar o resultado da partida **e** marcá-la como processada de forma **atômica** — senão um crash no meio deixa a partida "processada" sem efeito (ou o SQS reentrega e dobra o progresso). A solução é uma transação. O problema idiomático: eu já tinha as queries (`FindByEventType`, `RecordProgress`) rodando sobre o `*pgxpool.Pool`, e não queria duplicá-las só para rodar sobre uma `pgx.Tx`. A saída é uma **interface pequena que `*pgxpool.Pool` e `pgx.Tx` satisfazem os dois** (interfaces implícitas, entrada 10) — as funções passam a receber esse `querier` e não sabem se estão dentro ou fora de uma transação.
+
+**Onde no projeto:** `achievements-service/internal/repository/postgres_achievement.go` (`querier`, `findByEventType`, `recordProgress`, `ApplyMatchResult`).
+
+```mermaid
+flowchart TD
+    A["ApplyMatchResult (abre tx)"] --> B["INSERT processed_matches ON CONFLICT DO NOTHING"]
+    B -->|RowsAffected 0| D["dup: commit, no-op"]
+    B -->|inseriu| E["findByEventType(tx, ...)"]
+    E --> F["recordProgress(tx, ...)"]
+    F --> G["commit"]
+```
+
+```go
+// A mesma query serve pool E tx: ambos têm Query/QueryRow/Exec.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// Fora de transação: passa o pool.
+func (r *PostgresAchievementRepository) RecordProgress(ctx context.Context, /* ... */) (bool, error) {
+	return recordProgress(ctx, r.pool, /* ... */) // r.pool satisfaz querier
+}
+
+// Dentro de transação: passa a tx (mesma função, sem duplicar SQL).
+func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context /* ... */) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil { return false, err }
+	defer func() { _ = tx.Rollback(ctx) }() // no-op depois do Commit
+
+	tag, _ := tx.Exec(ctx, `INSERT INTO processed_matches (match_id, game_id)
+	                        VALUES ($1,$2) ON CONFLICT DO NOTHING`, matchID, gameID)
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processada: idempotente
+	}
+	// ... findByEventType(ctx, tx, ...) + recordProgress(ctx, tx, ...) ...
+	return false, tx.Commit(ctx)
+}
+```
+
+**Pegadinha / nuance:** dois detalhes valem ouro. (1) `defer tx.Rollback(ctx)` **sempre** — depois de um `Commit` bem-sucedido o Rollback vira no-op (retorna `ErrTxClosed`, que ignoramos), então você nunca esquece de desfazer nos caminhos de erro/panic. É o equivalente pgx do `using`/`TransactionScope` do C#, mas explícito. (2) A idempotência sai de graça do banco: `INSERT ... ON CONFLICT DO NOTHING` + `tag.RowsAffected() == 0` é o teste de "já vi essa partida?" **na mesma transação** que aplica o efeito — sem `SELECT` antes (que teria corrida entre o check e o insert). Contraste com C#/.NET: em vez de um `SemaphoreSlim` ou lock distribuído, você deixa o Postgres arbitrar via constraint.

@@ -34,6 +34,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/001_create_achievements.sql",
 			"../../migrations/002_add_progress.sql",
 			"../../migrations/003_add_game_scope.sql",
+			"../../migrations/004_processed_matches.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -95,6 +96,48 @@ func TestRecordProgress_Target1_DesbloqueiaNoPrimeiro(t *testing.T) {
 	ju, err = repo.RecordProgress(ctx, sandbox, "p1", "first_win", 1, time.Now().UTC())
 	require.NoError(t, err)
 	assert.False(t, ju, "2ª é no-op")
+}
+
+// ApplyMatchResult é idempotente por matchID: reprocessar a mesma partida
+// (entrega at-least-once do SQS, ADR-0020) não incrementa o progresso de novo.
+func TestApplyMatchResult_Reprocessada_NaoDobraProgresso(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	// p1 venceu; "first_win" (event_type=match_won, target=1) deve desbloquear.
+	players := []domain.PlayerEvents{
+		{PlayerID: "p1", EventTypes: []string{"match_played", "match_won"}},
+	}
+
+	dup, err := repo.ApplyMatchResult(ctx, sandbox, "match-1", players, at)
+	require.NoError(t, err)
+	assert.False(t, dup, "1ª vez: não é duplicata")
+
+	// Reentrega da MESMA partida: no-op.
+	dup, err = repo.ApplyMatchResult(ctx, sandbox, "match-1", players, at)
+	require.NoError(t, err)
+	assert.True(t, dup, "2ª vez: duplicata detectada")
+
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 1, prog["first_win"].Progress, "progresso não dobra com a reentrega")
+	assert.False(t, prog["first_win"].UnlockedAt.IsZero(), "first_win desbloqueada")
+}
+
+// Uma NOVA partida do mesmo jogador incrementa normalmente (matchID diferente).
+func TestApplyMatchResult_PartidasDistintas_Acumulam(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+	players := []domain.PlayerEvents{{PlayerID: "p1", EventTypes: []string{"match_won"}}}
+
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "match-1", players, at)
+	require.NoError(t, err)
+	_, err = repo.ApplyMatchResult(ctx, sandbox, "match-2", players, at)
+	require.NoError(t, err)
+
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 2, prog["ten_wins"].Progress, "duas partidas distintas somam no ten_wins")
 }
 
 func TestCreateAchievement_MesmoIdEmJogosDiferentes_Coexiste(t *testing.T) {

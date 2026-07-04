@@ -1,0 +1,7 @@
+# Artefatos locais do Terraform (não versionar): providers, state, lock, plans.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
