@@ -15,7 +15,7 @@ function CountBadge({ count, color = "gray" }: { count?: number; color?: string 
   if (count == null) return null;
   return (
     <Badge size="xs" variant="filled" color={color}>
-      {count > 999 ? "99+" : count}
+      {count > 999 ? "999" : count}
     </Badge>
   );
 }
