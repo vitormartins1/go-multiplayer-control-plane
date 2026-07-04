@@ -4,7 +4,7 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   IconChartBar,
   IconDeviceGamepad2,
-  IconLayoutDashboard,
+  IconServer,
   IconUsers,
 } from "@tabler/icons-react";
 
@@ -19,15 +19,15 @@ const PlayerDetail = lazy(() => import("./pages/PlayerDetail").then((m) => ({ de
 const Analytics = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.Analytics })));
 
 const NAV = [
-  { to: "/", label: "Visão geral", icon: IconLayoutDashboard },
   { to: "/games", label: "Games", icon: IconDeviceGamepad2 },
   { to: "/players", label: "Players", icon: IconUsers },
   { to: "/analytics", label: "Analytics", icon: IconChartBar },
+  { to: "/infrastructure", label: "Infrastructure", icon: IconServer },
 ];
 
 export function App() {
   const { pathname } = useLocation();
-  const active = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
+  const active = (to: string) => pathname.startsWith(to);
 
   return (
     <AppShell header={{ height: 56 }} navbar={{ width: 230, breakpoint: "sm" }} padding="md">
@@ -59,13 +59,14 @@ export function App() {
           }
         >
           <Routes>
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={<Navigate to="/games" replace />} />
             <Route path="/games" element={<Games />} />
             <Route path="/games/:gameId" element={<GameDetail />} />
             <Route path="/players" element={<Players />} />
             <Route path="/players/:playerId" element={<PlayerDetail />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/infrastructure" element={<Overview />} />
+            <Route path="*" element={<Navigate to="/games" replace />} />
           </Routes>
         </Suspense>
       </AppShell.Main>

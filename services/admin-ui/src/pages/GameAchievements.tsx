@@ -19,6 +19,7 @@ import { IconPencil, IconPlus, IconRefresh, IconTrash } from "@tabler/icons-reac
 import { useState } from "react";
 import { api, HttpError, type CatalogAchievement } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { AchievementIcon } from "../components/AchievementIcon";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 
@@ -121,6 +122,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
+              <Table.Th w={40}></Table.Th>
               <Table.Th>Id</Table.Th>
               <Table.Th>Nome</Table.Th>
               <Table.Th>Descrição</Table.Th>
@@ -132,6 +134,9 @@ export function GameAchievements({ gameId }: { gameId: string }) {
           <Table.Tbody>
             {catalog.map((a) => (
               <Table.Tr key={a.id}>
+                <Table.Td>
+                  <AchievementIcon seed={a.id} />
+                </Table.Td>
                 <Table.Td c="dimmed">{a.id}</Table.Td>
                 <Table.Td>{a.name}</Table.Td>
                 <Table.Td c="dimmed">{a.description}</Table.Td>

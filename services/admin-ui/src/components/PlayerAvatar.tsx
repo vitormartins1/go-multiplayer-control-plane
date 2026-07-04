@@ -1,15 +1,17 @@
 import { Box } from "@mantine/core";
 import { useMemo } from "react";
-import { createAvatar } from "@dicebear/core";
-import { adventurer } from "@dicebear/collection";
+import { Style, Avatar } from "@dicebear/core";
+import adventurerDef from "@dicebear/styles/adventurer.json";
 
 // PlayerAvatar é a "fotinha" determinística de um jogador (006-player-avatars):
 // DiceBear estilo humanoide (adventurer), gerada no cliente a partir da seed
 // (o playerId — estável e único). Sem persistência, como a capa do jogo.
+const adventurerStyle = new Style(adventurerDef);
+
 export function PlayerAvatar({ seed, size = 32 }: { seed: string; size?: number }) {
   const uri = useMemo(
     () =>
-      createAvatar(adventurer, {
+      new Avatar(adventurerStyle, {
         seed,
         // paleta de fundo determinística (escolhida pela própria seed) — vira um
         // tile preenchido em vez de cabeça flutuante sobre o tema escuro.
