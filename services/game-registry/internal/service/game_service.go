@@ -61,6 +61,21 @@ func (s *service) Register(ctx context.Context, slug, name string) (*domain.Game
 	return g, nil
 }
 
+func (s *service) Rename(ctx context.Context, id, name string) (*domain.Game, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > maxNameLen {
+		return nil, domain.ErrInvalidName
+	}
+	if err := s.repo.UpdateName(ctx, id, name); err != nil {
+		return nil, fmt.Errorf("game-registry service: rename: %w", err)
+	}
+	g, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: rename: reload: %w", err)
+	}
+	return g, nil
+}
+
 func (s *service) List(ctx context.Context) ([]domain.Game, error) {
 	games, err := s.repo.List(ctx)
 	if err != nil {

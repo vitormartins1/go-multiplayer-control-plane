@@ -82,6 +82,13 @@ func (f *fakeRegistry) GamesOfPlayer(_ context.Context, playerID string) ([]doma
 	f.gotPlayerID = playerID
 	return f.games, f.err
 }
+func (f *fakeRegistry) RenameGame(_ context.Context, id, name string) (*domain.Game, error) {
+	f.gotGameID, f.gotName = id, name
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &domain.Game{ID: id, Name: name}, nil
+}
 
 type fakeLeaderboard struct {
 	entries   []domain.LeaderboardEntry

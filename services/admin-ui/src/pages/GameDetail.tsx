@@ -8,7 +8,7 @@ import { GameAchievements } from "./GameAchievements";
 import { GameLeaderboards } from "./GameLeaderboards";
 import { GamePlayers } from "./GamePlayers";
 import { GameSessions } from "./GameSessions";
-import { ComingSoon } from "../components/ComingSoon";
+import { GameSettings } from "./GameSettings";
 
 function CountBadge({ count, color = "gray" }: { count?: number; color?: string }) {
   if (count == null) return null;
@@ -21,7 +21,7 @@ function CountBadge({ count, color = "gray" }: { count?: number; color?: string 
 
 export function GameDetail() {
   const { gameId = "" } = useParams();
-  const { data: games } = useAsync((s) => api.games(s), []);
+  const { data: games, reload: reloadGames } = useAsync((s) => api.games(s), []);
   const { data: catalog } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
   const { data: gamePlayers } = useAsync((s) => api.gamePlayers(gameId, s), [gameId]);
   const { data: sessions } = useAsync((s) => api.gameSessions(gameId, s), [gameId]);
@@ -110,7 +110,11 @@ export function GameDetail() {
           <GameSessions gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="md">
-          <ComingSoon what="Configurações do jogo" />
+          {game ? (
+            <GameSettings game={game} onRenamed={reloadGames} />
+          ) : (
+            <Text c="dimmed">Carregando…</Text>
+          )}
         </Tabs.Panel>
       </Tabs>
     </Stack>

@@ -28,6 +28,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /games", h.create)
 	mux.HandleFunc("GET /games", h.list)
 	mux.HandleFunc("GET /games/{id}", h.get)
+	mux.HandleFunc("PUT /games/{id}", h.rename)
 	// Presença por jogo (ADR-0019): marca (login-into-game) e lista a base.
 	mux.HandleFunc("PUT /games/{gameId}/players/{playerID}", h.markPresence)
 	mux.HandleFunc("GET /games/{gameId}/players", h.listPlayers)
@@ -89,6 +90,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	g, err := h.games.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toDTO(g))
+}
+
+// rename altera só o nome do jogo (Configurações do painel, spec 005).
+func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.games.Rename(r.Context(), r.PathValue("id"), req.Name)
 	if err != nil {
 		writeDomainError(w, err)
 		return
