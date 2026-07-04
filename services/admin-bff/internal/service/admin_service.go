@@ -23,6 +23,7 @@ type Service struct {
 	playerData  domain.PlayerDataReader
 	cloudSave   domain.CloudSaveReader
 	sessions    domain.SessionsReader
+	analytics   domain.AnalyticsReader
 }
 
 // Deps reúne as Ports de saída do service. Struct (em vez de args posicionais)
@@ -37,6 +38,7 @@ type Deps struct {
 	PlayerData  domain.PlayerDataReader
 	CloudSave   domain.CloudSaveReader
 	Sessions    domain.SessionsReader
+	Analytics   domain.AnalyticsReader
 }
 
 // New cria o service a partir das Ports de saída.
@@ -50,7 +52,22 @@ func New(d Deps) *Service {
 		playerData:  d.PlayerData,
 		cloudSave:   d.CloudSave,
 		sessions:    d.Sessions,
+		analytics:   d.Analytics,
 	}
+}
+
+// AnalyticsOverview lê o panorama cross-game (analytics-service) e injeta o nome
+// do jogo (game-registry, best-effort — registry fora não derruba o overview).
+func (s *Service) AnalyticsOverview(ctx context.Context) (domain.AnalyticsOverview, error) {
+	ov, err := s.analytics.Overview(ctx)
+	if err != nil {
+		return domain.AnalyticsOverview{}, err
+	}
+	names := s.gameNamesByID(ctx)
+	for i := range ov.Games {
+		ov.Games[i].GameName = names[ov.Games[i].GameID]
+	}
+	return ov, nil
 }
 
 // Players delega ao directory (API admin do identity-service).

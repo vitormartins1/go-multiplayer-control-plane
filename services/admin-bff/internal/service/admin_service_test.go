@@ -431,3 +431,32 @@ func TestGameSessions_SessionFora_PropagaErro(t *testing.T) {
 	_, err := svc.GameSessions(context.Background(), "g1", "")
 	assert.ErrorIs(t, err, domain.ErrSessionsUnavailable)
 }
+
+type fakeAnalytics struct {
+	ov  domain.AnalyticsOverview
+	err error
+}
+
+func (f *fakeAnalytics) Overview(context.Context) (domain.AnalyticsOverview, error) {
+	return f.ov, f.err
+}
+
+func TestAnalyticsOverview_InjetaNomeDoJogo(t *testing.T) {
+	an := &fakeAnalytics{ov: domain.AnalyticsOverview{
+		Totals: domain.AnalyticsTotals{Matches: 3, Games: 1},
+		Games:  []domain.AnalyticsGameStat{{GameID: "g1", Matches: 3}},
+	}}
+	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Name: "Orb Rush"}}}
+	svc := New(Deps{Analytics: an, Registry: reg})
+
+	ov, err := svc.AnalyticsOverview(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "Orb Rush", ov.Games[0].GameName)
+}
+
+func TestAnalyticsOverview_AnalyticsFora_PropagaErro(t *testing.T) {
+	an := &fakeAnalytics{err: domain.ErrAnalyticsUnavailable}
+	svc := New(Deps{Analytics: an, Registry: &fakeRegistry{}})
+	_, err := svc.AnalyticsOverview(context.Background())
+	assert.ErrorIs(t, err, domain.ErrAnalyticsUnavailable)
+}
