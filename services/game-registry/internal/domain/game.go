@@ -37,6 +37,9 @@ type GameService interface {
 	List(ctx context.Context) ([]Game, error)
 	// Get devolve um jogo por id; ErrGameNotFound se ausente.
 	Get(ctx context.Context, id string) (*Game, error)
+	// Rename altera só o nome do jogo (slug/id são estáveis). ErrInvalidName em
+	// entrada inválida; ErrGameNotFound se não existir.
+	Rename(ctx context.Context, id, name string) (*Game, error)
 }
 
 // GameRepository é a Port de saída de persistência (implementada em repository).
@@ -47,4 +50,6 @@ type GameRepository interface {
 	List(ctx context.Context) ([]Game, error)
 	// FindByID busca por id; ErrGameNotFound se ausente.
 	FindByID(ctx context.Context, id string) (*Game, error)
+	// UpdateName atualiza só o nome do jogo; ErrGameNotFound se não existir.
+	UpdateName(ctx context.Context, id, name string) error
 }

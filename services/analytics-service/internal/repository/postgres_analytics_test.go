@@ -113,6 +113,10 @@ func TestOverview_OrdenaPorMatchesESomaTotais(t *testing.T) {
 	assert.Equal(t, int64(3), ov.Totals.Matches)
 	assert.Equal(t, int64(2), ov.Totals.Games)
 	assert.Equal(t, int64(2), ov.Totals.UniquePlayers, "p1 e p2 distintos globais")
+
+	// série diária cross-game: as 3 partidas caem hoje -> 1 ponto com 3.
+	require.Len(t, ov.Daily, 1)
+	assert.Equal(t, int64(3), ov.Daily[0].Matches, "soma partidas/dia entre jogos")
 }
 
 func mustApply(repo *PostgresRepository, ctx context.Context, m domain.MatchResult) error {

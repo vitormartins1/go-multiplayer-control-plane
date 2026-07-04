@@ -85,6 +85,11 @@ func (s *Service) CreateGame(ctx context.Context, slug, name string) (*domain.Ga
 	return s.registry.CreateGame(ctx, slug, name)
 }
 
+// RenameGame altera o nome do jogo (Configurações do painel, spec 010).
+func (s *Service) RenameGame(ctx context.Context, id, name string) (*domain.Game, error) {
+	return s.registry.RenameGame(ctx, id, name)
+}
+
 // GameCatalog lê o catálogo de conquistas do jogo (achievements).
 func (s *Service) GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error) {
 	return s.reader.CatalogForGame(ctx, gameID)
@@ -177,11 +182,26 @@ func (s *Service) CloseRoom(ctx context.Context, matchID string) (domain.GameSes
 func (s *Service) FanoutHealth(ctx context.Context) (domain.FanoutHealth, error) {
 	var fh domain.FanoutHealth
 	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() (err error) { fh.PublishOK, err = s.scalar(ctx, `sum(fanout_publish_total{result="ok"})`); return })
-	g.Go(func() (err error) { fh.PublishError, err = s.scalar(ctx, `sum(fanout_publish_total{result="error"})`); return })
-	g.Go(func() (err error) { fh.ConsumeOK, err = s.scalar(ctx, `sum(fanout_consume_total{result="ok"})`); return })
-	g.Go(func() (err error) { fh.ConsumeDup, err = s.scalar(ctx, `sum(fanout_consume_total{result="dup"})`); return })
-	g.Go(func() (err error) { fh.ConsumeError, err = s.scalar(ctx, `sum(fanout_consume_total{result="error"})`); return })
+	g.Go(func() (err error) {
+		fh.PublishOK, err = s.scalar(ctx, `sum(fanout_publish_total{result="ok"})`)
+		return
+	})
+	g.Go(func() (err error) {
+		fh.PublishError, err = s.scalar(ctx, `sum(fanout_publish_total{result="error"})`)
+		return
+	})
+	g.Go(func() (err error) {
+		fh.ConsumeOK, err = s.scalar(ctx, `sum(fanout_consume_total{result="ok"})`)
+		return
+	})
+	g.Go(func() (err error) {
+		fh.ConsumeDup, err = s.scalar(ctx, `sum(fanout_consume_total{result="dup"})`)
+		return
+	})
+	g.Go(func() (err error) {
+		fh.ConsumeError, err = s.scalar(ctx, `sum(fanout_consume_total{result="error"})`)
+		return
+	})
 	if err := g.Wait(); err != nil {
 		return domain.FanoutHealth{}, err
 	}

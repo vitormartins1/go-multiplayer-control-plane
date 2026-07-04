@@ -127,3 +127,23 @@ func TestPostgresGameRepository_RegistroAntigoSemSeed_CaiNoSlug(t *testing.T) {
 	assert.Equal(t, "shapes", got.GeneratedImageStyle, "default da migration")
 	assert.Empty(t, got.Image)
 }
+
+func TestPostgresGameRepository_UpdateName_AtualizaSoNome(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("orb", "Orb Rush")
+	require.NoError(t, repo.Create(ctx, g))
+
+	require.NoError(t, repo.UpdateName(ctx, g.ID, "Orb Rush 2"))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Orb Rush 2", got.Name)
+	assert.Equal(t, "orb", got.Slug, "slug intacto")
+}
+
+func TestPostgresGameRepository_UpdateName_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	err := repo.UpdateName(context.Background(), "00000000-0000-0000-0000-000000000000", "X")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}

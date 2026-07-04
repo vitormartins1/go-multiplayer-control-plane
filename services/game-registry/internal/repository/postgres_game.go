@@ -41,6 +41,17 @@ func (r *PostgresGameRepository) Create(ctx context.Context, g *domain.Game) err
 	return nil
 }
 
+func (r *PostgresGameRepository) UpdateName(ctx context.Context, id, name string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET name = $2 WHERE id = $1`, id, name)
+	if err != nil {
+		return fmt.Errorf("game-registry repository: update name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGameNotFound
+	}
+	return nil
+}
+
 // selectCols robustece a leitura para registros antigos: image NULL -> "",
 // seed NULL -> slug (mesma regra do cadastro). Ver migration 004.
 const selectCols = `id, slug, name, created_at,

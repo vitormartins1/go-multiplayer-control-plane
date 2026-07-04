@@ -126,6 +126,8 @@ type GameRegistry interface {
 	// CreateGame registra um jogo. Erro de validação do upstream vira
 	// UpstreamError (status repassado); indisponibilidade -> ErrGameRegistryUnavailable.
 	CreateGame(ctx context.Context, slug, name string) (*Game, error)
+	// RenameGame altera o nome do jogo. UpstreamError (400/404) propagado.
+	RenameGame(ctx context.Context, id, name string) (*Game, error)
 	// PlayersOf lê a player base do jogo (presença, ADR-0019).
 	PlayersOf(ctx context.Context, gameID string) ([]GamePlayer, error)
 	// GamesOfPlayer lê os jogos em que o player está presente (consulta reversa).

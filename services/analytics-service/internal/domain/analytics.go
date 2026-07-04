@@ -36,10 +36,12 @@ type Totals struct {
 	Games         int64 // jogos com atividade
 }
 
-// Overview é o panorama cross-game (aba Analytics).
+// Overview é o panorama cross-game (aba Analytics): totais, jogos e a série de
+// partidas por dia somada entre todos os jogos (spec 002).
 type Overview struct {
 	Totals Totals
 	Games  []GameStat
+	Daily  []DailyPoint
 }
 
 // DailyPoint é uma partida-por-dia da série de um jogo.

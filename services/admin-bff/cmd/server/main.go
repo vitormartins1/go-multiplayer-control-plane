@@ -19,8 +19,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	achievementsclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/achievements"
-	cloudsaveclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/cloudsave"
 	analyticsclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/analytics"
+	cloudsaveclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/cloudsave"
 	gameregistryclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/gameregistry"
 	identityclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/identity"
 	leaderboardclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/leaderboard"

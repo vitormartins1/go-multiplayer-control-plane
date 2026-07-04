@@ -20,6 +20,7 @@ type AdminService interface {
 	Players(ctx context.Context, limit, offset int) (domain.PlayerPage, error)
 	Games(ctx context.Context) ([]domain.Game, error)
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
+	RenameGame(ctx context.Context, id, name string) (*domain.Game, error)
 	GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error)
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
 	UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error
@@ -54,6 +55,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/players", h.players)
 	mux.HandleFunc("GET /api/games", h.games)
 	mux.HandleFunc("POST /api/games", h.createGame)
+	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
 	mux.HandleFunc("PUT /api/games/{gameId}/achievements/{id}", h.updateAchievement)
@@ -146,6 +148,23 @@ func (h *Handler) createGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, g)
+}
+
+// renameGame altera o nome do jogo (Configurações do painel, spec 010).
+func (h *Handler) renameGame(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.svc.RenameGame(r.Context(), r.PathValue("gameId"), req.Name)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
 }
 
 // gameCatalog lê o catálogo de conquistas do jogo (achievements).
@@ -301,6 +320,9 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	if ov.Games == nil {
 		ov.Games = []domain.AnalyticsGameStat{}
+	}
+	if ov.Daily == nil {
+		ov.Daily = []domain.AnalyticsDaily{}
 	}
 	writeJSON(w, http.StatusOK, ov)
 }

@@ -27,6 +27,34 @@ func (m *mockRepo) FindByID(ctx context.Context, id string) (*domain.Game, error
 	return g, args.Error(1)
 }
 
+func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
+	return m.Called(ctx, id, name).Error(0)
+}
+
+func TestRename_Valido_AtualizaNomeMantemChave(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateName", mock.Anything, "g1", "Novo Nome").Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1", Slug: "orb", Name: "Novo Nome"}, nil)
+
+	g, err := New(repo).Rename(context.Background(), "g1", "  Novo Nome  ")
+	require.NoError(t, err)
+	assert.Equal(t, "Novo Nome", g.Name)
+	assert.Equal(t, "orb", g.Slug, "slug estável")
+	repo.AssertExpectations(t)
+}
+
+func TestRename_NomeInvalido_ErrInvalidName(t *testing.T) {
+	_, err := New(new(mockRepo)).Rename(context.Background(), "g1", "   ")
+	assert.ErrorIs(t, err, domain.ErrInvalidName)
+}
+
+func TestRename_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateName", mock.Anything, "nao", "X").Return(domain.ErrGameNotFound)
+	_, err := New(repo).Rename(context.Background(), "nao", "X")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
 func TestRegister_Valido_CriaComIDeCreatedAt(t *testing.T) {
 	repo := new(mockRepo)
 	var captured *domain.Game

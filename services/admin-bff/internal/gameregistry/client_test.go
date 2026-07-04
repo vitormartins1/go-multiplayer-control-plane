@@ -3,6 +3,7 @@ package gameregistry
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -110,4 +111,22 @@ func TestGamesOfPlayer_200(t *testing.T) {
 	assert.Equal(t, "/players/p1/games", gotPath)
 	require.Len(t, got, 1)
 	assert.Equal(t, "tetris", got[0].Slug)
+}
+
+func TestRenameGame_PutName(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"g1","slug":"orb","name":"Novo"}`))
+	}))
+	defer upstream.Close()
+
+	g, err := New(upstream.URL, nil).RenameGame(context.Background(), "g1", "Novo")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPut, gotMethod)
+	assert.Equal(t, "/games/g1", gotPath)
+	assert.Contains(t, gotBody, `"name":"Novo"`)
+	assert.Equal(t, "Novo", g.Name)
 }

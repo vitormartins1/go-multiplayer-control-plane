@@ -51,6 +51,7 @@ type overviewDTO struct {
 		Games         int64 `json:"games"`
 	} `json:"totals"`
 	Games []gameStatDTO `json:"games"`
+	Daily []dailyDTO    `json:"daily"`
 }
 
 func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +67,10 @@ func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
 	dto.Games = make([]gameStatDTO, 0, len(ov.Games))
 	for _, g := range ov.Games {
 		dto.Games = append(dto.Games, toGameStatDTO(g))
+	}
+	dto.Daily = make([]dailyDTO, 0, len(ov.Daily))
+	for _, d := range ov.Daily {
+		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
 	}
 	writeJSON(w, http.StatusOK, dto)
 }

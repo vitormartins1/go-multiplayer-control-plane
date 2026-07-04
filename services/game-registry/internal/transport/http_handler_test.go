@@ -33,6 +33,12 @@ func (m *mockService) Get(ctx context.Context, id string) (*domain.Game, error) 
 	return g, args.Error(1)
 }
 
+func (m *mockService) Rename(ctx context.Context, id, name string) (*domain.Game, error) {
+	args := m.Called(ctx, id, name)
+	g, _ := args.Get(0).(*domain.Game)
+	return g, args.Error(1)
+}
+
 type mockPresence struct{ mock.Mock }
 
 func (m *mockPresence) Mark(ctx context.Context, gameID, playerID, handle string) error {
@@ -187,4 +193,29 @@ func TestListPlayers_200(t *testing.T) {
 	require.Len(t, resp, 1)
 	assert.Equal(t, "p1", resp[0]["playerId"])
 	assert.Equal(t, "Alice", resp[0]["handle"])
+}
+
+func TestRename_200_AtualizaNome(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Rename", mock.Anything, "id-1", "Novo").Return(&domain.Game{ID: "id-1", Slug: "orb", Name: "Novo"}, nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1", `{"name":"Novo"}`)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"name":"Novo"`)
+	svc.AssertExpectations(t)
+}
+
+func TestRename_NomeInvalido_400(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Rename", mock.Anything, "id-1", "").Return((*domain.Game)(nil), domain.ErrInvalidName)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1", `{"name":""}`)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestRename_Inexistente_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Rename", mock.Anything, "nao", "X").Return((*domain.Game)(nil), domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodPut, "/games/nao", `{"name":"X"}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }

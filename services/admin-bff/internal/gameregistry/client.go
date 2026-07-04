@@ -68,6 +68,26 @@ func (c *Client) CreateGame(ctx context.Context, slug, name string) (*domain.Gam
 	return &g, nil
 }
 
+// RenameGame altera o nome do jogo (PUT /games/{id}).
+func (c *Client) RenameGame(ctx context.Context, id, name string) (*domain.Game, error) {
+	body, _ := json.Marshal(map[string]string{"name": name})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/games/"+url.PathEscape(id), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrGameRegistryUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if err := classify(resp); err != nil {
+		return nil, err
+	}
+	var g domain.Game
+	if err := json.NewDecoder(resp.Body).Decode(&g); err != nil {
+		return nil, fmt.Errorf("gameregistry: decode: %w", err)
+	}
+	return &g, nil
+}
+
 // PlayersOf lê a player base do jogo (presença, ADR-0019).
 func (c *Client) PlayersOf(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/players"

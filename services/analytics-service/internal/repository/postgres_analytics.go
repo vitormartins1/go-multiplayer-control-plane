@@ -122,8 +122,28 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 		Scan(&ov.Totals.UniquePlayers); err != nil {
 		return domain.Overview{}, fmt.Errorf("analytics repository: overview unique: %w", err)
 	}
-	return ov, nil
+
+	// Série "partidas por dia" somada entre todos os jogos (últimos overviewDailyDays).
+	drows, err := r.pool.Query(ctx, `
+		SELECT to_char(day, 'YYYY-MM-DD'), SUM(matches) FROM game_daily
+		WHERE day >= (now() AT TIME ZONE 'utc')::date - $1::int
+		GROUP BY day ORDER BY day`, overviewDailyDays)
+	if err != nil {
+		return domain.Overview{}, fmt.Errorf("analytics repository: overview daily: %w", err)
+	}
+	defer drows.Close()
+	for drows.Next() {
+		var d domain.DailyPoint
+		if err := drows.Scan(&d.Day, &d.Matches); err != nil {
+			return domain.Overview{}, fmt.Errorf("analytics repository: scan overview daily: %w", err)
+		}
+		ov.Daily = append(ov.Daily, d)
+	}
+	return ov, drows.Err()
 }
+
+// overviewDailyDays é a janela (dias) da série do overview cross-game.
+const overviewDailyDays = 30
 
 // GameAnalytics devolve o resumo do jogo + a série diária dos últimos `days`.
 func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalytics, error) {

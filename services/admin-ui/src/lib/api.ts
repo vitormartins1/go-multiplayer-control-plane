@@ -128,9 +128,15 @@ export interface AnalyticsGameStat {
   avgScore: number;
 }
 
+export interface AnalyticsDaily {
+  day: string;
+  matches: number;
+}
+
 export interface AnalyticsOverview {
   totals: { matches: number; uniquePlayers: number; games: number };
   games: AnalyticsGameStat[];
+  daily: AnalyticsDaily[];
 }
 
 // LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.
@@ -197,6 +203,8 @@ export const api = {
 
   games: (signal?: AbortSignal) => getJSON<Game[]>("/api/games", signal),
   createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),
+  renameGame: (gameId: string, name: string) =>
+    putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}`, { name }),
   gameCatalog: (gameId: string, signal?: AbortSignal) =>
     getJSON<CatalogAchievement[]>(`/api/games/${encodeURIComponent(gameId)}/achievements`, signal),
   createAchievement: (gameId: string, a: NewAchievement) =>

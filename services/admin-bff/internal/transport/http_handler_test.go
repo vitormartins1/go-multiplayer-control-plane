@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,40 +16,40 @@ import (
 )
 
 type fakeService struct {
-	topo      domain.Topology
-	topoErr   error
-	live      domain.LiveMetrics
-	liveErr   error
-	page      domain.PlayerPage
-	pageErr   error
-	games     []domain.Game
-	gamesErr  error
-	createErr error
-	catalog   []domain.Achievement
-	catErr    error
-	ach       []domain.PlayerAchievement
-	achErr    error
-	leaders   []domain.LeaderboardEntry
-	leadErr   error
-	pdata     []domain.PlayerDataEntry
-	pdataErr  error
-	save      domain.CloudSave
-	saveErr   error
-	gplayers  []domain.GamePlayer
-	gplayErr  error
-	pgames      []domain.Game
-	pgamesErr   error
-	sessions    domain.GameSessions
-	sessionsErr error
+	topo         domain.Topology
+	topoErr      error
+	live         domain.LiveMetrics
+	liveErr      error
+	page         domain.PlayerPage
+	pageErr      error
+	games        []domain.Game
+	gamesErr     error
+	createErr    error
+	catalog      []domain.Achievement
+	catErr       error
+	ach          []domain.PlayerAchievement
+	achErr       error
+	leaders      []domain.LeaderboardEntry
+	leadErr      error
+	pdata        []domain.PlayerDataEntry
+	pdataErr     error
+	save         domain.CloudSave
+	saveErr      error
+	gplayers     []domain.GamePlayer
+	gplayErr     error
+	pgames       []domain.Game
+	pgamesErr    error
+	sessions     domain.GameSessions
+	sessionsErr  error
 	fanout       domain.FanoutHealth
 	fanoutErr    error
 	analytics    domain.AnalyticsOverview
 	analyticsErr error
 	gotGameID    string
-	gotPlayer   string
-	gotLimit    int
-	gotOffset   int
-	gotState    string
+	gotPlayer    string
+	gotLimit     int
+	gotOffset    int
+	gotState     string
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -69,6 +70,13 @@ func (f *fakeService) CreateGame(_ context.Context, slug, name string) (*domain.
 		return nil, f.createErr
 	}
 	return &domain.Game{ID: "g1", Slug: slug, Name: name}, nil
+}
+func (f *fakeService) RenameGame(_ context.Context, id, name string) (*domain.Game, error) {
+	f.gotGameID = id
+	if f.gamesErr != nil {
+		return nil, f.gamesErr
+	}
+	return &domain.Game{ID: id, Name: name}, nil
 }
 func (f *fakeService) GameCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
 	f.gotGameID = gameID
@@ -660,4 +668,26 @@ func TestAnalyticsOverview_Fora_502(t *testing.T) {
 	resp := get(t, srv, "/api/analytics/overview")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestRenameGame_200(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1", strings.NewReader(`{"name":"Novo"}`))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Contains(t, readBody(t, resp), `"name":"Novo"`)
+}
+
+func readBody(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return string(b)
 }
