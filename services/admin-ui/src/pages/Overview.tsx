@@ -13,7 +13,7 @@ export function Overview() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>Visão geral</Title>
+        <Title order={3}>Infrastructure</Title>
         <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={reload}>
           Atualizar
         </Button>

@@ -19,7 +19,7 @@ export default defineConfig({
         // Isola os vendors pesados em chunks próprios (cacheáveis à parte e
         // carregados só com as rotas que os usam, via lazy no App).
         manualChunks: {
-          dicebear: ["@dicebear/core", "@dicebear/collection"],
+          dicebear: ["@dicebear/core"],
           xyflow: ["@xyflow/react"],
           mantine: ["@mantine/core", "@mantine/hooks", "@mantine/form", "@mantine/notifications"],
         },

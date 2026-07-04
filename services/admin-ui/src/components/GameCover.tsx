@@ -1,13 +1,18 @@
 import { AspectRatio, Box, Text } from "@mantine/core";
 import { useMemo } from "react";
-import { createAvatar, type Style } from "@dicebear/core";
-import { glass, rings, shapes } from "@dicebear/collection";
+import { Style, Avatar } from "@dicebear/core";
+import shapesDef from "@dicebear/styles/shapes.json";
+import glassDef from "@dicebear/styles/glass.json";
+import ringsDef from "@dicebear/styles/rings.json";
 import type { Game } from "../lib/api";
 
 // Estilos suportados (abstratos/geométricos, não-avatar). O backend manda o
 // nome em generatedImageStyle; trocar/adicionar gerador é só mexer aqui.
+const shapesStyle = new Style(shapesDef);
+const glassStyle = new Style(glassDef);
+const ringsStyle = new Style(ringsDef);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const STYLES: Record<string, Style<any>> = { shapes, glass, rings };
+const STYLES: Record<string, Style<any>> = { shapes: shapesStyle, glass: glassStyle, rings: ringsStyle };
 const DEFAULT_STYLE = "shapes";
 
 // coverSeed: a seed determinística da capa. Cai no slug se o backend não mandou
@@ -20,8 +25,8 @@ export function coverSeed(game: Game): string {
 // futuro houver upload (imageSource="upload" + image), usa a imagem direto.
 function coverDataUri(game: Game): string {
   if (game.imageSource === "upload" && game.image) return game.image;
-  const style = STYLES[game.generatedImageStyle ?? DEFAULT_STYLE] ?? shapes;
-  return createAvatar(style, { seed: coverSeed(game) }).toDataUri();
+  const style = STYLES[game.generatedImageStyle ?? DEFAULT_STYLE] ?? shapesStyle;
+  return new Avatar(style, { seed: coverSeed(game) }).toDataUri();
 }
 
 function initial(name: string): string {
