@@ -6,6 +6,7 @@ import { Notifications } from "@mantine/notifications";
 
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "@mantine/charts/styles.css";
 import "@xyflow/react/dist/style.css";
 import "./index.css";
 

@@ -321,6 +321,9 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 	if ov.Games == nil {
 		ov.Games = []domain.AnalyticsGameStat{}
 	}
+	if ov.Daily == nil {
+		ov.Daily = []domain.AnalyticsDaily{}
+	}
 	writeJSON(w, http.StatusOK, ov)
 }
 

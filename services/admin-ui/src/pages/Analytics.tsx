@@ -1,4 +1,5 @@
 import { Alert, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { LineChart } from "@mantine/charts";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
@@ -27,6 +28,22 @@ export function Analytics() {
             <StatCard label="Jogadores únicos" value={String(data.totals.uniquePlayers)} />
             <StatCard label="Jogos com atividade" value={String(data.totals.games)} />
           </SimpleGrid>
+
+          {data.daily.length > 0 && (
+            <>
+              <Title order={5}>Partidas por dia</Title>
+              <LineChart
+                h={220}
+                data={data.daily}
+                dataKey="day"
+                series={[{ name: "matches", label: "Partidas", color: "blue.5" }]}
+                curveType="monotone"
+                withDots={data.daily.length < 40}
+                tickLine="x"
+                gridAxis="xy"
+              />
+            </>
+          )}
 
           {data.games.length === 0 ? (
             <Text c="dimmed">

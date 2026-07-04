@@ -128,9 +128,15 @@ export interface AnalyticsGameStat {
   avgScore: number;
 }
 
+export interface AnalyticsDaily {
+  day: string;
+  matches: number;
+}
+
 export interface AnalyticsOverview {
   totals: { matches: number; uniquePlayers: number; games: number };
   games: AnalyticsGameStat[];
+  daily: AnalyticsDaily[];
 }
 
 // LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.
