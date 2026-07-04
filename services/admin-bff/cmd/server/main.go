@@ -20,6 +20,7 @@ import (
 
 	achievementsclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/achievements"
 	cloudsaveclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/cloudsave"
+	analyticsclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/analytics"
 	gameregistryclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/gameregistry"
 	identityclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/identity"
 	leaderboardclient "github.com/vitormartins1/go-game-backend/services/admin-bff/internal/leaderboard"
@@ -96,6 +97,10 @@ func run(log *slog.Logger) error {
 	if sessionURL == "" {
 		log.Warn("SESSION_URL ausente — a aba Sessions vai falhar; aponte para o session-service")
 	}
+	analyticsURL := os.Getenv("ANALYTICS_URL")
+	if analyticsURL == "" {
+		log.Warn("ANALYTICS_URL ausente — a aba Analytics vai falhar; aponte para o analytics-service")
+	}
 
 	internalKey := os.Getenv("INTERNAL_API_KEY")
 	if internalKey == "" {
@@ -117,6 +122,7 @@ func run(log *slog.Logger) error {
 		PlayerData:  playerdataclient.New(playerDataURL, httpClient),
 		CloudSave:   cloudsaveclient.New(cloudSaveURL, httpClient),
 		Sessions:    sessionclient.New(sessionURL, httpClient),
+		Analytics:   analyticsclient.New(analyticsURL, httpClient),
 	})
 
 	red := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)

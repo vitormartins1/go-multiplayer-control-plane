@@ -68,6 +68,20 @@ resource "aws_sqs_queue" "leaderboard" {
   })
 }
 
+# ── analytics ──────────────────────────────────────────────────────────────
+resource "aws_sqs_queue" "analytics_dlq" {
+  name = "match-results-analytics-dlq"
+}
+
+resource "aws_sqs_queue" "analytics" {
+  name                       = "match-results-analytics"
+  visibility_timeout_seconds = 30
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.analytics_dlq.arn
+    maxReceiveCount     = var.max_receive_count
+  })
+}
+
 # ── assinaturas SNS→SQS (raw delivery: o corpo da SQS = o payload publicado,
 #    sem o envelope de Notification do SNS — o consumidor lê o JSON direto) ───
 resource "aws_sns_topic_subscription" "achievements" {
@@ -84,11 +98,19 @@ resource "aws_sns_topic_subscription" "leaderboard" {
   raw_message_delivery = true
 }
 
+resource "aws_sns_topic_subscription" "analytics" {
+  topic_arn            = aws_sns_topic.match_results.arn
+  protocol             = "sqs"
+  endpoint             = aws_sqs_queue.analytics.arn
+  raw_message_delivery = true
+}
+
 # Permite o SNS entregar nas filas (parity com AWS; o LocalStack não força).
 data "aws_iam_policy_document" "allow_sns" {
   for_each = {
     achievements = aws_sqs_queue.achievements.arn
     leaderboard  = aws_sqs_queue.leaderboard.arn
+    analytics    = aws_sqs_queue.analytics.arn
   }
   statement {
     effect    = "Allow"
@@ -116,6 +138,11 @@ resource "aws_sqs_queue_policy" "leaderboard" {
   policy    = data.aws_iam_policy_document.allow_sns["leaderboard"].json
 }
 
+resource "aws_sqs_queue_policy" "analytics" {
+  queue_url = aws_sqs_queue.analytics.id
+  policy    = data.aws_iam_policy_document.allow_sns["analytics"].json
+}
+
 output "topic_arn" {
   value = aws_sns_topic.match_results.arn
 }
@@ -126,4 +153,8 @@ output "achievements_queue_url" {
 
 output "leaderboard_queue_url" {
   value = aws_sqs_queue.leaderboard.id
+}
+
+output "analytics_queue_url" {
+  value = aws_sqs_queue.analytics.id
 }

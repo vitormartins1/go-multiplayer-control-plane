@@ -40,9 +40,11 @@ type fakeService struct {
 	pgamesErr   error
 	sessions    domain.GameSessions
 	sessionsErr error
-	fanout      domain.FanoutHealth
-	fanoutErr   error
-	gotGameID   string
+	fanout       domain.FanoutHealth
+	fanoutErr    error
+	analytics    domain.AnalyticsOverview
+	analyticsErr error
+	gotGameID    string
 	gotPlayer   string
 	gotLimit    int
 	gotOffset   int
@@ -128,6 +130,10 @@ func (f *fakeService) CloseRoom(_ context.Context, matchID string) (domain.GameS
 
 func (f *fakeService) FanoutHealth(context.Context) (domain.FanoutHealth, error) {
 	return f.fanout, f.fanoutErr
+}
+
+func (f *fakeService) AnalyticsOverview(context.Context) (domain.AnalyticsOverview, error) {
+	return f.analytics, f.analyticsErr
 }
 
 func newServer(svc AdminService) *httptest.Server {
@@ -619,4 +625,39 @@ func TestFanoutHealth_200(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.NotNil(t, body.PublishOK)
 	assert.Equal(t, 10.0, *body.PublishOK)
+}
+
+func TestAnalyticsOverview_200_InjetaJogos(t *testing.T) {
+	svc := &fakeService{analytics: domain.AnalyticsOverview{
+		Totals: domain.AnalyticsTotals{Matches: 3, Games: 1},
+		Games:  []domain.AnalyticsGameStat{{GameID: "g1", GameName: "Orb Rush", Matches: 3, AvgScore: 4.5}},
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/analytics/overview")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var body struct {
+		Totals struct {
+			Matches int64 `json:"matches"`
+		} `json:"totals"`
+		Games []struct {
+			GameName string `json:"gameName"`
+		} `json:"games"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, int64(3), body.Totals.Matches)
+	require.Len(t, body.Games, 1)
+	assert.Equal(t, "Orb Rush", body.Games[0].GameName)
+}
+
+func TestAnalyticsOverview_Fora_502(t *testing.T) {
+	svc := &fakeService{analyticsErr: domain.ErrAnalyticsUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/analytics/overview")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }

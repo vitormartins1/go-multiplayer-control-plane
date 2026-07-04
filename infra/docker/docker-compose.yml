@@ -194,6 +194,30 @@ services:
       tempo:
         condition: service_started
 
+  # analytics-service (ADR-0021): consome o fan-out match-results por um worker
+  # pool e agrega rollups por jogo; expõe a read API do overview p/ o painel.
+  analytics-service:
+    build:
+      context: ../..
+      dockerfile: services/analytics-service/Dockerfile
+    ports:
+      - "8091:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://dev:dev@analytics-postgres:5432/analytics?sslmode=disable
+      ANALYTICS_QUEUE_URL: http://localstack:4566/000000000000/match-results-analytics
+      ANALYTICS_WORKERS: "4"
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
+    depends_on:
+      analytics-postgres:
+        condition: service_healthy
+      messaging-provisioner:
+        condition: service_completed_successfully
+      tempo:
+        condition: service_started
+
   # admin-bff: back-end-for-frontend do painel admin (ADR-0016). Agregador
   # read-only — lê o Prometheus e a API admin do achievements. Sem banco.
   admin-bff:
@@ -212,6 +236,7 @@ services:
       PLAYER_DATA_URL: http://player-data-service:8080 # aba Player data do painel (ADR-0016)
       CLOUD_SAVE_URL: http://cloud-save-service:8080 # aba Cloud saves do painel (ADR-0016)
       SESSION_URL: http://session-service:8080 # aba Sessions do painel (spec 007)
+      ANALYTICS_URL: http://analytics-service:8080 # aba Analytics do painel (ADR-0021)
       INTERNAL_API_KEY: dev-internal-key # injeta nos callers serviço-a-serviço (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
@@ -467,3 +492,29 @@ services:
       - "9190:9187"
     depends_on:
       - game-registry-postgres
+
+  # Banco próprio do analytics (database-per-service, ADR-0015).
+  analytics-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: analytics
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5436:5432"
+    volumes:
+      - ../../services/analytics-service/migrations/001_create_analytics.sql:/docker-entrypoint-initdb.d/001_create_analytics.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d analytics"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  analytics-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://dev:dev@analytics-postgres:5432/analytics?sslmode=disable
+    ports:
+      - "9191:9187"
+    depends_on:
+      - analytics-postgres
