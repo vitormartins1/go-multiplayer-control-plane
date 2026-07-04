@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -37,8 +38,8 @@ func (m *mockIssuer) JWKS(ctx context.Context) ([]byte, error) {
 
 type mockPublisher struct{ mock.Mock }
 
-func (m *mockPublisher) Publish(ctx context.Context, gameID string, results []domain.PlayerResult) error {
-	return m.Called(ctx, gameID, results).Error(0)
+func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID string, results []domain.PlayerResult) error {
+	return m.Called(ctx, gameID, matchID, results).Error(0)
 }
 
 func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
@@ -87,13 +88,35 @@ func TestReportResult_PublicaLiberaEncerra(t *testing.T) {
 	require.NoError(t, err)
 
 	results := []domain.PlayerResult{{PlayerID: "p1", Score: 10, Won: true}}
-	pub.On("Publish", mock.Anything, "game-1", results).Return(nil) // recebe o game_id da sessão
+	pub.On("Publish", mock.Anything, "game-1", "match-1", results).Return(nil) // recebe o game_id e o match_id da sessão
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", results))
 	assert.Equal(t, float64(0), svc.ActiveSessions(), "sessão encerrada")
 	pub.AssertExpectations(t)
 	alloc.AssertExpectations(t)
+}
+
+// Publicação falha -> ReportResult retorna erro e NÃO encerra a sessão nem
+// libera o server (ADR-0020: publica antes de fechar; o retry do Dedicated
+// Server e o TTL sweeper cobrem). O server continua alocado.
+func TestReportResult_PublishFalha_NaoEncerraSessao(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	pub := &mockPublisher{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	svc := New(alloc, iss, pub)
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
+	require.NoError(t, err)
+
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(errors.New("sns fora"))
+
+	err = svc.ReportResult(context.Background(), "match-1", nil)
+	require.Error(t, err)
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "sessão continua ativa")
+	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
+	pub.AssertExpectations(t)
 }
 
 func TestReportResult_MatchInexistente_ErrSessionNotFound(t *testing.T) {
@@ -155,7 +178,7 @@ func TestReportResult_MarcaCloseReasonResult(t *testing.T) {
 	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
 	require.NoError(t, err)
 
-	pub.On("Publish", mock.Anything, "game-1", mock.Anything).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", mock.Anything, mock.Anything).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", nil))
 
@@ -175,7 +198,7 @@ func newSvcComSessoes(t *testing.T, opts ...Option) *Service {
 	alloc.On("Release", mock.Anything, mock.Anything).Return(nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	pub := &mockPublisher{}
-	pub.On("Publish", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	pub.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	return New(alloc, iss, pub, opts...)
 }
 

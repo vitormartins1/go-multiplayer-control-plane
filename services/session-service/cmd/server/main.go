@@ -24,7 +24,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"k8s.io/client-go/dynamic"
@@ -38,7 +37,6 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/service"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/token"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/transport"
-	"github.com/vitormartins1/go-game-backend/shared/auth"
 	"github.com/vitormartins1/go-game-backend/shared/config"
 	"github.com/vitormartins1/go-game-backend/shared/logger"
 	"github.com/vitormartins1/go-game-backend/shared/telemetry"
@@ -86,7 +84,11 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	svc := service.New(alloc, issuer, buildPublisher(log),
+	pub, err := buildPublisher(context.Background(), log)
+	if err != nil {
+		return err
+	}
+	svc := service.New(alloc, issuer, pub,
 		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)))
 
 	// métricas custom: sessões ativas + fechamentos por motivo (spec 004).
@@ -278,35 +280,18 @@ func serverPool() []string {
 	return out
 }
 
-// buildPublisher monta o fan-out do resultado: um sink por destino configurado
-// (achievements via ACHIEVEMENTS_URL, leaderboard via LEADERBOARD_URL), agrupados
-// num Composite (fan-out N sinks). Sem nenhum destino, cai no fallback de log.
-// Todos compartilham um client com a internal key (ADR-0018) + trace (otelhttp).
-func buildPublisher(log *slog.Logger) domain.ResultPublisher {
-	internalKey := os.Getenv("INTERNAL_API_KEY")
-	client := &http.Client{
-		Timeout:   5 * time.Second,
-		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
+// buildPublisher escolhe o adapter do fan-out: SNS (publica no tópico
+// match-results) se MATCH_RESULTS_TOPIC_ARN estiver setado; senão o fallback de
+// log (dev). O endpoint AWS vem de AWS_ENDPOINT_URL (LocalStack) — ver awsx e
+// ADR-0020. A tradução do resultado em eventos migrou para os consumidores.
+func buildPublisher(ctx context.Context, log *slog.Logger) (domain.ResultPublisher, error) {
+	arn := os.Getenv("MATCH_RESULTS_TOPIC_ARN")
+	if arn == "" {
+		log.Warn("MATCH_RESULTS_TOPIC_ARN ausente — fan-out só vai logar (fallback dev)")
+		return publisher.New(log), nil
 	}
-
-	var sinks []domain.ResultPublisher
-	if u := os.Getenv("ACHIEVEMENTS_URL"); u != "" {
-		log.Info("fan-out: achievements", "url", u)
-		sinks = append(sinks, publisher.NewAchievements(u, client, log))
-	}
-	if u := os.Getenv("LEADERBOARD_URL"); u != "" {
-		log.Info("fan-out: leaderboard", "url", u)
-		sinks = append(sinks, publisher.NewLeaderboard(u, client, log))
-	}
-
-	if len(sinks) == 0 {
-		log.Warn("nenhum destino de fan-out (ACHIEVEMENTS_URL/LEADERBOARD_URL) — só vai logar (fallback)")
-		return publisher.New(log)
-	}
-	if internalKey == "" {
-		log.Warn("INTERNAL_API_KEY ausente — o fan-out vai dar 401 nos destinos")
-	}
-	return publisher.NewComposite(log, sinks...)
+	log.Info("fan-out: SNS", "topic", arn)
+	return publisher.NewSNS(ctx, arn, log)
 }
 
 // buildIssuer carrega a chave Ed25519 do config (PEM PKCS8) ou, em dev, gera uma

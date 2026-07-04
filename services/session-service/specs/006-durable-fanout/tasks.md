@@ -7,11 +7,11 @@
 
 ## Produtor — session-service
 
-- [ ] `domain` — estender `ResultPublisher.Publish(ctx, gameID, matchID, results)`; ajustar `LogPublisher` e fakes de teste
-- [ ] `internal/publisher/sns_publisher.go` (+ test) — serializa envelope `{schemaVersion:1, matchId, gameId, results[]}`, `sns.Publish`; client via helper AWS
-- [ ] `internal/service/session_service.go` — `ReportResult` passa `matchID`; **publish falha → erro, não encerra sessão** (TTL sweeper cobre); testar o caminho de erro
-- [ ] `cmd/server/main.go` — `buildPublisher`: `MATCH_RESULTS_TOPIC_ARN` → `SNSPublisher`, senão `LogPublisher`; remover ramo Composite/HTTP
-- [ ] remover `internal/publisher/{achievements_publisher,leaderboard_publisher,composite}.go` (+ testes) e envs de fan-out HTTP
+- [x] `domain` — estender `ResultPublisher.Publish(ctx, gameID, matchID, results)`; ajustar `LogPublisher` e fakes de teste
+- [x] `internal/publisher/sns_publisher.go` (+ test) — serializa envelope `{schemaVersion:1, matchId, gameId, results[]}`, `sns.Publish`; client via helper AWS
+- [x] `internal/service/session_service.go` — `ReportResult` passa `matchID`; **publish falha → erro, não encerra sessão** (TTL sweeper cobre); testar o caminho de erro
+- [x] `cmd/server/main.go` — `buildPublisher`: `MATCH_RESULTS_TOPIC_ARN` → `SNSPublisher`, senão `LogPublisher`; remover ramo Composite/HTTP
+- [x] remover `internal/publisher/{achievements_publisher,leaderboard_publisher,composite}.go` (+ testes) e envs de fan-out HTTP
 
 ## Consumidor — achievements-service (dedup por matchID)
 

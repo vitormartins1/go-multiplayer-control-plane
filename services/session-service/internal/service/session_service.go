@@ -108,17 +108,32 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, players []
 	return sess, grants, nil
 }
 
-// ReportResult dispara o fan-out do resultado, libera o server e encerra a
-// sessão (CLOSED/result). ErrSessionNotFound se não houver sessão para o match.
+// ReportResult publica o resultado no fan-out e, só então, libera o server e
+// encerra a sessão (CLOSED/result). ErrSessionNotFound se não houver sessão para
+// o match.
+//
+// Ordem invertida vs. specs 002/003 (ADR-0020): publica ANTES de fechar. Se a
+// publicação falhar, retorna erro e NÃO encerra a sessão — o Dedicated Server
+// refaz o ReportResult (retry, Fase 6 do data plane) e o TTL sweeper cobre a
+// sessão órfã. O resultado não se perde silenciosamente.
 func (s *Service) ReportResult(ctx context.Context, matchID string, results []domain.PlayerResult) error {
-	sess, err := s.closeSession(ctx, matchID, domain.CloseResult)
-	if err != nil {
-		return fmt.Errorf("session service: report result: %w", err)
+	s.mu.Lock()
+	sess, ok := s.sessions[matchID]
+	gameID := ""
+	if ok {
+		gameID = sess.GameID
 	}
-	// Fan-out do resultado para os serviços de dados (best-effort no adapter):
-	// usa o game_id da sessão (ADR-0017).
-	if err := s.publisher.Publish(ctx, sess.GameID, results); err != nil {
+	s.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("session service: report result: %w", domain.ErrSessionNotFound)
+	}
+
+	if err := s.publisher.Publish(ctx, gameID, matchID, results); err != nil {
 		return fmt.Errorf("session service: report result: publish: %w", err)
+	}
+
+	if _, err := s.closeSession(ctx, matchID, domain.CloseResult); err != nil {
+		return fmt.Errorf("session service: report result: %w", err)
 	}
 	return nil
 }
