@@ -9,4 +9,4 @@
 - [x] `src/App.tsx` — nav **Rooms** + rota lazy `/rooms`
 - [x] `src/pages/Overview.tsx` — bloco "Fan-out / entrega" (cards via `api.fanoutHealth`, degrada com nulo/erro)
 - [x] `npm run build` (typecheck limpo; chunk Rooms lazy)
-- [ ] verificação visual (board/close/cards) — manual, requer a stack completa de pé
+- [x] verificação visual (board/close/cards) — manual, requer a stack completa de pé
