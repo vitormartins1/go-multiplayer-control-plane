@@ -634,3 +634,56 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context /* 
 ```
 
 **Pegadinha / nuance:** dois detalhes valem ouro. (1) `defer tx.Rollback(ctx)` **sempre** — depois de um `Commit` bem-sucedido o Rollback vira no-op (retorna `ErrTxClosed`, que ignoramos), então você nunca esquece de desfazer nos caminhos de erro/panic. É o equivalente pgx do `using`/`TransactionScope` do C#, mas explícito. (2) A idempotência sai de graça do banco: `INSERT ... ON CONFLICT DO NOTHING` + `tag.RowsAffected() == 0` é o teste de "já vi essa partida?" **na mesma transação** que aplica o efeito — sem `SELECT` antes (que teria corrida entre o check e o insert). Contraste com C#/.NET: em vez de um `SemaphoreSlim` ou lock distribuído, você deixa o Postgres arbitrar via constraint.
+
+## 18 — Worker pool: fan-out/fan-in com channels, resultado por trabalho e shutdown ordenado
+
+**O que é / por que importa:** o analytics-service (ADR-0021) processa o fan-out das partidas com um **worker pool** — o *core* de concorrência do serviço (não um loop simples como os consumers da 006). É o padrão de Go que faltava: um channel de `jobs`, N goroutines consumindo, e um channel de retorno **por trabalho** para o produtor saber o resultado. A sacada é o `done chan error` embutido no job: o consumidor SQS submete e **espera** o resultado para deletar a mensagem só no sucesso (at-least-once → DLQ em falha) — sem isso, um pool assíncrono não conseguiria confirmar a entrega.
+
+**Onde no projeto:** `analytics-service/internal/service/pool.go` (o pool) + `internal/consumer/consumer.go` (fan-out do batch → fan-in dos `done`).
+
+```mermaid
+flowchart LR
+    C["consumer: batch SQS"] -->|Submit x N| J[(jobs chan)]
+    J --> W1[worker] & W2[worker] & W3[worker]
+    W1 & W2 & W3 -->|ApplyMatch| DB[(Postgres)]
+    W1 & W2 & W3 -->|done chan error| C
+    C -->|err==nil| DEL[delete msg]
+```
+
+```go
+type job struct {
+	match domain.MatchResult
+	done  chan error // resultado deste trabalho específico
+}
+
+func (p *Pool) Submit(ctx context.Context, m domain.MatchResult) <-chan error {
+	done := make(chan error, 1) // buffer 1: o worker nunca bloqueia ao responder
+	select {
+	case <-ctx.Done(): // shutdown: não enfileira, devolve o erro do ctx
+		done <- ctx.Err()
+	case p.jobs <- job{match: m, done: done}: // contrapressão: bloqueia se cheio
+	}
+	return done
+}
+
+func (p *Pool) worker(ctx context.Context) {
+	defer p.wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case j, ok := <-p.jobs:
+			if !ok { // channel fechado (Stop): drena o que sobrou e sai
+				return
+			}
+			j.done <- p.applyAndObserve(ctx, j.match)
+		}
+	}
+}
+
+// Stop: fecha o channel e espera os workers drenarem. Ordem importa —
+// parar o consumidor ANTES, senão haveria Submit num pool fechado (panic).
+func (p *Pool) Stop() { close(p.jobs); p.wg.Wait() }
+```
+
+**Pegadinha / nuance:** três detalhes que só o Go ensina direito aqui. (1) **`done` com buffer 1** — o worker faz `j.done <- err` e segue sem bloquear, mesmo que o consumidor ainda não esteja lendo aquele `done` específico (ele lê todos em sequência depois). (2) **`close(jobs)` é o sinal de "acabou"**: o `for range`/`<-jobs` com o segundo retorno `ok` deixa os workers **drenarem** o que já estava enfileirado antes de sair — nenhum trabalho aceito se perde. (3) **Ordem de shutdown**: parar o consumidor → `pool.Stop()`; inverter isso daria `send on closed channel`. Contraste com C#/.NET: é o mesmo território de `Channel<T>` + `BackgroundService`, mas em Go o `select` sobre `ctx.Done()` e o channel é a espinha do cancelamento cooperativo — sem `CancellationToken` separado, o `context` já é o canal de parada. Reaproveita as entradas [[13]] (channels + select) e [[05]] (graceful shutdown).

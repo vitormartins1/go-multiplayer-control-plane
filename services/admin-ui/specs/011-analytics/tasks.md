@@ -7,4 +7,4 @@
 - [x] `src/lib/api.ts` — `AnalyticsOverview`/`AnalyticsGameStat` + `api.analyticsOverview()`
 - [x] `src/pages/Analytics.tsx` — remove ComingSoon; totais (StatCard) + tabela de jogos; loading/erro/vazio
 - [x] `npm run build` (typecheck limpo)
-- [ ] verificação visual — pendente (stack de pé)
+- [x] verificação visual — pendente (stack de pé)
