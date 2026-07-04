@@ -330,6 +330,66 @@ func (f *fakeSessions) SessionsByGame(_ context.Context, gameID, state string) (
 	return f.sessions, f.err
 }
 
+func (f *fakeSessions) AllSessions(_ context.Context, state string) (domain.GameSessions, error) {
+	f.gotState = state
+	return f.sessions, f.err
+}
+
+func (f *fakeSessions) CloseSession(_ context.Context, matchID string) (domain.GameSession, error) {
+	f.gotGameID = matchID // reaproveita o campo p/ capturar o matchID
+	if f.err != nil {
+		return domain.GameSession{}, f.err
+	}
+	return domain.GameSession{MatchID: matchID, State: "closed", CloseReason: "admin"}, nil
+}
+
+func TestRooms_EnriqueceHandleENomeDoJogo(t *testing.T) {
+	sessions := &fakeSessions{sessions: domain.GameSessions{
+		Active: []domain.GameSession{{SessionID: "s1", GameID: "g1", Players: []domain.SessionPlayer{{ID: "p1"}}}},
+	}}
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 1, Players: []domain.Player{{ID: "p1", Handle: "alice"}}}}
+	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Name: "Orb Rush"}}}
+	svc := New(Deps{Sessions: sessions, Directory: dir, Registry: reg})
+
+	got, err := svc.Rooms(context.Background(), "open")
+
+	require.NoError(t, err)
+	assert.Equal(t, "open", sessions.gotState)
+	assert.Equal(t, "Orb Rush", got.Active[0].GameName, "board global traz o nome do jogo")
+	assert.Equal(t, "alice", got.Active[0].Players[0].Handle)
+}
+
+func TestRooms_RegistryFora_SemNome_SemErro(t *testing.T) {
+	sessions := &fakeSessions{sessions: domain.GameSessions{
+		Active: []domain.GameSession{{SessionID: "s1", GameID: "g1", Players: []domain.SessionPlayer{{ID: "p1"}}}},
+	}}
+	reg := &fakeRegistry{err: domain.ErrGameRegistryUnavailable}
+	svc := New(Deps{Sessions: sessions, Directory: &fakeDirectory{}, Registry: reg})
+
+	got, err := svc.Rooms(context.Background(), "")
+
+	require.NoError(t, err, "registry fora não derruba o board (best-effort)")
+	assert.Equal(t, "", got.Active[0].GameName)
+	assert.Equal(t, "g1", got.Active[0].GameID, "gameId sempre presente")
+}
+
+func TestFanoutHealth_AgregaMetricas_AusenteViraNil(t *testing.T) {
+	m := &fakeMetrics{byQuery: map[string][]domain.Sample{
+		`sum(fanout_publish_total{result="ok"})`:    {{Value: 10}},
+		`sum(fanout_consume_total{result="error"})`: {{Value: 2}},
+	}}
+	svc := New(Deps{Metrics: m})
+
+	fh, err := svc.FanoutHealth(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, fh.PublishOK)
+	assert.Equal(t, float64(10), *fh.PublishOK)
+	require.NotNil(t, fh.ConsumeError)
+	assert.Equal(t, float64(2), *fh.ConsumeError)
+	assert.Nil(t, fh.ConsumeOK, "métrica ausente -> nil (não zero)")
+}
+
 func TestGameSessions_EnriqueceHandlesBestEffort(t *testing.T) {
 	sessions := &fakeSessions{sessions: domain.GameSessions{
 		Active: []domain.GameSession{{SessionID: "s1", Players: []domain.SessionPlayer{{ID: "p1"}, {ID: "p-desconhecido"}}}},

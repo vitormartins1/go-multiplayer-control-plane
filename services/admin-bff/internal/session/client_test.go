@@ -57,3 +57,54 @@ func TestSessionsByGame_Status500_ErrSessionsUnavailable(t *testing.T) {
 	_, err := New(upstream.URL, nil).SessionsByGame(context.Background(), "g1", "")
 	assert.ErrorIs(t, err, domain.ErrSessionsUnavailable)
 }
+
+func TestAllSessions_ParseiaGameIDEFiltra(t *testing.T) {
+	var gotPath, gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"active": [{"sessionId":"s1","matchId":"m1","gameId":"g1","state":"open","players":["p1"],"serverAddress":"127.0.0.1:7103","openedAt":"2026-07-03T12:00:00Z"}],
+			"closed": []
+		}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).AllSessions(context.Background(), "open")
+
+	require.NoError(t, err)
+	assert.Equal(t, "/admin/sessions", gotPath)
+	assert.Equal(t, "state=open", gotQuery)
+	require.Len(t, got.Active, 1)
+	assert.Equal(t, "g1", got.Active[0].GameID, "board global carrega o gameId")
+}
+
+func TestCloseSession_Ok_ParseiaSessao(t *testing.T) {
+	var gotMethod, gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sessionId":"s1","matchId":"m1","gameId":"g1","state":"closed","players":["p1"],"closeReason":"admin","openedAt":"2026-07-03T12:00:00Z"}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).CloseSession(context.Background(), "m1")
+
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPost, gotMethod)
+	assert.Equal(t, "/admin/sessions/m1/close", gotPath)
+	assert.Equal(t, "admin", got.CloseReason)
+}
+
+func TestCloseSession_404_UpstreamError(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer upstream.Close()
+
+	_, err := New(upstream.URL, nil).CloseSession(context.Background(), "nao-existe")
+
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusNotFound, ue.Status)
+}

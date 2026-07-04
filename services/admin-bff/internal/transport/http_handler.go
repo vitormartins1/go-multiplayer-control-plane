@@ -31,6 +31,9 @@ type AdminService interface {
 	GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error)
 	PlayerGames(ctx context.Context, playerID string) ([]domain.Game, error)
 	GameSessions(ctx context.Context, gameID, state string) (domain.GameSessions, error)
+	Rooms(ctx context.Context, state string) (domain.GameSessions, error)
+	CloseRoom(ctx context.Context, matchID string) (domain.GameSession, error)
+	FanoutHealth(ctx context.Context) (domain.FanoutHealth, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -61,6 +64,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/{gameId}/players", h.gamePlayers)
 	mux.HandleFunc("GET /api/games/{gameId}/sessions", h.gameSessions)
 	mux.HandleFunc("GET /api/players/{playerID}/games", h.playerGames)
+	mux.HandleFunc("GET /api/rooms", h.rooms)
+	mux.HandleFunc("POST /api/rooms/{matchId}/close", h.closeRoom)
+	mux.HandleFunc("GET /api/health/fanout", h.fanoutHealth)
 }
 
 // topology nunca falha por causa do Prometheus: o service degrada (nós unknown).
@@ -252,6 +258,46 @@ func (h *Handler) gameSessions(w http.ResponseWriter, r *http.Request) {
 		sessions.Closed = []domain.GameSession{}
 	}
 	writeJSON(w, http.StatusOK, sessions)
+}
+
+// rooms é o board global de sessões (todos os jogos), enriquecido. state filtra.
+func (h *Handler) rooms(w http.ResponseWriter, r *http.Request) {
+	sessions, err := h.svc.Rooms(r.Context(), r.URL.Query().Get("state"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if sessions.Active == nil {
+		sessions.Active = []domain.GameSession{}
+	}
+	if sessions.Closed == nil {
+		sessions.Closed = []domain.GameSession{}
+	}
+	writeJSON(w, http.StatusOK, sessions)
+}
+
+// closeRoom encerra uma sessão ativa (force-close). 404 do session vira 404.
+func (h *Handler) closeRoom(w http.ResponseWriter, r *http.Request) {
+	sess, err := h.svc.CloseRoom(r.Context(), r.PathValue("matchId"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sess)
+}
+
+// fanoutHealth expõe os sinais do fan-out durável (ADR-0020). Prometheus fora -> 503.
+func (h *Handler) fanoutHealth(w http.ResponseWriter, r *http.Request) {
+	fh, err := h.svc.FanoutHealth(r.Context())
+	if err != nil {
+		if errors.Is(err, domain.ErrMetricsUnavailable) {
+			writeError(w, http.StatusServiceUnavailable, "metrics_unavailable")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, fh)
 }
 
 // playerData: dado de gameplay do jogador no jogo (player-data).

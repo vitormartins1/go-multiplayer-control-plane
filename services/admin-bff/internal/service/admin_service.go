@@ -125,6 +125,66 @@ func (s *Service) GameSessions(ctx context.Context, gameID, state string) (domai
 	return sessions, nil
 }
 
+// Rooms lê as sessões de TODOS os jogos (board global do console, 008) e
+// enriquece cada uma com o handle dos players (identity) e o nome do jogo
+// (game-registry). Best-effort: fontes fora -> campos vazios, não derruba.
+func (s *Service) Rooms(ctx context.Context, state string) (domain.GameSessions, error) {
+	sessions, err := s.sessions.AllSessions(ctx, state)
+	if err != nil {
+		return domain.GameSessions{}, err
+	}
+
+	handles := s.handlesByID(ctx)
+	names := s.gameNamesByID(ctx)
+	enrich := func(list []domain.GameSession) {
+		for i := range list {
+			list[i].GameName = names[list[i].GameID]
+			for j := range list[i].Players {
+				list[i].Players[j].Handle = handles[list[i].Players[j].ID]
+			}
+		}
+	}
+	enrich(sessions.Active)
+	enrich(sessions.Closed)
+	return sessions, nil
+}
+
+// CloseRoom encerra uma sessão ativa por ação do operador (force-close, 008).
+func (s *Service) CloseRoom(ctx context.Context, matchID string) (domain.GameSession, error) {
+	return s.sessions.CloseSession(ctx, matchID)
+}
+
+// FanoutHealth agrega os sinais do fan-out durável (ADR-0020) via PromQL, em
+// paralelo. Prometheus fora -> ErrMetricsUnavailable (transport -> 503); métrica
+// ausente -> campo nil.
+func (s *Service) FanoutHealth(ctx context.Context) (domain.FanoutHealth, error) {
+	var fh domain.FanoutHealth
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() (err error) { fh.PublishOK, err = s.scalar(ctx, `sum(fanout_publish_total{result="ok"})`); return })
+	g.Go(func() (err error) { fh.PublishError, err = s.scalar(ctx, `sum(fanout_publish_total{result="error"})`); return })
+	g.Go(func() (err error) { fh.ConsumeOK, err = s.scalar(ctx, `sum(fanout_consume_total{result="ok"})`); return })
+	g.Go(func() (err error) { fh.ConsumeDup, err = s.scalar(ctx, `sum(fanout_consume_total{result="dup"})`); return })
+	g.Go(func() (err error) { fh.ConsumeError, err = s.scalar(ctx, `sum(fanout_consume_total{result="error"})`); return })
+	if err := g.Wait(); err != nil {
+		return domain.FanoutHealth{}, err
+	}
+	return fh, nil
+}
+
+// gameNamesByID monta o mapa gameID -> nome (via registry.ListGames). Best-effort:
+// registry fora -> mapa vazio (o board mostra a sala sem o nome do jogo).
+func (s *Service) gameNamesByID(ctx context.Context) map[string]string {
+	names := make(map[string]string)
+	games, err := s.registry.ListGames(ctx)
+	if err != nil {
+		return names
+	}
+	for _, g := range games {
+		names[g.ID] = g.Name
+	}
+	return names
+}
+
 // handlesByID monta o mapa playerID -> handle paginando o ListPlayers do
 // identity (não há lookup por id — validado na spec). Bounded a poucas páginas:
 // suficiente para a base de dev; falha em qualquer página -> mapa parcial/vazio
