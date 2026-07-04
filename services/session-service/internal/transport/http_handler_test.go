@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,11 +17,24 @@ import (
 type fakeDirectory struct {
 	active, closed []domain.Session
 	gotGameID      string
+
+	closedMatchID string          // capturado pelo CloseByAdmin
+	closeResult   *domain.Session // devolvido pelo CloseByAdmin (sucesso)
+	closeErr      error           // devolvido pelo CloseByAdmin (ex.: ErrSessionNotFound)
 }
 
 func (f *fakeDirectory) SessionsByGame(gameID string) ([]domain.Session, []domain.Session) {
 	f.gotGameID = gameID
 	return f.active, f.closed
+}
+
+func (f *fakeDirectory) AllSessions() ([]domain.Session, []domain.Session) {
+	return f.active, f.closed
+}
+
+func (f *fakeDirectory) CloseByAdmin(_ context.Context, matchID string) (*domain.Session, error) {
+	f.closedMatchID = matchID
+	return f.closeResult, f.closeErr
 }
 
 func newAdminMux(dir *fakeDirectory) *http.ServeMux {
@@ -100,4 +114,41 @@ func TestAdminSessions_JogoSemSessao_200ComListasVazias(t *testing.T) {
 	// contrato do JSON: listas presentes (não null) mesmo vazias.
 	assert.Contains(t, rec.Body.String(), `"active":[]`)
 	assert.Contains(t, rec.Body.String(), `"closed":[]`)
+}
+
+func TestAdminAllSessions_MultiJogo_IncluiGameID(t *testing.T) {
+	dir := &fakeDirectory{
+		active: []domain.Session{
+			{ID: "s1", MatchID: "m1", GameID: "g1", State: domain.SessionOpen, OpenedAt: time.Now()},
+			{ID: "s2", MatchID: "m2", GameID: "g2", State: domain.SessionOpen, OpenedAt: time.Now()},
+		},
+	}
+	rec, body := doGet(t, newAdminMux(dir), "/admin/sessions?state=open")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, body.Active, 2)
+	games := map[string]bool{body.Active[0].GameID: true, body.Active[1].GameID: true}
+	assert.True(t, games["g1"] && games["g2"], "board global traz sessões de jogos distintos com gameId")
+}
+
+func TestAdminClose_Ativa_200ComDTO(t *testing.T) {
+	dir := &fakeDirectory{closeResult: &domain.Session{
+		ID: "s1", MatchID: "m1", GameID: "g1", State: domain.SessionClosed, CloseReason: domain.CloseAdmin,
+	}}
+	rec := httptest.NewRecorder()
+	newAdminMux(dir).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/sessions/m1/close", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "m1", dir.closedMatchID)
+	var dto sessionDTO
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &dto))
+	assert.Equal(t, "admin", dto.CloseReason)
+}
+
+func TestAdminClose_Inexistente_404(t *testing.T) {
+	dir := &fakeDirectory{closeErr: domain.ErrSessionNotFound}
+	rec := httptest.NewRecorder()
+	newAdminMux(dir).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/sessions/nao-existe/close", nil))
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
 }

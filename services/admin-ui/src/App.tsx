@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   IconChartBar,
   IconDeviceGamepad2,
+  IconDoorEnter,
   IconServer,
   IconUsers,
 } from "@tabler/icons-react";
@@ -17,10 +18,12 @@ const GameDetail = lazy(() => import("./pages/GameDetail").then((m) => ({ defaul
 const Players = lazy(() => import("./pages/Players").then((m) => ({ default: m.Players })));
 const PlayerDetail = lazy(() => import("./pages/PlayerDetail").then((m) => ({ default: m.PlayerDetail })));
 const Analytics = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.Analytics })));
+const Rooms = lazy(() => import("./pages/Rooms").then((m) => ({ default: m.Rooms })));
 
 const NAV = [
   { to: "/games", label: "Games", icon: IconDeviceGamepad2 },
   { to: "/players", label: "Players", icon: IconUsers },
+  { to: "/rooms", label: "Rooms", icon: IconDoorEnter },
   { to: "/analytics", label: "Analytics", icon: IconChartBar },
   { to: "/infrastructure", label: "Infrastructure", icon: IconServer },
 ];
@@ -64,6 +67,7 @@ export function App() {
             <Route path="/games/:gameId" element={<GameDetail />} />
             <Route path="/players" element={<Players />} />
             <Route path="/players/:playerId" element={<PlayerDetail />} />
+            <Route path="/rooms" element={<Rooms />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/infrastructure" element={<Overview />} />
             <Route path="*" element={<Navigate to="/games" replace />} />

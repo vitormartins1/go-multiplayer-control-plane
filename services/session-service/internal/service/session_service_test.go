@@ -260,3 +260,39 @@ func TestCreate_FalhaAoEmitirToken_LiberaServer(t *testing.T) {
 	assert.Equal(t, float64(0), svc.ActiveSessions())
 	alloc.AssertExpectations(t) // garante o Release de rollback
 }
+
+func TestCloseByAdmin_Ativa_FechaELiberaServer(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+	svc := New(alloc, iss, &mockPublisher{})
+	_, _, err := svc.Create(context.Background(), "m1", "g1", []string{"p1"})
+	require.NoError(t, err)
+
+	sess, err := svc.CloseByAdmin(context.Background(), "m1")
+	require.NoError(t, err)
+	assert.Equal(t, domain.CloseAdmin, sess.CloseReason)
+	assert.Equal(t, float64(0), svc.ActiveSessions(), "sai das ativas")
+	alloc.AssertExpectations(t)
+}
+
+func TestCloseByAdmin_Inexistente_ErrSessionNotFound(t *testing.T) {
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	_, err := svc.CloseByAdmin(context.Background(), "nao-existe")
+	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+}
+
+func TestAllSessions_JogosDistintos_VemJuntas(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s", Address: "a"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
+	svc := New(alloc, iss, &mockPublisher{})
+	_, _, _ = svc.Create(context.Background(), "m1", "g1", []string{"p1"})
+	_, _, _ = svc.Create(context.Background(), "m2", "g2", []string{"p2"})
+
+	active, _ := svc.AllSessions()
+	assert.Len(t, active, 2, "board global reúne sessões de jogos diferentes")
+}

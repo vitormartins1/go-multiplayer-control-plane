@@ -40,6 +40,7 @@ type sessionsResponse struct {
 type sessionDTO struct {
 	SessionID     string     `json:"sessionId"`
 	MatchID       string     `json:"matchId"`
+	GameID        string     `json:"gameId"`
 	State         string     `json:"state"`
 	Players       []string   `json:"players"`
 	ServerAddress string     `json:"serverAddress"`
@@ -50,7 +51,17 @@ type sessionDTO struct {
 
 // SessionsByGame lê as sessões do jogo, repassando o filtro state.
 func (c *Client) SessionsByGame(ctx context.Context, gameID, state string) (domain.GameSessions, error) {
-	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/sessions"
+	return c.getSessions(ctx, c.baseURL+"/admin/games/"+url.PathEscape(gameID)+"/sessions", state)
+}
+
+// AllSessions lê as sessões de todos os jogos (board global do console, 008).
+func (c *Client) AllSessions(ctx context.Context, state string) (domain.GameSessions, error) {
+	return c.getSessions(ctx, c.baseURL+"/admin/sessions", state)
+}
+
+// getSessions faz o GET (com filtro state) e mapeia — compartilhado entre a
+// listagem por-jogo e a global.
+func (c *Client) getSessions(ctx context.Context, u, state string) (domain.GameSessions, error) {
 	if state != "" {
 		u += "?state=" + url.QueryEscape(state)
 	}
@@ -72,8 +83,32 @@ func (c *Client) SessionsByGame(ctx context.Context, gameID, state string) (doma
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return domain.GameSessions{}, fmt.Errorf("session: decode: %w", err)
 	}
-
 	return domain.GameSessions{Active: toGameSessions(body.Active), Closed: toGameSessions(body.Closed)}, nil
+}
+
+// CloseSession encerra a sessão ativa (force-close, 008). Propaga o status do
+// session: 404 -> UpstreamError{Status:404}; conexão fora -> ErrSessionsUnavailable.
+func (c *Client) CloseSession(ctx context.Context, matchID string) (domain.GameSession, error) {
+	u := c.baseURL + "/admin/sessions/" + url.PathEscape(matchID) + "/close"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return domain.GameSession{}, fmt.Errorf("session: build request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return domain.GameSession{}, fmt.Errorf("%w: %v", domain.ErrSessionsUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return domain.GameSession{}, &domain.UpstreamError{Status: resp.StatusCode}
+	}
+
+	var d sessionDTO
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return domain.GameSession{}, fmt.Errorf("session: decode: %w", err)
+	}
+	return toGameSessions([]sessionDTO{d})[0], nil
 }
 
 func toGameSessions(dtos []sessionDTO) []domain.GameSession {
@@ -86,6 +121,7 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 		out = append(out, domain.GameSession{
 			SessionID:     d.SessionID,
 			MatchID:       d.MatchID,
+			GameID:        d.GameID,
 			State:         d.State,
 			Players:       players,
 			ServerAddress: d.ServerAddress,

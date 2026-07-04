@@ -17,10 +17,14 @@ type SessionPlayer struct {
 	Handle string `json:"handle"`
 }
 
-// GameSession é uma partida do jogo (aberta ou fechada) para a aba Sessions.
+// GameSession é uma partida (aberta ou fechada) para a aba Sessions e o board
+// global Rooms. GameID/GameName ficam vazios na aba por-jogo (já se sabe o jogo)
+// e preenchidos no board global (spec 008).
 type GameSession struct {
 	SessionID     string          `json:"sessionId"`
 	MatchID       string          `json:"matchId"`
+	GameID        string          `json:"gameId,omitempty"`
+	GameName      string          `json:"gameName,omitempty"`
 	State         string          `json:"state"`
 	Players       []SessionPlayer `json:"players"`
 	ServerAddress string          `json:"serverAddress"`
@@ -40,4 +44,19 @@ type SessionsReader interface {
 	// SessionsByGame lê as sessões do jogo; state ("open"|"closed"|"") é
 	// repassado como filtro. Indisponibilidade -> ErrSessionsUnavailable.
 	SessionsByGame(ctx context.Context, gameID, state string) (GameSessions, error)
+	// AllSessions lê as sessões de todos os jogos (board global do console, 008).
+	AllSessions(ctx context.Context, state string) (GameSessions, error)
+	// CloseSession encerra a sessão ativa (force-close do operador). 404 do
+	// session -> UpstreamError{Status:404}.
+	CloseSession(ctx context.Context, matchID string) (GameSession, error)
+}
+
+// FanoutHealth são os sinais do fan-out durável (ADR-0020) via PromQL. Ponteiros:
+// nil = métrica ausente/Prometheus fora (não confundir com zero), como LiveMetrics.
+type FanoutHealth struct {
+	PublishOK    *float64 `json:"publishOk"`
+	PublishError *float64 `json:"publishError"`
+	ConsumeOK    *float64 `json:"consumeOk"`
+	ConsumeDup   *float64 `json:"consumeDup"`
+	ConsumeError *float64 `json:"consumeError"`
 }

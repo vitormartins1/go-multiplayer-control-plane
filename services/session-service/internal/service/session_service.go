@@ -227,6 +227,36 @@ func (s *Service) SessionsByGame(gameID string) (active, closed []domain.Session
 	return active, closed
 }
 
+// AllSessions devolve as sessões de TODOS os jogos para o board global do
+// console (spec 007): ativas (do mapa) e fechadas (do histórico bounded), da mais
+// recente para a mais antiga. Devolve cópias. Irmão global do SessionsByGame.
+func (s *Service) AllSessions() (active, closed []domain.Session) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, sess := range s.sessions {
+		active = append(active, *sess)
+	}
+	sort.Slice(active, func(i, j int) bool { return active[i].OpenedAt.After(active[j].OpenedAt) })
+
+	for i := len(s.history) - 1; i >= 0; i-- {
+		closed = append(closed, *s.history[i])
+	}
+	return active, closed
+}
+
+// CloseByAdmin encerra uma sessão ativa por ação do operador (CLOSED/admin):
+// reusa o fechamento unificado (libera o server, entra no histórico). Devolve
+// ErrSessionNotFound se não houver sessão ativa para o match (idempotente do
+// ponto de vista do operador). Spec 007.
+func (s *Service) CloseByAdmin(ctx context.Context, matchID string) (*domain.Session, error) {
+	sess, err := s.closeSession(ctx, matchID, domain.CloseAdmin)
+	if err != nil {
+		return nil, fmt.Errorf("session service: close by admin: %w", err)
+	}
+	return sess, nil
+}
+
 // ActiveSessions devolve o número de sessões ativas (métrica).
 func (s *Service) ActiveSessions() float64 {
 	s.mu.Lock()

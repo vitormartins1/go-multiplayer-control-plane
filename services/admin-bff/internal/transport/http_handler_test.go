@@ -40,6 +40,8 @@ type fakeService struct {
 	pgamesErr   error
 	sessions    domain.GameSessions
 	sessionsErr error
+	fanout      domain.FanoutHealth
+	fanoutErr   error
 	gotGameID   string
 	gotPlayer   string
 	gotLimit    int
@@ -109,6 +111,23 @@ func (f *fakeService) PlayerGames(_ context.Context, playerID string) ([]domain.
 func (f *fakeService) GameSessions(_ context.Context, gameID, state string) (domain.GameSessions, error) {
 	f.gotGameID, f.gotState = gameID, state
 	return f.sessions, f.sessionsErr
+}
+
+func (f *fakeService) Rooms(_ context.Context, state string) (domain.GameSessions, error) {
+	f.gotState = state
+	return f.sessions, f.sessionsErr
+}
+
+func (f *fakeService) CloseRoom(_ context.Context, matchID string) (domain.GameSession, error) {
+	f.gotGameID = matchID
+	if f.sessionsErr != nil {
+		return domain.GameSession{}, f.sessionsErr
+	}
+	return domain.GameSession{MatchID: matchID, State: "closed", CloseReason: "admin"}, nil
+}
+
+func (f *fakeService) FanoutHealth(context.Context) (domain.FanoutHealth, error) {
+	return f.fanout, f.fanoutErr
 }
 
 func newServer(svc AdminService) *httptest.Server {
@@ -548,4 +567,56 @@ func TestGameSessions_SessionFora_502(t *testing.T) {
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.Equal(t, "sessions_unavailable", body["error"])
+}
+
+func TestRooms_200_RepassaState(t *testing.T) {
+	svc := &fakeService{sessions: domain.GameSessions{
+		Active: []domain.GameSession{{SessionID: "s1", MatchID: "m1", GameID: "g1", GameName: "Orb Rush", State: "open"}},
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/rooms?state=open")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "open", svc.gotState)
+	var body struct {
+		Active []struct {
+			GameName string `json:"gameName"`
+		} `json:"active"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Active, 1)
+	assert.Equal(t, "Orb Rush", body.Active[0].GameName)
+}
+
+func TestCloseRoom_404_Propaga(t *testing.T) {
+	svc := &fakeService{sessionsErr: &domain.UpstreamError{Status: http.StatusNotFound}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := post(t, srv, "/api/rooms/nao-existe/close", "")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, "nao-existe", svc.gotGameID, "matchId repassado ao service")
+}
+
+func TestFanoutHealth_200(t *testing.T) {
+	ok := 10.0
+	svc := &fakeService{fanout: domain.FanoutHealth{PublishOK: &ok}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/health/fanout")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var body struct {
+		PublishOK *float64 `json:"publishOk"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.NotNil(t, body.PublishOK)
+	assert.Equal(t, 10.0, *body.PublishOK)
 }
