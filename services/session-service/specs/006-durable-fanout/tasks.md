@@ -17,7 +17,7 @@
 
 - [x] `migrations/004_processed_matches.sql` — `processed_matches(match_id pk, processed_at)`
 - [x] `internal/repository` — métodos aceitam querier/`pgx.Tx` (executor injetável)
-- [ ] `internal/service/achievement_service.go` — `ApplyMatchResult(ctx, gameID, matchID, results)`: tx única (INSERT ON CONFLICT → dup=no-op; senão `match_played`/`match_won` por player) (+ test de idempotência: 2× = 1 efeito)
+- [x] `internal/service/achievement_service.go` — `ApplyMatchResult(ctx, gameID, matchID, results)`: tx única (INSERT ON CONFLICT → dup=no-op; senão `match_played`/`match_won` por player) (+ test de idempotência: 2× = 1 efeito)
 - [x] `cmd/consumer/main.go` — long-poll SQS, `ApplyMatchResult`, delete-após-sucesso, DLQ por não-delete; `context`+`WaitGroup`; `/metrics`+`/healthz`
 - [x] métricas `fanout_consume_total{result}` + duração
 
