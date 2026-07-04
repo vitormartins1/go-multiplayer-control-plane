@@ -8,10 +8,18 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/awsx"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 )
+
+// publishTotal conta as publicações no tópico por resultado (ADR-0020 / RED).
+var publishTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "fanout_publish_total",
+	Help: "Resultados publicados no tópico match-results por status (ok/error).",
+}, []string{"result"})
 
 var _ domain.ResultPublisher = (*SNS)(nil)
 
@@ -82,8 +90,10 @@ func (s *SNS) Publish(ctx context.Context, gameID, matchID string, results []dom
 		TopicArn: aws.String(s.topicARN),
 		Message:  aws.String(string(body)),
 	}); err != nil {
+		publishTotal.WithLabelValues("error").Inc()
 		return fmt.Errorf("session publisher: sns publish: %w", err)
 	}
+	publishTotal.WithLabelValues("ok").Inc()
 	s.log.Info("result publicado no tópico",
 		slog.String("game_id", gameID),
 		slog.String("match_id", matchID),

@@ -82,6 +82,14 @@ Cada serviço Go nasce instrumentado (ADR-0006). Ao adicionar um serviço, siga 
 - [ ] **Banco:** `<svc>-postgres-exporter` no compose + job `<svc>-postgres` no `prometheus.yml` (dashboard PostgreSQL 9628, filtrar por `instance`).
 - [ ] **Logs:** `slog` JSON via `shared/logger` (de graça).
 
+### Workers de fila (consumidores do fan-out durável — ADR-0020)
+
+Os `*-consumer` (achievements/leaderboard) não são HTTP services: são workers que fazem long-poll de uma fila SQS. Ainda assim entram na stack:
+
+- **Métricas próprias:** `fanout_consume_total{result="ok|dup|error"}` e `fanout_consume_duration_seconds` (pacote `internal/consumer`). Expõem `/metrics` + `/healthz` num HTTP mínimo só para o scrape.
+- **Scrape:** jobs `achievements-consumer` / `leaderboard-consumer` no `prometheus.yml`.
+- **Sinais a vigiar:** `result="error"` sustentado (mensagens indo p/ DLQ) e a **profundidade da DLQ** (`ApproximateNumberOfMessages`) — alerta de perda potencial. O produtor (session) tem `fanout_publish_total{result}`.
+
 ## Visão de futuro: observabilidade do sistema completo
 
 A observabilidade não para no backend Go. Não implementamos agora, mas as decisões atuais já acomodam:

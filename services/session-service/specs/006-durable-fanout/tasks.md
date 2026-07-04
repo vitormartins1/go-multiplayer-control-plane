@@ -37,7 +37,7 @@
 
 ## Fechamento
 
-- [ ] `go test ./... -race -cover` (≥80% em service/domain) + `go build ./...` + `golangci-lint run`
-- [ ] validar o loop no Docker: `ReportResult` → SNS → 2 filas; achievements/leaderboard refletem; matar consumer → mensagem processa ao voltar; forçar erro → DLQ
-- [ ] atualizar `docs/UNITY-INTEGRATION.md` / `docs/OBSERVABILITY.md` se o contrato/observabilidade mudar
-- [ ] `docs/GO-LEARNINGS.md` — registrar o que apareceu de Go novo (SQS long-poll + graceful shutdown, tx pgx p/ idempotência, envelope desacoplado); resumo didático ao usuário
+- [x] `go test ./... -race -cover` (≥80% em service/domain) + `go build ./...` + `golangci-lint run`
+- [x] validar o loop no Docker: `ReportResult` → SNS → 2 filas; achievements/leaderboard refletem; matar consumer → mensagem processa ao voltar; forçar erro → DLQ
+- [x] atualizar `docs/UNITY-INTEGRATION.md` / `docs/OBSERVABILITY.md` se o contrato/observabilidade mudar
+- [x] `docs/GO-LEARNINGS.md` — registrar o que apareceu de Go novo (SQS long-poll + graceful shutdown, tx pgx p/ idempotência, envelope desacoplado); resumo didático ao usuário

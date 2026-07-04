@@ -1,7 +1,7 @@
 # Spec: 006-durable-fanout
 
 **Serviço:** session-service (produtor) · achievements-service, leaderboard-service (consumidores) · infra
-**Status:** Draft
+**Status:** Implementado
 **Data:** 2026-07-04
 **ADR:** [0020](../../../../docs/adr/0020-durable-result-fanout.md) — fan-out durável via SNS→SQS
 
@@ -40,9 +40,9 @@ Esta feature substitui o fan-out síncrono por **SNS→SQS** (ADR-0020): o sessi
 ## Contratos de Interface
 
 - **Envelope da mensagem** (JSON, versionado): `{ "schemaVersion": 1, "matchId", "gameId", "results": [{ "playerId", "won", "score" }] }`.
-- **`SNSPublisher`** (`session-service/internal/publisher/sns_publisher.go`) satisfaz `domain.ResultPublisher` (`Publish(ctx, gameID, results)` inalterado) — serializa o envelope e faz `sns.Publish`. Substitui o `Composite` no wire-up do `main.go`. `LogPublisher` segue como fallback.
+- **`SNSPublisher`** (`session-service/internal/publisher/sns_publisher.go`) satisfaz `domain.ResultPublisher` (`Publish` passou a receber `matchID`, chave de idempotência no envelope) — serializa o envelope e faz `sns.Publish`. Substitui o `Composite` no wire-up do `main.go`. `LogPublisher` segue como fallback.
 - **Consumidores** — um binário novo por serviço: `achievements-service/cmd/consumer` e `leaderboard-service/cmd/consumer`. Fazem long-poll na SQS, desserializam o envelope, aplicam o efeito reusando o **service** existente (in-process, não via HTTP admin) e deletam a mensagem no sucesso.
-- **Idempotência** — dedup por `matchID` (detalhe no plan): achievements via tabela `processed_matches`; leaderboard via chave de dedup no Redis. O efeito + a marca de processado devem ser aplicados de forma consistente.
+- **Idempotência** — achievements via tabela `processed_matches` numa **única tx** com o progresso (dedup por `matchID`). Leaderboard **não precisa de dedup**: o `Submit` usa `ZADD GT`, então reprocessar é no-op intrínseco.
 - Os adapters HTTP `achievements_publisher.go` / `leaderboard_publisher.go` e o `composite.go` do session **são removidos** (a tradução vive agora nos consumidores).
 
 ## Observabilidade (obrigatória — ver docs/OBSERVABILITY.md)
@@ -53,13 +53,13 @@ Esta feature substitui o fan-out síncrono por **SNS→SQS** (ADR-0020): o sessi
 
 ## Casos de Teste Obrigatórios
 
-- [ ] `SNSPublisher` serializa o envelope correto e publica no tópico; erro de publish -> `ReportResult` retorna erro e **não** encerra a sessão
-- [ ] `matchId` inexistente -> `NotFound`
-- [ ] consumidor de achievements aplica `match_played`/`match_won` por jogador a partir do envelope
-- [ ] consumidor de leaderboard submete `score` por jogador
-- [ ] **idempotência**: entregar a mesma mensagem 2× não dobra contagem/score (dedup por `matchID`)
-- [ ] falha de processamento -> mensagem não é deletada; após N tentativas vai para a DLQ
-- [ ] fallback: sem envs de SNS/SQS o session usa `LogPublisher` (dev)
+- [x] `SNSPublisher` serializa o envelope correto e publica no tópico; erro de publish -> `ReportResult` retorna erro e **não** encerra a sessão
+- [x] `matchId` inexistente -> `NotFound`
+- [x] consumidor de achievements aplica `match_played`/`match_won` por jogador a partir do envelope
+- [x] consumidor de leaderboard submete `score` por jogador
+- [x] **idempotência**: entregar a mesma mensagem 2× não dobra contagem/score (dedup por `matchID`)
+- [x] falha de processamento -> mensagem não é deletada; após N tentativas vai para a DLQ
+- [x] fallback: sem envs de SNS/SQS o session usa `LogPublisher` (dev)
 
 ## Fora do escopo
 
