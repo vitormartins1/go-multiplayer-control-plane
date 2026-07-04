@@ -1,4 +1,4 @@
-# NEXT-STEPS — handoff (atualizado 2026-07-04)
+# NEXT-STEPS — handoff (atualizado 2026-07-05)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
@@ -17,8 +17,10 @@ Gameplay loop fechado e observável no painel:
 - **Matchmaking funnel** (`admin-ui/010`): liga o `GET /api/metrics/live` (já existente) num bloco de cards no Infrastructure (fila/sessões/matches ok/falha), polling 10s. Fecha o ciclo de observação: fila → match → Rooms → fan-out.
 - **analytics-service** (ADR-0021, specs `analytics/001` + `admin-bff/009` + `admin-ui/011`) — **trilha de serviços completa**. Assina o tópico `match-results` (nova fila SQS, zero mudança no produtor), agrega por um **worker pool** (goroutines/channels/context; GO-LEARNINGS #18) em rollups por jogo idempotentes por `matchId` (Postgres). Acende a aba **Analytics** (overview cross-game). Validado ponta a ponta (agregação + idempotência).
 - **Refinos do console (item 3)** — **rename de jogo** (specs `game-registry/005` + `admin-bff/010` + `admin-ui/012`: aba Configurações renomeia, `PUT /games/{id}` só o nome) e **gráfico "partidas por dia"** na Analytics (specs `analytics/002` + `admin-ui/013`: série `daily` cross-game + `LineChart` do `@mantine/charts`, chunk lazy). **Delete de jogo continua adiado** (ADR da cascata — ver backlog).
+- **Importação CSV de conquistas** (specs `admin-bff/011` + `admin-ui/014`): botão "Baixar modelo" (template CSV client-side) e "Importar CSV" na aba Achievements do jogo. Parser CSV nativo no frontend (`lib/csv.ts`), validação pré-envio por linha, modal de erros de validação e modal de resultado pós-importação. BFF: `POST /api/games/{gameId}/achievements/import` (best-effort, resultado por linha). Testes unitários completos (client + handler). Commit `1947ce4`.
+- **Observabilidade Grafana** — review completo + 2 novos dashboards provisionados: `game-lifecycle.json` (funil matchmaking → sessões → fan-out consumers) e `analytics-workers.json` (worker pool + backpressure). Commit `1947ce4`.
 
-**Trilha de serviços da tese: 100% construída.** 11 serviços Go + 3 workers de fila (achievements/leaderboard/analytics-consumer): identity, game-registry, achievements, player-data, cloud-save, leaderboard, matchmaking (gRPC), session (gRPC), **analytics**, admin-bff, admin-ui. Observabilidade: Prometheus + Grafana + Tempo.
+**Trilha de serviços da tese: 100% construída.** 11 serviços Go + 3 workers de fila (achievements/leaderboard/analytics-consumer): identity, game-registry, achievements, player-data, cloud-save, leaderboard, matchmaking (gRPC), session (gRPC), **analytics**, admin-bff, admin-ui. Observabilidade: Prometheus + Grafana (7 dashboards) + Tempo.
 
 ADRs recentes: 0018 (service auth), 0019 (presença por jogo), 0020 (fan-out durável SNS→SQS), **0021 (analytics via worker pool)**.
 
@@ -38,31 +40,32 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 
 ## O que foi feito nesta sessão (para referência)
 
-Todas mergeadas na `main` (branch por feature, `--no-ff`):
+Commit `1947ce4` na `main`:
 
-- `player-data/002-game-scope`, `cloud-save/002-game-scope`, `admin-bff/006-player-tabs` — game-scope + admin read + abas Player data/Cloud saves.
-- `admin-ui/005-game-library` — biblioteca de capas + (depois removido) jogo ativo global.
-- `game-registry/002-game-presence` (**ADR-0019**) — presença + login-into-game + Players por jogo.
-- `game-registry/003-generated-cover` — capa determinística por seed (DiceBear no cliente).
-- `admin-ui/006-player-avatars` — avatar humanoide por jogador.
-- `game-registry/004-games-of-player` — **review do modelo**: navegação player-cêntrica, remove o jogo ativo global, base por jogo no GameDetail, consulta reversa.
-- `achievements/006-catalog-crud` — editar/remover conquistas (delete transacional: apaga progresso + catálogo).
-- **chore**: module path renomeado (regenerar proto com `buf` — um `sed` cru corrompe o `rawDesc`); **CI GitHub Actions**; **code-splitting** do admin-ui (lazy routes + `manualChunks`: bundle 941kB → entry 28kB, DiceBear/xyflow saem do boot).
-- **code-review** (`high`, `fd25bf4..HEAD`): 4 finders em paralelo. Corrigidos: 4 bugs de dados obsoletos no painel (deps `playerId` + reset do jogo ao trocar de jogador), PUT de conquista devolve `eventType`, loginAnonymous tolera corpo vazio/chunked, `markPresence` com timeout 2s. Rastreio cross-file e convenções vieram limpos.
+- **Review de observabilidade Grafana**: levantamento completo (serviços × dashboards × exporters) — nenhum exporter faltando; lacunas identificadas foram métricas customizadas do matchmaking/session/analytics sem dashboard.
+- **Dashboard `game-lifecycle.json`**: funil completo — fila de matchmaking, matches formados/falhas, sessões ativas, sessões encerradas por motivo, consumo fan-out (achievements + leaderboard consumers) e latência p95 do processamento.
+- **Dashboard `analytics-workers.json`**: workers ativos, ingest vs processamento (eventos/s), resultado por linha (ok/dup/error), backpressure.
+- **Importação CSV de conquistas** (specs `admin-bff/011` + `admin-ui/014`): feature completa — BFF orquestra criações sequenciais com resultado por linha; parser CSV nativo no frontend; validação pré-envio (regex, campos obrigatórios, IDs duplicados no arquivo, ≤ 500 linhas, ≤ 200 KB); modais de erro e resultado. 9 testes unitários novos (4 no client, 5 no handler).
+
+*Sessões anteriores (histórico):*
+
+- `player-data/002-game-scope`, `cloud-save/002-game-scope`, `admin-bff/006-player-tabs`, `admin-ui/005-game-library`, `game-registry/002-004`, `achievements/006-catalog-crud`, chore module path + CI + code-splitting, code-review `high`.
 
 ## Backlog priorizado (sem spec ainda)
 
 Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Ordem sugerida:
 
 1. **Push pro GitHub** (acima) → CI passa a rodar. **Atenção:** o CI agora precisa de Docker p/ os testes de integração/e2e do fan-out (LocalStack + Postgres via testcontainers).
-2. ✅ **Fan-out resiliente — FEITO** (ADR-0020, spec `session/006-durable-fanout`): SNS→SQS com DLQ + idempotência. *Resíduo:* a **presença** no login-into-game (identity → game-registry) segue best-effort síncrona — se virar problema, mesmo tratamento (fila) ou aceitar como está (é marcação, não resultado de partida). O **outbox table** foi deliberadamente adiado (ADR-0020 tem os gatilhos de reintrodução — ex.: session ganhar Postgres).
-3. ✅ **analytics-service — FEITO** (ADR-0021). *Evoluções v1→v2 quando fizer sentido:* telemetria genérica (`POST /events`) quando o dataplane emitir eventos arbitrários; série temporal na aba (o `daily` já existe no serviço, falta o gráfico); deep-dive por jogo (aba no GameDetail). O **event store cru** (C2 do ADR-0021) é o escape se a pré-agregação engessar.
-4. **Remover jogo** no painel — *rename* ✅ **feito** (specs `game-registry/005` + `admin-bff/010` + `admin-ui/012`: aba Configurações renomeia, fecha o ComingSoon). *Delete* segue **adiado** por precisar de decisão: dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/**analytics**/presença (cascata cross-service). **Precisa de ADR** — opções levantadas: *soft delete* (marca inativo, some do painel, dado preservado; mais barato) vs *hard cascade* (endpoint delete-by-game em cada serviço + orquestração best-effort). A aba Configurações já avisa "remover ainda não disponível".
-5. **Leaderboard**: seasons/janelas por período + paginação.
-6. **Cleanup admin-bff** (do code-review, não é bug): `do()`/`classify()`/`errorCode()`/default-client duplicados nos 4 adapters + o presence client do identity → extrair um helper `internal/upstream` parametrizado pelo erro sentinela.
-7. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço (identidade, expiração, revogação). Quando houver múltiplos ambientes/consumidores. Abrir ADR.
-8. **Infra / deploy — o fim, e o payoff da tese (ADR-0008):** o `infra/terraform/` **estreou** na spec 006 (`environments/local/messaging/` — SNS/SQS no LocalStack, provisionado no boot do compose). Falta o grosso: os demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005: Lambda/Fargate/ECS/EC2/EKS); medir custo/performance vs AWS GameKit. O padrão "SDK AWS + endpoint configurável" já vale p/ S3/MinIO **e** SNS/SQS/LocalStack.
-9. **Data plane / o jogo (repo `go-game-unity`, não-Go):** Unity Dedicated Server + Netcode + Agones/EKS (ADR-0010/0011/0012). Onde o gameplay realtime roda.
+2. ✅ **Fan-out resiliente — FEITO** (ADR-0020, spec `session/006-durable-fanout`).
+3. ✅ **analytics-service — FEITO** (ADR-0021). *Evoluções v1→v2 quando fizer sentido:* telemetria genérica (`POST /events`); deep-dive por jogo (aba no GameDetail). O **event store cru** (C2 do ADR-0021) é o escape se a pré-agregação engessar.
+4. ✅ **Importação CSV de conquistas — FEITA** (specs `admin-bff/011` + `admin-ui/014`, commit `1947ce4`).
+5. **Remover jogo** no painel — *rename* ✅ feito. *Delete* segue **adiado** por precisar de decisão sobre dado órfão (cascata cross-service). **Precisa de ADR** — opções: *soft delete* (mais barato) vs *hard cascade*. A aba Configurações já avisa "remover ainda não disponível".
+6. **Leaderboard**: seasons/janelas por período + paginação.
+7. **Cleanup admin-bff** (do code-review, não é bug): `do()`/`classify()`/`errorCode()`/default-client duplicados nos 4 adapters → extrair helper `internal/upstream`.
+8. **SQS queue depth no Grafana** (observabilidade futura): visibilidade de profundidade de fila e DLQ requer `yet-another-cloudwatch-exporter` (YACE). Métricas do lado consumidor já estão no dashboard `game-lifecycle`. Implementar quando chegar em produção AWS.
+9. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR.
+10. **Infra / deploy — payoff da tese (ADR-0008):** falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005); medir custo/performance vs AWS GameKit.
+11. **Data plane / o jogo (repo `go-game-unity`, não-Go):** Unity Dedicated Server + Netcode + Agones/EKS (ADR-0010/0011/0012).
 
 ## Gotchas operacionais
 
