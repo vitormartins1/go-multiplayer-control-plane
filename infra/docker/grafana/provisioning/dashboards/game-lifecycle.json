@@ -1,0 +1,244 @@
+{
+  "uid": "gb-game-lifecycle",
+  "title": "Game Backend — Game Lifecycle",
+  "tags": ["game-backend"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Fila de matchmaking",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "matchmaking_queue_size{job=\"matchmaking-service\"}",
+          "legendFormat": "tickets"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Sessões ativas",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "session_active_sessions{job=\"session-service\"}",
+          "legendFormat": "sessões"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Taxa de sucesso de match",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "green", "value": 95 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "matchmaking_matches_total{job=\"matchmaking-service\"} / (matchmaking_matches_total{job=\"matchmaking-service\"} + matchmaking_matches_failed_total{job=\"matchmaking-service\"}) * 100",
+          "legendFormat": "sucesso"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Matches formados (24h)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "purple" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "increase(matchmaking_matches_total{job=\"matchmaking-service\"}[24h])",
+          "legendFormat": "matches"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tickets na fila de matchmaking",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "matchmaking_queue_size{job=\"matchmaking-service\"}",
+          "legendFormat": "tickets aguardando"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Matches formados/s vs falhas/s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(matchmaking_matches_total{job=\"matchmaking-service\"}[5m])",
+          "legendFormat": "matches/s"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(matchmaking_matches_failed_total{job=\"matchmaking-service\"}[5m])",
+          "legendFormat": "falhas/s"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Sessões ativas",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "session_active_sessions{job=\"session-service\"}",
+          "legendFormat": "sessões ativas"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Sessões encerradas/s por motivo",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(sessions_closed_total{job=\"session-service\"}[5m])",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Fan-out — consumo/s por worker (ok/dup/error)",
+      "description": "Mensagens SQS processadas pelos consumers de achievements e leaderboard após o fan-out SNS do session-service.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(fanout_consume_total{job=~\"achievements-consumer|leaderboard-consumer\"}[5m])",
+          "legendFormat": "{{job}} {{result}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Fan-out — latência de processamento p95",
+      "description": "Tempo total de processamento de cada mensagem SQS (desserialização + lógica de negócio).",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(fanout_consume_duration_seconds_bucket{job=~\"achievements-consumer|leaderboard-consumer\"}[5m])) by (le, job))",
+          "legendFormat": "{{job}} p95"
+        }
+      ]
+    }
+  ]
+}

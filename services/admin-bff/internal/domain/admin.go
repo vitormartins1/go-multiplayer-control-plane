@@ -90,6 +90,29 @@ type Achievement struct {
 	Target      int    `json:"target"`
 }
 
+// Status de cada linha na importação em lote.
+const (
+	ImportStatusCreated   = "created"
+	ImportStatusDuplicate = "duplicate"
+	ImportStatusInvalid   = "invalid"
+	ImportStatusError     = "error"
+)
+
+// ImportResult é o resultado de uma linha da importação CSV.
+type ImportResult struct {
+	Row    int    `json:"row"`
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+// ImportResponse é o envelope de resposta do endpoint de importação em lote.
+type ImportResponse struct {
+	Created int            `json:"created"`
+	Failed  int            `json:"failed"`
+	Results []ImportResult `json:"results"`
+}
+
 // PlayerPage é uma página da lista de usuários + o total global.
 type PlayerPage struct {
 	Total   int      `json:"total"`
@@ -161,6 +184,9 @@ type AchievementsReader interface {
 	DeleteAchievement(ctx context.Context, gameID, id string) error
 	// PlayerAchievements lê os achievements de um jogador no jogo.
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]PlayerAchievement, error)
+	// ImportAchievements cadastra conquistas em lote (spec 011). Processa cada
+	// item sequencialmente e retorna o resultado por linha — nunca falha no total.
+	ImportAchievements(ctx context.Context, gameID string, items []Achievement) (ImportResponse, error)
 }
 
 // PlayerDataEntry é uma linha de dado de gameplay do jogador (player-data). O

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -170,6 +171,38 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%w: status %d", domain.ErrAchievementsUnavailable, resp.StatusCode)
 	}
+}
+
+// ImportAchievements cadastra conquistas em lote processando cada item
+// sequencialmente. Nunca retorna erro não-nil — falhas de linha são absorvidas
+// no ImportResponse.
+func (c *Client) ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error) {
+	resp := domain.ImportResponse{Results: make([]domain.ImportResult, 0, len(items))}
+	for i, a := range items {
+		row := i + 1
+		err := c.CreateAchievement(ctx, gameID, a)
+		result := domain.ImportResult{Row: row, ID: a.ID}
+		var ue *domain.UpstreamError
+		switch {
+		case err == nil:
+			result.Status = domain.ImportStatusCreated
+			resp.Created++
+		case errors.As(err, &ue) && ue.Status == http.StatusConflict:
+			result.Status = domain.ImportStatusDuplicate
+			result.Error = "achievement_exists"
+			resp.Failed++
+		case errors.As(err, &ue):
+			result.Status = domain.ImportStatusInvalid
+			result.Error = ue.Code
+			resp.Failed++
+		default:
+			result.Status = domain.ImportStatusError
+			result.Error = "service_unavailable"
+			resp.Failed++
+		}
+		resp.Results = append(resp.Results, result)
+	}
+	return resp, nil
 }
 
 func errorCode(resp *http.Response) string {

@@ -53,6 +53,10 @@ func (f *fakeReader) PlayerAchievements(_ context.Context, gameID, playerID stri
 	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.out, f.err
 }
+func (f *fakeReader) ImportAchievements(_ context.Context, gameID string, _ []domain.Achievement) (domain.ImportResponse, error) {
+	f.gotGameID = gameID
+	return domain.ImportResponse{}, f.err
+}
 
 type fakeRegistry struct {
 	games       []domain.Game

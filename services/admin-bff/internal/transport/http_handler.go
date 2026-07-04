@@ -25,6 +25,7 @@ type AdminService interface {
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
 	UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error
 	DeleteAchievement(ctx context.Context, gameID, id string) error
+	ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error)
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
 	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
@@ -57,6 +58,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
+	mux.HandleFunc("POST /api/games/{gameId}/achievements/import", h.importAchievements)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements", h.createAchievement)
 	mux.HandleFunc("PUT /api/games/{gameId}/achievements/{id}", h.updateAchievement)
 	mux.HandleFunc("DELETE /api/games/{gameId}/achievements/{id}", h.deleteAchievement)
@@ -189,6 +191,32 @@ func (h *Handler) createAchievement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, a)
+}
+
+// importAchievements cadastra conquistas em lote a partir de um array JSON
+// (spec 011). Sempre 200 — erros por linha estão no corpo da resposta.
+func (h *Handler) importAchievements(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Achievements []domain.Achievement `json:"achievements"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_input")
+		return
+	}
+	if len(body.Achievements) == 0 {
+		writeError(w, http.StatusBadRequest, "empty_batch")
+		return
+	}
+	if len(body.Achievements) > 500 {
+		writeError(w, http.StatusBadRequest, "batch_too_large")
+		return
+	}
+	result, err := h.svc.ImportAchievements(r.Context(), r.PathValue("gameId"), body.Achievements)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 // updateAchievement edita uma conquista do jogo; repassa 400/404.

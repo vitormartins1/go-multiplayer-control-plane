@@ -110,6 +110,11 @@ func (s *Service) DeleteAchievement(ctx context.Context, gameID, id string) erro
 	return s.reader.DeleteAchievement(ctx, gameID, id)
 }
 
+// ImportAchievements cadastra conquistas em lote (spec 011).
+func (s *Service) ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error) {
+	return s.reader.ImportAchievements(ctx, gameID, items)
+}
+
 // GameLeaderboard lê o top-N do jogo (leaderboard).
 func (s *Service) GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
 	return s.leaderboard.TopForGame(ctx, gameID, limit)

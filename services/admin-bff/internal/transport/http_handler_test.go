@@ -45,6 +45,8 @@ type fakeService struct {
 	fanoutErr    error
 	analytics    domain.AnalyticsOverview
 	analyticsErr error
+	importResp   domain.ImportResponse
+	importErr    error
 	gotGameID    string
 	gotPlayer    string
 	gotLimit     int
@@ -97,6 +99,10 @@ func (f *fakeService) DeleteAchievement(_ context.Context, gameID, id string) er
 func (f *fakeService) PlayerAchievements(_ context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error) {
 	f.gotGameID, f.gotPlayer = gameID, playerID
 	return f.ach, f.achErr
+}
+func (f *fakeService) ImportAchievements(_ context.Context, gameID string, _ []domain.Achievement) (domain.ImportResponse, error) {
+	f.gotGameID = gameID
+	return f.importResp, f.importErr
 }
 func (f *fakeService) GameLeaderboard(_ context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
 	f.gotGameID, f.gotLimit = gameID, limit
@@ -690,4 +696,112 @@ func readBody(t *testing.T, resp *http.Response) string {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	return string(b)
+}
+
+func postJSON(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, srv.URL+path, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	return resp
+}
+
+func TestImportAchievements_BatchVazio_400(t *testing.T) {
+	srv := newServer(&fakeService{})
+	defer srv.Close()
+
+	resp := postJSON(t, srv, "/api/games/g1/achievements/import", `{"achievements":[]}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "empty_batch")
+}
+
+func TestImportAchievements_BatchGrande_400(t *testing.T) {
+	items := make([]map[string]any, 501)
+	for i := range items {
+		items[i] = map[string]any{"id": "a", "name": "N", "description": "", "eventType": "e", "target": 1}
+	}
+	b, _ := json.Marshal(map[string]any{"achievements": items})
+
+	srv := newServer(&fakeService{})
+	defer srv.Close()
+
+	resp := postJSON(t, srv, "/api/games/g1/achievements/import", string(b))
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "batch_too_large")
+}
+
+func TestImportAchievements_BodyInvalido_400(t *testing.T) {
+	srv := newServer(&fakeService{})
+	defer srv.Close()
+
+	resp := postJSON(t, srv, "/api/games/g1/achievements/import", `not json`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestImportAchievements_Sucesso_200(t *testing.T) {
+	svc := &fakeService{
+		importResp: domain.ImportResponse{
+			Created: 2,
+			Failed:  0,
+			Results: []domain.ImportResult{
+				{Row: 1, ID: "a1", Status: domain.ImportStatusCreated},
+				{Row: 2, ID: "a2", Status: domain.ImportStatusCreated},
+			},
+		},
+	}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	body := `{"achievements":[
+		{"id":"a1","name":"A1","description":"","eventType":"e","target":1},
+		{"id":"a2","name":"A2","description":"","eventType":"e","target":2}
+	]}`
+	resp := postJSON(t, srv, "/api/games/g1/achievements/import", body)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+
+	var result domain.ImportResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 2, result.Created)
+	assert.Equal(t, 0, result.Failed)
+	require.Len(t, result.Results, 2)
+	assert.Equal(t, domain.ImportStatusCreated, result.Results[0].Status)
+}
+
+func TestImportAchievements_Parcial_200(t *testing.T) {
+	svc := &fakeService{
+		importResp: domain.ImportResponse{
+			Created: 1,
+			Failed:  1,
+			Results: []domain.ImportResult{
+				{Row: 1, ID: "a1", Status: domain.ImportStatusCreated},
+				{Row: 2, ID: "a2", Status: domain.ImportStatusDuplicate, Error: "achievement_exists"},
+			},
+		},
+	}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	body := `{"achievements":[
+		{"id":"a1","name":"A1","description":"","eventType":"e","target":1},
+		{"id":"a2","name":"A2","description":"","eventType":"e","target":1}
+	]}`
+	resp := postJSON(t, srv, "/api/games/g1/achievements/import", body)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode) // parcial ainda é 200
+
+	var result domain.ImportResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	assert.Equal(t, 1, result.Created)
+	assert.Equal(t, 1, result.Failed)
+	assert.Equal(t, domain.ImportStatusDuplicate, result.Results[1].Status)
+	assert.Equal(t, "achievement_exists", result.Results[1].Error)
 }

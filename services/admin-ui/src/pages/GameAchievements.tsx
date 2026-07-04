@@ -1,8 +1,10 @@
 import {
   ActionIcon,
   Alert,
+  Badge,
   Button,
   Group,
+  List,
   Loader,
   Modal,
   NumberInput,
@@ -15,9 +17,10 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconPencil, IconPlus, IconRefresh, IconTrash } from "@tabler/icons-react";
-import { useState } from "react";
-import { api, HttpError, type CatalogAchievement } from "../lib/api";
+import { IconDownload, IconPencil, IconPlus, IconRefresh, IconTrash, IconUpload } from "@tabler/icons-react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { api, HttpError, type CatalogAchievement, type ImportResponse } from "../lib/api";
+import { CSV_TEMPLATE, parseCSV, type ParseError } from "../lib/csv";
 import { useAsync } from "../lib/useAsync";
 import { AchievementIcon } from "../components/AchievementIcon";
 
@@ -28,6 +31,12 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<CatalogAchievement | null>(null);
   const [deleting, setDeleting] = useState<CatalogAchievement | null>(null);
+
+  // Importação CSV
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
+  const [importErrors, setImportErrors] = useState<ParseError[]>([]);
 
   const form = useForm({
     initialValues: { id: "", name: "", description: "", eventType: "", target: 1 },
@@ -88,6 +97,57 @@ export function GameAchievements({ gameId }: { gameId: string }) {
     }
   }
 
+  function handleDownloadTemplate() {
+    const blob = new Blob([CSV_TEMPLATE], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "achievements-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      notifications.show({ color: "red", message: "Selecione um arquivo .csv" });
+      return;
+    }
+    if (file.size > 200_000) {
+      notifications.show({ color: "red", message: "Arquivo muito grande (máx. 200 KB)." });
+      return;
+    }
+
+    const text = await file.text();
+    const { rows, errors } = parseCSV(text);
+
+    if (errors.length > 0) {
+      setImportErrors(errors);
+      return;
+    }
+    if (rows.length > 500) {
+      notifications.show({ color: "red", message: "O arquivo tem mais de 500 conquistas. Divida em arquivos menores." });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const achievements = rows.map(({ id, name, description, eventType, target }) => ({
+        id, name, description, eventType, target,
+      }));
+      const result = await api.importAchievements(gameId, achievements);
+      setImportResult(result);
+      if (result.created > 0) reload();
+    } catch {
+      notifications.show({ color: "red", message: "Falha ao importar (serviço indisponível?)." });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleting) return;
     try {
@@ -109,6 +169,25 @@ export function GameAchievements({ gameId }: { gameId: string }) {
           <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
             Atualizar
           </Button>
+          <Button variant="default" size="xs" leftSection={<IconDownload size={14} />} onClick={handleDownloadTemplate}>
+            Baixar modelo
+          </Button>
+          <Button
+            variant="default"
+            size="xs"
+            leftSection={<IconUpload size={14} />}
+            loading={importing}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Importar CSV
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
           <Button size="xs" leftSection={<IconPlus size={14} />} onClick={open}>
             Nova conquista
           </Button>
@@ -187,6 +266,93 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             </Group>
           </Stack>
         </form>
+      </Modal>
+
+      {/* Erros de validação do CSV (antes de enviar) */}
+      <Modal
+        opened={importErrors.length > 0}
+        onClose={() => setImportErrors([])}
+        title="Arquivo inválido"
+        size="lg"
+      >
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Corrija os erros abaixo no arquivo CSV e tente novamente. Nenhuma conquista foi importada.
+          </Text>
+          <List size="sm" spacing={4}>
+            {importErrors.map((e) => (
+              <List.Item key={`${e.row}-${e.message}`} c="red">
+                {e.message}
+              </List.Item>
+            ))}
+          </List>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setImportErrors([])}>
+              Fechar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Resultado da importação */}
+      <Modal
+        opened={!!importResult}
+        onClose={() => setImportResult(null)}
+        title="Importação concluída"
+        size="lg"
+      >
+        {importResult && (
+          <Stack>
+            <Group>
+              <Badge color="green" size="lg">
+                {importResult.created} criada{importResult.created !== 1 ? "s" : ""}
+              </Badge>
+              {importResult.failed > 0 && (
+                <Badge color="red" size="lg">
+                  {importResult.failed} falha{importResult.failed !== 1 ? "s" : ""}
+                </Badge>
+              )}
+            </Group>
+            {importResult.failed > 0 && (
+              <>
+                <Text size="sm" fw={500}>
+                  Linhas com erro:
+                </Text>
+                <Table striped withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th w={60}>Linha</Table.Th>
+                      <Table.Th>ID</Table.Th>
+                      <Table.Th>Motivo</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {importResult.results
+                      .filter((r) => r.status !== "created")
+                      .map((r) => (
+                        <Table.Tr key={r.row}>
+                          <Table.Td c="dimmed">{r.row}</Table.Td>
+                          <Table.Td>
+                            <code>{r.id}</code>
+                          </Table.Td>
+                          <Table.Td c="red">
+                            {r.status === "duplicate"
+                              ? "Já existe uma conquista com este ID neste jogo"
+                              : r.status === "invalid"
+                                ? "Dados inválidos (verifique os campos)"
+                                : "Serviço indisponível — tente novamente"}
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                  </Table.Tbody>
+                </Table>
+              </>
+            )}
+            <Group justify="flex-end">
+              <Button onClick={() => setImportResult(null)}>Fechar</Button>
+            </Group>
+          </Stack>
+        )}
       </Modal>
 
       {/* Confirmar remoção */}

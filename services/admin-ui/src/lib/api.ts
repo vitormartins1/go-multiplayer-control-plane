@@ -70,6 +70,19 @@ export interface NewAchievement {
   target: number;
 }
 
+export interface ImportResult {
+  row: number;
+  id: string;
+  status: "created" | "duplicate" | "invalid" | "error";
+  error?: string;
+}
+
+export interface ImportResponse {
+  created: number;
+  failed: number;
+  results: ImportResult[];
+}
+
 export interface LeaderEntry {
   rank: number;
   playerId: string;
@@ -216,6 +229,10 @@ export const api = {
     ),
   deleteAchievement: (gameId: string, id: string) =>
     del(`/api/games/${encodeURIComponent(gameId)}/achievements/${encodeURIComponent(id)}`),
+  importAchievements: (gameId: string, achievements: NewAchievement[]) =>
+    postJSON<ImportResponse>(`/api/games/${encodeURIComponent(gameId)}/achievements/import`, {
+      achievements,
+    }),
   playerAchievements: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerAchievement[]>(
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/achievements`,
