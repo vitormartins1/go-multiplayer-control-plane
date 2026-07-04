@@ -10,6 +10,15 @@ scrape_configs:
     static_configs:
       - targets: ["achievements-service:8080"]
 
+  # Workers do fan-out durável (ADR-0020): fanout_consume_total / duração.
+  - job_name: achievements-consumer
+    static_configs:
+      - targets: ["achievements-consumer:8080"]
+
+  - job_name: leaderboard-consumer
+    static_configs:
+      - targets: ["leaderboard-consumer:8080"]
+
   - job_name: player-data-service
     static_configs:
       - targets: ["player-data-service:8080"]

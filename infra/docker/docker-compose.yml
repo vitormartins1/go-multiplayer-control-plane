@@ -138,15 +138,59 @@ services:
     environment:
       PORT: "8080"
       GRPC_PORT: "50051"
-      ACHIEVEMENTS_URL: http://achievements-service:8080 # fan-out -> achievements (ADR-0010)
-      LEADERBOARD_URL: http://leaderboard-service:8080 # fan-out -> leaderboard (ADR-0010)
-      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço no fan-out (ADR-0018)
+      # Fan-out durável (ADR-0020): publica o resultado no tópico SNS match-results.
+      MATCH_RESULTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:match-results
+      AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão MinIO/S3)
+      AWS_REGION: us-east-1
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
     depends_on:
-      achievements-service:
+      messaging-provisioner:
+        condition: service_completed_successfully
+      tempo:
         condition: service_started
-      leaderboard-service:
+
+  # Worker do fan-out durável (ADR-0020): consome match-results-achievements e
+  # aplica match_played/match_won (idempotente por matchID). Mesmo image do
+  # achievements-service, entrypoint no binário consumer.
+  achievements-consumer:
+    build:
+      context: ../..
+      dockerfile: services/achievements-service/Dockerfile
+    entrypoint: ["/achievements-consumer"]
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://dev:dev@achievements-postgres:5432/achievements?sslmode=disable
+      MATCH_RESULTS_QUEUE_URL: http://localstack:4566/000000000000/match-results-achievements
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
+    depends_on:
+      achievements-postgres:
+        condition: service_healthy
+      messaging-provisioner:
+        condition: service_completed_successfully
+      tempo:
         condition: service_started
+
+  # Worker do fan-out durável (ADR-0020): consome match-results-leaderboard e
+  # submete o score (idempotente via ZADD GT).
+  leaderboard-consumer:
+    build:
+      context: ../..
+      dockerfile: services/leaderboard-service/Dockerfile
+    entrypoint: ["/leaderboard-consumer"]
+    environment:
+      PORT: "8080"
+      REDIS_ADDR: redis:6379
+      MATCH_RESULTS_QUEUE_URL: http://localstack:4566/000000000000/match-results-leaderboard
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+      OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
+    depends_on:
+      redis:
+        condition: service_started
+      messaging-provisioner:
+        condition: service_completed_successfully
       tempo:
         condition: service_started
 
@@ -248,6 +292,7 @@ services:
       - ../../services/achievements-service/migrations/001_create_achievements.sql:/docker-entrypoint-initdb.d/001_create_achievements.sql:ro
       - ../../services/achievements-service/migrations/002_add_progress.sql:/docker-entrypoint-initdb.d/002_add_progress.sql:ro
       - ../../services/achievements-service/migrations/003_add_game_scope.sql:/docker-entrypoint-initdb.d/003_add_game_scope.sql:ro
+      - ../../services/achievements-service/migrations/004_processed_matches.sql:/docker-entrypoint-initdb.d/004_processed_matches.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
@@ -304,6 +349,35 @@ services:
     ports:
       - "9000:9000" # API S3
       - "9001:9001" # console web
+
+  # LocalStack: SNS/SQS locais do fan-out durável (ADR-0020), mesmo padrão do
+  # MinIO p/ S3 — o código só troca o endpoint (AWS_ENDPOINT_URL) na prod.
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: sns,sqs
+      DEBUG: "0"
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal sns list-topics && awslocal sqs list-queues"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Provisiona o tópico/filas/DLQ via Terraform (ADR-0004/0020) assim que o
+  # LocalStack sobe. Roda uma vez e sai; quem depende do messaging usa
+  # `condition: service_completed_successfully`.
+  messaging-provisioner:
+    image: hashicorp/terraform:1.9
+    working_dir: /tf
+    entrypoint: ["/bin/sh", "-c", "terraform init -input=false && terraform apply -auto-approve -input=false"]
+    volumes:
+      - ../terraform/environments/local/messaging:/tf
+    depends_on:
+      localstack:
+        condition: service_healthy
+    restart: "no"
 
   # Ranking real-time do leaderboard (Redis sorted sets; ADR-0015).
   redis:

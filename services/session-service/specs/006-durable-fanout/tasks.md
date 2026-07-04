@@ -29,11 +29,11 @@
 
 ## Infra + observabilidade
 
-- [ ] helper de config AWS (decisão §1: `internal/awsx` por serviço, ou `shared/awsx` com OK)
-- [ ] provisionamento SNS+SQS+DLQ+subscriptions (decisão §2: Terraform local, ou init do LocalStack)
-- [ ] `infra/docker/docker-compose.yml` — `localstack` (sns,sqs) + healthcheck; `session` ganha `MATCH_RESULTS_TOPIC_ARN`/`AWS_ENDPOINT_URL`; serviços `achievements-consumer`/`leaderboard-consumer`
-- [ ] `infra/docker/prometheus.yml` — jobs dos dois consumers (`docker compose restart prometheus`)
-- [ ] Dockerfile(s) — compilar o binário `cmd/consumer` além do `cmd/server`
+- [x] helper de config AWS (decisão §1: `internal/awsx` por serviço, ou `shared/awsx` com OK)
+- [x] provisionamento SNS+SQS+DLQ+subscriptions (decisão §2: Terraform local, ou init do LocalStack)
+- [x] `infra/docker/docker-compose.yml` — `localstack` (sns,sqs) + healthcheck; `session` ganha `MATCH_RESULTS_TOPIC_ARN`/`AWS_ENDPOINT_URL`; serviços `achievements-consumer`/`leaderboard-consumer`
+- [x] `infra/docker/prometheus.yml` — jobs dos dois consumers (`docker compose restart prometheus`)
+- [x] Dockerfile(s) — compilar o binário `cmd/consumer` além do `cmd/server`
 
 ## Fechamento
 
