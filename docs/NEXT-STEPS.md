@@ -1,4 +1,4 @@
-# NEXT-STEPS — handoff (atualizado 2026-06-30)
+# NEXT-STEPS — handoff (atualizado 2026-07-04)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
@@ -11,12 +11,14 @@ Gameplay loop fechado e observável no painel:
 - **Multi-tenant por jogo** (ADR-0017) ponta a ponta: game-registry + achievements + leaderboard + player-data + cloud-save escopados por `game_id`.
 - **Auth serviço-a-serviço** (ADR-0018): internal key (`X-Internal-Key`) nos control planes; `shared/auth` (`RequireInternalKey` + `InternalKeyTransport`). Chave dev: `dev-internal-key`.
 - **Presença por jogo** (ADR-0019): identidade continua **global**; cada jogo tem uma player base explícita (`game_players` no game-registry), marcada no **login-into-game** (identity aceita `gameId` opcional, marca best-effort com timeout de 2s).
-- **Fan-out** do resultado: `session` → `CompositePublisher` → achievements + leaderboard. Best-effort.
+- **Fan-out durável** do resultado (ADR-0020, spec `session/006-durable-fanout`): `session` publica o resultado no **tópico SNS `match-results`**; achievements e leaderboard viram **consumidores SQS** (`*-consumer`) com retry, **DLQ** e **idempotência por `matchID`** (achievements via tabela `processed_matches` + tx pgx; leaderboard idempotente de graça pelo `ZADD GT`). Local via **LocalStack** + **Terraform** (`infra/terraform/environments/local/messaging/`, provisionado no boot do compose). Substitui o `CompositePublisher` HTTP best-effort das specs 002/003 (**removido**). Validado ponta a ponta no Docker (publish → 2 filas → sinks refletem; reenvio = no-op).
 - **Painel jogo-cêntrico** (admin-bff + admin-ui, Mantine) em http://localhost:8089 — ver seção abaixo.
 
-10 serviços Go construídos: identity, game-registry, achievements, player-data, cloud-save, leaderboard, matchmaking (gRPC), session (gRPC), admin-bff, admin-ui. Observabilidade: Prometheus + Grafana + Tempo.
+10 serviços Go + 2 workers de fila (achievements-consumer, leaderboard-consumer): identity, game-registry, achievements, player-data, cloud-save, leaderboard, matchmaking (gRPC), session (gRPC), admin-bff, admin-ui. Observabilidade: Prometheus + Grafana + Tempo.
 
-ADRs recentes: 0016 (painel BFF), 0017 (multi-tenant), 0018 (service auth), **0019 (presença por jogo)**.
+ADRs recentes: 0017 (multi-tenant), 0018 (service auth), 0019 (presença por jogo), **0020 (fan-out durável SNS→SQS)**.
+
+> **Data plane muito à frente do que este doc registrava:** o `go-game-dataplane` (Unity) fechou as Fases 0–6 e está na 7 — Dedicated Server ARM64 orquestrado por Agones (k3d local → homelab Pi 5), com o handshake completo `login → FindMatch → session aloca via Agones → connect token Ed25519 → partida → ReportResult` rodando de verdade. Foi isso que tornou o fan-out durável urgente (game server real reportando resultado). `docs/UNITY-INTEGRATION.md` está **desatualizado** (marcado "rascunho" com TODOs já resolvidos) — candidato a atualização.
 
 ## ⚠️ Pendente de você (ações fora do código)
 
@@ -48,14 +50,14 @@ Todas mergeadas na `main` (branch por feature, `--no-ff`):
 
 Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Ordem sugerida:
 
-1. **Push pro GitHub** (acima) → CI passa a rodar.
-2. **Fan-out resiliente** — hoje `ReportResult → achievements/leaderboard` e a presença são best-effort síncronos (logam falha). Evoluir p/ **outbox/retry** (ou fila) para garantir entrega. Provável ADR (SQS/outbox table). *É o ponto mais frágil do sistema.*
-3. **analytics-service** (Fase 9 do ROADMAP — **único serviço não construído**; ≈ Game Analytics Pipeline). Ingestão de eventos + agregação; acende a aba **Analytics** do painel (hoje "em breve"). SDD do zero.
+1. **Push pro GitHub** (acima) → CI passa a rodar. **Atenção:** o CI agora precisa de Docker p/ os testes de integração/e2e do fan-out (LocalStack + Postgres via testcontainers).
+2. ✅ **Fan-out resiliente — FEITO** (ADR-0020, spec `session/006-durable-fanout`): SNS→SQS com DLQ + idempotência. *Resíduo:* a **presença** no login-into-game (identity → game-registry) segue best-effort síncrona — se virar problema, mesmo tratamento (fila) ou aceitar como está (é marcação, não resultado de partida). O **outbox table** foi deliberadamente adiado (ADR-0020 tem os gatilhos de reintrodução — ex.: session ganhar Postgres).
+3. **analytics-service** (Fase 9 do ROADMAP — **único serviço não construído**; ≈ Game Analytics Pipeline). Ingestão de eventos + agregação; acende a aba **Analytics** do painel (hoje "em breve"). SDD do zero. **Encaixe pronto:** só **assina o tópico SNS `match-results`** (mais uma fila SQS, zero mudança no produtor) — foi por isso que o fan-out virou SNS e não SQS única.
 4. **Editar/remover jogo** no painel — *rename* é simples (cabe na aba Configurações do GameDetail, hoje ComingSoon). *Delete* precisa de decisão: dado órfão por `game_id` em achievements/player-data/cloud-save/leaderboard/presença (cascata cross-service, provável ADR).
 5. **Leaderboard**: seasons/janelas por período + paginação.
 6. **Cleanup admin-bff** (do code-review, não é bug): `do()`/`classify()`/`errorCode()`/default-client duplicados nos 4 adapters + o presence client do identity → extrair um helper `internal/upstream` parametrizado pelo erro sentinela.
 7. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço (identidade, expiração, revogação). Quando houver múltiplos ambientes/consumidores. Abrir ADR.
-8. **Infra / deploy — o fim, e o payoff da tese (ADR-0008):** não existe `infra/terraform/` ainda (tudo é Docker Compose, local-first deliberado). Terraform → LocalStack → AWS; compute por serviço (ADR-0005: Lambda/Fargate/ECS/EC2/EKS); medir custo/performance vs AWS GameKit.
+8. **Infra / deploy — o fim, e o payoff da tese (ADR-0008):** o `infra/terraform/` **estreou** na spec 006 (`environments/local/messaging/` — SNS/SQS no LocalStack, provisionado no boot do compose). Falta o grosso: os demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005: Lambda/Fargate/ECS/EC2/EKS); medir custo/performance vs AWS GameKit. O padrão "SDK AWS + endpoint configurável" já vale p/ S3/MinIO **e** SNS/SQS/LocalStack.
 9. **Data plane / o jogo (repo `go-game-unity`, não-Go):** Unity Dedicated Server + Netcode + Agones/EKS (ADR-0010/0011/0012). Onde o gameplay realtime roda.
 
 ## Gotchas operacionais
@@ -64,6 +66,7 @@ Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-
 - **Proto**: após mexer no module path / `.proto`, **regenerar com `buf`** (`PATH="$(go env GOPATH)/bin:$PATH" buf generate` dentro do serviço) — um `sed` no `.pb.go` corrompe o `rawDesc` (go_package tem prefixo de tamanho).
 - **golangci-lint** não está instalado por padrão: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2` (o CI usa a mesma versão pinada). Config em `.golangci.yml` (v2): errcheck dispensado só nos `_test.go`.
 - **Prometheus** não raspa job novo sem `docker compose restart prometheus`; **Grafana** provisioning só no boot (restart do container).
+- **Fan-out (LocalStack/Terraform):** os recursos SNS/SQS são criados pelo `messaging-provisioner` (Terraform) no boot — depende do LocalStack `healthy`. As envs `MATCH_RESULTS_TOPIC_ARN`/`MATCH_RESULTS_QUEUE_URL` no compose são **fixas e determinísticas** (conta `000000000000`, host `localstack:4566` no formato path-based — funciona mesmo o LocalStack devolvendo a URL `sqs.us-east-1.localhost.localstack.cloud`). Se mudar o `.tf`, o provisioner reaplica no próximo `up` (idempotente). A migration `004_processed_matches` exige recriar o volume do `achievements-postgres` (gotcha de migrations acima).
 - **Processo órfão** segurando porta gRPC (50051/50052) de algum `go run` antigo: matar antes de `up`.
 - **/metrics e /healthz** ficam **fora** do guard da internal key (Prometheus precisa raspar).
 - Internal key dev: `dev-internal-key` (header `X-Internal-Key`).
