@@ -143,6 +143,13 @@ services:
       AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão MinIO/S3)
       AWS_REGION: us-east-1
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+      # Chave Ed25519 persistente do connect token (PEM PKCS8). Sem ela o
+      # serviço gera uma efêmera a cada boot e todo game server Ready fica
+      # com JWKS velho — obriga a reciclar a fleet a cada restart do session.
+      # Gerar uma vez: infra/docker/gen-secrets.sh
+      JWT_PRIVATE_KEY_FILE: /run/secrets/session-jwt-key
+    secrets:
+      - session-jwt-key
     depends_on:
       messaging-provisioner:
         condition: service_completed_successfully
@@ -518,3 +525,8 @@ services:
       - "9191:9187"
     depends_on:
       - analytics-postgres
+
+# Segredos de dev (gitignored — infra/docker/secrets/). Gerar: gen-secrets.sh
+secrets:
+  session-jwt-key:
+    file: ./secrets/session-jwt-ed25519.pem

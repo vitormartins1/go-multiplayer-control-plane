@@ -11,7 +11,7 @@ import (
 type Config struct {
 	Port          string
 	DatabaseURL   string // DSN do Postgres
-	JWTPrivateKey string // chave Ed25519 em PEM; vazio em dev -> gera efêmera
+	JWTPrivateKey string // chave Ed25519 em PEM; via JWT_PRIVATE_KEY (inline) ou JWT_PRIVATE_KEY_FILE (docker secret); vazio em dev -> gera efêmera
 
 	// Tracing (ADR-0014). OTLPEndpoint vazio desliga o tracing — dev local sem
 	// Tempo no ar roda normal; o compose seta a env para apontar ao coletor.
@@ -42,7 +42,7 @@ func Load() Config {
 	return Config{
 		Port:             env("PORT", "8080"),
 		DatabaseURL:      env("DATABASE_URL", defaultDSN()),
-		JWTPrivateKey:    os.Getenv("JWT_PRIVATE_KEY"),
+		JWTPrivateKey:    envOrFile("JWT_PRIVATE_KEY"),
 		OTLPEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		TraceSampleRatio: envFloat("OTEL_TRACES_SAMPLER_RATIO", 1.0),
 		IdentityJWKSURL:  os.Getenv("IDENTITY_JWKS_URL"),
@@ -53,6 +53,24 @@ func Load() Config {
 		RedisAddr:        os.Getenv("REDIS_ADDR"),
 		GRPCPort:         env("GRPC_PORT", "50051"),
 	}
+}
+
+// envOrFile lê a env `key` ou, se vazia, o arquivo apontado por `key_FILE`
+// (convenção de docker secrets). Arquivo configurado mas ilegível é erro de
+// deploy — fail-fast em vez de degradar silenciosamente para chave efêmera.
+func envOrFile(key string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	path := os.Getenv(key + "_FILE")
+	if path == "" {
+		return ""
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		panic(fmt.Sprintf("config: lendo %s_FILE: %v", key, err))
+	}
+	return string(b)
 }
 
 func envFloat(key string, def float64) float64 {
