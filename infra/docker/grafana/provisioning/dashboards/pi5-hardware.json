@@ -1,0 +1,463 @@
+{
+  "title": "Pi 5 — Hardware",
+  "uid": "pi5-hardware",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "tags": ["pi5", "infrastructure"],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "CPU",
+      "id": 1,
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 70},
+            {"color": "red", "value": 90}
+          ]}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[2m])) * 100)",
+        "instant": true
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "RAM Usada",
+      "id": 2,
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 75},
+            {"color": "red", "value": 90}
+          ]}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "(1 - node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"}) * 100",
+        "instant": true
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Temp CPU",
+      "id": 3,
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 60},
+            {"color": "orange", "value": 70},
+            {"color": "red", "value": 80}
+          ]}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "node_hwmon_temp_celsius{job=\"node-exporter\",chip=\"thermal_thermal_zone0\",sensor=\"temp0\"}",
+        "instant": true
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Temp NVMe",
+      "id": 4,
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 55},
+            {"color": "red", "value": 70}
+          ]}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "node_hwmon_temp_celsius{job=\"node-exporter\",chip=\"nvme_nvme0\",sensor=\"temp1\"}",
+        "instant": true
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Load (1m / 5m / 15m)",
+      "id": 5,
+      "gridPos": {"h": 4, "w": 6, "x": 16, "y": 0},
+      "options": {"colorMode": "value", "textMode": "value_and_name", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "color": {"mode": "fixed", "fixedColor": "text"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": 0}]}
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_load1{job=\"node-exporter\"}",
+          "legendFormat": "1m",
+          "instant": true
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_load5{job=\"node-exporter\"}",
+          "legendFormat": "5m",
+          "instant": true
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_load15{job=\"node-exporter\"}",
+          "legendFormat": "15m",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Uptime",
+      "id": 6,
+      "gridPos": {"h": 4, "w": 2, "x": 22, "y": 0},
+      "options": {"colorMode": "value", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {"mode": "fixed", "fixedColor": "text"}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "time() - node_boot_time_seconds{job=\"node-exporter\"}",
+        "instant": true
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU por modo",
+      "id": 7,
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean","max"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {"fillOpacity": 15, "lineWidth": 2, "stacking": {"mode": "normal"}}
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"user\"}[2m])) * 100",
+          "legendFormat": "user"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"system\"}[2m])) * 100",
+          "legendFormat": "system"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"iowait\"}[2m])) * 100",
+          "legendFormat": "iowait"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"softirq\"}[2m])) * 100",
+          "legendFormat": "softirq"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load Average",
+      "id": 8,
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {"fillOpacity": 8, "lineWidth": 2}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "1m"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "5m"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byName", "options": "15m"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_load1{job=\"node-exporter\"}",
+          "legendFormat": "1m"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_load5{job=\"node-exporter\"}",
+          "legendFormat": "5m"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_load15{job=\"node-exporter\"}",
+          "legendFormat": "15m"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memória",
+      "id": 9,
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 12},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean","max"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {"fillOpacity": 15, "lineWidth": 2, "stacking": {"mode": "normal"}}
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"} - node_memory_MemFree_bytes{job=\"node-exporter\"} - node_memory_Buffers_bytes{job=\"node-exporter\"} - node_memory_Cached_bytes{job=\"node-exporter\"}",
+          "legendFormat": "usada"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_memory_Cached_bytes{job=\"node-exporter\"}",
+          "legendFormat": "cache"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_memory_Buffers_bytes{job=\"node-exporter\"}",
+          "legendFormat": "buffers"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_memory_MemFree_bytes{job=\"node-exporter\"}",
+          "legendFormat": "livre"
+        }
+      ]
+    },
+    {
+      "type": "gauge",
+      "title": "RAM Disponível",
+      "id": 10,
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 12},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "max": 17002004480,
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "red", "value": 0},
+            {"color": "yellow", "value": 2000000000},
+            {"color": "green", "value": 4000000000}
+          ]}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "node_memory_MemAvailable_bytes{job=\"node-exporter\"}",
+        "instant": true
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Swap",
+      "id": 11,
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 16},
+      "options": {"colorMode": "value", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {"mode": "fixed", "fixedColor": "text"}
+        }
+      },
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "node_memory_SwapTotal_bytes{job=\"node-exporter\"} - node_memory_SwapFree_bytes{job=\"node-exporter\"}",
+        "instant": true,
+        "legendFormat": "swap usado"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "NVMe — Throughput",
+      "id": 12,
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {"fillOpacity": 8, "lineWidth": 2}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "escrita"}, "properties": [{"id": "custom.transform", "value": "negative-Y"}]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_disk_read_bytes_total{job=\"node-exporter\",device=\"nvme0n1\"}[2m])",
+          "legendFormat": "leitura"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_disk_written_bytes_total{job=\"node-exporter\",device=\"nvme0n1\"}[2m])",
+          "legendFormat": "escrita"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "NVMe — IOPS",
+      "id": 13,
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "iops",
+          "custom": {"fillOpacity": 8, "lineWidth": 2}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "escrita"}, "properties": [{"id": "custom.transform", "value": "negative-Y"}]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_disk_reads_completed_total{job=\"node-exporter\",device=\"nvme0n1\"}[2m])",
+          "legendFormat": "leitura"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_disk_writes_completed_total{job=\"node-exporter\",device=\"nvme0n1\"}[2m])",
+          "legendFormat": "escrita"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rede — wlan0 (Wi-Fi)",
+      "id": 14,
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 28},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {"fillOpacity": 8, "lineWidth": 2}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "TX"}, "properties": [{"id": "custom.transform", "value": "negative-Y"}]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_network_receive_bytes_total{job=\"node-exporter\",device=\"wlan0\"}[2m])",
+          "legendFormat": "RX"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_network_transmit_bytes_total{job=\"node-exporter\",device=\"wlan0\"}[2m])",
+          "legendFormat": "TX"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rede — erros e drops (wlan0)",
+      "id": 15,
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 28},
+      "options": {"tooltip": {"mode": "multi"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {"fillOpacity": 8, "lineWidth": 1},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": 0},
+            {"color": "red", "value": 1}
+          ]},
+          "color": {"mode": "thresholds"}
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_network_receive_errs_total{job=\"node-exporter\",device=\"wlan0\"}[2m])",
+          "legendFormat": "RX erros"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_network_receive_drop_total{job=\"node-exporter\",device=\"wlan0\"}[2m])",
+          "legendFormat": "RX drops"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "rate(node_network_transmit_errs_total{job=\"node-exporter\",device=\"wlan0\"}[2m])",
+          "legendFormat": "TX erros"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Temperatura",
+      "id": 16,
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 36},
+      "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": {"fillOpacity": 8, "lineWidth": 2},
+          "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 60},
+            {"color": "red", "value": 75}
+          ]},
+          "color": {"mode": "thresholds"}
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_hwmon_temp_celsius{job=\"node-exporter\",chip=\"thermal_thermal_zone0\",sensor=\"temp0\"}",
+          "legendFormat": "CPU"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_hwmon_temp_celsius{job=\"node-exporter\",chip=\"nvme_nvme0\",sensor=\"temp1\"}",
+          "legendFormat": "NVMe"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "node_hwmon_temp_celsius{job=\"node-exporter\",chip=\"1000120000_pcie_1f000c8000_adc\",sensor=\"temp1\"}",
+          "legendFormat": "VRM/Board"
+        }
+      ]
+    }
+  ]
+}

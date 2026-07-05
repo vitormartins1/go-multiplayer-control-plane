@@ -85,3 +85,22 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  # Pi 5 — federation: puxa métricas de hardware (node-exporter), k8s
+  # (kube-state-metrics) e Agones do Prometheus que roda no cluster do Pi.
+  # Docker Desktop no Mac não roteia containers → LAN diretamente; o túnel
+  # tools/pi5/start-pi-prometheus-tunnel.sh expõe o Pi em host.docker.internal:39090.
+  # Se o Pi/túnel estiver desligado, o Prometheus loga scrape error e segue normalmente.
+  - job_name: pi5-federation
+    honor_labels: true
+    metrics_path: /federate
+    params:
+      match[]:
+        - '{__name__=~"node_.+"}'
+        - '{__name__=~"kube_.+"}'
+        - '{__name__=~"agones_.+"}'
+        - '{__name__=~"container_.+"}'
+    static_configs:
+      - targets: ["host.docker.internal:39090"]
+        labels:
+          cluster: pi5
