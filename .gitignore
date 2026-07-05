@@ -24,3 +24,6 @@ go.work.sum
 # env file
 .env
 .DS_Store
+
+# segredos de dev do compose (gen-secrets.sh)
+infra/docker/secrets/
