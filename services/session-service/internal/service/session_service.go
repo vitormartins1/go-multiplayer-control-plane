@@ -140,7 +140,11 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, players []
 // publicação falhar, retorna erro e NÃO encerra a sessão — o Dedicated Server
 // refaz o ReportResult (retry, Fase 6 do data plane) e o TTL sweeper cobre a
 // sessão órfã. O resultado não se perde silenciosamente.
-func (s *Service) ReportResult(ctx context.Context, matchID string, results []domain.PlayerResult) error {
+func (s *Service) ReportResult(ctx context.Context, matchID string, outcome domain.MatchOutcome) error {
+	if err := validateOutcome(outcome); err != nil {
+		return fmt.Errorf("session service: report result: %w", err)
+	}
+
 	s.mu.Lock()
 	sess, ok := s.sessions[matchID]
 	gameID := ""
@@ -152,12 +156,31 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, results []do
 		return fmt.Errorf("session service: report result: %w", domain.ErrSessionNotFound)
 	}
 
-	if err := s.publisher.Publish(ctx, gameID, matchID, results); err != nil {
+	if err := s.publisher.Publish(ctx, gameID, matchID, outcome); err != nil {
 		return fmt.Errorf("session service: report result: publish: %w", err)
 	}
 
 	if _, err := s.closeSession(ctx, matchID, domain.CloseResult); err != nil {
 		return fmt.Errorf("session service: report result: %w", err)
+	}
+	return nil
+}
+
+// validateOutcome valida o outcome estruturalmente (ADR-0023). Não valida contra
+// o perfil do jogo — o game server é autoritativo sobre o resultado.
+func validateOutcome(o domain.MatchOutcome) error {
+	if o.Kind != domain.OutcomeWinLossDraw {
+		return domain.ErrUnsupportedOutcome
+	}
+	if o.WinLossDraw == nil || len(o.WinLossDraw.Players) == 0 {
+		return domain.ErrInvalidOutcome
+	}
+	for _, p := range o.WinLossDraw.Players {
+		switch p.Outcome {
+		case domain.ResultWin, domain.ResultLoss, domain.ResultDraw:
+		default:
+			return domain.ErrInvalidOutcome
+		}
 	}
 	return nil
 }

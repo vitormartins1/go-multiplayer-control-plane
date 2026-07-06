@@ -91,7 +91,9 @@ func TestReportResult_LiberaServer_PermiteNovaAlocacao(t *testing.T) {
 
 	_, err = client.ReportResult(context.Background(), &pb.ReportResultRequest{
 		MatchId: "m1",
-		Results: []*pb.PlayerResult{{PlayerId: "p1", Score: 10, Won: true}},
+		Outcome: &pb.ReportResultRequest_WinLossDraw{WinLossDraw: &pb.WinLossDrawResult{
+			Players: []*pb.PlayerOutcome{{PlayerId: "p1", Outcome: "win", Score: 10, Stats: map[string]int64{"kills": 3}}},
+		}},
 	})
 	require.NoError(t, err)
 
@@ -100,12 +102,31 @@ func TestReportResult_LiberaServer_PermiteNovaAlocacao(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// winLossDrawReq monta um request válido para os testes de mapeamento de erro.
+func winLossDrawReq(matchID string) *pb.ReportResultRequest {
+	return &pb.ReportResultRequest{
+		MatchId: matchID,
+		Outcome: &pb.ReportResultRequest_WinLossDraw{WinLossDraw: &pb.WinLossDrawResult{
+			Players: []*pb.PlayerOutcome{{PlayerId: "p1", Outcome: "win"}},
+		}},
+	}
+}
+
 func TestReportResult_MatchInexistente_NotFound(t *testing.T) {
 	client, _ := setup(t, []string{"10.0.0.1:7777"})
 
-	_, err := client.ReportResult(context.Background(), &pb.ReportResultRequest{MatchId: "nao-existe"})
+	_, err := client.ReportResult(context.Background(), winLossDrawReq("nao-existe"))
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestReportResult_OutcomeAusente_InvalidArgument(t *testing.T) {
+	client, _ := setup(t, []string{"10.0.0.1:7777"})
+
+	// nenhum campo do oneof setado -> Kind vazio -> unsupported outcome.
+	_, err := client.ReportResult(context.Background(), &pb.ReportResultRequest{MatchId: "m1"})
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
 }
 
 func slogDiscard() *slog.Logger {

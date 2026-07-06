@@ -195,9 +195,15 @@ func (x *ConnectGrant) GetConnectToken() string {
 }
 
 type ReportResultRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MatchId       string                 `protobuf:"bytes,1,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"`
-	Results       []*PlayerResult        `protobuf:"bytes,2,rep,name=results,proto3" json:"results,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	MatchId string                 `protobuf:"bytes,1,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"`
+	// outcome polimórfico por arquétipo (ADR-0023). O kind é implícito no campo
+	// setado; novos arquétipos entram como novos campos do oneof.
+	//
+	// Types that are valid to be assigned to Outcome:
+	//
+	//	*ReportResultRequest_WinLossDraw
+	Outcome       isReportResultRequest_Outcome `protobuf_oneof:"outcome"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -239,12 +245,31 @@ func (x *ReportResultRequest) GetMatchId() string {
 	return ""
 }
 
-func (x *ReportResultRequest) GetResults() []*PlayerResult {
+func (x *ReportResultRequest) GetOutcome() isReportResultRequest_Outcome {
 	if x != nil {
-		return x.Results
+		return x.Outcome
 	}
 	return nil
 }
+
+func (x *ReportResultRequest) GetWinLossDraw() *WinLossDrawResult {
+	if x != nil {
+		if x, ok := x.Outcome.(*ReportResultRequest_WinLossDraw); ok {
+			return x.WinLossDraw
+		}
+	}
+	return nil
+}
+
+type isReportResultRequest_Outcome interface {
+	isReportResultRequest_Outcome()
+}
+
+type ReportResultRequest_WinLossDraw struct {
+	WinLossDraw *WinLossDrawResult `protobuf:"bytes,2,opt,name=win_loss_draw,json=winLossDraw,proto3,oneof"` // arquétipo queue_arena
+}
+
+func (*ReportResultRequest_WinLossDraw) isReportResultRequest_Outcome() {}
 
 type ReportResultResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -282,30 +307,29 @@ func (*ReportResultResponse) Descriptor() ([]byte, []int) {
 	return file_session_v1_session_proto_rawDescGZIP(), []int{4}
 }
 
-// PlayerResult é o resultado de um jogador na partida (reportado pelo server).
-type PlayerResult struct {
+// WinLossDrawResult é o outcome do arquétipo queue_arena: vitória/derrota/empate
+// por jogador (e por time, via team_id), com stats.
+type WinLossDrawResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Score         int64                  `protobuf:"varint,2,opt,name=score,proto3" json:"score,omitempty"`
-	Won           bool                   `protobuf:"varint,3,opt,name=won,proto3" json:"won,omitempty"`
+	Players       []*PlayerOutcome       `protobuf:"bytes,1,rep,name=players,proto3" json:"players,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PlayerResult) Reset() {
-	*x = PlayerResult{}
+func (x *WinLossDrawResult) Reset() {
+	*x = WinLossDrawResult{}
 	mi := &file_session_v1_session_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PlayerResult) String() string {
+func (x *WinLossDrawResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PlayerResult) ProtoMessage() {}
+func (*WinLossDrawResult) ProtoMessage() {}
 
-func (x *PlayerResult) ProtoReflect() protoreflect.Message {
+func (x *WinLossDrawResult) ProtoReflect() protoreflect.Message {
 	mi := &file_session_v1_session_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -317,30 +341,93 @@ func (x *PlayerResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PlayerResult.ProtoReflect.Descriptor instead.
-func (*PlayerResult) Descriptor() ([]byte, []int) {
+// Deprecated: Use WinLossDrawResult.ProtoReflect.Descriptor instead.
+func (*WinLossDrawResult) Descriptor() ([]byte, []int) {
 	return file_session_v1_session_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *PlayerResult) GetPlayerId() string {
+func (x *WinLossDrawResult) GetPlayers() []*PlayerOutcome {
+	if x != nil {
+		return x.Players
+	}
+	return nil
+}
+
+// PlayerOutcome é o resultado de um jogador na partida (reportado pelo server).
+type PlayerOutcome struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	TeamId        string                 `protobuf:"bytes,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"` // vazio em FFA
+	Outcome       string                 `protobuf:"bytes,3,opt,name=outcome,proto3" json:"outcome,omitempty"`             // "win" | "loss" | "draw"
+	Score         int64                  `protobuf:"varint,4,opt,name=score,proto3" json:"score,omitempty"`
+	Stats         map[string]int64       `protobuf:"bytes,5,rep,name=stats,proto3" json:"stats,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // métricas declaradas (kills, assists, ...)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerOutcome) Reset() {
+	*x = PlayerOutcome{}
+	mi := &file_session_v1_session_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerOutcome) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerOutcome) ProtoMessage() {}
+
+func (x *PlayerOutcome) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerOutcome.ProtoReflect.Descriptor instead.
+func (*PlayerOutcome) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *PlayerOutcome) GetPlayerId() string {
 	if x != nil {
 		return x.PlayerId
 	}
 	return ""
 }
 
-func (x *PlayerResult) GetScore() int64 {
+func (x *PlayerOutcome) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *PlayerOutcome) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *PlayerOutcome) GetScore() int64 {
 	if x != nil {
 		return x.Score
 	}
 	return 0
 }
 
-func (x *PlayerResult) GetWon() bool {
+func (x *PlayerOutcome) GetStats() map[string]int64 {
 	if x != nil {
-		return x.Won
+		return x.Stats
 	}
-	return false
+	return nil
 }
 
 var File_session_v1_session_proto protoreflect.FileDescriptor
@@ -360,15 +447,24 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x06grants\x18\x03 \x03(\v2\x18.session.v1.ConnectGrantR\x06grants\"P\n" +
 	"\fConnectGrant\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12#\n" +
-	"\rconnect_token\x18\x02 \x01(\tR\fconnectToken\"d\n" +
+	"\rconnect_token\x18\x02 \x01(\tR\fconnectToken\"\x80\x01\n" +
 	"\x13ReportResultRequest\x12\x19\n" +
-	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x122\n" +
-	"\aresults\x18\x02 \x03(\v2\x18.session.v1.PlayerResultR\aresults\"\x16\n" +
-	"\x14ReportResultResponse\"S\n" +
-	"\fPlayerResult\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x14\n" +
-	"\x05score\x18\x02 \x01(\x03R\x05score\x12\x10\n" +
-	"\x03won\x18\x03 \x01(\bR\x03won2\xb2\x01\n" +
+	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12C\n" +
+	"\rwin_loss_draw\x18\x02 \x01(\v2\x1d.session.v1.WinLossDrawResultH\x00R\vwinLossDrawB\t\n" +
+	"\aoutcome\"\x16\n" +
+	"\x14ReportResultResponse\"H\n" +
+	"\x11WinLossDrawResult\x123\n" +
+	"\aplayers\x18\x01 \x03(\v2\x19.session.v1.PlayerOutcomeR\aplayers\"\xeb\x01\n" +
+	"\rPlayerOutcome\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x17\n" +
+	"\ateam_id\x18\x02 \x01(\tR\x06teamId\x12\x18\n" +
+	"\aoutcome\x18\x03 \x01(\tR\aoutcome\x12\x14\n" +
+	"\x05score\x18\x04 \x01(\x03R\x05score\x12:\n" +
+	"\x05stats\x18\x05 \x03(\v2$.session.v1.PlayerOutcome.StatsEntryR\x05stats\x1a8\n" +
+	"\n" +
+	"StatsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012\xb2\x01\n" +
 	"\aSession\x12T\n" +
 	"\rCreateSession\x12 .session.v1.CreateSessionRequest\x1a!.session.v1.CreateSessionResponse\x12Q\n" +
 	"\fReportResult\x12\x1f.session.v1.ReportResultRequest\x1a .session.v1.ReportResultResponseB\\ZZgithub.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1;sessionv1b\x06proto3"
@@ -385,27 +481,31 @@ func file_session_v1_session_proto_rawDescGZIP() []byte {
 	return file_session_v1_session_proto_rawDescData
 }
 
-var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_session_v1_session_proto_goTypes = []any{
 	(*CreateSessionRequest)(nil),  // 0: session.v1.CreateSessionRequest
 	(*CreateSessionResponse)(nil), // 1: session.v1.CreateSessionResponse
 	(*ConnectGrant)(nil),          // 2: session.v1.ConnectGrant
 	(*ReportResultRequest)(nil),   // 3: session.v1.ReportResultRequest
 	(*ReportResultResponse)(nil),  // 4: session.v1.ReportResultResponse
-	(*PlayerResult)(nil),          // 5: session.v1.PlayerResult
+	(*WinLossDrawResult)(nil),     // 5: session.v1.WinLossDrawResult
+	(*PlayerOutcome)(nil),         // 6: session.v1.PlayerOutcome
+	nil,                           // 7: session.v1.PlayerOutcome.StatsEntry
 }
 var file_session_v1_session_proto_depIdxs = []int32{
 	2, // 0: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
-	5, // 1: session.v1.ReportResultRequest.results:type_name -> session.v1.PlayerResult
-	0, // 2: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
-	3, // 3: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
-	1, // 4: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
-	4, // 5: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	5, // 1: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
+	6, // 2: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
+	7, // 3: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
+	0, // 4: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
+	3, // 5: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
+	1, // 6: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
+	4, // 7: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
+	6, // [6:8] is the sub-list for method output_type
+	4, // [4:6] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_session_v1_session_proto_init() }
@@ -413,13 +513,16 @@ func file_session_v1_session_proto_init() {
 	if File_session_v1_session_proto != nil {
 		return
 	}
+	file_session_v1_session_proto_msgTypes[3].OneofWrappers = []any{
+		(*ReportResultRequest_WinLossDraw)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_session_v1_session_proto_rawDesc), len(file_session_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

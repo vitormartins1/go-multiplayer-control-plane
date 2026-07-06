@@ -55,11 +55,37 @@ type ConnectGrant struct {
 	Token    string
 }
 
-// PlayerResult é o resultado de um jogador na partida (reportado pelo server).
-type PlayerResult struct {
+// Vocabulário do outcome (ADR-0023). No MVP só o kind win_loss_draw existe.
+const (
+	OutcomeWinLossDraw = "win_loss_draw"
+
+	ResultWin  = "win"
+	ResultLoss = "loss"
+	ResultDraw = "draw"
+)
+
+// MatchOutcome é o resultado da partida, polimórfico por arquétipo (ADR-0023),
+// modelado como tagged union por ponteiro: exatamente o ponteiro do Kind
+// declarado é não-nil. No MVP só WinLossDraw (arquétipo queue_arena); novos
+// arquétipos adicionam um campo-ponteiro próprio (placement, collective, ...).
+type MatchOutcome struct {
+	Kind        string // "win_loss_draw" (único no MVP)
+	WinLossDraw *WinLossDrawResult
+}
+
+// WinLossDrawResult é o outcome do queue_arena: vitória/derrota/empate por
+// jogador (e por time, via TeamID), com stats.
+type WinLossDrawResult struct {
+	Players []PlayerOutcome
+}
+
+// PlayerOutcome é o resultado de um jogador na partida (reportado pelo server).
+type PlayerOutcome struct {
 	PlayerID string
+	TeamID   string // vazio em FFA
+	Outcome  string // "win" | "loss" | "draw"
 	Score    int64
-	Won      bool
+	Stats    map[string]int64 // métricas declaradas (kills, assists, ...); pode ser nil
 }
 
 // SessionService é a Port de entrada: cria sessões a partir de matches e
@@ -69,8 +95,9 @@ type SessionService interface {
 	// a sessão. Devolve ErrNoServer se o pool esgotar.
 	Create(ctx context.Context, matchID, gameID string, players []string) (*Session, []ConnectGrant, error)
 	// ReportResult dispara o fan-out do resultado, libera o server e encerra a
-	// sessão. Devolve ErrSessionNotFound se não houver sessão para o match.
-	ReportResult(ctx context.Context, matchID string, results []PlayerResult) error
+	// sessão. ErrUnsupportedOutcome/ErrInvalidOutcome em outcome inválido;
+	// ErrSessionNotFound se não houver sessão para o match.
+	ReportResult(ctx context.Context, matchID string, outcome MatchOutcome) error
 }
 
 // ServerAllocator é a Port de saída do pool de game servers. O adapter static
@@ -111,5 +138,5 @@ type ConnectTokenIssuer interface {
 // o fallback de dev. Recebe gameID (multi-tenant, ADR-0017) e matchID (chave de
 // idempotência que viaja no envelope).
 type ResultPublisher interface {
-	Publish(ctx context.Context, gameID, matchID string, results []PlayerResult) error
+	Publish(ctx context.Context, gameID, matchID string, outcome MatchOutcome) error
 }

@@ -43,8 +43,18 @@ func (m *mockIssuer) JWKS(ctx context.Context) ([]byte, error) {
 
 type mockPublisher struct{ mock.Mock }
 
-func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID string, results []domain.PlayerResult) error {
-	return m.Called(ctx, gameID, matchID, results).Error(0)
+func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+	return m.Called(ctx, gameID, matchID, outcome).Error(0)
+}
+
+// wldOutcome monta um MatchOutcome win_loss_draw com os jogadores dados.
+func wldOutcome(players ...domain.PlayerOutcome) domain.MatchOutcome {
+	return domain.MatchOutcome{Kind: domain.OutcomeWinLossDraw, WinLossDraw: &domain.WinLossDrawResult{Players: players}}
+}
+
+// validOutcome é um outcome válido genérico (passa a validação → chega ao estado).
+func validOutcome() domain.MatchOutcome {
+	return wldOutcome(domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin, Score: 10})
 }
 
 type mockRegistry struct{ mock.Mock }
@@ -111,11 +121,11 @@ func TestReportResult_PublicaLiberaEncerra(t *testing.T) {
 	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
 	require.NoError(t, err)
 
-	results := []domain.PlayerResult{{PlayerID: "p1", Score: 10, Won: true}}
-	pub.On("Publish", mock.Anything, "game-1", "match-1", results).Return(nil) // recebe o game_id e o match_id da sessão
+	outcome := wldOutcome(domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin, Score: 10})
+	pub.On("Publish", mock.Anything, "game-1", "match-1", outcome).Return(nil) // recebe o game_id e o match_id da sessão
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
-	require.NoError(t, svc.ReportResult(context.Background(), "match-1", results))
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
 	assert.Equal(t, float64(0), svc.ActiveSessions(), "sessão encerrada")
 	pub.AssertExpectations(t)
 	alloc.AssertExpectations(t)
@@ -136,7 +146,7 @@ func TestReportResult_PublishFalha_NaoEncerraSessao(t *testing.T) {
 
 	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(errors.New("sns fora"))
 
-	err = svc.ReportResult(context.Background(), "match-1", nil)
+	err = svc.ReportResult(context.Background(), "match-1", validOutcome())
 	require.Error(t, err)
 	assert.Equal(t, float64(1), svc.ActiveSessions(), "sessão continua ativa")
 	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
@@ -145,8 +155,66 @@ func TestReportResult_PublishFalha_NaoEncerraSessao(t *testing.T) {
 
 func TestReportResult_MatchInexistente_ErrSessionNotFound(t *testing.T) {
 	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
-	err := svc.ReportResult(context.Background(), "nao-existe", nil)
+	err := svc.ReportResult(context.Background(), "nao-existe", validOutcome())
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+}
+
+// reportSetup cria um service com uma sessão aberta (match-1/game-1) pronta para
+// o ReportResult (server-0, players p1/p2).
+func reportSetup(t *testing.T) (*Service, *mockPublisher, *mockAllocator) {
+	t.Helper()
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	pub := &mockPublisher{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	svc := New(alloc, iss, pub)
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1", "p2"})
+	require.NoError(t, err)
+	return svc, pub, alloc
+}
+
+func TestReportResult_Empate_Aceito(t *testing.T) {
+	svc, pub, alloc := reportSetup(t)
+	outcome := wldOutcome(
+		domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultDraw, Score: 5},
+		domain.PlayerOutcome{PlayerID: "p2", Outcome: domain.ResultDraw, Score: 5},
+	)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", outcome).Return(nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome), "draw é aceito (session não valida contra o perfil)")
+	pub.AssertExpectations(t)
+}
+
+func TestReportResult_ComTimesEStats_Publica(t *testing.T) {
+	svc, pub, alloc := reportSetup(t)
+	outcome := wldOutcome(
+		domain.PlayerOutcome{PlayerID: "p1", TeamID: "A", Outcome: domain.ResultWin, Score: 3, Stats: map[string]int64{"kills": 7}},
+		domain.PlayerOutcome{PlayerID: "p2", TeamID: "B", Outcome: domain.ResultLoss, Score: 1},
+	)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", outcome).Return(nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
+	pub.AssertExpectations(t)
+}
+
+func TestReportResult_KindNaoSuportado_ErrUnsupportedOutcome(t *testing.T) {
+	svc, _, _ := reportSetup(t)
+	err := svc.ReportResult(context.Background(), "match-1", domain.MatchOutcome{Kind: "placement"})
+	assert.ErrorIs(t, err, domain.ErrUnsupportedOutcome)
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "outcome inválido não encerra a sessão")
+}
+
+func TestReportResult_OutcomeInvalido_ErrInvalidOutcome(t *testing.T) {
+	svc, _, _ := reportSetup(t)
+	errSemPlayers := svc.ReportResult(context.Background(), "match-1", wldOutcome())
+	assert.ErrorIs(t, errSemPlayers, domain.ErrInvalidOutcome, "win_loss_draw sem jogadores")
+
+	errValor := svc.ReportResult(context.Background(), "match-1",
+		wldOutcome(domain.PlayerOutcome{PlayerID: "p1", Outcome: "victory"}))
+	assert.ErrorIs(t, errValor, domain.ErrInvalidOutcome, "outcome fora de win/loss/draw")
 }
 
 func TestSweep_SessaoExpirada_FechaComTTLELiberaServer(t *testing.T) {
@@ -314,7 +382,7 @@ func TestReportResult_MarcaCloseReasonResult(t *testing.T) {
 
 	pub.On("Publish", mock.Anything, "game-1", mock.Anything, mock.Anything).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
-	require.NoError(t, svc.ReportResult(context.Background(), "match-1", nil))
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", validOutcome()))
 
 	assert.Equal(t, domain.SessionClosed, sess.State)
 	assert.Equal(t, domain.CloseResult, sess.CloseReason)
@@ -350,7 +418,7 @@ func TestSessionsByGame_AtivasEFechadasFiltradasEOrdenadas(t *testing.T) {
 	require.NoError(t, err)
 
 	now = now.Add(time.Minute)
-	require.NoError(t, svc.ReportResult(ctx, "m-old", nil))
+	require.NoError(t, svc.ReportResult(ctx, "m-old", validOutcome()))
 
 	active, closed := svc.SessionsByGame("g1")
 	require.Len(t, active, 1, "sessão de outro jogo não vaza")
@@ -371,7 +439,7 @@ func TestHistorico_RespeitaLimite_MaisAntigaSai(t *testing.T) {
 	for _, m := range []string{"m1", "m2", "m3"} {
 		_, _, err := svc.Create(ctx, m, "g1", []string{"p"})
 		require.NoError(t, err)
-		require.NoError(t, svc.ReportResult(ctx, m, nil))
+		require.NoError(t, svc.ReportResult(ctx, m, validOutcome()))
 	}
 
 	_, closed := svc.SessionsByGame("g1")

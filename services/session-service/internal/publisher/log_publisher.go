@@ -25,14 +25,21 @@ func New(log *slog.Logger) *Log {
 }
 
 // Publish loga o resultado da partida (fallback do fan-out real).
-func (l *Log) Publish(_ context.Context, gameID, matchID string, results []domain.PlayerResult) error {
-	for _, r := range results {
+func (l *Log) Publish(_ context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+	var players []domain.PlayerOutcome
+	if outcome.WinLossDraw != nil {
+		players = outcome.WinLossDraw.Players
+	}
+	for _, p := range players {
 		l.log.Info("result fan-out (log fallback)",
 			slog.String("game_id", gameID),
 			slog.String("match_id", matchID),
-			slog.String("player_id", r.PlayerID),
-			slog.Int64("score", r.Score),
-			slog.Bool("won", r.Won),
+			slog.String("kind", outcome.Kind),
+			slog.String("player_id", p.PlayerID),
+			slog.String("team_id", p.TeamID),
+			slog.String("outcome", p.Outcome),
+			slog.Int64("score", p.Score),
+			slog.Any("stats", p.Stats),
 		)
 	}
 	return nil

@@ -36,14 +36,26 @@ message ConnectGrant {
 
 message ReportResultRequest {
   string match_id = 1;
-  repeated PlayerResult results = 2;
+  // outcome polimórfico por arquétipo (ADR-0023). O kind é implícito no campo
+  // setado; novos arquétipos entram como novos campos do oneof.
+  oneof outcome {
+    WinLossDrawResult win_loss_draw = 2; // arquétipo queue_arena
+  }
 }
 
 message ReportResultResponse {}
 
-// PlayerResult é o resultado de um jogador na partida (reportado pelo server).
-message PlayerResult {
+// WinLossDrawResult é o outcome do arquétipo queue_arena: vitória/derrota/empate
+// por jogador (e por time, via team_id), com stats.
+message WinLossDrawResult {
+  repeated PlayerOutcome players = 1;
+}
+
+// PlayerOutcome é o resultado de um jogador na partida (reportado pelo server).
+message PlayerOutcome {
   string player_id = 1;
-  int64 score = 2;
-  bool won = 3;
+  string team_id = 2;             // vazio em FFA
+  string outcome = 3;             // "win" | "loss" | "draw"
+  int64 score = 4;
+  map<string, int64> stats = 5;   // métricas declaradas (kills, assists, ...)
 }
