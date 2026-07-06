@@ -120,6 +120,7 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 			Results []struct {
 				PlayerID string `json:"playerId"`
 				Won      bool   `json:"won"`
+				Outcome  string `json:"outcome"` // ADR-0023 (v2); ausente no v1 -> fallback no Won
 			} `json:"results"`
 		}
 		if err := json.Unmarshal(body, &env); err != nil {
@@ -127,7 +128,7 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 		}
 		results := make([]domain.MatchResult, 0, len(env.Results))
 		for _, r := range env.Results {
-			results = append(results, domain.MatchResult{PlayerID: r.PlayerID, Won: r.Won})
+			results = append(results, domain.MatchResult{PlayerID: r.PlayerID, Won: r.Won, Outcome: r.Outcome})
 		}
 		dup, err := svc.ApplyMatchResult(ctx, env.GameID, env.MatchID, results)
 		if err != nil {

@@ -28,6 +28,13 @@ const maxAchievementNameLen = 100
 const (
 	eventMatchPlayed = "match_played"
 	eventMatchWon    = "match_won"
+	eventMatchLost   = "match_lost"  // ADR-0023: outcome=loss
+	eventMatchDrawn  = "match_drawn" // ADR-0023: outcome=draw
+
+	// vocabulário do outcome no envelope (ADR-0023).
+	outcomeWin  = "win"
+	outcomeLoss = "loss"
+	outcomeDraw = "draw"
 )
 
 // Service implementa as regras de catálogo e desbloqueio de conquistas.
@@ -117,8 +124,20 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 	players := make([]domain.PlayerEvents, 0, len(results))
 	for _, r := range results {
 		events := []string{eventMatchPlayed}
-		if r.Won {
+		switch r.Outcome {
+		case outcomeWin:
 			events = append(events, eventMatchWon)
+		case outcomeLoss:
+			events = append(events, eventMatchLost)
+		case outcomeDraw:
+			events = append(events, eventMatchDrawn)
+		case "":
+			// fallback retrocompat: envelope sem outcome (v1) -> usa Won.
+			if r.Won {
+				events = append(events, eventMatchWon)
+			}
+		default:
+			// valor desconhecido: só match_played (não falha o processamento).
 		}
 		players = append(players, domain.PlayerEvents{PlayerID: r.PlayerID, EventTypes: events})
 	}
