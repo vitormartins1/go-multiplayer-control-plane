@@ -1,7 +1,7 @@
 # Spec: 004-profile-driven-sizing
 
 **Serviço:** matchmaking-service
-**Status:** Approved
+**Status:** Implementada (2026-07-06)
 **Data:** 2026-07-06
 **ADR:** 0023 (perfil de multiplayer por jogo) — **fatia 2** (matchmaking lê o perfil)
 
