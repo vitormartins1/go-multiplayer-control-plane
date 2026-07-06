@@ -16,6 +16,8 @@ type AnalyticsGameStat struct {
 	Matches       int64   `json:"matches"`
 	UniquePlayers int64   `json:"uniquePlayers"`
 	Wins          int64   `json:"wins"`
+	Losses        int64   `json:"losses"`
+	Draws         int64   `json:"draws"`
 	AvgScore      float64 `json:"avgScore"`
 }
 

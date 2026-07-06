@@ -59,6 +59,8 @@ export function Analytics() {
                     <Table.Th ta="right">Partidas</Table.Th>
                     <Table.Th ta="right">Jogadores únicos</Table.Th>
                     <Table.Th ta="right">Vitórias</Table.Th>
+                    <Table.Th ta="right">Derrotas</Table.Th>
+                    <Table.Th ta="right">Empates</Table.Th>
                     <Table.Th ta="right">Score médio</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -73,6 +75,8 @@ export function Analytics() {
                       <Table.Td ta="right">{g.matches}</Table.Td>
                       <Table.Td ta="right">{g.uniquePlayers}</Table.Td>
                       <Table.Td ta="right">{g.wins}</Table.Td>
+                      <Table.Td ta="right">{g.losses}</Table.Td>
+                      <Table.Td ta="right">{g.draws}</Table.Td>
                       <Table.Td ta="right">{g.avgScore.toFixed(1)}</Table.Td>
                     </Table.Tr>
                   ))}

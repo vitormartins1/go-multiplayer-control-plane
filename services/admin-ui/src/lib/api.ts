@@ -167,6 +167,8 @@ export interface AnalyticsGameStat {
   matches: number;
   uniquePlayers: number;
   wins: number;
+  losses: number;
+  draws: number;
   avgScore: number;
 }
 
