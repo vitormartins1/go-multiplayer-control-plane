@@ -140,3 +140,4 @@ Preenchido pelo Vitor. Começamos por 1–2 jogos que ele tem em mente e expandi
 - [`_TEMPLATE-jogo.md`](./_TEMPLATE-jogo.md) — ficha de engenharia reversa (copie por jogo)
 - `NN-<slug>.md` — uma ficha por jogo analisado
 - [`queue_arena-dataplane-contract.md`](./queue_arena-dataplane-contract.md) — contrato control↔data plane do arquétipo `queue_arena` (perfil → formação → token c/ `team_id` → resultado `win_loss_draw`); fonte de verdade das mudanças cross-repo no `go-game-dataplane`
+- [`queue_arena-roadmap.md`](./queue_arena-roadmap.md) — specs **restantes** do `queue_arena` (B1 perfil no console, B2 surfacing, A1/A2 enriquecimento); plano em lote p/ não re-derivar contexto
