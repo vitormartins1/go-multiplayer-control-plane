@@ -86,7 +86,7 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 
 | Gap | Origem (jogo/ficha) | Serviço(s) | Ideia de direção | Estado |
 |---|---|---|---|---|
-| Modelo de resultado além de `Won bool`/`Score` | baseline, fichas 01-04 | session, achievements, leaderboard | resultado como **outcome** rico: WIN/LOSS/DRAW (02), **colocação ordinal** (03), **coletivo por sessão** (04), **por evento/papel** (01) — por jogador, time **ou sessão** | 🔎 aberto |
+| Modelo de resultado além de `Won bool`/`Score` | baseline, fichas 01-04 | session, achievements, leaderboard | resultado como **outcome** rico: WIN/LOSS/DRAW (02), **colocação ordinal** (03), **coletivo por sessão** (04), **por evento/papel** (01) — por jogador, time **ou sessão** | 🟡 **win_loss_draw feito** (session `009`, achievements `007`); placement/coletivo/papel pendentes |
 | Jogo descreve sua **forma** de multiplayer (**perfil/arquétipo**) | baseline, ficha 01 | game-registry | jogo declara um **arquétipo de multiplayer** (`queue_arena`, `host_world_dropin`, …) + parâmetros; demais serviços leem e se pré-configuram | ✅ **ADR-0023** (Accepted) |
 | Matchmaking com **times** e composição | baseline, fichas 02/03 | matchmaking | formar lados (NvN), squads e **lobby grande** (BR), não só N tickets FIFO | 🔎 aberto |
 | Condição de vitória **declarada no perfil** (não hardcoded) | ficha 02 | game-registry, session | `first_to_score` / `highest_at_time` / `objective` / `elimination` no cadastro; hoje é `first-to-5` no código | 🔎 aberto |
@@ -103,6 +103,24 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 | **Papel** do participante na sessão | ficha 01 | session | participante tem papel (host/aliado/adversário/neutro), não só "player" | 🔎 aberto |
 | **Quando alocar o dedicated server** (Agones) | ficha 01 | session | original é P2P (mundo = grátis, sempre existe); nós usamos dedicated server → alocar **sob demanda** quando o mundo abre p/ multiplayer e liberar ao esvaziar (economia) | 🔎 aberto |
 | **Topologia por jogo** (`dedicated` vs `p2p`) + control plane **agnóstico de transporte** | ficha 01 | game-registry, session | perfil declara a topologia; `SessionProvisioner` Port com 2 adapters (Agones / P2P listen-server+relay). Dedicated 1º; P2P = slot no modelo, implementação depois (provável repo Unity à parte) | ✅ campo do **ADR-0023**; implementação P2P = ADR futuro |
+
+## Estado da implementação (fatias do ADR-0023)
+
+O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar → formar → produzir resultado → colher). Feito e planejado:
+
+| Fatia | Serviço (spec) | O que faz | Status |
+|---|---|---|---|
+| Perfil no cadastro | game-registry (`006`) | jogo declara arquétipo (`queue_arena`) + params; coluna JSONB | ✅ **main** |
+| Tamanho do match | matchmaking (`004`) | deriva o tamanho do perfil (ffa/teams), remove `matchSize` global | ✅ **main** |
+| Resultado polimórfico | session (`009`) | `MatchOutcome` (win_loss_draw + stats + times); envelope de fan-out v2 retrocompatível | ✅ **main** |
+| Colher: conquistas | achievements (`007`) | lê `outcome` → `match_won`/`match_lost`/`match_drawn` (destrava empate/derrota) | ✅ **main** |
+| **Composição de times** | matchmaking | atribuir jogadores a lados NvN (a session já aceita `teamId`) | ⬜ planejado |
+| **Colher: leaderboard/analytics** | leaderboard, analytics | ler `stats`/`outcome` (leaderboard por kills/K-D; analytics por desfecho) | ⬜ planejado |
+| **Conquistas por `stats`/`teamId`** | achievements | progresso por métrica (ex.: "10 kills"), conquistas por time | ⬜ planejado |
+| Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
+| **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective), `host_world_dropin` (role_event + topologia p2p) | ⬜ futuro |
+
+> Convenção de status: ✅ **main** = mergeado · ⬜ planejado = fatia identificada, não iniciada · 🟡 = parcial (ver Log acima).
 
 ## Backlog de jogos a analisar
 
