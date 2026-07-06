@@ -4,6 +4,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -36,6 +37,11 @@ func (s *Server) FindMatch(req *pb.FindMatchRequest, stream pb.Matchmaking_FindM
 	playerID := playerIDFromContext(stream.Context())
 	ch, err := s.mm.Join(stream.Context(), gameID, playerID)
 	if err != nil {
+		if errors.Is(err, domain.ErrProfileUnavailable) {
+			// jogo sem perfil de multiplayer utilizável (ADR-0023): não dá para
+			// derivar o tamanho do match, então o ticket não entra na fila.
+			return status.Error(codes.FailedPrecondition, "jogo sem perfil de multiplayer configurado")
+		}
 		return status.Error(codes.Internal, "join")
 	}
 	if err := stream.Send(&pb.TicketUpdate{Status: pb.Status_STATUS_SEARCHING}); err != nil {

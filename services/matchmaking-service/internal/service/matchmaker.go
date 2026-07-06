@@ -20,15 +20,18 @@ var _ domain.Matchmaker = (*Matchmaker)(nil)
 const provisionTimeout = 5 * time.Second
 
 type ticket struct {
-	gameID   string // o jogo do ticket — só casa com tickets do mesmo jogo
-	playerID string
-	ch       chan domain.MatchResult // buffer 1: a entrega nunca bloqueia
+	gameID    string // o jogo do ticket — só casa com tickets do mesmo jogo
+	playerID  string
+	matchSize int                     // tamanho do match do jogo, derivado do perfil no Join (ADR-0023)
+	ch        chan domain.MatchResult // buffer 1: a entrega nunca bloqueia
 }
 
-// Matchmaker mantém a fila de tickets em memória e forma matches FIFO.
+// Matchmaker mantém a fila de tickets em memória e forma matches FIFO. O tamanho
+// do match não é global: vem do perfil de cada jogo (domain.ProfileProvider),
+// resolvido no Join e carimbado no ticket (ADR-0023).
 type Matchmaker struct {
-	matchSize   int
 	interval    time.Duration
+	provider    domain.ProfileProvider
 	provisioner domain.SessionProvisioner
 
 	baseCtx context.Context // ctx do Run, herdado pelas goroutines de provisionamento
@@ -39,12 +42,12 @@ type Matchmaker struct {
 	matchesFailed int64
 }
 
-// New cria o matchmaker (tamanho do match, intervalo do loop e o provisioner
-// de sessão usado ao formar cada match).
-func New(matchSize int, interval time.Duration, provisioner domain.SessionProvisioner) *Matchmaker {
+// New cria o matchmaker (intervalo do loop, o provider de perfil que dita o
+// tamanho do match por jogo, e o provisioner de sessão usado ao formar cada match).
+func New(interval time.Duration, provider domain.ProfileProvider, provisioner domain.SessionProvisioner) *Matchmaker {
 	return &Matchmaker{
-		matchSize:   matchSize,
 		interval:    interval,
+		provider:    provider,
 		provisioner: provisioner,
 		baseCtx:     context.Background(),
 	}
@@ -53,7 +56,15 @@ func New(matchSize int, interval time.Duration, provisioner domain.SessionProvis
 // Join enfileira o jogador (um ticket por jogador) e devolve o canal do Match.
 // Quando o ctx é cancelado (stream fechado), o ticket sai da fila.
 func (m *Matchmaker) Join(ctx context.Context, gameID, playerID string) (<-chan domain.MatchResult, error) {
-	t := &ticket{gameID: gameID, playerID: playerID, ch: make(chan domain.MatchResult, 1)}
+	// O tamanho do match vem do perfil do jogo (ADR-0023). Resolver antes de
+	// enfileirar: se o jogo não tem perfil utilizável, o ticket não entra na fila
+	// (ErrProfileUnavailable). Fora da seção crítica — nada de I/O sob o lock.
+	size, err := m.provider.MatchSize(ctx, gameID)
+	if err != nil {
+		return nil, err
+	}
+
+	t := &ticket{gameID: gameID, playerID: playerID, matchSize: size, ch: make(chan domain.MatchResult, 1)}
 
 	m.mu.Lock()
 	m.removeByPlayerLocked(playerID) // garante um ticket por jogador
@@ -96,9 +107,11 @@ func (m *Matchmaker) tryForm() {
 	}
 	taken := map[*ticket]bool{}
 	for _, ts := range byGame {
-		for len(ts) >= m.matchSize {
-			group := ts[:m.matchSize:m.matchSize]
-			ts = ts[m.matchSize:]
+		// tickets do mesmo jogo compartilham o tamanho (derivado do perfil no Join).
+		size := ts[0].matchSize
+		for len(ts) >= size {
+			group := ts[:size:size]
+			ts = ts[size:]
 			for _, t := range group {
 				taken[t] = true
 			}

@@ -48,10 +48,22 @@ var okProvisioner = provisionerFunc(func(_ string, players []string) (domain.Pro
 	return domain.Provisioned{ServerAddress: "10.0.0.1:7777", Tokens: tokens}, nil
 })
 
+// stubProvider é um domain.ProfileProvider fixo (tamanho ou erro) para os testes.
+type stubProvider struct {
+	size int
+	err  error
+}
+
+func (s stubProvider) MatchSize(context.Context, string) (int, error) { return s.size, s.err }
+
 func setup(t *testing.T, prov domain.SessionProvisioner) pb.MatchmakingClient {
+	return setupWith(t, prov, stubProvider{size: 2})
+}
+
+func setupWith(t *testing.T, prov domain.SessionProvisioner, profile domain.ProfileProvider) pb.MatchmakingClient {
 	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
-	mm := service.New(2, 10*time.Millisecond, prov)
+	mm := service.New(10*time.Millisecond, profile, prov)
 	ctx, cancel := context.WithCancel(context.Background())
 	go mm.Run(ctx)
 
@@ -137,6 +149,17 @@ func TestFindMatch_SemServer_Failed(t *testing.T) {
 	assert.Equal(t, pb.Status_STATUS_FAILED, f1.Status)
 	assert.Equal(t, "no game server available", f1.Reason)
 	assert.Empty(t, f1.ConnectToken)
+}
+
+func TestFindMatch_SemPerfil_FailedPrecondition(t *testing.T) {
+	client := setupWith(t, okProvisioner, stubProvider{err: domain.ErrProfileUnavailable})
+
+	s, err := client.FindMatch(authCtx("p1"), &pb.FindMatchRequest{GameId: "sem-perfil"})
+	require.NoError(t, err)
+
+	_, err = s.Recv()
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code(), "jogo sem perfil -> FailedPrecondition")
 }
 
 func recvSearching(t *testing.T, s pb.Matchmaking_FindMatchClient) error {

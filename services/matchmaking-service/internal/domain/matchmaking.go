@@ -46,6 +46,15 @@ type SessionProvisioner interface {
 	Provision(ctx context.Context, matchID string, players []string, gameID string) (Provisioned, error)
 }
 
+// ProfileProvider é a Port de saída que devolve o tamanho do match derivado do
+// perfil de multiplayer do jogo (ADR-0023, arquétipo queue_arena): ffa ->
+// playerCount, teams -> teamCount*teamSize. A derivação mora no adapter; o
+// domínio só recebe o tamanho. Devolve ErrProfileUnavailable quando o perfil
+// não está disponível/utilizável.
+type ProfileProvider interface {
+	MatchSize(ctx context.Context, gameID string) (int, error)
+}
+
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).
 // Implementada por shared/auth (JWKS), usada no interceptor gRPC.
 type TokenVerifier interface {
