@@ -30,9 +30,9 @@ func NewRedisStore(addr, prefix string) *RedisStore {
 	}
 }
 
-// key monta a key do sorted set do jogo.
-func (s *RedisStore) key(gameID string) string {
-	return s.prefix + ":" + gameID
+// key monta a key do sorted set do (jogo, board).
+func (s *RedisStore) key(gameID, board string) string {
+	return s.prefix + ":" + gameID + ":" + board
 }
 
 // Ping verifica a conectividade (usado no boot, com retry).
@@ -41,8 +41,8 @@ func (s *RedisStore) Ping(ctx context.Context) error {
 }
 
 // Submit aplica highscore: ZADD GT só sobe o score se o novo for maior.
-func (s *RedisStore) Submit(ctx context.Context, gameID, playerID string, score int64) error {
-	err := s.client.ZAddArgs(ctx, s.key(gameID), redis.ZAddArgs{
+func (s *RedisStore) Submit(ctx context.Context, gameID, board, playerID string, score int64) error {
+	err := s.client.ZAddArgs(ctx, s.key(gameID, board), redis.ZAddArgs{
 		GT:      true,
 		Members: []redis.Z{{Score: float64(score), Member: playerID}},
 	}).Err()
@@ -53,8 +53,8 @@ func (s *RedisStore) Submit(ctx context.Context, gameID, playerID string, score 
 }
 
 // ForceScore substitui o score independente do valor atual (admin override, ZADD sem GT).
-func (s *RedisStore) ForceScore(ctx context.Context, gameID, playerID string, score int64) error {
-	err := s.client.ZAdd(ctx, s.key(gameID), redis.Z{Score: float64(score), Member: playerID}).Err()
+func (s *RedisStore) ForceScore(ctx context.Context, gameID, board, playerID string, score int64) error {
+	err := s.client.ZAdd(ctx, s.key(gameID, board), redis.Z{Score: float64(score), Member: playerID}).Err()
 	if err != nil {
 		return fmt.Errorf("leaderboard storage: force score: %w", err)
 	}
@@ -62,8 +62,8 @@ func (s *RedisStore) ForceScore(ctx context.Context, gameID, playerID string, sc
 }
 
 // Rank devolve a posição (0-based) e o score do jogador; ErrNotRanked se ausente.
-func (s *RedisStore) Rank(ctx context.Context, gameID, playerID string) (int64, int64, error) {
-	res, err := s.client.ZRevRankWithScore(ctx, s.key(gameID), playerID).Result()
+func (s *RedisStore) Rank(ctx context.Context, gameID, board, playerID string) (int64, int64, error) {
+	res, err := s.client.ZRevRankWithScore(ctx, s.key(gameID, board), playerID).Result()
 	if errors.Is(err, redis.Nil) {
 		return 0, 0, domain.ErrNotRanked
 	}
@@ -73,12 +73,12 @@ func (s *RedisStore) Rank(ctx context.Context, gameID, playerID string) (int64, 
 	return res.Rank, int64(res.Score), nil
 }
 
-func (s *RedisStore) Top(ctx context.Context, gameID string, limit int) ([]domain.Entry, error) {
-	return s.Range(ctx, gameID, 0, int64(limit-1))
+func (s *RedisStore) Top(ctx context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
+	return s.Range(ctx, gameID, board, 0, int64(limit-1))
 }
 
-func (s *RedisStore) Range(ctx context.Context, gameID string, start, stop int64) ([]domain.Entry, error) {
-	zs, err := s.client.ZRevRangeWithScores(ctx, s.key(gameID), start, stop).Result()
+func (s *RedisStore) Range(ctx context.Context, gameID, board string, start, stop int64) ([]domain.Entry, error) {
+	zs, err := s.client.ZRevRangeWithScores(ctx, s.key(gameID, board), start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard storage: range: %w", err)
 	}

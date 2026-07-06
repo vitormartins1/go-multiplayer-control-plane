@@ -8,4 +8,5 @@ import "errors"
 var (
 	ErrNotRanked    = errors.New("leaderboard: jogador sem score")
 	ErrInvalidScore = errors.New("leaderboard: score inválido")
+	ErrInvalidBoard = errors.New("leaderboard: board inválido")
 )

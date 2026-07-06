@@ -70,7 +70,7 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
-	entry, err := h.svc.Submit(r.Context(), gameID, playerID(r.Context()), *req.Score)
+	entry, err := h.svc.Submit(r.Context(), gameID, boardFromQuery(r), playerID(r.Context()), *req.Score)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -85,7 +85,7 @@ func (h *Handler) top(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit")) // 0/erro -> service aplica o default
-	entries, err := h.svc.Top(r.Context(), gameID, limit)
+	entries, err := h.svc.Top(r.Context(), gameID, boardFromQuery(r), limit)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -105,7 +105,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 			k = n
 		}
 	}
-	entries, err := h.svc.Around(r.Context(), gameID, playerID(r.Context()), k)
+	entries, err := h.svc.Around(r.Context(), gameID, boardFromQuery(r), playerID(r.Context()), k)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -123,7 +123,7 @@ func (h *Handler) adminSubmit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
-	entry, err := h.svc.Submit(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
+	entry, err := h.svc.Submit(r.Context(), r.PathValue("gameId"), boardFromQuery(r), r.PathValue("playerID"), *req.Score)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -140,7 +140,7 @@ func (h *Handler) adminForceScore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
-	entry, err := h.svc.ForceSubmit(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
+	entry, err := h.svc.ForceSubmit(r.Context(), r.PathValue("gameId"), boardFromQuery(r), r.PathValue("playerID"), *req.Score)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -151,7 +151,7 @@ func (h *Handler) adminForceScore(w http.ResponseWriter, r *http.Request) {
 // adminTop devolve o top-N do jogo (consumo do painel).
 func (h *Handler) adminTop(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	entries, err := h.svc.Top(r.Context(), r.PathValue("gameId"), limit)
+	entries, err := h.svc.Top(r.Context(), r.PathValue("gameId"), boardFromQuery(r), limit)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -178,6 +178,14 @@ func playerID(ctx context.Context) string {
 // gameFromHeader lê o jogo do header X-Game-Id (contexto do cliente, ADR-0017).
 func gameFromHeader(r *http.Request) string {
 	return r.Header.Get("X-Game-Id")
+}
+
+// boardFromQuery lê o board do query param `?board`; ausente -> "score" (ADR-0023).
+func boardFromQuery(r *http.Request) string {
+	if b := r.URL.Query().Get("board"); b != "" {
+		return b
+	}
+	return domain.BoardScore
 }
 
 type entryDTO struct {
@@ -214,6 +222,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_ranked")
 	case errors.Is(err, domain.ErrInvalidScore):
 		writeError(w, http.StatusBadRequest, "invalid_score")
+	case errors.Is(err, domain.ErrInvalidBoard):
+		writeError(w, http.StatusBadRequest, "invalid_board")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

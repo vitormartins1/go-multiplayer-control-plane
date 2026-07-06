@@ -27,37 +27,43 @@ func (f fakeVerifier) Verify(_ context.Context, _ string) (string, error) {
 type fakeService struct {
 	submitEntry   domain.Entry
 	topEntries    []domain.Entry
+	topErr        error
 	aroundEntries []domain.Entry
 	aroundErr     error
 	gotGameID     string
+	gotBoard      string
 	gotPlayerID   string
 	gotScore      int64
 	gotLimit      int
 	gotK          int
 }
 
-func (f *fakeService) Submit(_ context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
+func (f *fakeService) Submit(_ context.Context, gameID, board, playerID string, score int64) (domain.Entry, error) {
 	f.gotGameID = gameID
+	f.gotBoard = board
 	f.gotPlayerID = playerID
 	f.gotScore = score
 	return f.submitEntry, nil
 }
 
-func (f *fakeService) ForceSubmit(_ context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
+func (f *fakeService) ForceSubmit(_ context.Context, gameID, board, playerID string, score int64) (domain.Entry, error) {
 	f.gotGameID = gameID
+	f.gotBoard = board
 	f.gotPlayerID = playerID
 	f.gotScore = score
 	return f.submitEntry, nil
 }
 
-func (f *fakeService) Top(_ context.Context, gameID string, limit int) ([]domain.Entry, error) {
+func (f *fakeService) Top(_ context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
 	f.gotGameID = gameID
+	f.gotBoard = board
 	f.gotLimit = limit
-	return f.topEntries, nil
+	return f.topEntries, f.topErr
 }
 
-func (f *fakeService) Around(_ context.Context, gameID, playerID string, k int) ([]domain.Entry, error) {
+func (f *fakeService) Around(_ context.Context, gameID, board, playerID string, k int) ([]domain.Entry, error) {
 	f.gotGameID = gameID
+	f.gotBoard = board
 	f.gotPlayerID = playerID
 	f.gotK = k
 	return f.aroundEntries, f.aroundErr
@@ -131,6 +137,38 @@ func TestTop_200_PassaLimit(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.Len(t, body.Entries, 1)
 	assert.Equal(t, "p2", body.Entries[0].PlayerID)
+}
+
+func TestTop_Board_kills_PassaBoard(t *testing.T) {
+	svc := &fakeService{topEntries: []domain.Entry{}}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard?board=kills", "tok", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "kills", svc.gotBoard)
+}
+
+func TestTop_SemBoard_DefaultScore(t *testing.T) {
+	svc := &fakeService{topEntries: []domain.Entry{}}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard", "tok", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, domain.BoardScore, svc.gotBoard, "board ausente -> score (compat)")
+}
+
+func TestTop_BoardInvalido_400(t *testing.T) {
+	svc := &fakeService{topErr: domain.ErrInvalidBoard}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard?board=BAD!", "tok", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestMe_200_PassaAround(t *testing.T) {
