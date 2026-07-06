@@ -29,6 +29,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games", h.list)
 	mux.HandleFunc("GET /games/{id}", h.get)
 	mux.HandleFunc("PUT /games/{id}", h.rename)
+	// Perfil de multiplayer (ADR-0023, spec 006).
+	mux.HandleFunc("PUT /games/{id}/multiplayer-profile", h.setProfile)
+	mux.HandleFunc("GET /games/{id}/multiplayer-profile", h.getProfile)
 	// Presença por jogo (ADR-0019): marca (login-into-game) e lista a base.
 	mux.HandleFunc("PUT /games/{gameId}/players/{playerID}", h.markPresence)
 	mux.HandleFunc("GET /games/{gameId}/players", h.listPlayers)
@@ -56,6 +59,66 @@ func toDTO(g *domain.Game) gameDTO {
 		GeneratedImageSeed:  g.GeneratedImageSeed,
 		GeneratedImageStyle: g.GeneratedImageStyle,
 	}
+}
+
+// --- perfil de multiplayer (ADR-0023, spec 006) ---
+
+type profileDTO struct {
+	Archetype string              `json:"archetype"`
+	Topology  string              `json:"topology"`
+	Params    queueArenaParamsDTO `json:"params"`
+}
+
+type queueArenaParamsDTO struct {
+	Structure       string   `json:"structure"`
+	PlayerCount     int      `json:"playerCount"`
+	TeamCount       int      `json:"teamCount"`
+	TeamSize        int      `json:"teamSize"`
+	WinCondition    string   `json:"winCondition"`
+	ScoreTarget     int      `json:"scoreTarget"`
+	DurationSeconds int      `json:"durationSeconds"`
+	MatchStructure  string   `json:"matchStructure"`
+	RoundsToWin     int      `json:"roundsToWin"`
+	AllowDraw       bool     `json:"allowDraw"`
+	ScoringStats    []string `json:"scoringStats"`
+}
+
+// gameWithProfileDTO estende o jogo com o perfil no GET /games/{id}. O perfil
+// serializa como objeto ou null (sem omitempty); a lista usa gameDTO puro.
+type gameWithProfileDTO struct {
+	gameDTO
+	MultiplayerProfile *profileDTO `json:"multiplayerProfile"`
+}
+
+func profileToDomain(d profileDTO) domain.MultiplayerProfile {
+	p := domain.MultiplayerProfile{Archetype: d.Archetype, Topology: d.Topology}
+	if d.Archetype == domain.ArchetypeQueueArena {
+		qa := d.Params
+		p.QueueArena = &domain.QueueArenaParams{
+			Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
+			TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
+			DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
+			RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+		}
+	}
+	return p
+}
+
+func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
+	if p == nil {
+		return nil
+	}
+	d := &profileDTO{Archetype: p.Archetype, Topology: p.Topology}
+	if p.QueueArena != nil {
+		qa := p.QueueArena
+		d.Params = queueArenaParamsDTO{
+			Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
+			TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
+			DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
+			RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+		}
+	}
+	return d
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +157,35 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toDTO(g))
+	writeJSON(w, http.StatusOK, gameWithProfileDTO{
+		gameDTO:            toDTO(g),
+		MultiplayerProfile: profileToDTO(g.MultiplayerProfile),
+	})
+}
+
+// setProfile faz upsert do perfil de multiplayer do jogo (ADR-0023, spec 006).
+func (h *Handler) setProfile(w http.ResponseWriter, r *http.Request) {
+	var req profileDTO
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	p, err := h.games.SetMultiplayerProfile(r.Context(), r.PathValue("id"), profileToDomain(req))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, profileToDTO(p))
+}
+
+// getProfile devolve o perfil de multiplayer do jogo (404 se ausente).
+func (h *Handler) getProfile(w http.ResponseWriter, r *http.Request) {
+	p, err := h.games.GetMultiplayerProfile(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, profileToDTO(p))
 }
 
 // rename altera só o nome do jogo (Configurações do painel, spec 005).
@@ -195,6 +286,14 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "slug_taken")
 	case errors.Is(err, domain.ErrGameNotFound):
 		writeError(w, http.StatusNotFound, "not_found")
+	case errors.Is(err, domain.ErrUnsupportedArchetype):
+		writeError(w, http.StatusBadRequest, "unsupported_archetype")
+	case errors.Is(err, domain.ErrUnsupportedTopology):
+		writeError(w, http.StatusBadRequest, "unsupported_topology")
+	case errors.Is(err, domain.ErrInvalidProfileParams):
+		writeError(w, http.StatusBadRequest, "invalid_profile_params")
+	case errors.Is(err, domain.ErrProfileNotFound):
+		writeError(w, http.StatusNotFound, "profile_not_found")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

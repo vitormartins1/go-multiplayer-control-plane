@@ -1,0 +1,120 @@
+package repository
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
+)
+
+// Persistência do perfil de multiplayer (ADR-0023, spec 006): coluna JSONB
+// multiplayer_profile na tabela games. O formato armazenado é
+// { archetype, topology, params }, onde params é o objeto do arquétipo — o que
+// mantém archetype/topology no topo e acomoda params polimórficos por arquétipo.
+
+// storedProfile é o envelope persistido; params fica cru (RawMessage) para ser
+// decodificado conforme o archetype.
+type storedProfile struct {
+	Archetype string          `json:"archetype"`
+	Topology  string          `json:"topology"`
+	Params    json.RawMessage `json:"params"`
+}
+
+// storedQueueArena é o shape persistido dos params do arquétipo queue_arena.
+type storedQueueArena struct {
+	Structure       string   `json:"structure"`
+	PlayerCount     int      `json:"playerCount,omitempty"`
+	TeamCount       int      `json:"teamCount,omitempty"`
+	TeamSize        int      `json:"teamSize,omitempty"`
+	WinCondition    string   `json:"winCondition"`
+	ScoreTarget     int      `json:"scoreTarget,omitempty"`
+	DurationSeconds int      `json:"durationSeconds,omitempty"`
+	MatchStructure  string   `json:"matchStructure"`
+	RoundsToWin     int      `json:"roundsToWin,omitempty"`
+	AllowDraw       bool     `json:"allowDraw"`
+	ScoringStats    []string `json:"scoringStats,omitempty"`
+}
+
+func (r *PostgresGameRepository) UpsertMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) error {
+	raw, err := encodeProfile(&p)
+	if err != nil {
+		return fmt.Errorf("game-registry repository: upsert profile: encode: %w", err)
+	}
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET multiplayer_profile = $2 WHERE id = $1`, gameID, raw)
+	if err != nil {
+		return fmt.Errorf("game-registry repository: upsert profile: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGameNotFound
+	}
+	return nil
+}
+
+// encodeProfile serializa o perfil de domínio para o JSONB armazenado.
+func encodeProfile(p *domain.MultiplayerProfile) ([]byte, error) {
+	sp := storedProfile{Archetype: p.Archetype, Topology: p.Topology}
+	switch p.Archetype {
+	case domain.ArchetypeQueueArena:
+		if p.QueueArena == nil {
+			return nil, fmt.Errorf("perfil %q sem params", p.Archetype)
+		}
+		qa := p.QueueArena
+		params, err := json.Marshal(storedQueueArena{
+			Structure:       qa.Structure,
+			PlayerCount:     qa.PlayerCount,
+			TeamCount:       qa.TeamCount,
+			TeamSize:        qa.TeamSize,
+			WinCondition:    qa.WinCondition,
+			ScoreTarget:     qa.ScoreTarget,
+			DurationSeconds: qa.DurationSeconds,
+			MatchStructure:  qa.MatchStructure,
+			RoundsToWin:     qa.RoundsToWin,
+			AllowDraw:       qa.AllowDraw,
+			ScoringStats:    qa.ScoringStats,
+		})
+		if err != nil {
+			return nil, err
+		}
+		sp.Params = params
+	default:
+		return nil, fmt.Errorf("arquétipo não persistível: %q", p.Archetype)
+	}
+	return json.Marshal(sp)
+}
+
+// decodeProfile desserializa o JSONB armazenado para o perfil de domínio.
+// Coluna NULL/vazia -> nil (jogo sem perfil).
+func decodeProfile(raw []byte) (*domain.MultiplayerProfile, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var sp storedProfile
+	if err := json.Unmarshal(raw, &sp); err != nil {
+		return nil, err
+	}
+	p := &domain.MultiplayerProfile{Archetype: sp.Archetype, Topology: sp.Topology}
+	switch sp.Archetype {
+	case domain.ArchetypeQueueArena:
+		var sq storedQueueArena
+		if len(sp.Params) > 0 {
+			if err := json.Unmarshal(sp.Params, &sq); err != nil {
+				return nil, err
+			}
+		}
+		p.QueueArena = &domain.QueueArenaParams{
+			Structure:       sq.Structure,
+			PlayerCount:     sq.PlayerCount,
+			TeamCount:       sq.TeamCount,
+			TeamSize:        sq.TeamSize,
+			WinCondition:    sq.WinCondition,
+			ScoreTarget:     sq.ScoreTarget,
+			DurationSeconds: sq.DurationSeconds,
+			MatchStructure:  sq.MatchStructure,
+			RoundsToWin:     sq.RoundsToWin,
+			AllowDraw:       sq.AllowDraw,
+			ScoringStats:    sq.ScoringStats,
+		}
+	}
+	return p, nil
+}

@@ -716,3 +716,35 @@ case "agones":
 ```
 
 **Pegadinha / nuance:** o *typed-nil* é o buraco clássico de Go. Se eu tivesse escrito `var ag *allocator.Agones` (ponteiro nil concreto) e passado esse `ag` para `WithServerRegistry(ag)`, a interface resultante **não seria nil** — ela carrega o par `(tipo=*Agones, valor=nil)`, e `s.registry == nil` daria **false**, entrando no `reconcile` e chamando método num ponteiro nil → panic. A defesa é declarar a variável já como **o tipo da interface** (`var registry domain.ServerRegistry`) e só atribuir um valor concreto quando ele existe de verdade — assim o "vazio" é uma interface nil de verdade. Contraste com C#: lá `null` é só `null`, não existe esse par tipo+valor; a checagem `_registry is null` nunca te surpreende. Em Go, "interface nil" ≠ "interface com ponteiro nil dentro". Relaciona com [[07]] (capacidade opcional de um valor presente) e [[10]] (interfaces implícitas).
+
+## 20 — Tagged union por ponteiro (discriminated union) para params polimórficos
+
+**O que é / por que importa:** às vezes um campo precisa ter **uma de várias formas**, escolhida por um discriminador. Em C# você faria herança/`abstract` ou um `oneof`/união; Go não tem união nativa. O padrão idiomático é um **struct com um ponteiro por variante** e um campo discriminador string — exatamente um ponteiro é não-nil, indicado pelo discriminador. Type-safe, serializa em JSON/JSONB natural e é fácil de estender (nova variante = novo ponteiro), sem `any` nem type-switch mágico no domínio.
+
+**Onde no projeto:** `game-registry/internal/domain/game.go` — `MultiplayerProfile` guarda o perfil de multiplayer de um jogo (ADR-0023). O `Archetype` discrimina; no MVP só existe `QueueArena`, mas `battle_royale`/`coop_mission` (fichas de `docs/game-models/`) entram como novos ponteiros. A validação da invariante (o ponteiro do arquétipo declarado é o único não-nil) vive no `service` (`profile_service.go`); a persistência isola o formato num struct-espelho com tags JSON no `repository` (`postgres_profile.go`), mantendo o domínio limpo.
+
+```mermaid
+flowchart LR
+    A["MultiplayerProfile<br/>Archetype = 'queue_arena'"] --> Q["QueueArena *QueueArenaParams<br/>(não-nil)"]
+    A -.-> B["BattleRoyale *…<br/>(nil — futuro)"]
+    A -.-> C["CoopMission *…<br/>(nil — futuro)"]
+```
+
+```go
+type MultiplayerProfile struct {
+	Archetype  string // discriminador: "queue_arena" | (futuro) "battle_royale" | ...
+	Topology   string
+	QueueArena *QueueArenaParams // não-nil sse Archetype == "queue_arena"
+	// BattleRoyale *BattleRoyaleParams // nova variante entra aqui
+}
+
+// invariante conferida no service (não no tipo):
+func check(p MultiplayerProfile) error {
+	if p.Archetype == ArchetypeQueueArena && p.QueueArena == nil {
+		return ErrInvalidProfileParams // discriminador diz queue_arena, mas faltam os params
+	}
+	return nil
+}
+```
+
+**Pegadinha / nuance:** o compilador **não** garante a invariante — nada impede `Archetype="queue_arena"` com `QueueArena==nil`, ou dois ponteiros não-nil ao mesmo tempo. Isso é responsabilidade de validação em runtime (aqui, no `service`). É o trade-off vs. uma união de verdade: mais simples e explícito, mas a coerência discriminador↔ponteiro é sua para manter. Diferente do [[12]] (ponteiro para distinguir *ausente* de *zero* num escalar), aqui o ponteiro seleciona **qual sub-struct** está ativa. Relaciona com [[09]] (NULL como ponteiro no pgx).

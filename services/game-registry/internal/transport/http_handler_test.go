@@ -38,6 +38,16 @@ func (m *mockService) Rename(ctx context.Context, id, name string) (*domain.Game
 	g, _ := args.Get(0).(*domain.Game)
 	return g, args.Error(1)
 }
+func (m *mockService) SetMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) (*domain.MultiplayerProfile, error) {
+	args := m.Called(ctx, gameID, p)
+	res, _ := args.Get(0).(*domain.MultiplayerProfile)
+	return res, args.Error(1)
+}
+func (m *mockService) GetMultiplayerProfile(ctx context.Context, gameID string) (*domain.MultiplayerProfile, error) {
+	args := m.Called(ctx, gameID)
+	res, _ := args.Get(0).(*domain.MultiplayerProfile)
+	return res, args.Error(1)
+}
 
 type mockPresence struct{ mock.Mock }
 
@@ -218,4 +228,121 @@ func TestRename_Inexistente_404(t *testing.T) {
 	svc.On("Rename", mock.Anything, "nao", "X").Return((*domain.Game)(nil), domain.ErrGameNotFound)
 	rr := do(newServer(svc), http.MethodPut, "/games/nao", `{"name":"X"}`)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+// --- perfil de multiplayer (spec 006) ---
+
+func ffaProfile() *domain.MultiplayerProfile {
+	return &domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeQueueArena, Topology: domain.TopologyDedicated,
+		QueueArena: &domain.QueueArenaParams{
+			Structure: "ffa", PlayerCount: 8,
+			WinCondition: "first_to_score", ScoreTarget: 25, MatchStructure: "single",
+		},
+	}
+}
+
+const validProfileBody = `{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":8,"winCondition":"first_to_score","scoreTarget":25,"matchStructure":"single"}}`
+
+func TestSetProfile_Valido_200_MapeiaParams(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, "id-1", mock.MatchedBy(func(p domain.MultiplayerProfile) bool {
+		return p.Archetype == "queue_arena" && p.Topology == "dedicated" &&
+			p.QueueArena != nil && p.QueueArena.Structure == "ffa" && p.QueueArena.PlayerCount == 8
+	})).Return(ffaProfile(), nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/multiplayer-profile", validProfileBody)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, "queue_arena", resp["archetype"])
+	svc.AssertExpectations(t)
+}
+
+func TestSetProfile_BodyInvalido_400(t *testing.T) {
+	rr := do(newServer(new(mockService)), http.MethodPut, "/games/id-1/multiplayer-profile", `{`)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestSetProfile_ArchetypeNaoSuportado_400(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, mock.Anything, mock.Anything).
+		Return((*domain.MultiplayerProfile)(nil), domain.ErrUnsupportedArchetype)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/multiplayer-profile", validProfileBody)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "unsupported_archetype")
+}
+
+func TestSetProfile_ParamsInvalidos_400(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, mock.Anything, mock.Anything).
+		Return((*domain.MultiplayerProfile)(nil), domain.ErrInvalidProfileParams)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/multiplayer-profile", validProfileBody)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestSetProfile_JogoInexistente_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, mock.Anything, mock.Anything).
+		Return((*domain.MultiplayerProfile)(nil), domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodPut, "/games/nao/multiplayer-profile", validProfileBody)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestGetProfile_Existe_200(t *testing.T) {
+	svc := new(mockService)
+	svc.On("GetMultiplayerProfile", mock.Anything, "id-1").Return(ffaProfile(), nil)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-1/multiplayer-profile", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"archetype":"queue_arena"`)
+}
+
+func TestGetProfile_Ausente_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("GetMultiplayerProfile", mock.Anything, "id-1").
+		Return((*domain.MultiplayerProfile)(nil), domain.ErrProfileNotFound)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-1/multiplayer-profile", "")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "profile_not_found")
+}
+
+func TestGet_IncluiMultiplayerProfile(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Get", mock.Anything, "id-1").
+		Return(&domain.Game{ID: "id-1", Slug: "arena", Name: "Arena", MultiplayerProfile: ffaProfile()}, nil)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-1", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	prof, ok := resp["multiplayerProfile"].(map[string]any)
+	require.True(t, ok, "multiplayerProfile presente como objeto")
+	assert.Equal(t, "queue_arena", prof["archetype"])
+}
+
+func TestGet_SemPerfil_MultiplayerProfileNull(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Get", mock.Anything, "id-1").Return(&domain.Game{ID: "id-1", Slug: "arena", Name: "Arena"}, nil)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-1", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	val, ok := resp["multiplayerProfile"]
+	require.True(t, ok, "chave presente")
+	assert.Nil(t, val, "valor null quando sem perfil")
+}
+
+func TestList_NaoIncluiMultiplayerProfile(t *testing.T) {
+	svc := new(mockService)
+	svc.On("List", mock.Anything).Return([]domain.Game{{ID: "id-1", Slug: "arena", Name: "Arena"}}, nil)
+	rr := do(newServer(svc), http.MethodGet, "/games", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var arr []map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &arr))
+	require.Len(t, arr, 1)
+	_, ok := arr[0]["multiplayerProfile"]
+	assert.False(t, ok, "lista não infla com o perfil")
 }

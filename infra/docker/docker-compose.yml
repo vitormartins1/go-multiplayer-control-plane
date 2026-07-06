@@ -363,6 +363,7 @@ services:
       - ../../services/game-registry/migrations/002_seed_sandbox.sql:/docker-entrypoint-initdb.d/002_seed_sandbox.sql:ro
       - ../../services/game-registry/migrations/003_create_game_players.sql:/docker-entrypoint-initdb.d/003_create_game_players.sql:ro
       - ../../services/game-registry/migrations/004_add_cover_metadata.sql:/docker-entrypoint-initdb.d/004_add_cover_metadata.sql:ro
+      - ../../services/game-registry/migrations/005_add_multiplayer_profile.sql:/docker-entrypoint-initdb.d/005_add_multiplayer_profile.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s

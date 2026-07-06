@@ -26,6 +26,48 @@ GET {{host}}/games
 ### Consultar um jogo por id (validação de game_id por outros serviços)
 GET {{host}}/games/{{gameId}}
 
+### Perfil de multiplayer (ADR-0023 / spec 006): configurar (queue_arena, dedicated)
+# @name setProfile
+PUT {{host}}/games/{{gameId}}/multiplayer-profile
+Content-Type: application/json
+
+{
+  "archetype": "queue_arena",
+  "topology": "dedicated",
+  "params": {
+    "structure": "teams",
+    "teamCount": 2,
+    "teamSize": 3,
+    "winCondition": "first_to_score",
+    "scoreTarget": 50,
+    "matchStructure": "single",
+    "allowDraw": true,
+    "scoringStats": ["kills", "assists"]
+  }
+}
+
+### Consultar o perfil -> 200 (ou 404 profile_not_found se não configurado)
+GET {{host}}/games/{{gameId}}/multiplayer-profile
+
+### GET do jogo agora inclui multiplayerProfile (perfil ou null)
+GET {{host}}/games/{{gameId}}
+
+### GET /games (lista) NÃO inclui o perfil (não infla)
+GET {{host}}/games
+
+### Perfil inválido -> 400: archetype não suportado
+PUT {{host}}/games/{{gameId}}/multiplayer-profile
+Content-Type: application/json
+
+{ "archetype": "battle_royale", "topology": "dedicated", "params": {} }
+
+### Perfil inválido -> 400: params incoerentes (ffa com teamCount)
+PUT {{host}}/games/{{gameId}}/multiplayer-profile
+Content-Type: application/json
+
+{ "archetype": "queue_arena", "topology": "dedicated",
+  "params": { "structure": "ffa", "playerCount": 4, "teamCount": 2, "winCondition": "objective", "matchStructure": "single" } }
+
 ### slug inválido -> 400 ; slug duplicado -> 409 ; id inexistente -> 404
 POST {{host}}/games
 Content-Type: application/json

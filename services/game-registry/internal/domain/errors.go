@@ -9,4 +9,10 @@ var (
 	ErrInvalidName  = errors.New("game-registry: nome inválido")
 	ErrSlugTaken    = errors.New("game-registry: slug já em uso")
 	ErrGameNotFound = errors.New("game-registry: jogo não encontrado")
+
+	// Perfil de multiplayer (ADR-0023, spec 006).
+	ErrUnsupportedArchetype = errors.New("game-registry: arquétipo de multiplayer não suportado")
+	ErrUnsupportedTopology  = errors.New("game-registry: topologia não suportada")
+	ErrInvalidProfileParams = errors.New("game-registry: parâmetros do perfil inválidos")
+	ErrProfileNotFound      = errors.New("game-registry: perfil de multiplayer não configurado")
 )

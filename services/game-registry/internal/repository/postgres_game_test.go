@@ -31,6 +31,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithInitScripts(
 			"../../migrations/001_create_games.sql",
 			"../../migrations/004_add_cover_metadata.sql",
+			"../../migrations/005_add_multiplayer_profile.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -145,5 +146,77 @@ func TestPostgresGameRepository_UpdateName_AtualizaSoNome(t *testing.T) {
 func TestPostgresGameRepository_UpdateName_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := NewPostgresGameRepository(newTestPool(t))
 	err := repo.UpdateName(context.Background(), "00000000-0000-0000-0000-000000000000", "X")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+func teamsProfile() domain.MultiplayerProfile {
+	return domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeQueueArena, Topology: domain.TopologyDedicated,
+		QueueArena: &domain.QueueArenaParams{
+			Structure: "teams", TeamCount: 2, TeamSize: 3,
+			WinCondition: "first_to_score", ScoreTarget: 50,
+			MatchStructure: "single", AllowDraw: true,
+			ScoringStats: []string{"kills", "assists"},
+		},
+	}
+}
+
+func TestPostgresGameRepository_UpsertMultiplayerProfile_RoundTrip(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("arena", "Arena")
+	require.NoError(t, repo.Create(ctx, g))
+
+	p := teamsProfile()
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, p))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.MultiplayerProfile)
+	assert.Equal(t, domain.ArchetypeQueueArena, got.MultiplayerProfile.Archetype)
+	assert.Equal(t, domain.TopologyDedicated, got.MultiplayerProfile.Topology)
+	require.NotNil(t, got.MultiplayerProfile.QueueArena)
+	assert.Equal(t, *p.QueueArena, *got.MultiplayerProfile.QueueArena)
+}
+
+func TestPostgresGameRepository_UpsertMultiplayerProfile_Substitui(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("arena", "Arena")
+	require.NoError(t, repo.Create(ctx, g))
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, teamsProfile()))
+
+	ffa := domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeQueueArena, Topology: domain.TopologyDedicated,
+		QueueArena: &domain.QueueArenaParams{
+			Structure: "ffa", PlayerCount: 8,
+			WinCondition: "highest_at_time", DurationSeconds: 300, MatchStructure: "single",
+		},
+	}
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, ffa))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.MultiplayerProfile.QueueArena)
+	assert.Equal(t, "ffa", got.MultiplayerProfile.QueueArena.Structure)
+	assert.Equal(t, 8, got.MultiplayerProfile.QueueArena.PlayerCount)
+	assert.Zero(t, got.MultiplayerProfile.QueueArena.TeamCount, "params antigos substituídos, não mesclados")
+}
+
+func TestPostgresGameRepository_FindByID_SemPerfil_Nil(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("arena", "Arena")
+	require.NoError(t, repo.Create(ctx, g))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.MultiplayerProfile, "jogo recém-criado não tem perfil")
+}
+
+func TestPostgresGameRepository_UpsertMultiplayerProfile_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	err := repo.UpsertMultiplayerProfile(context.Background(),
+		"00000000-0000-0000-0000-000000000000", teamsProfile())
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }

@@ -26,6 +26,47 @@ type Game struct {
 	ImageSource         string // "generated" no MVP
 	GeneratedImageSeed  string // seed determinística (default = slug)
 	GeneratedImageStyle string // estilo do gerador (default = "shapes")
+	// MultiplayerProfile é o perfil de multiplayer do jogo (ADR-0023), nil se
+	// ainda não configurado. Carregado por FindByID; List não o carrega.
+	MultiplayerProfile *MultiplayerProfile
+}
+
+// Valores de vocabulário do perfil suportados no MVP (ADR-0023). O conjunto de
+// arquétipos/topologias é fechado e expansível por evidência (sem DSL).
+const (
+	ArchetypeQueueArena = "queue_arena"
+	TopologyDedicated   = "dedicated"
+)
+
+// MultiplayerProfile declara a *forma* do multiplayer de um jogo (ADR-0023): o
+// arquétipo, a topologia e os parâmetros do arquétipo. É lido por matchmaking/
+// session (fatias futuras) para se configurarem por jogo.
+//
+// Os parâmetros são polimórficos por arquétipo, modelados como tagged union por
+// ponteiro: exatamente o ponteiro correspondente ao Archetype é não-nil (os
+// demais nil). No MVP existe só QueueArena (arquétipo "queue_arena"); novos
+// arquétipos adicionam um campo-ponteiro próprio.
+type MultiplayerProfile struct {
+	Archetype  string // "queue_arena" (único suportado no MVP)
+	Topology   string // "dedicated" (único suportado no MVP)
+	QueueArena *QueueArenaParams
+}
+
+// QueueArenaParams são os parâmetros do arquétipo "queue_arena": sessão
+// simétrica de N jogadores (FFA ou por times) que termina com um desfecho e,
+// opcionalmente, stats. Ver spec 006 para as regras de validação.
+type QueueArenaParams struct {
+	Structure       string   // "ffa" | "teams"
+	PlayerCount     int      // se ffa: total de jogadores (>= 2)
+	TeamCount       int      // se teams: nº de times (>= 2)
+	TeamSize        int      // se teams: jogadores por time (>= 1)
+	WinCondition    string   // "first_to_score" | "highest_at_time" | "objective" | "elimination"
+	ScoreTarget     int      // se first_to_score: pontuação-alvo (> 0)
+	DurationSeconds int      // se highest_at_time: duração (> 0)
+	MatchStructure  string   // "single" | "best_of_rounds"
+	RoundsToWin     int      // se best_of_rounds: rounds para vencer (> 0)
+	AllowDraw       bool     // empate permitido no desfecho
+	ScoringStats    []string // métricas que o resultado carregará (pode ser vazia)
 }
 
 // GameService é a Port de entrada do game-registry.
@@ -40,6 +81,14 @@ type GameService interface {
 	// Rename altera só o nome do jogo (slug/id são estáveis). ErrInvalidName em
 	// entrada inválida; ErrGameNotFound se não existir.
 	Rename(ctx context.Context, id, name string) (*Game, error)
+	// SetMultiplayerProfile valida e faz upsert do perfil de multiplayer do jogo
+	// (ADR-0023). ErrUnsupportedArchetype/ErrUnsupportedTopology/
+	// ErrInvalidProfileParams em entrada inválida; ErrGameNotFound se o jogo não
+	// existir. Devolve o perfil persistido.
+	SetMultiplayerProfile(ctx context.Context, gameID string, p MultiplayerProfile) (*MultiplayerProfile, error)
+	// GetMultiplayerProfile devolve o perfil do jogo; ErrGameNotFound se o jogo
+	// não existir; ErrProfileNotFound se existir sem perfil configurado.
+	GetMultiplayerProfile(ctx context.Context, gameID string) (*MultiplayerProfile, error)
 }
 
 // GameRepository é a Port de saída de persistência (implementada em repository).
@@ -52,4 +101,8 @@ type GameRepository interface {
 	FindByID(ctx context.Context, id string) (*Game, error)
 	// UpdateName atualiza só o nome do jogo; ErrGameNotFound se não existir.
 	UpdateName(ctx context.Context, id, name string) error
+	// UpsertMultiplayerProfile persiste (cria ou substitui) o perfil de
+	// multiplayer do jogo; ErrGameNotFound se o jogo não existir. A validação do
+	// perfil é responsabilidade do service (o repositório só persiste).
+	UpsertMultiplayerProfile(ctx context.Context, gameID string, p MultiplayerProfile) error
 }
