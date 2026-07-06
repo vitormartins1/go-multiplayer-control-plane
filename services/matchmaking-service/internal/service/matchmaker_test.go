@@ -13,6 +13,33 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
 )
 
+// fakeProvider simula o domain.ProfileProvider: devolve um tamanho por gameID
+// (ou o default), ou um erro. Conta as chamadas.
+type fakeProvider struct {
+	mu    sync.Mutex
+	def   int
+	sizes map[string]int
+	err   error
+	calls int
+}
+
+func newFakeProvider(defSize int) *fakeProvider {
+	return &fakeProvider{def: defSize, sizes: map[string]int{}}
+}
+
+func (f *fakeProvider) MatchSize(_ context.Context, gameID string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.err != nil {
+		return 0, f.err
+	}
+	if s, ok := f.sizes[gameID]; ok {
+		return s, nil
+	}
+	return f.def, nil
+}
+
 // fakeProvisioner permite trocar o comportamento por teste (sucesso/falha).
 type fakeProvisioner struct {
 	mu       sync.Mutex
@@ -48,7 +75,7 @@ func successProvisioner() *fakeProvisioner {
 }
 
 func TestProvision_MatchSizeJogadores_TokenPorJogador(t *testing.T) {
-	mm := New(2, time.Hour, successProvisioner())
+	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ctx := context.Background()
 
 	ch1, _ := mm.Join(ctx, "game-1", "p1")
@@ -69,7 +96,7 @@ func TestProvision_MatchSizeJogadores_TokenPorJogador(t *testing.T) {
 func TestProvision_SemServer_EntregaFailed(t *testing.T) {
 	prov := &fakeProvisioner{}
 	prov.set(func(string, []string) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
-	mm := New(2, time.Hour, prov)
+	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
 	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
@@ -88,7 +115,7 @@ func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
 	prov.set(func(string, []string) (domain.Provisioned, error) {
 		return domain.Provisioned{}, errors.New("session indisponível")
 	})
-	mm := New(2, time.Hour, prov)
+	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
 	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
@@ -103,7 +130,7 @@ func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
 func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 	prov := &fakeProvisioner{}
 	prov.set(func(string, []string) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
-	mm := New(2, time.Hour, prov)
+	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
 	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
@@ -130,7 +157,7 @@ func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 }
 
 func TestTryForm_MenosQueMatchSize_NaoForma(t *testing.T) {
-	mm := New(2, time.Hour, successProvisioner())
+	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
 	mm.tryForm()
 
@@ -143,7 +170,7 @@ func TestTryForm_MenosQueMatchSize_NaoForma(t *testing.T) {
 }
 
 func TestJoin_Cancelado_SaiDaFila(t *testing.T) {
-	mm := New(2, time.Hour, successProvisioner())
+	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	mm.Join(ctx1, "game-1", "p1")
 	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
@@ -160,7 +187,7 @@ func TestJoin_Cancelado_SaiDaFila(t *testing.T) {
 }
 
 func TestJoin_MesmoJogador_UmTicket(t *testing.T) {
-	mm := New(2, time.Hour, successProvisioner())
+	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ctx := context.Background()
 	mm.Join(ctx, "game-1", "p1")
 	mm.Join(ctx, "game-1", "p1") // segundo Join do mesmo jogador
@@ -169,7 +196,7 @@ func TestJoin_MesmoJogador_UmTicket(t *testing.T) {
 }
 
 func TestRun_FormaPeloTicker(t *testing.T) {
-	mm := New(2, 10*time.Millisecond, successProvisioner())
+	mm := New(10*time.Millisecond, newFakeProvider(2), successProvisioner())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go mm.Run(ctx)
@@ -187,9 +214,64 @@ func TestRun_FormaPeloTicker(t *testing.T) {
 	<-ch2
 }
 
+func TestJoin_TamanhoDoPerfil_FormaComQuatro(t *testing.T) {
+	mm := New(time.Hour, newFakeProvider(4), successProvisioner())
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	for _, p := range []string{"p1", "p2", "p3", "p4"} {
+		ch, err := mm.Join(ctx, "game-1", p)
+		require.NoError(t, err)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+
+	m := <-chs[0]
+	assert.False(t, m.Failed)
+	assert.Len(t, m.Players, 4, "match forma no tamanho do perfil (4)")
+	for _, ch := range chs[1:] {
+		<-ch
+	}
+}
+
+func TestJoin_JogosComTamanhosDiferentes_FormamIndependente(t *testing.T) {
+	prov := newFakeProvider(0)
+	prov.sizes = map[string]int{"game-a": 2, "game-b": 3}
+	mm := New(time.Hour, prov, successProvisioner())
+	ctx := context.Background()
+
+	// game-a: 2 jogadores (forma); game-b: 3 jogadores (forma).
+	a1, _ := mm.Join(ctx, "game-a", "a1")
+	a2, _ := mm.Join(ctx, "game-a", "a2")
+	b1, _ := mm.Join(ctx, "game-b", "b1")
+	b2, _ := mm.Join(ctx, "game-b", "b2")
+	b3, _ := mm.Join(ctx, "game-b", "b3")
+	mm.tryForm()
+
+	ma := <-a1
+	<-a2
+	mb := <-b1
+	<-b2
+	<-b3
+	assert.Len(t, ma.Players, 2, "game-a forma com 2")
+	assert.Len(t, mb.Players, 3, "game-b forma com 3")
+	assert.Equal(t, 0, mm.QueueSize(), "fila esvazia")
+}
+
+func TestJoin_PerfilIndisponivel_NaoEntraNaFila(t *testing.T) {
+	prov := newFakeProvider(2)
+	prov.err = domain.ErrProfileUnavailable
+	mm := New(time.Hour, prov, successProvisioner())
+
+	ch, err := mm.Join(context.Background(), "sem-perfil", "p1")
+	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+	assert.Nil(t, ch)
+	assert.Equal(t, 0, mm.QueueSize(), "ticket não entra na fila sem perfil")
+}
+
 func TestTryForm_JogosDiferentes_NaoCasam(t *testing.T) {
 	prov := successProvisioner()
-	mm := New(2, time.Hour, prov)
+	mm := New(time.Hour, newFakeProvider(2), prov)
 	ctx := context.Background()
 
 	chA, _ := mm.Join(ctx, "game-a", "p1")

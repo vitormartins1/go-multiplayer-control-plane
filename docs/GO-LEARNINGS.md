@@ -748,3 +748,35 @@ func check(p MultiplayerProfile) error {
 ```
 
 **Pegadinha / nuance:** o compilador **não** garante a invariante — nada impede `Archetype="queue_arena"` com `QueueArena==nil`, ou dois ponteiros não-nil ao mesmo tempo. Isso é responsabilidade de validação em runtime (aqui, no `service`). É o trade-off vs. uma união de verdade: mais simples e explícito, mas a coerência discriminador↔ponteiro é sua para manter. Diferente do [[12]] (ponteiro para distinguir *ausente* de *zero* num escalar), aqui o ponteiro seleciona **qual sub-struct** está ativa. Relaciona com [[09]] (NULL como ponteiro no pgx).
+
+## 21 — Decorator de uma Port de domínio (cache transparente)
+
+**O que é / por que importa:** para adicionar um *cross-cutting concern* (cache, retry, logging) a uma dependência **sem** tocar quem a usa nem quem a implementa, escreve-se um tipo que **implementa a mesma interface que recebe** e delega ao "inner", interceptando no meio. É o Decorator do GoF, e em Go sai de graça por causa das interfaces implícitas ([[10]]): o consumidor recebe a Port e não sabe se é o adapter real ou um wrapper. Mesma técnica de [[03]] (middleware de `http.Handler`) e [[16]] (`http.RoundTripper`), mas aqui aplicada a uma **Port de domínio própria**, não a uma abstração de infra HTTP.
+
+**Onde no projeto:** `matchmaking-service/internal/profilecache` — `CachingProvider` decora `domain.ProfileProvider` (que dita o tamanho do match por jogo, ADR-0023): memoriza `gameID → tamanho` com TTL, servindo do cache no hit e só chamando o adapter HTTP (`registryclient`) no miss. O matchmaker recebe um `ProfileProvider` e é **alheio** ao cache; o wire-up aninha no `main`: `profilecache.New(registryclient.New(url, httpClient), ttl)`.
+
+```go
+type CachingProvider struct {
+	inner domain.ProfileProvider // a MESMA Port que este tipo implementa
+	ttl   time.Duration
+	mu    sync.Mutex
+	cache map[string]entry
+}
+
+func (c *CachingProvider) MatchSize(ctx context.Context, gameID string) (int, error) {
+	c.mu.Lock()
+	if e, ok := c.cache[gameID]; ok && time.Now().Before(e.expiry) {
+		c.mu.Unlock()
+		return e.size, nil // hit: nem toca no inner
+	}
+	c.mu.Unlock()
+	size, err := c.inner.MatchSize(ctx, gameID) // miss: delega
+	if err != nil {
+		return 0, err // erro não é cacheado
+	}
+	c.mu.Lock(); c.cache[gameID] = entry{size, time.Now().Add(c.ttl)}; c.mu.Unlock()
+	return size, nil
+}
+```
+
+**Pegadinha / nuance:** decisões de política vivem no decorator, não na interface — aqui, **não cachear erros** (senão um "registry fora" fixaria o jogo como "sem perfil" por todo o TTL) e **não segurar o lock durante a chamada ao inner** (I/O sob mutex serializaria tudo; o custo é dois misses concorrentes poderem ambos buscar — inofensivo). Em C#/.NET seria um decorator via DI registrando `IProfileProvider` → `CachingProfileProvider` que recebe o inner; a diferença é que em Go não há registro/atributo: basta o tipo ter o método, e o aninhamento é manual e explícito no `main`.

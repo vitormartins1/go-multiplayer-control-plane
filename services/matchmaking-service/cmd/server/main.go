@@ -18,11 +18,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/profilecache"
+	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/registryclient"
 	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/service"
 	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/sessionclient"
 	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/transport"
@@ -34,9 +37,9 @@ import (
 )
 
 const (
-	serviceName  = "matchmaking-service"
-	matchSize    = 2
-	formInterval = time.Second
+	serviceName     = "matchmaking-service"
+	formInterval    = time.Second
+	profileCacheTTL = 30 * time.Second // TTL do cache do perfil de multiplayer (ADR-0023)
 )
 
 func main() {
@@ -88,7 +91,24 @@ func run(log *slog.Logger) error {
 	defer func() { _ = sessionConn.Close() }()
 	provisioner := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
 
-	mm := service.New(matchSize, formInterval, provisioner)
+	// Perfil de multiplayer por jogo (ADR-0023): o tamanho do match vem do
+	// game-registry. Sem ele o matchmaking não forma nenhum match -> fail-fast no
+	// boot. A internal key (ADR-0018) é injetada pelo transport do http.Client.
+	gameRegistryURL := os.Getenv("GAME_REGISTRY_URL")
+	if gameRegistryURL == "" {
+		return fmt.Errorf("GAME_REGISTRY_URL ausente: necessário para derivar o tamanho do match do perfil (ADR-0023)")
+	}
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — o game-registry vai negar (401); configure a chave")
+	}
+	profileHTTP := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
+	}
+	provider := profilecache.New(registryclient.New(gameRegistryURL, profileHTTP), profileCacheTTL)
+
+	mm := service.New(formInterval, provider, provisioner)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
