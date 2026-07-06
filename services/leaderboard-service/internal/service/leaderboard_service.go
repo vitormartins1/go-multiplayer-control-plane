@@ -29,12 +29,15 @@ func New(store domain.LeaderboardStore) *Service {
 	return &Service{store: store}
 }
 
-// Submit aplica o highscore e devolve a posição/score do jogador no jogo.
-func (s *Service) Submit(ctx context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
-	if err := s.store.Submit(ctx, gameID, playerID, score); err != nil {
+// Submit aplica o highscore e devolve a posição/score do jogador no board.
+func (s *Service) Submit(ctx context.Context, gameID, board, playerID string, score int64) (domain.Entry, error) {
+	if !domain.ValidBoard(board) {
+		return domain.Entry{}, domain.ErrInvalidBoard
+	}
+	if err := s.store.Submit(ctx, gameID, board, playerID, score); err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: submit: %w", err)
 	}
-	rank0, best, err := s.store.Rank(ctx, gameID, playerID)
+	rank0, best, err := s.store.Rank(ctx, gameID, board, playerID)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: rank: %w", err)
 	}
@@ -42,28 +45,37 @@ func (s *Service) Submit(ctx context.Context, gameID, playerID string, score int
 }
 
 // ForceSubmit substitui o score independente do valor atual (admin override).
-func (s *Service) ForceSubmit(ctx context.Context, gameID, playerID string, score int64) (domain.Entry, error) {
-	if err := s.store.ForceScore(ctx, gameID, playerID, score); err != nil {
+func (s *Service) ForceSubmit(ctx context.Context, gameID, board, playerID string, score int64) (domain.Entry, error) {
+	if !domain.ValidBoard(board) {
+		return domain.Entry{}, domain.ErrInvalidBoard
+	}
+	if err := s.store.ForceScore(ctx, gameID, board, playerID, score); err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: force submit: %w", err)
 	}
-	rank0, best, err := s.store.Rank(ctx, gameID, playerID)
+	rank0, best, err := s.store.Rank(ctx, gameID, board, playerID)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: rank after force: %w", err)
 	}
 	return domain.Entry{Rank: rank0 + 1, PlayerID: playerID, Score: best}, nil
 }
 
-func (s *Service) Top(ctx context.Context, gameID string, limit int) ([]domain.Entry, error) {
-	entries, err := s.store.Top(ctx, gameID, clampLimit(limit))
+func (s *Service) Top(ctx context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
+	if !domain.ValidBoard(board) {
+		return nil, domain.ErrInvalidBoard
+	}
+	entries, err := s.store.Top(ctx, gameID, board, clampLimit(limit))
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: top: %w", err)
 	}
 	return entries, nil
 }
 
-func (s *Service) Around(ctx context.Context, gameID, playerID string, k int) ([]domain.Entry, error) {
+func (s *Service) Around(ctx context.Context, gameID, board, playerID string, k int) ([]domain.Entry, error) {
+	if !domain.ValidBoard(board) {
+		return nil, domain.ErrInvalidBoard
+	}
 	k = clampAround(k)
-	rank0, _, err := s.store.Rank(ctx, gameID, playerID)
+	rank0, _, err := s.store.Rank(ctx, gameID, board, playerID)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: around: %w", err) // ErrNotRanked propaga
 	}
@@ -72,7 +84,7 @@ func (s *Service) Around(ctx context.Context, gameID, playerID string, k int) ([
 		start = 0
 	}
 	stop := rank0 + int64(k)
-	entries, err := s.store.Range(ctx, gameID, start, stop)
+	entries, err := s.store.Range(ctx, gameID, board, start, stop)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: around range: %w", err)
 	}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/awsx"
 	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/consumer"
+	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/domain"
 	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/service"
 	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/storage"
 	"github.com/vitormartins1/go-game-backend/shared/config"
@@ -111,16 +112,26 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 			MatchID string `json:"matchId"`
 			GameID  string `json:"gameId"`
 			Results []struct {
-				PlayerID string `json:"playerId"`
-				Score    int64  `json:"score"`
+				PlayerID string           `json:"playerId"`
+				Score    int64            `json:"score"`
+				Stats    map[string]int64 `json:"stats"` // ADR-0023: um board por métrica
 			} `json:"results"`
 		}
 		if err := json.Unmarshal(body, &env); err != nil {
 			return false, fmt.Errorf("unmarshal envelope: %w", err)
 		}
 		for _, r := range env.Results {
-			if _, err := svc.Submit(ctx, env.GameID, r.PlayerID, r.Score); err != nil {
-				return false, fmt.Errorf("submit %s: %w", r.PlayerID, err)
+			// board "score" (como sempre) + um board por stat presente.
+			if _, err := svc.Submit(ctx, env.GameID, domain.BoardScore, r.PlayerID, r.Score); err != nil {
+				return false, fmt.Errorf("submit %s score: %w", r.PlayerID, err)
+			}
+			for stat, val := range r.Stats {
+				if !domain.ValidBoard(stat) {
+					continue // nome inválido: pula (o game-registry já valida scoringStats)
+				}
+				if _, err := svc.Submit(ctx, env.GameID, stat, r.PlayerID, val); err != nil {
+					return false, fmt.Errorf("submit %s %s: %w", r.PlayerID, stat, err)
+				}
 			}
 		}
 		return false, nil
