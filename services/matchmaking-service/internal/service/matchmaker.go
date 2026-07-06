@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -20,10 +21,10 @@ var _ domain.Matchmaker = (*Matchmaker)(nil)
 const provisionTimeout = 5 * time.Second
 
 type ticket struct {
-	gameID    string // o jogo do ticket — só casa com tickets do mesmo jogo
-	playerID  string
-	matchSize int                     // tamanho do match do jogo, derivado do perfil no Join (ADR-0023)
-	ch        chan domain.MatchResult // buffer 1: a entrega nunca bloqueia
+	gameID   string // o jogo do ticket — só casa com tickets do mesmo jogo
+	playerID string
+	format   domain.MatchFormat      // formação do match, derivada do perfil no Join (ADR-0023)
+	ch       chan domain.MatchResult // buffer 1: a entrega nunca bloqueia
 }
 
 // Matchmaker mantém a fila de tickets em memória e forma matches FIFO. O tamanho
@@ -56,15 +57,15 @@ func New(interval time.Duration, provider domain.ProfileProvider, provisioner do
 // Join enfileira o jogador (um ticket por jogador) e devolve o canal do Match.
 // Quando o ctx é cancelado (stream fechado), o ticket sai da fila.
 func (m *Matchmaker) Join(ctx context.Context, gameID, playerID string) (<-chan domain.MatchResult, error) {
-	// O tamanho do match vem do perfil do jogo (ADR-0023). Resolver antes de
+	// A formação do match vem do perfil do jogo (ADR-0023). Resolver antes de
 	// enfileirar: se o jogo não tem perfil utilizável, o ticket não entra na fila
 	// (ErrProfileUnavailable). Fora da seção crítica — nada de I/O sob o lock.
-	size, err := m.provider.MatchSize(ctx, gameID)
+	format, err := m.provider.Format(ctx, gameID)
 	if err != nil {
 		return nil, err
 	}
 
-	t := &ticket{gameID: gameID, playerID: playerID, matchSize: size, ch: make(chan domain.MatchResult, 1)}
+	t := &ticket{gameID: gameID, playerID: playerID, format: format, ch: make(chan domain.MatchResult, 1)}
 
 	m.mu.Lock()
 	m.removeByPlayerLocked(playerID) // garante um ticket por jogador
@@ -107,8 +108,8 @@ func (m *Matchmaker) tryForm() {
 	}
 	taken := map[*ticket]bool{}
 	for _, ts := range byGame {
-		// tickets do mesmo jogo compartilham o tamanho (derivado do perfil no Join).
-		size := ts[0].matchSize
+		// tickets do mesmo jogo compartilham a formação (derivada do perfil no Join).
+		size := ts[0].format.Size
 		for len(ts) >= size {
 			group := ts[:size:size]
 			ts = ts[size:]
@@ -139,10 +140,11 @@ func (m *Matchmaker) tryForm() {
 func (m *Matchmaker) provision(matchID string, group []*ticket) {
 	players := playerIDs(group)
 	gameID := group[0].gameID // o grupo é de um único jogo
+	teams := composeTeams(group)
 
 	ctx, cancel := context.WithTimeout(m.baseCtx, provisionTimeout)
 	defer cancel()
-	prov, err := m.provisioner.Provision(ctx, matchID, players, gameID)
+	prov, err := m.provisioner.Provision(ctx, matchID, teams, gameID)
 	if err != nil {
 		m.deliverFailure(group, matchID, players, reasonFor(err))
 		return
@@ -228,4 +230,23 @@ func playerIDs(ts []*ticket) []string {
 		ids[i] = t.playerID
 	}
 	return ids
+}
+
+// composeTeams particiona o grupo em lados conforme a formação do jogo
+// (ADR-0023). teams: blocos contíguos de teamSize na ordem FIFO, rótulos
+// "team-1".."team-N". ffa: um único assignment sem TeamID com todos os
+// jogadores. O grupo tem exatamente Size = TeamCount*TeamSize tickets (garantido
+// por tryForm), então o fatiamento é seguro. Atribuição posicional, sem
+// skill/MMR (backlog).
+func composeTeams(group []*ticket) []domain.TeamAssignment {
+	format := group[0].format
+	if format.Structure != domain.StructureTeams {
+		return []domain.TeamAssignment{{Players: playerIDs(group)}}
+	}
+	teams := make([]domain.TeamAssignment, 0, format.TeamCount)
+	for k := 0; k < format.TeamCount; k++ {
+		members := playerIDs(group[k*format.TeamSize : (k+1)*format.TeamSize])
+		teams = append(teams, domain.TeamAssignment{TeamID: fmt.Sprintf("team-%d", k+1), Players: members})
+	}
+	return teams
 }

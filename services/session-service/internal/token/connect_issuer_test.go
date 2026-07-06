@@ -17,7 +17,7 @@ func TestIssue_TokenVerificavelComChavePublica_RetornaClaims(t *testing.T) {
 	iss, err := Generate()
 	require.NoError(t, err)
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "")
 	require.NoError(t, err)
 
 	parsed, err := jwt.Parse(signed, func(*jwt.Token) (any, error) {
@@ -33,6 +33,25 @@ func TestIssue_TokenVerificavelComChavePublica_RetornaClaims(t *testing.T) {
 	assert.Equal(t, iss.KeyID(), parsed.Header["kid"])
 	assert.Contains(t, claims, "exp")
 	assert.Contains(t, claims, "iat")
+	assert.NotContains(t, claims, "team_id", "FFA (teamID vazio): claim team_id omitido")
+}
+
+// Com um teamID não vazio (queue_arena/teams), o token carrega o claim team_id
+// para o game server ler no connection approval (ADR-0023).
+func TestIssue_ComTime_TokenCarregaTeamID(t *testing.T) {
+	iss, err := Generate()
+	require.NoError(t, err)
+
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "team-1")
+	require.NoError(t, err)
+
+	parsed, err := jwt.Parse(signed, func(*jwt.Token) (any, error) {
+		return iss.PublicKey(), nil
+	}, jwt.WithValidMethods([]string{"EdDSA"}))
+	require.NoError(t, err)
+
+	claims := parsed.Claims.(jwt.MapClaims)
+	assert.Equal(t, "team-1", claims["team_id"])
 }
 
 func TestIssue_TokenExpirado_FalhaNaVerificacao(t *testing.T) {
@@ -40,7 +59,7 @@ func TestIssue_TokenExpirado_FalhaNaVerificacao(t *testing.T) {
 	require.NoError(t, err)
 	iss.ttl = -time.Minute // já nasce expirado
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "")
 	require.NoError(t, err)
 
 	_, err = jwt.Parse(signed, func(*jwt.Token) (any, error) {
@@ -76,7 +95,7 @@ func TestConnectToken_ValidadoPelaChaveReconstruidaDoJWKS(t *testing.T) {
 	iss, err := Generate()
 	require.NoError(t, err)
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "")
 	require.NoError(t, err)
 
 	raw, err := iss.JWKS(context.Background())

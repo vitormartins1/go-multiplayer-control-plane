@@ -30,36 +30,39 @@ func serverReturning(t *testing.T, status int, body string, gotKey *string) *htt
 func TestMatchSize_Ffa_UsaPlayerCount(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":8}}`, nil)
-	size, err := New(srv.URL, srv.Client()).MatchSize(t.Context(), "g1")
+	format, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
 	require.NoError(t, err)
-	assert.Equal(t, 8, size)
+	assert.Equal(t, 8, format.Size)
 }
 
 func TestMatchSize_Teams_MultiplicaContagemPorTamanho(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"teams","teamCount":2,"teamSize":3}}`, nil)
-	size, err := New(srv.URL, srv.Client()).MatchSize(t.Context(), "g1")
+	format, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
 	require.NoError(t, err)
-	assert.Equal(t, 6, size, "teamCount*teamSize")
+	assert.Equal(t, 6, format.Size, "teamCount*teamSize")
+	assert.Equal(t, domain.StructureTeams, format.Structure)
+	assert.Equal(t, 2, format.TeamCount)
+	assert.Equal(t, 3, format.TeamSize)
 }
 
 func TestMatchSize_404_ErrProfileUnavailable(t *testing.T) {
 	srv := serverReturning(t, http.StatusNotFound, `{"error":"profile_not_found"}`, nil)
-	_, err := New(srv.URL, srv.Client()).MatchSize(t.Context(), "g1")
+	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
 func TestMatchSize_ArchetypeNaoSuportado_ErrProfileUnavailable(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"battle_royale","topology":"dedicated","params":{"structure":"ffa","playerCount":60}}`, nil)
-	_, err := New(srv.URL, srv.Client()).MatchSize(t.Context(), "g1")
+	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
 func TestMatchSize_TamanhoZero_ErrProfileUnavailable(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":0}}`, nil)
-	_, err := New(srv.URL, srv.Client()).MatchSize(t.Context(), "g1")
+	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
@@ -69,7 +72,7 @@ func TestMatchSize_InjetaInternalKey(t *testing.T) {
 		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":2}}`, &gotKey)
 
 	httpClient := &http.Client{Transport: auth.InternalKeyTransport("segredo", nil)}
-	_, err := New(srv.URL, httpClient).MatchSize(t.Context(), "g1")
+	_, err := New(srv.URL, httpClient).Format(t.Context(), "g1")
 	require.NoError(t, err)
 	assert.Equal(t, "segredo", gotKey, "a internal key viaja no header")
 }

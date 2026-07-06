@@ -132,3 +132,44 @@ func TestReportResult_OutcomeAusente_InvalidArgument(t *testing.T) {
 func slogDiscard() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(io.Discard, nil))
 }
+
+// Com times, o token de cada jogador carrega o claim team_id (ADR-0023, spec 010).
+func TestCreateSession_ComTimes_TokenCarregaTeamID(t *testing.T) {
+	client, iss := setup(t, []string{"10.0.0.1:7777"})
+
+	resp, err := client.CreateSession(context.Background(), &pb.CreateSessionRequest{
+		MatchId: "match-1",
+		Players: []string{"p1", "p2"},
+		Teams: []*pb.Team{
+			{TeamId: "team-1", Players: []string{"p1"}},
+			{TeamId: "team-2", Players: []string{"p2"}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetGrants(), 2)
+
+	want := map[string]string{"p1": "team-1", "p2": "team-2"}
+	for _, g := range resp.GetGrants() {
+		parsed, err := jwt.Parse(g.GetConnectToken(), func(*jwt.Token) (any, error) {
+			return iss.PublicKey(), nil
+		}, jwt.WithValidMethods([]string{"EdDSA"}))
+		require.NoError(t, err)
+		claims := parsed.Claims.(jwt.MapClaims)
+		assert.Equal(t, want[g.GetPlayerId()], claims["team_id"])
+	}
+}
+
+// Composição inconsistente (jogador em dois times) → InvalidArgument.
+func TestCreateSession_TimesInconsistentes_InvalidArgument(t *testing.T) {
+	client, _ := setup(t, []string{"10.0.0.1:7777"})
+
+	_, err := client.CreateSession(context.Background(), &pb.CreateSessionRequest{
+		MatchId: "match-1",
+		Teams: []*pb.Team{
+			{TeamId: "team-1", Players: []string{"p1"}},
+			{TeamId: "team-2", Players: []string{"p1"}},
+		},
+	})
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+}

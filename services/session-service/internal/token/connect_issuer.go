@@ -49,10 +49,11 @@ func Generate() (*ConnectIssuer, error) {
 	return New(priv), nil
 }
 
-// Issue emite um connect token EdDSA com sub/match_id/server/iat/exp/kid.
-// O game server valida offline (JWKS) que o portador foi autorizado para a
-// partida e o servidor indicados.
-func (i *ConnectIssuer) Issue(playerID, matchID, serverAddr string) (string, error) {
+// Issue emite um connect token EdDSA com sub/match_id/server/iat/exp/kid e,
+// quando teamID não é vazio, o claim team_id (ADR-0023). O game server valida
+// offline (JWKS) que o portador foi autorizado para a partida e o servidor
+// indicados e lê o team_id para o gameplay NvN.
+func (i *ConnectIssuer) Issue(playerID, matchID, serverAddr, teamID string) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"sub":      playerID,
@@ -60,6 +61,9 @@ func (i *ConnectIssuer) Issue(playerID, matchID, serverAddr string) (string, err
 		"server":   serverAddr,
 		"iat":      now.Unix(),
 		"exp":      now.Add(i.ttl).Unix(),
+	}
+	if teamID != "" {
+		claims["team_id"] = teamID // omitido em FFA para não poluir o token
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tok.Header["kid"] = i.kid

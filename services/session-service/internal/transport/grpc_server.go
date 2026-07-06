@@ -26,12 +26,16 @@ func NewServer(svc domain.SessionService) *Server {
 
 // CreateSession aloca um server, emite os connect tokens e registra a sessão.
 func (s *Server) CreateSession(ctx context.Context, req *pb.CreateSessionRequest) (*pb.CreateSessionResponse, error) {
-	sess, grants, err := s.svc.Create(ctx, req.GetMatchId(), req.GetGameId(), req.GetPlayers())
+	sess, grants, err := s.svc.Create(ctx, req.GetMatchId(), req.GetGameId(), toTeamAssignments(req))
 	if err != nil {
-		if errors.Is(err, domain.ErrNoServer) {
+		switch {
+		case errors.Is(err, domain.ErrNoServer):
 			return nil, status.Error(codes.ResourceExhausted, "no server available")
+		case errors.Is(err, domain.ErrInvalidTeams):
+			return nil, status.Error(codes.InvalidArgument, "invalid team composition")
+		default:
+			return nil, status.Error(codes.Internal, "create session")
 		}
-		return nil, status.Error(codes.Internal, "create session")
 	}
 
 	pbGrants := make([]*pb.ConnectGrant, len(grants))
@@ -43,6 +47,20 @@ func (s *Server) CreateSession(ctx context.Context, req *pb.CreateSessionRequest
 		ServerAddress: sess.ServerAddress,
 		Grants:        pbGrants,
 	}, nil
+}
+
+// toTeamAssignments traduz o request para a composição do domínio. Com times
+// (queue_arena/teams) usa req.teams; sem times (FFA) devolve um único
+// assignment sem TeamID com todos os req.players.
+func toTeamAssignments(req *pb.CreateSessionRequest) []domain.TeamAssignment {
+	if teams := req.GetTeams(); len(teams) > 0 {
+		out := make([]domain.TeamAssignment, len(teams))
+		for i, t := range teams {
+			out[i] = domain.TeamAssignment{TeamID: t.GetTeamId(), Players: t.GetPlayers()}
+		}
+		return out
+	}
+	return []domain.TeamAssignment{{Players: req.GetPlayers()}}
 }
 
 // ReportResult publica o resultado, libera o server e encerra a sessão. Traduz

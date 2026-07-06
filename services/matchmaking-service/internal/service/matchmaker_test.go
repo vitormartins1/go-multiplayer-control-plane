@@ -13,29 +13,32 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
 )
 
-// fakeProvider simula o domain.ProfileProvider: devolve um tamanho por gameID
-// (ou o default), ou um erro. Conta as chamadas.
+// fakeProvider simula o domain.ProfileProvider: devolve uma formação por gameID
+// (ou o default FFA), ou um erro. Conta as chamadas.
 type fakeProvider struct {
-	mu    sync.Mutex
-	def   int
-	sizes map[string]int
-	err   error
-	calls int
+	mu      sync.Mutex
+	def     domain.MatchFormat
+	formats map[string]domain.MatchFormat
+	err     error
+	calls   int
 }
 
 func newFakeProvider(defSize int) *fakeProvider {
-	return &fakeProvider{def: defSize, sizes: map[string]int{}}
+	return &fakeProvider{
+		def:     domain.MatchFormat{Size: defSize, Structure: domain.StructureFFA},
+		formats: map[string]domain.MatchFormat{},
+	}
 }
 
-func (f *fakeProvider) MatchSize(_ context.Context, gameID string) (int, error) {
+func (f *fakeProvider) Format(_ context.Context, gameID string) (domain.MatchFormat, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
 	if f.err != nil {
-		return 0, f.err
+		return domain.MatchFormat{}, f.err
 	}
-	if s, ok := f.sizes[gameID]; ok {
-		return s, nil
+	if fm, ok := f.formats[gameID]; ok {
+		return fm, nil
 	}
 	return f.def, nil
 }
@@ -43,33 +46,42 @@ func (f *fakeProvider) MatchSize(_ context.Context, gameID string) (int, error) 
 // fakeProvisioner permite trocar o comportamento por teste (sucesso/falha).
 type fakeProvisioner struct {
 	mu       sync.Mutex
-	fn       func(matchID string, players []string) (domain.Provisioned, error)
-	gotGames []string // game_ids recebidos (para o teste de isolamento)
+	fn       func(matchID string, teams []domain.TeamAssignment) (domain.Provisioned, error)
+	gotGames []string                  // game_ids recebidos (para o teste de isolamento)
+	gotTeams [][]domain.TeamAssignment // composições recebidas (para o teste de times)
 }
 
-func (f *fakeProvisioner) set(fn func(matchID string, players []string) (domain.Provisioned, error)) {
+func (f *fakeProvisioner) set(fn func(matchID string, teams []domain.TeamAssignment) (domain.Provisioned, error)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.fn = fn
 }
 
-func (f *fakeProvisioner) Provision(_ context.Context, matchID string, players []string, gameID string) (domain.Provisioned, error) {
+func (f *fakeProvisioner) Provision(_ context.Context, matchID string, teams []domain.TeamAssignment, gameID string) (domain.Provisioned, error) {
 	f.mu.Lock()
 	fn := f.fn
 	f.gotGames = append(f.gotGames, gameID)
+	f.gotTeams = append(f.gotTeams, teams)
 	f.mu.Unlock()
-	return fn(matchID, players)
+	return fn(matchID, teams)
+}
+
+// tokensFor monta um token determinístico por jogador de todos os times.
+func tokensFor(teams []domain.TeamAssignment) map[string]string {
+	tokens := map[string]string{}
+	for _, tm := range teams {
+		for _, p := range tm.Players {
+			tokens[p] = "tok-" + p
+		}
+	}
+	return tokens
 }
 
 // successProvisioner devolve um token determinístico por jogador (tok-<player>).
 func successProvisioner() *fakeProvisioner {
 	f := &fakeProvisioner{}
-	f.set(func(_ string, players []string) (domain.Provisioned, error) {
-		tokens := make(map[string]string, len(players))
-		for _, p := range players {
-			tokens[p] = "tok-" + p
-		}
-		return domain.Provisioned{ServerAddress: "10.0.0.1:7777", Tokens: tokens}, nil
+	f.set(func(_ string, teams []domain.TeamAssignment) (domain.Provisioned, error) {
+		return domain.Provisioned{ServerAddress: "10.0.0.1:7777", Tokens: tokensFor(teams)}, nil
 	})
 	return f
 }
@@ -95,7 +107,7 @@ func TestProvision_MatchSizeJogadores_TokenPorJogador(t *testing.T) {
 
 func TestProvision_SemServer_EntregaFailed(t *testing.T) {
 	prov := &fakeProvisioner{}
-	prov.set(func(string, []string) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
+	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
@@ -112,7 +124,7 @@ func TestProvision_SemServer_EntregaFailed(t *testing.T) {
 
 func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
 	prov := &fakeProvisioner{}
-	prov.set(func(string, []string) (domain.Provisioned, error) {
+	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) {
 		return domain.Provisioned{}, errors.New("session indisponível")
 	})
 	mm := New(time.Hour, newFakeProvider(2), prov)
@@ -129,7 +141,7 @@ func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
 
 func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 	prov := &fakeProvisioner{}
-	prov.set(func(string, []string) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
+	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
@@ -139,12 +151,8 @@ func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 	<-ch2 // ambos falharam, saíram da fila
 
 	// session volta: jogadores re-ingressam e agora são matched.
-	prov.set(func(_ string, players []string) (domain.Provisioned, error) {
-		tokens := map[string]string{}
-		for _, p := range players {
-			tokens[p] = "tok-" + p
-		}
-		return domain.Provisioned{ServerAddress: "10.0.0.2:7777", Tokens: tokens}, nil
+	prov.set(func(_ string, teams []domain.TeamAssignment) (domain.Provisioned, error) {
+		return domain.Provisioned{ServerAddress: "10.0.0.2:7777", Tokens: tokensFor(teams)}, nil
 	})
 	ch1b, _ := mm.Join(context.Background(), "game-1", "p1")
 	ch2b, _ := mm.Join(context.Background(), "game-1", "p2")
@@ -236,7 +244,10 @@ func TestJoin_TamanhoDoPerfil_FormaComQuatro(t *testing.T) {
 
 func TestJoin_JogosComTamanhosDiferentes_FormamIndependente(t *testing.T) {
 	prov := newFakeProvider(0)
-	prov.sizes = map[string]int{"game-a": 2, "game-b": 3}
+	prov.formats = map[string]domain.MatchFormat{
+		"game-a": {Size: 2, Structure: domain.StructureFFA},
+		"game-b": {Size: 3, Structure: domain.StructureFFA},
+	}
 	mm := New(time.Hour, prov, successProvisioner())
 	ctx := context.Background()
 
@@ -301,4 +312,83 @@ func TestTryForm_JogosDiferentes_NaoCasam(t *testing.T) {
 	defer prov.mu.Unlock()
 	assert.Contains(t, prov.gotGames, "game-a")
 	assert.NotContains(t, prov.gotGames, "game-b")
+}
+
+// --- composição de times (ADR-0023, spec 005) ---
+
+// teams: 4 jogadores viram 2 times de 2, por blocos contíguos na ordem FIFO,
+// rótulos team-1/team-2. O provisioner recebe a composição.
+func TestTryForm_Teams_ParticionaEmLados(t *testing.T) {
+	prov := successProvisioner()
+	provider := newFakeProvider(0)
+	provider.formats["game-1"] = domain.MatchFormat{Size: 4, Structure: domain.StructureTeams, TeamCount: 2, TeamSize: 2}
+	mm := New(time.Hour, provider, prov)
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	for _, p := range []string{"p1", "p2", "p3", "p4"} {
+		ch, _ := mm.Join(ctx, "game-1", p)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+	for _, ch := range chs {
+		<-ch
+	}
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	require.Len(t, prov.gotTeams, 1)
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 2)
+	assert.Equal(t, "team-1", teams[0].TeamID)
+	assert.Equal(t, []string{"p1", "p2"}, teams[0].Players)
+	assert.Equal(t, "team-2", teams[1].TeamID)
+	assert.Equal(t, []string{"p3", "p4"}, teams[1].Players)
+}
+
+// teams 3x3: valida um tamanho de time diferente.
+func TestTryForm_Teams3x3_SeisJogadoresDoisTimesDeTres(t *testing.T) {
+	prov := successProvisioner()
+	provider := newFakeProvider(0)
+	provider.formats["g"] = domain.MatchFormat{Size: 6, Structure: domain.StructureTeams, TeamCount: 2, TeamSize: 3}
+	mm := New(time.Hour, provider, prov)
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	for _, p := range []string{"a", "b", "c", "d", "e", "f"} {
+		ch, _ := mm.Join(ctx, "g", p)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+	for _, ch := range chs {
+		<-ch
+	}
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 2)
+	assert.Equal(t, []string{"a", "b", "c"}, teams[0].Players)
+	assert.Equal(t, []string{"d", "e", "f"}, teams[1].Players)
+}
+
+// ffa: o provisioner recebe um único assignment sem TeamID (sem times).
+func TestTryForm_FFA_UmAssignmentSemTime(t *testing.T) {
+	prov := successProvisioner()
+	mm := New(time.Hour, newFakeProvider(2), prov)
+	ctx := context.Background()
+
+	ch1, _ := mm.Join(ctx, "game-1", "p1")
+	ch2, _ := mm.Join(ctx, "game-1", "p2")
+	mm.tryForm()
+	<-ch1
+	<-ch2
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	require.Len(t, prov.gotTeams, 1)
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 1)
+	assert.Empty(t, teams[0].TeamID, "FFA: assignment sem TeamID")
+	assert.ElementsMatch(t, []string{"p1", "p2"}, teams[0].Players)
 }

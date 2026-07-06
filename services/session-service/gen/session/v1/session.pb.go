@@ -24,8 +24,9 @@ const (
 type CreateSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MatchId       string                 `protobuf:"bytes,1,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"`
-	Players       []string               `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"`             // playerIDs do match
+	Players       []string               `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"`             // playerIDs do match (lista completa; fonte p/ tokens)
 	GameId        string                 `protobuf:"bytes,3,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // jogo da partida (multi-tenant, ADR-0017)
+	Teams         []*Team                `protobuf:"bytes,4,rep,name=teams,proto3" json:"teams,omitempty"`                 // composição de times (ADR-0023 queue_arena); vazio em FFA
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,6 +82,69 @@ func (x *CreateSessionRequest) GetGameId() string {
 	return ""
 }
 
+func (x *CreateSessionRequest) GetTeams() []*Team {
+	if x != nil {
+		return x.Teams
+	}
+	return nil
+}
+
+// Team é um lado da partida NvN: um rótulo estável no match + seus jogadores
+// (ADR-0023). Em FFA não há times (teams vazio). O session é o dono canônico
+// da composição — carimba o team_id no resultado a partir daqui e emite o
+// connect token de cada jogador com o claim team_id.
+type Team struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TeamId        string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"` // rótulo estável no match (ex.: "team-1")
+	Players       []string               `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"`             // playerIDs deste time
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Team) Reset() {
+	*x = Team{}
+	mi := &file_session_v1_session_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Team) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Team) ProtoMessage() {}
+
+func (x *Team) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Team.ProtoReflect.Descriptor instead.
+func (*Team) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Team) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *Team) GetPlayers() []string {
+	if x != nil {
+		return x.Players
+	}
+	return nil
+}
+
 type CreateSessionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -92,7 +156,7 @@ type CreateSessionResponse struct {
 
 func (x *CreateSessionResponse) Reset() {
 	*x = CreateSessionResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[1]
+	mi := &file_session_v1_session_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -104,7 +168,7 @@ func (x *CreateSessionResponse) String() string {
 func (*CreateSessionResponse) ProtoMessage() {}
 
 func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[1]
+	mi := &file_session_v1_session_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -117,7 +181,7 @@ func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateSessionResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{1}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateSessionResponse) GetSessionId() string {
@@ -152,7 +216,7 @@ type ConnectGrant struct {
 
 func (x *ConnectGrant) Reset() {
 	*x = ConnectGrant{}
-	mi := &file_session_v1_session_proto_msgTypes[2]
+	mi := &file_session_v1_session_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -164,7 +228,7 @@ func (x *ConnectGrant) String() string {
 func (*ConnectGrant) ProtoMessage() {}
 
 func (x *ConnectGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[2]
+	mi := &file_session_v1_session_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -177,7 +241,7 @@ func (x *ConnectGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectGrant.ProtoReflect.Descriptor instead.
 func (*ConnectGrant) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{2}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ConnectGrant) GetPlayerId() string {
@@ -210,7 +274,7 @@ type ReportResultRequest struct {
 
 func (x *ReportResultRequest) Reset() {
 	*x = ReportResultRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[3]
+	mi := &file_session_v1_session_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +286,7 @@ func (x *ReportResultRequest) String() string {
 func (*ReportResultRequest) ProtoMessage() {}
 
 func (x *ReportResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[3]
+	mi := &file_session_v1_session_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +299,7 @@ func (x *ReportResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResultRequest.ProtoReflect.Descriptor instead.
 func (*ReportResultRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{3}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReportResultRequest) GetMatchId() string {
@@ -279,7 +343,7 @@ type ReportResultResponse struct {
 
 func (x *ReportResultResponse) Reset() {
 	*x = ReportResultResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[4]
+	mi := &file_session_v1_session_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -291,7 +355,7 @@ func (x *ReportResultResponse) String() string {
 func (*ReportResultResponse) ProtoMessage() {}
 
 func (x *ReportResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[4]
+	mi := &file_session_v1_session_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -304,7 +368,7 @@ func (x *ReportResultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResultResponse.ProtoReflect.Descriptor instead.
 func (*ReportResultResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{4}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{5}
 }
 
 // WinLossDrawResult é o outcome do arquétipo queue_arena: vitória/derrota/empate
@@ -318,7 +382,7 @@ type WinLossDrawResult struct {
 
 func (x *WinLossDrawResult) Reset() {
 	*x = WinLossDrawResult{}
-	mi := &file_session_v1_session_proto_msgTypes[5]
+	mi := &file_session_v1_session_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -330,7 +394,7 @@ func (x *WinLossDrawResult) String() string {
 func (*WinLossDrawResult) ProtoMessage() {}
 
 func (x *WinLossDrawResult) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[5]
+	mi := &file_session_v1_session_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -343,7 +407,7 @@ func (x *WinLossDrawResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WinLossDrawResult.ProtoReflect.Descriptor instead.
 func (*WinLossDrawResult) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{5}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WinLossDrawResult) GetPlayers() []*PlayerOutcome {
@@ -367,7 +431,7 @@ type PlayerOutcome struct {
 
 func (x *PlayerOutcome) Reset() {
 	*x = PlayerOutcome{}
-	mi := &file_session_v1_session_proto_msgTypes[6]
+	mi := &file_session_v1_session_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -379,7 +443,7 @@ func (x *PlayerOutcome) String() string {
 func (*PlayerOutcome) ProtoMessage() {}
 
 func (x *PlayerOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[6]
+	mi := &file_session_v1_session_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -392,7 +456,7 @@ func (x *PlayerOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlayerOutcome.ProtoReflect.Descriptor instead.
 func (*PlayerOutcome) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{6}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PlayerOutcome) GetPlayerId() string {
@@ -435,11 +499,15 @@ var File_session_v1_session_proto protoreflect.FileDescriptor
 const file_session_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18session/v1/session.proto\x12\n" +
-	"session.v1\"d\n" +
+	"session.v1\"\x8c\x01\n" +
 	"\x14CreateSessionRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12\x18\n" +
 	"\aplayers\x18\x02 \x03(\tR\aplayers\x12\x17\n" +
-	"\agame_id\x18\x03 \x01(\tR\x06gameId\"\x8f\x01\n" +
+	"\agame_id\x18\x03 \x01(\tR\x06gameId\x12&\n" +
+	"\x05teams\x18\x04 \x03(\v2\x10.session.v1.TeamR\x05teams\"9\n" +
+	"\x04Team\x12\x17\n" +
+	"\ateam_id\x18\x01 \x01(\tR\x06teamId\x12\x18\n" +
+	"\aplayers\x18\x02 \x03(\tR\aplayers\"\x8f\x01\n" +
 	"\x15CreateSessionResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
@@ -481,31 +549,33 @@ func file_session_v1_session_proto_rawDescGZIP() []byte {
 	return file_session_v1_session_proto_rawDescData
 }
 
-var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_session_v1_session_proto_goTypes = []any{
 	(*CreateSessionRequest)(nil),  // 0: session.v1.CreateSessionRequest
-	(*CreateSessionResponse)(nil), // 1: session.v1.CreateSessionResponse
-	(*ConnectGrant)(nil),          // 2: session.v1.ConnectGrant
-	(*ReportResultRequest)(nil),   // 3: session.v1.ReportResultRequest
-	(*ReportResultResponse)(nil),  // 4: session.v1.ReportResultResponse
-	(*WinLossDrawResult)(nil),     // 5: session.v1.WinLossDrawResult
-	(*PlayerOutcome)(nil),         // 6: session.v1.PlayerOutcome
-	nil,                           // 7: session.v1.PlayerOutcome.StatsEntry
+	(*Team)(nil),                  // 1: session.v1.Team
+	(*CreateSessionResponse)(nil), // 2: session.v1.CreateSessionResponse
+	(*ConnectGrant)(nil),          // 3: session.v1.ConnectGrant
+	(*ReportResultRequest)(nil),   // 4: session.v1.ReportResultRequest
+	(*ReportResultResponse)(nil),  // 5: session.v1.ReportResultResponse
+	(*WinLossDrawResult)(nil),     // 6: session.v1.WinLossDrawResult
+	(*PlayerOutcome)(nil),         // 7: session.v1.PlayerOutcome
+	nil,                           // 8: session.v1.PlayerOutcome.StatsEntry
 }
 var file_session_v1_session_proto_depIdxs = []int32{
-	2, // 0: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
-	5, // 1: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
-	6, // 2: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
-	7, // 3: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
-	0, // 4: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
-	3, // 5: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
-	1, // 6: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
-	4, // 7: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 0: session.v1.CreateSessionRequest.teams:type_name -> session.v1.Team
+	3, // 1: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
+	6, // 2: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
+	7, // 3: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
+	8, // 4: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
+	0, // 5: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
+	4, // 6: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
+	2, // 7: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
+	5, // 8: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_session_v1_session_proto_init() }
@@ -513,7 +583,7 @@ func file_session_v1_session_proto_init() {
 	if File_session_v1_session_proto != nil {
 		return
 	}
-	file_session_v1_session_proto_msgTypes[3].OneofWrappers = []any{
+	file_session_v1_session_proto_msgTypes[4].OneofWrappers = []any{
 		(*ReportResultRequest_WinLossDraw)(nil),
 	}
 	type x struct{}
@@ -522,7 +592,7 @@ func file_session_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_session_v1_session_proto_rawDesc), len(file_session_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

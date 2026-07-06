@@ -28,12 +28,21 @@ const (
 	CloseAbandoned CloseReason = "abandoned"
 )
 
+// TeamAssignment é um lado da partida NvN: um rótulo estável no match e seus
+// jogadores (ADR-0023, arquétipo queue_arena). Em FFA a composição é um único
+// assignment com TeamID vazio e todos os jogadores.
+type TeamAssignment struct {
+	TeamID  string
+	Players []string
+}
+
 // Session é uma partida em andamento: o match alocado a um game server.
 type Session struct {
 	ID            string
 	MatchID       string
 	GameID        string // jogo da partida (multi-tenant, ADR-0017)
 	Players       []string
+	TeamByPlayer  map[string]string // playerID -> teamID; nil/vazio em FFA (ADR-0023)
 	ServerID      string
 	ServerAddress string
 
@@ -91,9 +100,11 @@ type PlayerOutcome struct {
 // SessionService é a Port de entrada: cria sessões a partir de matches e
 // recebe o resultado da partida.
 type SessionService interface {
-	// Create aloca um game server, emite um connect token por jogador e registra
-	// a sessão. Devolve ErrNoServer se o pool esgotar.
-	Create(ctx context.Context, matchID, gameID string, players []string) (*Session, []ConnectGrant, error)
+	// Create aloca um game server, emite um connect token por jogador (com o
+	// claim team_id) e registra a sessão com a composição de times. FFA = um
+	// único TeamAssignment com TeamID vazio. Devolve ErrNoServer se o pool
+	// esgotar; ErrInvalidTeams se a composição for inconsistente.
+	Create(ctx context.Context, matchID, gameID string, teams []TeamAssignment) (*Session, []ConnectGrant, error)
 	// ReportResult dispara o fan-out do resultado, libera o server e encerra a
 	// sessão. ErrUnsupportedOutcome/ErrInvalidOutcome em outcome inválido;
 	// ErrSessionNotFound se não houver sessão para o match.
@@ -126,8 +137,9 @@ type ServerRegistry interface {
 // ConnectTokenIssuer é a Port de saída que cunha o connect token (JWT EdDSA)
 // validado offline pelo game server via JWKS (ADR-0010/0011).
 type ConnectTokenIssuer interface {
-	// Issue emite um JWT EdDSA com sub/match_id/server/exp.
-	Issue(playerID, matchID, serverAddr string) (token string, err error)
+	// Issue emite um JWT EdDSA com sub/match_id/server/exp e, quando não vazio, o
+	// claim team_id (ADR-0023) — o game server lê o time no connection approval.
+	Issue(playerID, matchID, serverAddr, teamID string) (token string, err error)
 	// JWKS devolve a chave pública (JSON) para verificação offline.
 	JWKS(ctx context.Context) ([]byte, error)
 }

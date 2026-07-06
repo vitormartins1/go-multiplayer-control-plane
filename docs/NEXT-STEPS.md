@@ -2,6 +2,8 @@
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
+> **Frente ativa (2026-07-06): ADR-0023 — multiplayer por arquétipo/perfil.** O estado por fatia vive em `docs/game-models/README.md` → "Estado da implementação". Em andamento: **composição de times** no `queue_arena` (specs `matchmaking/005-team-composition` + `session/010-team-registration`, branch `feat/matchmaking/005-team-composition`) — matchmaking atribui lados, session vira dono canônico do `team_id` (carimba no resultado) e o **connect token passa a carregar `team_id`** para o data plane rodar NvN. Docs novos: **`docs/game-models/queue_arena-dataplane-contract.md`** (contrato control↔data plane + dívidas cross-repo do data plane) e **`docs/REPO-TOPOLOGY.md`** (padrão de nomes: um `go-game-<archetype>-dataplane` por arquétipo + rename proposto do backend → `go-game-control-plane`; **decisão pendente**, nada renomeado ainda). Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane** — pode quebrar o Unity, migra-se depois.
+
 ## Estado atual (`main` verde, stack local de pé)
 
 Gameplay loop fechado e observável no painel:

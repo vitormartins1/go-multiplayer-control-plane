@@ -33,28 +33,32 @@ func (fakeVerifier) Verify(_ context.Context, token string) (string, error) {
 }
 
 // provisionerFunc adapta uma func à Port domain.SessionProvisioner.
-type provisionerFunc func(matchID string, players []string) (domain.Provisioned, error)
+type provisionerFunc func(matchID string, teams []domain.TeamAssignment) (domain.Provisioned, error)
 
-func (f provisionerFunc) Provision(_ context.Context, matchID string, players []string, _ string) (domain.Provisioned, error) {
-	return f(matchID, players)
+func (f provisionerFunc) Provision(_ context.Context, matchID string, teams []domain.TeamAssignment, _ string) (domain.Provisioned, error) {
+	return f(matchID, teams)
 }
 
 // okProvisioner devolve server fixo e um token por jogador (tok-<player>).
-var okProvisioner = provisionerFunc(func(_ string, players []string) (domain.Provisioned, error) {
-	tokens := make(map[string]string, len(players))
-	for _, p := range players {
-		tokens[p] = "tok-" + p
+var okProvisioner = provisionerFunc(func(_ string, teams []domain.TeamAssignment) (domain.Provisioned, error) {
+	tokens := map[string]string{}
+	for _, t := range teams {
+		for _, p := range t.Players {
+			tokens[p] = "tok-" + p
+		}
 	}
 	return domain.Provisioned{ServerAddress: "10.0.0.1:7777", Tokens: tokens}, nil
 })
 
-// stubProvider é um domain.ProfileProvider fixo (tamanho ou erro) para os testes.
+// stubProvider é um domain.ProfileProvider fixo (formação ou erro) para os testes.
 type stubProvider struct {
 	size int
 	err  error
 }
 
-func (s stubProvider) MatchSize(context.Context, string) (int, error) { return s.size, s.err }
+func (s stubProvider) Format(context.Context, string) (domain.MatchFormat, error) {
+	return domain.MatchFormat{Size: s.size, Structure: domain.StructureFFA}, s.err
+}
 
 func setup(t *testing.T, prov domain.SessionProvisioner) pb.MatchmakingClient {
 	return setupWith(t, prov, stubProvider{size: 2})
@@ -131,7 +135,7 @@ func TestFindMatch_DoisClientes_MatchedComServerEToken(t *testing.T) {
 }
 
 func TestFindMatch_SemServer_Failed(t *testing.T) {
-	noServer := provisionerFunc(func(string, []string) (domain.Provisioned, error) {
+	noServer := provisionerFunc(func(string, []domain.TeamAssignment) (domain.Provisioned, error) {
 		return domain.Provisioned{}, domain.ErrNoServer
 	})
 	client := setup(t, noServer)

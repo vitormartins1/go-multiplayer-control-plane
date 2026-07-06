@@ -18,8 +18,18 @@ service Session {
 
 message CreateSessionRequest {
   string match_id = 1;
-  repeated string players = 2; // playerIDs do match
+  repeated string players = 2; // playerIDs do match (lista completa; fonte p/ tokens)
   string game_id = 3;          // jogo da partida (multi-tenant, ADR-0017)
+  repeated Team teams = 4;     // composição de times (ADR-0023 queue_arena); vazio em FFA
+}
+
+// Team é um lado da partida NvN: um rótulo estável no match + seus jogadores
+// (ADR-0023). Em FFA não há times (teams vazio). O session é o dono canônico
+// da composição — carimba o team_id no resultado a partir daqui e emite o
+// connect token de cada jogador com o claim team_id.
+message Team {
+  string team_id = 1;          // rótulo estável no match (ex.: "team-1")
+  repeated string players = 2; // playerIDs deste time
 }
 
 message CreateSessionResponse {
