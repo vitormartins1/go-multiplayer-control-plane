@@ -5,6 +5,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"golang.org/x/sync/errgroup"
@@ -88,6 +89,16 @@ func (s *Service) CreateGame(ctx context.Context, slug, name string) (*domain.Ga
 // RenameGame altera o nome do jogo (Configurações do painel, spec 010).
 func (s *Service) RenameGame(ctx context.Context, id, name string) (*domain.Game, error) {
 	return s.registry.RenameGame(ctx, id, name)
+}
+
+// GetMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023, passthrough).
+func (s *Service) GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error) {
+	return s.registry.GetMultiplayerProfile(ctx, gameID)
+}
+
+// SetMultiplayerProfile faz upsert do perfil de multiplayer (passthrough).
+func (s *Service) SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
+	return s.registry.SetMultiplayerProfile(ctx, gameID, profile)
 }
 
 // GameCatalog lê o catálogo de conquistas do jogo (achievements).

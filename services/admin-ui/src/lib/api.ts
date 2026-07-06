@@ -54,6 +54,28 @@ export interface Game {
   generatedImageStyle?: string;
 }
 
+// Perfil de multiplayer do jogo (ADR-0023, espelha game-registry/006). No MVP só
+// o arquétipo queue_arena; params cresce por arquétipo no futuro.
+export interface QueueArenaParams {
+  structure: "ffa" | "teams";
+  playerCount: number;
+  teamCount: number;
+  teamSize: number;
+  winCondition: "first_to_score" | "highest_at_time" | "objective" | "elimination";
+  scoreTarget: number;
+  durationSeconds: number;
+  matchStructure: "single" | "best_of_rounds";
+  roundsToWin: number;
+  allowDraw: boolean;
+  scoringStats: string[];
+}
+
+export interface MultiplayerProfile {
+  archetype: "queue_arena";
+  topology: "dedicated" | "p2p";
+  params: QueueArenaParams;
+}
+
 export interface CatalogAchievement {
   id: string;
   name: string;
@@ -176,10 +198,24 @@ export interface FanoutHealth {
   consumeError: number | null;
 }
 
-// HttpError carrega o status para a UI distinguir 502/409/400 etc.
+// HttpError carrega o status para a UI distinguir 502/409/400 etc. O code é o
+// campo "error" do corpo (quando o BFF o envia) — útil p/ mensagens estruturadas.
 export class HttpError extends Error {
-  constructor(public status: number) {
-    super(`HTTP ${status}`);
+  constructor(
+    public status: number,
+    public code?: string,
+  ) {
+    super(code ? `HTTP ${status}: ${code}` : `HTTP ${status}`);
+  }
+}
+
+// errorCode lê o campo "error" do corpo (best-effort; body pode não ser JSON).
+async function errorCode(resp: Response): Promise<string | undefined> {
+  try {
+    const body = (await resp.json()) as { error?: string };
+    return body.error;
+  } catch {
+    return undefined;
   }
 }
 
@@ -203,7 +239,7 @@ async function sendJSON<T>(method: string, path: string, body: unknown): Promise
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!resp.ok) throw new HttpError(resp.status);
+  if (!resp.ok) throw new HttpError(resp.status, await errorCode(resp));
   return (await resp.json()) as T;
 }
 
@@ -225,6 +261,27 @@ export const api = {
   createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),
   renameGame: (gameId: string, name: string) =>
     putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}`, { name }),
+  // Perfil de multiplayer (ADR-0023). getMultiplayerProfile -> null em 404
+  // (jogo ainda não configurado); demais erros propagam.
+  getMultiplayerProfile: async (
+    gameId: string,
+    signal?: AbortSignal,
+  ): Promise<MultiplayerProfile | null> => {
+    try {
+      return await getJSON<MultiplayerProfile>(
+        `/api/games/${encodeURIComponent(gameId)}/multiplayer-profile`,
+        signal,
+      );
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return null;
+      throw err;
+    }
+  },
+  setMultiplayerProfile: (gameId: string, profile: MultiplayerProfile) =>
+    putJSON<MultiplayerProfile>(
+      `/api/games/${encodeURIComponent(gameId)}/multiplayer-profile`,
+      profile,
+    ),
   gameCatalog: (gameId: string, signal?: AbortSignal) =>
     getJSON<CatalogAchievement[]>(`/api/games/${encodeURIComponent(gameId)}/achievements`, signal),
   createAchievement: (gameId: string, a: NewAchievement) =>

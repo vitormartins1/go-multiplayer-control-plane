@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Button, Group, Stack, Text, TextInput } from "@mantine/core";
+import { Button, Divider, Group, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { api, type Game } from "../lib/api";
+import { MultiplayerSettings } from "./MultiplayerSettings";
 
 // GameSettings é a aba Configurações do jogo (spec 012): renomear (único write
 // de config por ora; delete adiado). O slug é a chave estável — read-only.
@@ -26,22 +27,30 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
   }
 
   return (
-    <Stack maw={420}>
-      <TextInput
-        label="Nome"
-        value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
-        maxLength={100}
-      />
-      <TextInput label="Slug" value={game.slug} readOnly disabled description="Chave estável — não muda." />
-      <Group>
-        <Button onClick={save} disabled={!canSave} loading={saving}>
-          Salvar
-        </Button>
-      </Group>
-      <Text size="xs" c="dimmed">
-        Remover jogo ainda não está disponível (envolve apagar dados em vários serviços).
-      </Text>
+    <Stack>
+      <Stack maw={420}>
+        <Title order={4}>Identidade</Title>
+        <TextInput
+          label="Nome"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          maxLength={100}
+        />
+        <TextInput label="Slug" value={game.slug} readOnly disabled description="Chave estável — não muda." />
+        <Group>
+          <Button onClick={save} disabled={!canSave} loading={saving}>
+            Salvar
+          </Button>
+        </Group>
+        <Text size="xs" c="dimmed">
+          Remover jogo ainda não está disponível (envolve apagar dados em vários serviços).
+        </Text>
+      </Stack>
+
+      <Divider my="md" />
+
+      <Title order={4}>Multiplayer</Title>
+      <MultiplayerSettings gameId={game.id} />
     </Stack>
   );
 }

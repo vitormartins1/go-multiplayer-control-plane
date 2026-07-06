@@ -25,6 +25,9 @@ type fakeService struct {
 	games        []domain.Game
 	gamesErr     error
 	createErr    error
+	profile      json.RawMessage
+	profileErr   error
+	gotProfile   json.RawMessage
 	catalog      []domain.Achievement
 	catErr       error
 	ach          []domain.PlayerAchievement
@@ -79,6 +82,17 @@ func (f *fakeService) RenameGame(_ context.Context, id, name string) (*domain.Ga
 		return nil, f.gamesErr
 	}
 	return &domain.Game{ID: id, Name: name}, nil
+}
+func (f *fakeService) GetMultiplayerProfile(_ context.Context, gameID string) (json.RawMessage, error) {
+	f.gotGameID = gameID
+	return f.profile, f.profileErr
+}
+func (f *fakeService) SetMultiplayerProfile(_ context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
+	f.gotGameID, f.gotProfile = gameID, profile
+	if f.profileErr != nil {
+		return nil, f.profileErr
+	}
+	return profile, nil
 }
 func (f *fakeService) GameCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
 	f.gotGameID = gameID
@@ -699,6 +713,70 @@ func TestRenameGame_200(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "g1", svc.gotGameID)
 	assert.Contains(t, readBody(t, resp), `"name":"Novo"`)
+}
+
+func TestGetMultiplayerProfile_200(t *testing.T) {
+	svc := &fakeService{profile: json.RawMessage(`{"archetype":"queue_arena","topology":"dedicated"}`)}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/multiplayer-profile")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.JSONEq(t, `{"archetype":"queue_arena","topology":"dedicated"}`, readBody(t, resp))
+}
+
+func TestGetMultiplayerProfile_404_Propaga(t *testing.T) {
+	svc := &fakeService{profileErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "profile_not_found"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/multiplayer-profile")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "profile_not_found")
+}
+
+func TestGetMultiplayerProfile_RegistryFora_502(t *testing.T) {
+	svc := &fakeService{profileErr: domain.ErrGameRegistryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/multiplayer-profile")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestSetMultiplayerProfile_200(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	body := `{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":4}}`
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/multiplayer-profile", strings.NewReader(body))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.JSONEq(t, body, string(svc.gotProfile))
+	assert.JSONEq(t, body, readBody(t, resp))
+}
+
+func TestSetMultiplayerProfile_400_Propaga(t *testing.T) {
+	svc := &fakeService{profileErr: &domain.UpstreamError{Status: http.StatusBadRequest, Code: "invalid_profile_params"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/multiplayer-profile", strings.NewReader(`{}`))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "invalid_profile_params")
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

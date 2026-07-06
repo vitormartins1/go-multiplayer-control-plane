@@ -155,6 +155,13 @@ type GameRegistry interface {
 	PlayersOf(ctx context.Context, gameID string) ([]GamePlayer, error)
 	// GamesOfPlayer lê os jogos em que o player está presente (consulta reversa).
 	GamesOfPlayer(ctx context.Context, playerID string) ([]Game, error)
+	// GetMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023, cru).
+	// UpstreamError(404) se o jogo ou o perfil não existir; indisponibilidade ->
+	// ErrGameRegistryUnavailable. O BFF não interpreta a forma do perfil.
+	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
+	// SetMultiplayerProfile faz upsert do perfil (cru). Validação/estado do
+	// upstream (400/404) viram UpstreamError; indisponibilidade -> unavailable.
+	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
 }
 
 // LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).

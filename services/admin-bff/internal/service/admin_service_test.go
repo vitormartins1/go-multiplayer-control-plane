@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -71,6 +72,8 @@ type fakeRegistry struct {
 	gotName     string
 	gotGameID   string
 	gotPlayerID string
+	profile     json.RawMessage
+	gotProfile  json.RawMessage
 }
 
 func (f *fakeRegistry) ListGames(_ context.Context) ([]domain.Game, error) {
@@ -97,6 +100,17 @@ func (f *fakeRegistry) RenameGame(_ context.Context, id, name string) (*domain.G
 		return nil, f.err
 	}
 	return &domain.Game{ID: id, Name: name}, nil
+}
+func (f *fakeRegistry) GetMultiplayerProfile(_ context.Context, gameID string) (json.RawMessage, error) {
+	f.gotGameID = gameID
+	return f.profile, f.err
+}
+func (f *fakeRegistry) SetMultiplayerProfile(_ context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
+	f.gotGameID, f.gotProfile = gameID, profile
+	if f.err != nil {
+		return nil, f.err
+	}
+	return profile, nil
 }
 
 type fakeLeaderboard struct {
@@ -275,6 +289,23 @@ func TestCreateGame_DelegaAoRegistry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "tetris", reg.gotSlug)
 	assert.Equal(t, "g1", g.ID)
+}
+
+func TestMultiplayerProfile_DelegaAoRegistry(t *testing.T) {
+	reg := &fakeRegistry{profile: json.RawMessage(`{"archetype":"queue_arena"}`)}
+	svc := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg})
+
+	got, err := svc.GetMultiplayerProfile(context.Background(), "g1")
+	require.NoError(t, err)
+	assert.Equal(t, "g1", reg.gotGameID)
+	assert.JSONEq(t, `{"archetype":"queue_arena"}`, string(got))
+
+	body := json.RawMessage(`{"archetype":"queue_arena","topology":"dedicated"}`)
+	saved, err := svc.SetMultiplayerProfile(context.Background(), "g2", body)
+	require.NoError(t, err)
+	assert.Equal(t, "g2", reg.gotGameID)
+	assert.JSONEq(t, string(body), string(reg.gotProfile))
+	assert.JSONEq(t, string(body), string(saved))
 }
 
 func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
