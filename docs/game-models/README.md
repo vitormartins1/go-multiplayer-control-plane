@@ -116,7 +116,7 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | Colher: conquistas | achievements (`007`) | lê `outcome` → `match_won`/`match_lost`/`match_drawn` (destrava empate/derrota) | ✅ **main** |
 | Colher: leaderboard por métrica | leaderboard (`003`) | N rankings por jogo (board): `score` + um por stat (kills…), highscore; `?board` default `score` | ✅ **main** |
 | **Composição de times** | matchmaking (`005`) + session (`010`) | matchmaking atribui lados NvN; session é dono canônico do `teamId` (registra + carimba no resultado); connect token carrega `team_id` p/ o data plane | ✅ **main** |
-| **Colher: analytics** | analytics | agregar por `outcome`/desfecho (win/loss/draw); stats por partida | ⬜ planejado |
+| **Colher: analytics** | analytics (`003`) | agrega por `outcome` (win/**loss**/**draw**) por jogo; empate deixa de ser contado como derrota; JSON aditivo (`losses`/`draws`) | ✅ **main** — _stats por partida seguem como follow-up_ |
 | **Conquistas por `stats`/`teamId`** | achievements | progresso por métrica (ex.: "10 kills"), conquistas por time | ⬜ planejado |
 | **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
 | Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
