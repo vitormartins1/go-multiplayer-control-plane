@@ -25,7 +25,11 @@ var _ domain.ResultPublisher = (*SNS)(nil)
 
 // envelopeVersion é a versão do schema da mensagem publicada no tópico. Os
 // consumidores ignoram campos desconhecidos; bumps de major viram um novo campo.
-const envelopeVersion = 1
+//
+// v2 (ADR-0023): outcome polimórfico. Ganha `kind` e, por jogador,
+// `outcome`/`teamId`/`stats`, MANTENDO `won`/`score` para os consumidores atuais
+// (retrocompat): won = (outcome == "win").
+const envelopeVersion = 2
 
 // envelope é o contrato JSON publicado no tópico match-results (resultado bruto
 // da partida). Cada consumidor (achievements/leaderboard) desserializa só o que
@@ -34,13 +38,17 @@ type envelope struct {
 	SchemaVersion int            `json:"schemaVersion"`
 	MatchID       string         `json:"matchId"`
 	GameID        string         `json:"gameId"`
+	Kind          string         `json:"kind"` // "win_loss_draw" (ADR-0023)
 	Results       []playerResult `json:"results"`
 }
 
 type playerResult struct {
-	PlayerID string `json:"playerId"`
-	Won      bool   `json:"won"`
-	Score    int64  `json:"score"`
+	PlayerID string           `json:"playerId"`
+	Won      bool             `json:"won"`   // compat: outcome == "win"
+	Score    int64            `json:"score"` // compat
+	Outcome  string           `json:"outcome"`
+	TeamID   string           `json:"teamId,omitempty"`
+	Stats    map[string]int64 `json:"stats,omitempty"`
 }
 
 // snsClient é a fração da API do SNS que usamos (permite fake em teste).
@@ -70,15 +78,24 @@ func NewSNS(ctx context.Context, topicARN string, log *slog.Logger) (*SNS, error
 }
 
 // Publish serializa o envelope e publica no tópico. Retorna erro em falha.
-func (s *SNS) Publish(ctx context.Context, gameID, matchID string, results []domain.PlayerResult) error {
+func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+	players := outcome.WinLossDraw.Players // no MVP só o kind win_loss_draw chega aqui (validado no service)
 	env := envelope{
 		SchemaVersion: envelopeVersion,
 		MatchID:       matchID,
 		GameID:        gameID,
-		Results:       make([]playerResult, 0, len(results)),
+		Kind:          outcome.Kind,
+		Results:       make([]playerResult, 0, len(players)),
 	}
-	for _, r := range results {
-		env.Results = append(env.Results, playerResult{PlayerID: r.PlayerID, Won: r.Won, Score: r.Score})
+	for _, p := range players {
+		env.Results = append(env.Results, playerResult{
+			PlayerID: p.PlayerID,
+			Won:      p.Outcome == domain.ResultWin, // compat
+			Score:    p.Score,
+			Outcome:  p.Outcome,
+			TeamID:   p.TeamID,
+			Stats:    p.Stats,
+		})
 	}
 
 	body, err := json.Marshal(env)
@@ -97,7 +114,7 @@ func (s *SNS) Publish(ctx context.Context, gameID, matchID string, results []dom
 	s.log.Info("result publicado no tópico",
 		slog.String("game_id", gameID),
 		slog.String("match_id", matchID),
-		slog.Int("players", len(results)),
+		slog.Int("players", len(players)),
 	)
 	return nil
 }

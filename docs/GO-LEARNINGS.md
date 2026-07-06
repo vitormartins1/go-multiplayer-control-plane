@@ -780,3 +780,28 @@ func (c *CachingProvider) MatchSize(ctx context.Context, gameID string) (int, er
 ```
 
 **Pegadinha / nuance:** decisões de política vivem no decorator, não na interface — aqui, **não cachear erros** (senão um "registry fora" fixaria o jogo como "sem perfil" por todo o TTL) e **não segurar o lock durante a chamada ao inner** (I/O sob mutex serializaria tudo; o custo é dois misses concorrentes poderem ambos buscar — inofensivo). Em C#/.NET seria um decorator via DI registrando `IProfileProvider` → `CachingProfileProvider` que recebe o inner; a diferença é que em Go não há registro/atributo: basta o tipo ter o método, e o aninhamento é manual e explícito no `main`.
+
+## 22 — `oneof` do protobuf ↔ tagged union do domínio (a ponte no transport)
+
+**O que é / por que importa:** quando um campo tem **uma de várias formas**, o protobuf oferece o `oneof` (discriminated union no wire) e o domínio Go usa a tagged union por ponteiro ([[20]]). Os dois se **espelham**, e o adapter de transport é a ponte: traduz o campo setado do `oneof` para o ponteiro correspondente do domínio (e vice-versa). Assim o wire e o domínio evoluem juntos — cada novo arquétipo é **um campo no `oneof`** e **um ponteiro no struct**.
+
+**Onde no projeto:** `session-service` — `ReportResultRequest { string match_id; oneof outcome { WinLossDrawResult win_loss_draw = 2; } }` (ADR-0023, resultado polimórfico). O `transport/grpc_server.go` mapeia com `toMatchOutcome`; novos kinds (placement/collective/role_event) entram como novos ramos do `oneof` e do `switch`.
+
+```protobuf
+message ReportResultRequest {
+  string match_id = 1;
+  oneof outcome { WinLossDrawResult win_loss_draw = 2; } // + placement/collective/... depois
+}
+```
+```go
+// transport: oneof (wire) -> tagged union (domínio)
+func toMatchOutcome(req *pb.ReportResultRequest) domain.MatchOutcome {
+	if wld := req.GetWinLossDraw(); wld != nil { // getter do oneof: nil se não setado
+		// ... monta players ...
+		return domain.MatchOutcome{Kind: domain.OutcomeWinLossDraw, WinLossDraw: &domain.WinLossDrawResult{Players: players}}
+	}
+	return domain.MatchOutcome{} // nenhum ramo setado -> Kind "" -> rejeitado na validação
+}
+```
+
+**Pegadinha / nuance:** o protoc gera para cada ramo um **tipo wrapper** (`ReportResultRequest_WinLossDraw`) e o getter `GetWinLossDraw()` devolve `nil` quando o ramo não está setado — então "nenhum outcome enviado" vira `Kind: ""`, que a validação do service rejeita (`ErrUnsupportedOutcome` → `InvalidArgument`). Diferente de C#, onde o `oneof` do protobuf vira um `enum XCase` + propriedade; em Go o discriminador é implícito no ponteiro não-nil. Nunca confie no cliente ter setado o ramo: trate o "vazio" explicitamente.
