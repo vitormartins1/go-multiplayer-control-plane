@@ -114,9 +114,11 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | Tamanho do match | matchmaking (`004`) | deriva o tamanho do perfil (ffa/teams), remove `matchSize` global | ✅ **main** |
 | Resultado polimórfico | session (`009`) | `MatchOutcome` (win_loss_draw + stats + times); envelope de fan-out v2 retrocompatível | ✅ **main** |
 | Colher: conquistas | achievements (`007`) | lê `outcome` → `match_won`/`match_lost`/`match_drawn` (destrava empate/derrota) | ✅ **main** |
+| Colher: leaderboard por métrica | leaderboard (`003`) | N rankings por jogo (board): `score` + um por stat (kills…), highscore; `?board` default `score` | ✅ **main** |
 | **Composição de times** | matchmaking | atribuir jogadores a lados NvN (a session já aceita `teamId`) | ⬜ planejado |
-| **Colher: leaderboard/analytics** | leaderboard, analytics | ler `stats`/`outcome` (leaderboard por kills/K-D; analytics por desfecho) | ⬜ planejado |
+| **Colher: analytics** | analytics | agregar por `outcome`/desfecho (win/loss/draw); stats por partida | ⬜ planejado |
 | **Conquistas por `stats`/`teamId`** | achievements | progresso por métrica (ex.: "10 kills"), conquistas por time | ⬜ planejado |
+| **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
 | Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
 | **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective), `host_world_dropin` (role_event + topologia p2p) | ⬜ futuro |
 
