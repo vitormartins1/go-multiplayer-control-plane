@@ -86,14 +86,27 @@ func (r *PostgresGameRepository) List(ctx context.Context) ([]domain.Game, error
 }
 
 func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*domain.Game, error) {
-	const q = `SELECT ` + selectCols + ` FROM games WHERE id = $1`
+	// FindByID também carrega o perfil de multiplayer (coluna JSONB); List não o
+	// faz (spec 006 — lista não infla). Por isso a query/scan são próprios, sem
+	// reusar scanGame.
+	const q = `SELECT ` + selectCols + `, multiplayer_profile FROM games WHERE id = $1`
 	var g domain.Game
-	err := scanGame(r.pool.QueryRow(ctx, q, id), &g)
+	var profileRaw []byte
+	err := r.pool.QueryRow(ctx, q, id).Scan(
+		&g.ID, &g.Slug, &g.Name, &g.CreatedAt,
+		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle,
+		&profileRaw,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrGameNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("game-registry repository: find by id: %w", err)
 	}
+	profile, err := decodeProfile(profileRaw)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry repository: find by id: decode profile: %w", err)
+	}
+	g.MultiplayerProfile = profile
 	return &g, nil
 }
