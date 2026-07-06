@@ -97,7 +97,12 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 
 // Create aloca um game server, emite um connect token por jogador e registra a
 // sessão (OPEN). Se a emissão falhar, o server alocado é devolvido ao pool.
-func (s *Service) Create(ctx context.Context, matchID, gameID string, players []string) (*domain.Session, []domain.ConnectGrant, error) {
+func (s *Service) Create(ctx context.Context, matchID, gameID string, teams []domain.TeamAssignment) (*domain.Session, []domain.ConnectGrant, error) {
+	players, teamByPlayer, err := flattenTeams(teams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("session service: create: %w", err)
+	}
+
 	server, err := s.allocator.Allocate(ctx, matchID, gameID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("session service: create: allocate: %w", err)
@@ -105,7 +110,9 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, players []
 
 	grants := make([]domain.ConnectGrant, 0, len(players))
 	for _, playerID := range players {
-		tok, err := s.issuer.Issue(playerID, matchID, server.Address)
+		// o token carrega o team_id do jogador (vazio em FFA) — o game server lê
+		// o time no connection approval para o gameplay NvN (ADR-0023).
+		tok, err := s.issuer.Issue(playerID, matchID, server.Address, teamByPlayer[playerID])
 		if err != nil {
 			// rollback: não deixa o server preso se não conseguimos cunhar os tokens.
 			_ = s.allocator.Release(ctx, server.ID)
@@ -119,6 +126,7 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, players []
 		MatchID:       matchID,
 		GameID:        gameID,
 		Players:       players,
+		TeamByPlayer:  teamByPlayer,
 		ServerID:      server.ID,
 		ServerAddress: server.Address,
 		State:         domain.SessionOpen,
@@ -130,6 +138,29 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, players []
 	s.mu.Unlock()
 
 	return sess, grants, nil
+}
+
+// flattenTeams achata a composição em uma lista ordenada de players e um mapa
+// playerID->teamID (só entradas com time; FFA devolve mapa vazio). Preserva a
+// ordem dos assignments/players. ErrInvalidTeams se um jogador aparece em mais
+// de um time (a única inconsistência possível quando os teams são a fonte).
+func flattenTeams(teams []domain.TeamAssignment) ([]string, map[string]string, error) {
+	var players []string
+	teamByPlayer := make(map[string]string)
+	seen := make(map[string]bool)
+	for _, t := range teams {
+		for _, p := range t.Players {
+			if seen[p] {
+				return nil, nil, domain.ErrInvalidTeams
+			}
+			seen[p] = true
+			players = append(players, p)
+			if t.TeamID != "" {
+				teamByPlayer[p] = t.TeamID
+			}
+		}
+	}
+	return players, teamByPlayer, nil
 }
 
 // ReportResult publica o resultado no fan-out e, só então, libera o server e
@@ -156,6 +187,11 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 		return fmt.Errorf("session service: report result: %w", domain.ErrSessionNotFound)
 	}
 
+	// carimba o team_id canônico a partir da composição registrada na formação
+	// (ADR-0023): o session é o dono do rótulo, não o que o game server ecoou.
+	// TeamByPlayer é imutável após o Create, então é seguro ler fora do lock.
+	stampTeams(outcome, sess.TeamByPlayer)
+
 	if err := s.publisher.Publish(ctx, gameID, matchID, outcome); err != nil {
 		return fmt.Errorf("session service: report result: publish: %w", err)
 	}
@@ -164,6 +200,18 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 		return fmt.Errorf("session service: report result: %w", err)
 	}
 	return nil
+}
+
+// stampTeams sobrescreve o TeamID de cada PlayerOutcome com o time registrado na
+// formação (ADR-0023). Jogador fora da composição (ou FFA) fica com TeamID
+// vazio. Muta in-place via o ponteiro do WinLossDraw (tagged union do outcome).
+func stampTeams(o domain.MatchOutcome, teamByPlayer map[string]string) {
+	if o.WinLossDraw == nil {
+		return
+	}
+	for i := range o.WinLossDraw.Players {
+		o.WinLossDraw.Players[i].TeamID = teamByPlayer[o.WinLossDraw.Players[i].PlayerID]
+	}
 }
 
 // validateOutcome valida o outcome estruturalmente (ADR-0023). Não valida contra

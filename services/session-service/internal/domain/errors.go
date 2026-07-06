@@ -12,4 +12,8 @@ var (
 	// ErrInvalidOutcome indica um outcome estruturalmente inválido (sem jogadores
 	// ou com valor fora de win/loss/draw).
 	ErrInvalidOutcome = errors.New("session: invalid outcome")
+	// ErrInvalidTeams indica uma composição de times inconsistente na criação da
+	// sessão (ADR-0023): jogador em dois times, ou divergência entre a lista de
+	// players e os jogadores dos times.
+	ErrInvalidTeams = errors.New("session: invalid team composition")
 )
