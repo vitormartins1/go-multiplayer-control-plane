@@ -88,7 +88,7 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 |---|---|---|---|---|
 | Modelo de resultado além de `Won bool`/`Score` | baseline, fichas 01-04 | session, achievements, leaderboard | resultado como **outcome** rico: WIN/LOSS/DRAW (02), **colocação ordinal** (03), **coletivo por sessão** (04), **por evento/papel** (01) — por jogador, time **ou sessão** | 🟡 **win_loss_draw feito** (session `009`, achievements `007`); placement/coletivo/papel pendentes |
 | Jogo descreve sua **forma** de multiplayer (**perfil/arquétipo**) | baseline, ficha 01 | game-registry | jogo declara um **arquétipo de multiplayer** (`queue_arena`, `host_world_dropin`, …) + parâmetros; demais serviços leem e se pré-configuram | ✅ **ADR-0023** (Accepted) |
-| Matchmaking com **times** e composição | baseline, fichas 02/03 | matchmaking | formar lados (NvN), squads e **lobby grande** (BR), não só N tickets FIFO | 🔵 **NvN na branch** (spec `matchmaking/005`, atribuição posicional); squads/lobby grande (BR) e skill/MMR seguem abertos |
+| Matchmaking com **times** e composição | baseline, fichas 02/03 | matchmaking | formar lados (NvN), squads e **lobby grande** (BR), não só N tickets FIFO | 🟡 **NvN na main** (specs `matchmaking/005`+`session/010`, atribuição posicional); squads/lobby grande (BR) e skill/MMR seguem abertos |
 | Condição de vitória **declarada no perfil** (não hardcoded) | ficha 02 | game-registry, session | `first_to_score` / `highest_at_time` / `objective` / `elimination` no cadastro; hoje é `first-to-5` no código | 🔎 aberto |
 | **Modo de partida** (preset) + **estrutura de rounds** no `queue_arena` | ficha 05 | game-registry, session | `mode` (TDM/FFA/Domination/S&D/CTF) = preset de {social, vitória, granularidade}; `matchStructure = single \| best_of_rounds(N)` | 🔎 aberto |
 | **Stats estruturadas** no resultado (não só `score int64`) | ficha 05 | session, leaderboard, achievements | resultado carrega mapa de métricas por jogador (kills, assists, objetivos, stealth) → leaderboards ricos (K/D, MVP) | 🔎 aberto |
@@ -115,7 +115,7 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | Resultado polimórfico | session (`009`) | `MatchOutcome` (win_loss_draw + stats + times); envelope de fan-out v2 retrocompatível | ✅ **main** |
 | Colher: conquistas | achievements (`007`) | lê `outcome` → `match_won`/`match_lost`/`match_drawn` (destrava empate/derrota) | ✅ **main** |
 | Colher: leaderboard por métrica | leaderboard (`003`) | N rankings por jogo (board): `score` + um por stat (kills…), highscore; `?board` default `score` | ✅ **main** |
-| **Composição de times** | matchmaking (`005`) + session (`010`) | matchmaking atribui lados NvN; session é dono canônico do `teamId` (registra + carimba no resultado); connect token carrega `team_id` p/ o data plane | 🔵 **branch** (`feat/matchmaking/005-team-composition`, testes verdes, não mergeado) |
+| **Composição de times** | matchmaking (`005`) + session (`010`) | matchmaking atribui lados NvN; session é dono canônico do `teamId` (registra + carimba no resultado); connect token carrega `team_id` p/ o data plane | ✅ **main** |
 | **Colher: analytics** | analytics | agregar por `outcome`/desfecho (win/loss/draw); stats por partida | ⬜ planejado |
 | **Conquistas por `stats`/`teamId`** | achievements | progresso por métrica (ex.: "10 kills"), conquistas por time | ⬜ planejado |
 | **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
