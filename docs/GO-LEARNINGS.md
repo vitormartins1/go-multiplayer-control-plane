@@ -805,3 +805,29 @@ func toMatchOutcome(req *pb.ReportResultRequest) domain.MatchOutcome {
 ```
 
 **Pegadinha / nuance:** o protoc gera para cada ramo um **tipo wrapper** (`ReportResultRequest_WinLossDraw`) e o getter `GetWinLossDraw()` devolve `nil` quando o ramo não está setado — então "nenhum outcome enviado" vira `Kind: ""`, que a validação do service rejeita (`ErrUnsupportedOutcome` → `InvalidArgument`). Diferente de C#, onde o `oneof` do protobuf vira um `enum XCase` + propriedade; em Go o discriminador é implícito no ponteiro não-nil. Nunca confie no cliente ter setado o ramo: trate o "vazio" explicitamente.
+
+---
+
+## 23 — `json.RawMessage`: passthrough sem re-decodificar (o BFF que não interpreta)
+
+**O que é / por que importa:** `json.RawMessage` é `[]byte` com métodos `MarshalJSON`/`UnmarshalJSON` que **não fazem nada** — o encoding/json trata o valor como JSON já serializado e o copia verbatim. É a ferramenta certa quando uma camada precisa **carregar** um JSON sem conhecer sua forma: o admin-bff repassa o perfil de multiplayer (ADR-0023) do painel para o game-registry e de volta sem se acoplar aos campos — quando o modelo crescer (novos arquétipos), o BFF não muda. É o "objeto opaco" que em C#/.NET você resolveria com `JsonElement`/`JObject`, mas aqui é literalmente o slice de bytes cru.
+
+**Onde no projeto:** `admin-bff` (spec 012) — `domain.GameRegistry.GetMultiplayerProfile/SetMultiplayerProfile` usam `json.RawMessage`; o adapter faz `io.ReadAll` do corpo e o handler escreve com `writeRawJSON` (sem `json.Encode`, que re-serializaria à toa). A validação fica só no game-registry (a verdade); o BFF é passthrough.
+
+```go
+// Port: o tipo carregado é JSON cru — o BFF não conhece a forma.
+GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
+
+// Adapter: lê o corpo verbatim (upstream.Do já classificou 2xx/4xx).
+raw, err := io.ReadAll(resp.Body)
+return raw, err
+
+// Transport: repassa os bytes sem re-decodificar (Encode reprocessaria).
+func writeRawJSON(w http.ResponseWriter, status int, raw json.RawMessage) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(raw) // já é JSON válido: só copia
+}
+```
+
+**Pegadinha / nuance:** `json.RawMessage` **não valida** que os bytes são JSON — só os carrega. Se você aceitar um `RawMessage` de fora e reencaminhar, um corpo lixo passa batido (aqui tudo bem: o game-registry rejeita o que for inválido). E no PUT eu leio `r.Body` com `io.ReadAll` em vez do `decode`/`DisallowUnknownFields` usado nos outros handlers — de propósito: campos desconhecidos são responsabilidade do dono da validação (o backend de domínio), não do passthrough. Contraste com [[22]] (`oneof`/tagged union): lá o transport **conhece e traduz** a forma; aqui ele deliberadamente **não conhece** — dois extremos do mesmo eixo "quanto a borda sabe do payload".
