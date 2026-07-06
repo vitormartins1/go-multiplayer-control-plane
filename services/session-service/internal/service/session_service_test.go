@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -12,6 +14,9 @@ import (
 
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 )
+
+// discardLog é o logger silencioso para os testes do reconcile/sweeper.
+func discardLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 type mockAllocator struct{ mock.Mock }
 
@@ -40,6 +45,25 @@ type mockPublisher struct{ mock.Mock }
 
 func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID string, results []domain.PlayerResult) error {
 	return m.Called(ctx, gameID, matchID, results).Error(0)
+}
+
+type mockRegistry struct{ mock.Mock }
+
+func (m *mockRegistry) LiveServerIDs(ctx context.Context) (map[string]struct{}, error) {
+	args := m.Called(ctx)
+	if s := args.Get(0); s != nil {
+		return s.(map[string]struct{}), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+// liveSet monta um conjunto de IDs vivos para o mockRegistry.
+func liveSet(ids ...string) map[string]struct{} {
+	set := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		set[id] = struct{}{}
+	}
+	return set
 }
 
 func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
@@ -166,6 +190,116 @@ func TestSweep_SessaoDentroDoTTL_NaoFecha(t *testing.T) {
 	assert.Equal(t, 0, svc.Sweep(context.Background(), 30*time.Minute))
 	assert.Equal(t, float64(1), svc.ActiveSessions(), "sessão dentro do TTL segue ativa")
 	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
+}
+
+func TestReconcile_ServerSumiuAposGrace_FechaComoAbandoned(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	reg := &mockRegistry{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	svc := New(alloc, iss, &mockPublisher{},
+		WithClock(func() time.Time { return now }),
+		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
+	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
+	require.NoError(t, err)
+
+	// passa o grace e o server sumiu da fleet (LIST devolve conjunto vazio).
+	now = now.Add(2 * time.Minute)
+	reg.On("LiveServerIDs", mock.Anything).Return(liveSet(), nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	assert.Equal(t, 1, svc.reconcile(context.Background(), time.Minute, discardLog()))
+	assert.Equal(t, float64(0), svc.ActiveSessions(), "órfã saiu das ativas")
+	assert.Equal(t, domain.SessionClosed, sess.State)
+	assert.Equal(t, domain.CloseAbandoned, sess.CloseReason)
+	assert.Equal(t, float64(1), svc.ClosedTotal(domain.CloseAbandoned))
+	alloc.AssertExpectations(t) // garante o Release do server abandonado
+}
+
+func TestReconcile_DentroDoGrace_NaoFecha(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	reg := &mockRegistry{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	svc := New(alloc, iss, &mockPublisher{},
+		WithClock(func() time.Time { return now }),
+		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
+	require.NoError(t, err)
+
+	// server já sumiu, mas a sessão tem só 30s de vida — grace protege.
+	now = now.Add(30 * time.Second)
+	reg.On("LiveServerIDs", mock.Anything).Return(liveSet(), nil)
+
+	assert.Equal(t, 0, svc.reconcile(context.Background(), time.Minute, discardLog()))
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "sessão dentro do grace segue ativa")
+	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
+}
+
+func TestReconcile_ErroNoList_NaoFechaNada(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	reg := &mockRegistry{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	svc := New(alloc, iss, &mockPublisher{},
+		WithClock(func() time.Time { return now }),
+		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
+	require.NoError(t, err)
+
+	now = now.Add(5 * time.Minute)
+	reg.On("LiveServerIDs", mock.Anything).Return(nil, errors.New("k8s indisponível"))
+
+	assert.Equal(t, 0, svc.reconcile(context.Background(), time.Minute, discardLog()), "falha no LIST não fecha nada")
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "sessão saudável preservada apesar do erro de leitura")
+	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
+}
+
+func TestReconcile_ServerVivo_NaoFecha(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	reg := &mockRegistry{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	svc := New(alloc, iss, &mockPublisher{},
+		WithClock(func() time.Time { return now }),
+		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
+	require.NoError(t, err)
+
+	now = now.Add(5 * time.Minute)
+	reg.On("LiveServerIDs", mock.Anything).Return(liveSet("server-0"), nil)
+
+	assert.Equal(t, 0, svc.reconcile(context.Background(), time.Minute, discardLog()))
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "server vivo → sessão segue ativa")
+	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
+}
+
+func TestReconcile_SemRegistry_NoOp(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	svc := New(alloc, iss, &mockPublisher{}, WithClock(func() time.Time { return now })) // sem WithServerRegistry
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", []string{"p1"})
+	require.NoError(t, err)
+
+	now = now.Add(5 * time.Minute)
+	assert.Equal(t, 0, svc.reconcile(context.Background(), time.Minute, discardLog()), "sem registry: reconcile é no-op")
+	assert.Equal(t, float64(1), svc.ActiveSessions())
 }
 
 func TestReportResult_MarcaCloseReasonResult(t *testing.T) {

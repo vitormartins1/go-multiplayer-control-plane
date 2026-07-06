@@ -99,6 +99,39 @@ func TestAgonesRelease_DeletaGameServerPorNome(t *testing.T) {
 	assert.Equal(t, "packet-arena-abcde-12345", deleted)
 }
 
+// gameServerObj monta um GameServer unstructured com o label da fleet, para
+// semear o fake do dynamic client no teste de LiveServerIDs.
+func gameServerObj(name, fleet string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "agones.dev/v1",
+		"kind":       "GameServer",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": "default",
+			"labels":    map[string]any{"agones.dev/fleet": fleet},
+		},
+	}}
+}
+
+func TestAgonesLiveServerIDs_DevolveNomesDaFleet(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "agones.dev", Version: "v1", Kind: "GameServerList"}, &unstructured.UnstructuredList{})
+	client := dynamicfake.NewSimpleDynamicClient(scheme,
+		gameServerObj("packet-arena-aaaaa", "packet-arena"),
+		gameServerObj("packet-arena-bbbbb", "packet-arena"),
+		gameServerObj("outra-fleet-ccccc", "outra-fleet"), // filtrada pelo selector
+	)
+
+	agones := NewAgones(client, "default", "packet-arena")
+	live, err := agones.LiveServerIDs(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]struct{}{
+		"packet-arena-aaaaa": {},
+		"packet-arena-bbbbb": {},
+	}, live, "só os GameServers da fleet")
+}
+
 func TestWithPublicHost_ReescreveHostMantemPorta(t *testing.T) {
 	inner := New([]string{"172.19.0.3:7127"})
 	alloc := WithPublicHost(inner, "127.0.0.1")

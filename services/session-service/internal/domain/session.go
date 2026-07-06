@@ -23,6 +23,9 @@ const (
 	CloseTTL CloseReason = "ttl"
 	// CloseAdmin: encerrada por um operador no console (spec 007).
 	CloseAdmin CloseReason = "admin"
+	// CloseAbandoned: fechada pela reconciliação — o game server sumiu da fleet
+	// sem ReportResult (spec 008, ADR-0022).
+	CloseAbandoned CloseReason = "abandoned"
 )
 
 // Session é uma partida em andamento: o match alocado a um game server.
@@ -80,6 +83,17 @@ type ServerAllocator interface {
 	Allocate(ctx context.Context, matchID, gameID string) (Server, error)
 	// Release devolve o server ao pool, liberando-o para nova alocação.
 	Release(ctx context.Context, serverID string) error
+}
+
+// ServerRegistry é a Port de saída OPCIONAL que consulta a liveness do pool:
+// quais game servers ainda existem na fonte de verdade. Só o adapter Agones a
+// implementa (LIST de GameServers da fleet); o static não (seus servers nunca
+// somem). Quando o Service recebe registry nil, não reconcilia — cai só no TTL
+// sweeper (spec 008, ADR-0022).
+type ServerRegistry interface {
+	// LiveServerIDs devolve o conjunto de IDs de game servers existentes na
+	// fleet. O ID é o mesmo que Allocate grava em Server.ID.
+	LiveServerIDs(ctx context.Context) (map[string]struct{}, error)
 }
 
 // ConnectTokenIssuer é a Port de saída que cunha o connect token (JWT EdDSA)

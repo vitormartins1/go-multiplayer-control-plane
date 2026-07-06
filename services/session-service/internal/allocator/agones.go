@@ -18,7 +18,10 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 )
 
-var _ domain.ServerAllocator = (*Agones)(nil)
+var (
+	_ domain.ServerAllocator = (*Agones)(nil)
+	_ domain.ServerRegistry  = (*Agones)(nil)
+)
 
 var (
 	allocationGVR = schema.GroupVersionResource{Group: "allocation.agones.dev", Version: "v1", Resource: "gameserverallocations"}
@@ -90,6 +93,24 @@ func (a *Agones) Release(ctx context.Context, serverID string) error {
 		return fmt.Errorf("agones: delete gameserver %q: %w", serverID, err)
 	}
 	return nil
+}
+
+// LiveServerIDs lista os GameServers vivos da fleet (LIST por label
+// `agones.dev/fleet=<fleet>`) e devolve o conjunto dos `metadata.name` — o mesmo
+// ID que Allocate grava em Server.ID (spec 008, ADR-0022). Uma chamada por tick
+// do sweeper (barata; não N GETs).
+func (a *Agones) LiveServerIDs(ctx context.Context) (map[string]struct{}, error) {
+	list, err := a.client.Resource(gameServerGVR).Namespace(a.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "agones.dev/fleet=" + a.fleet,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("agones: list gameservers: %w", err)
+	}
+	live := make(map[string]struct{}, len(list.Items))
+	for i := range list.Items {
+		live[list.Items[i].GetName()] = struct{}{}
+	}
+	return live, nil
 }
 
 var _ domain.ServerAllocator = (*publicHost)(nil)

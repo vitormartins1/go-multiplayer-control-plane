@@ -25,3 +25,4 @@
 | [0019](0019-game-presence.md) | Presença por jogo (player base por jogo) sobre identidade global | Accepted | 2026-06-30 | game-registry, identity, admin-bff, admin-ui |
 | [0020](0020-durable-result-fanout.md) | Fan-out durável do resultado via SNS→SQS (LocalStack local, AWS prod) | Accepted | 2026-07-04 | session, achievements, leaderboard, infra |
 | [0021](0021-analytics-ingestion-aggregation.md) | analytics-service ingere o fan-out via worker pool e agrega em Postgres | Accepted | 2026-07-04 | analytics, admin-bff, admin-ui, infra |
+| [0022](0022-orphan-session-reconcile-agones.md) | Reconciliação de sessões órfãs contra o Agones (fecha `abandoned`, TTL vira backstop) | Accepted | 2026-07-06 | session |

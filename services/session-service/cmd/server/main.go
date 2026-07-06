@@ -80,7 +80,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	alloc, err := buildAllocator(log)
+	alloc, registry, err := buildAllocator(log)
 	if err != nil {
 		return err
 	}
@@ -88,8 +88,12 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// registry nil (modo static) => WithServerRegistry no-op; reconciliação só no
+	// modo agones. Grace protege contra falso-positivo por staleness do LIST.
 	svc := service.New(alloc, issuer, pub,
-		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)))
+		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)),
+		service.WithServerRegistry(registry),
+		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
 
 	// métricas custom: sessões ativas + fechamentos por motivo (spec 004).
 	prometheus.MustRegister(
@@ -104,6 +108,10 @@ func run(log *slog.Logger) error {
 			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
 			ConstLabels: prometheus.Labels{"reason": string(domain.CloseTTL)},
 		}, func() float64 { return svc.ClosedTotal(domain.CloseTTL) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
+			ConstLabels: prometheus.Labels{"reason": string(domain.CloseAbandoned)},
+		}, func() float64 { return svc.ClosedTotal(domain.CloseAbandoned) }),
 	)
 
 	grpcSrv := grpc.NewServer(
@@ -180,8 +188,12 @@ func run(log *slog.Logger) error {
 // `static` (default) mantém o pool mock em memória; `agones` cria
 // GameServerAllocations no cluster (kubeconfig via KUBECONFIG ou in-cluster).
 // DEV_PUBLIC_HOST (dev) decora qualquer modo reescrevendo o host devolvido.
-func buildAllocator(log *slog.Logger) (domain.ServerAllocator, error) {
+// Devolve também o ServerRegistry (spec 008): no modo agones é o próprio adapter
+// (liveness via LIST da fleet); no static é nil — sem fonte de verdade de
+// liveness, o sweeper cai só no TTL.
+func buildAllocator(log *slog.Logger) (domain.ServerAllocator, domain.ServerRegistry, error) {
 	var alloc domain.ServerAllocator
+	var registry domain.ServerRegistry
 	switch mode := os.Getenv("ALLOCATOR_MODE"); mode {
 	case "", "static":
 		pool := serverPool()
@@ -190,25 +202,26 @@ func buildAllocator(log *slog.Logger) (domain.ServerAllocator, error) {
 	case "agones":
 		restCfg, err := kubeRestConfig()
 		if err != nil {
-			return nil, fmt.Errorf("allocator agones: %w", err)
+			return nil, nil, fmt.Errorf("allocator agones: %w", err)
 		}
 		client, err := dynamic.NewForConfig(restCfg)
 		if err != nil {
-			return nil, fmt.Errorf("allocator agones: client: %w", err)
+			return nil, nil, fmt.Errorf("allocator agones: client: %w", err)
 		}
 		namespace := envOr("AGONES_NAMESPACE", "default")
 		fleet := envOr("AGONES_FLEET", "packet-arena")
 		log.Info("allocator agones", "namespace", namespace, "fleet", fleet)
-		alloc = allocator.NewAgones(client, namespace, fleet)
+		ag := allocator.NewAgones(client, namespace, fleet)
+		alloc, registry = ag, ag // mesmo adapter serve alocação e liveness
 	default:
-		return nil, fmt.Errorf("ALLOCATOR_MODE inválido: %q (static|agones)", mode)
+		return nil, nil, fmt.Errorf("ALLOCATOR_MODE inválido: %q (static|agones)", mode)
 	}
 
 	if host := os.Getenv("DEV_PUBLIC_HOST"); host != "" {
 		log.Warn("DEV_PUBLIC_HOST ativo — host dos endereços alocados reescrito (config de dev)", "host", host)
 		alloc = allocator.WithPublicHost(alloc, host)
 	}
-	return alloc, nil
+	return alloc, registry, nil
 }
 
 // kubeRestConfig resolve a config do k8s: KUBECONFIG (dev/compose, arquivo
