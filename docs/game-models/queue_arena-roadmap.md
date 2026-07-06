@@ -13,7 +13,9 @@
 
 ---
 
-## B1 — Perfil de multiplayer no console  ⭐ (porta de entrada, maior)
+## B1 — Perfil de multiplayer no console  ✅ **FEITO** (main)
+
+> Mergeado: admin-bff/012 (passthrough cru `json.RawMessage`) + admin-ui/015 (seção Multiplayer na aba Configurações, form condicional espelhando a validação da game-registry/006). Validado ponta a ponta (GET não-configurado → 404; PUT válido → 200; `unsupported_topology`/`invalid_profile_params` propagados). GO-LEARNINGS #23.
 
 **Objetivo:** cadastrar/editar o perfil de multiplayer de um jogo pelo admin-ui (hoje só via API). Torna o ADR-0023 visível e usável.
 
@@ -89,7 +91,7 @@ O leaderboard-service já serve `?board` (score + um por stat — fatia leaderbo
 
 | Fatia | Specs | Tamanho | Depende |
 |---|---|---|---|
-| B1 — perfil no console | admin-bff/012 + admin-ui/015 | L | — |
+| B1 — perfil no console ✅ | admin-bff/012 + admin-ui/015 | L | — |
 | B2a — analytics loss/draw | admin-ui/016 | S | — |
 | B2b — seletor de board | admin-bff/013 + admin-ui/017 | S–M | B1 (GET perfil) |
 | A1 — conquistas por stats/teamId | achievements/008 (+admin-ui/018) | M–L | — |
