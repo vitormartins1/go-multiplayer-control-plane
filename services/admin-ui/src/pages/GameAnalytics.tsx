@@ -20,11 +20,13 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
       )}
 
       {stat && (
-        <SimpleGrid cols={{ base: 2, sm: 4 }}>
+        <SimpleGrid cols={{ base: 2, sm: 3 }}>
           <StatCard label="Partidas" value={String(stat.matches)} />
           <StatCard label="Jogadores únicos" value={String(stat.uniquePlayers)} />
-          <StatCard label="Vitórias" value={String(stat.wins)} />
           <StatCard label="Score médio" value={stat.avgScore.toFixed(1)} />
+          <StatCard label="Vitórias" value={String(stat.wins)} />
+          <StatCard label="Derrotas" value={String(stat.losses)} />
+          <StatCard label="Empates" value={String(stat.draws)} />
         </SimpleGrid>
       )}
     </Stack>

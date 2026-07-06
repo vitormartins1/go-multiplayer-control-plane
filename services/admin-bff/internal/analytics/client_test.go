@@ -17,7 +17,7 @@ func TestOverview_ParseiaTotaisEJogos(t *testing.T) {
 		assert.Equal(t, "/admin/analytics/overview", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"totals":{"matches":3,"uniquePlayers":2,"games":1},
-			"games":[{"gameId":"g1","matches":3,"uniquePlayers":2,"participations":5,"wins":1,"avgScore":4.5}]}`))
+			"games":[{"gameId":"g1","matches":3,"uniquePlayers":2,"participations":5,"wins":1,"losses":2,"draws":1,"avgScore":4.5}]}`))
 	}))
 	defer upstream.Close()
 
@@ -27,6 +27,9 @@ func TestOverview_ParseiaTotaisEJogos(t *testing.T) {
 	require.Len(t, ov.Games, 1)
 	assert.Equal(t, "g1", ov.Games[0].GameID)
 	assert.Equal(t, 4.5, ov.Games[0].AvgScore)
+	assert.Equal(t, int64(1), ov.Games[0].Wins)
+	assert.Equal(t, int64(2), ov.Games[0].Losses)
+	assert.Equal(t, int64(1), ov.Games[0].Draws)
 	assert.Empty(t, ov.Games[0].GameName, "nome é injetado pelo service, não vem do analytics")
 }
 
