@@ -86,6 +86,34 @@ func TestApplyMatchResult_TraduzEventosPorVitoria(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+// Traduz o outcome (ADR-0023) em eventos, com fallback para Won quando ausente
+// e sem falhar em valor desconhecido.
+func TestApplyMatchResult_OutcomeParaEventos(t *testing.T) {
+	cases := map[string]struct {
+		result domain.MatchResult
+		want   []string
+	}{
+		"win":           {domain.MatchResult{PlayerID: "p", Outcome: "win"}, []string{"match_played", "match_won"}},
+		"loss":          {domain.MatchResult{PlayerID: "p", Outcome: "loss"}, []string{"match_played", "match_lost"}},
+		"draw":          {domain.MatchResult{PlayerID: "p", Outcome: "draw"}, []string{"match_played", "match_drawn"}},
+		"fallback won":  {domain.MatchResult{PlayerID: "p", Won: true}, []string{"match_played", "match_won"}},
+		"fallback loss": {domain.MatchResult{PlayerID: "p", Won: false}, []string{"match_played"}},
+		"invalido":      {domain.MatchResult{PlayerID: "p", Outcome: "victory"}, []string{"match_played"}},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			repo := new(mockRepo)
+			svc := New(repo)
+			want := []domain.PlayerEvents{{PlayerID: "p", EventTypes: c.want}}
+			repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
+
+			_, err := svc.ApplyMatchResult(context.Background(), gameID, "m", []domain.MatchResult{c.result})
+			require.NoError(t, err)
+			repo.AssertExpectations(t)
+		})
+	}
+}
+
 // Partida já processada -> o repo devolve dup=true; o service propaga (no-op).
 func TestApplyMatchResult_Duplicada_PropagaDup(t *testing.T) {
 	repo := new(mockRepo)

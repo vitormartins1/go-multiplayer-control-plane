@@ -52,7 +52,8 @@ type Event struct {
 // durável (consumidor SQS, ADR-0020). O service traduz em eventos de gameplay.
 type MatchResult struct {
 	PlayerID string
-	Won      bool
+	Won      bool   // mantido para o fallback (envelope v1 / Outcome ausente)
+	Outcome  string // "win" | "loss" | "draw" | "" (ausente) — ADR-0023
 }
 
 // PlayerEvents são os eventos de gameplay de um jogador já traduzidos pelo
