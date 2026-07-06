@@ -4,9 +4,18 @@ package domain
 
 import "context"
 
+// Vocabulário do desfecho (ADR-0023, arquétipo queue_arena).
+const (
+	OutcomeWin  = "win"
+	OutcomeLoss = "loss"
+	OutcomeDraw = "draw"
+)
+
 // PlayerResult é o resultado de um jogador numa partida (do fan-out match-results).
+// Outcome é o desfecho polimórfico (ADR-0023); Won permanece por compat/fallback.
 type PlayerResult struct {
 	PlayerID string
+	Outcome  string // "win" | "loss" | "draw"
 	Won      bool
 	Score    int64
 }
@@ -26,6 +35,8 @@ type GameStat struct {
 	UniquePlayers  int64
 	Participations int64
 	Wins           int64
+	Losses         int64
+	Draws          int64
 	AvgScore       float64
 }
 

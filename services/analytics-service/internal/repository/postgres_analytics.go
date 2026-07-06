@@ -7,20 +7,12 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/vitormartins1/go-game-backend/services/analytics-service/internal/domain"
 )
 
 var _ domain.MatchRepository = (*PostgresRepository)(nil)
-
-// querier abstrai *pgxpool.Pool e pgx.Tx para reusar SQL dentro/fora de tx.
-type querier interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
 
 // PostgresRepository persiste os rollups de analytics.
 type PostgresRepository struct {
@@ -52,11 +44,16 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 		return true, tx.Commit(ctx) // já processada: no-op idempotente
 	}
 
-	var participations, wins, scoreSum int64
+	var participations, wins, losses, draws, scoreSum int64
 	for _, p := range m.Results {
 		participations++
-		if p.Won {
+		switch p.Outcome {
+		case domain.OutcomeWin:
 			wins++
+		case domain.OutcomeLoss:
+			losses++
+		case domain.OutcomeDraw:
+			draws++
 		}
 		scoreSum += p.Score
 		if _, err := tx.Exec(ctx,
@@ -67,14 +64,16 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO game_rollup (game_id, matches_total, participations, wins, score_sum)
-		VALUES ($1, 1, $2, $3, $4)
+		INSERT INTO game_rollup (game_id, matches_total, participations, wins, losses, draws, score_sum)
+		VALUES ($1, 1, $2, $3, $4, $5, $6)
 		ON CONFLICT (game_id) DO UPDATE SET
 			matches_total  = game_rollup.matches_total + 1,
 			participations = game_rollup.participations + $2,
 			wins           = game_rollup.wins + $3,
-			score_sum      = game_rollup.score_sum + $4`,
-		m.GameID, participations, wins, scoreSum); err != nil {
+			losses         = game_rollup.losses + $4,
+			draws          = game_rollup.draws + $5,
+			score_sum      = game_rollup.score_sum + $6`,
+		m.GameID, participations, wins, losses, draws, scoreSum); err != nil {
 		return false, fmt.Errorf("analytics repository: apply match: rollup: %w", err)
 	}
 
@@ -92,7 +91,7 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.game_id, r.matches_total, r.participations, r.wins, r.score_sum,
+		SELECT r.game_id, r.matches_total, r.participations, r.wins, r.losses, r.draws, r.score_sum,
 		       (SELECT count(*) FROM game_player_seen s WHERE s.game_id = r.game_id)
 		FROM game_rollup r
 		ORDER BY r.matches_total DESC, r.game_id`)
@@ -105,7 +104,7 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 	for rows.Next() {
 		var g domain.GameStat
 		var participations, scoreSum int64
-		if err := rows.Scan(&g.GameID, &g.Matches, &participations, &g.Wins, &scoreSum, &g.UniquePlayers); err != nil {
+		if err := rows.Scan(&g.GameID, &g.Matches, &participations, &g.Wins, &g.Losses, &g.Draws, &scoreSum, &g.UniquePlayers); err != nil {
 			return domain.Overview{}, fmt.Errorf("analytics repository: scan overview: %w", err)
 		}
 		g.Participations = participations
@@ -152,10 +151,10 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 
 	var participations, scoreSum int64
 	err := r.pool.QueryRow(ctx, `
-		SELECT r.matches_total, r.participations, r.wins, r.score_sum,
+		SELECT r.matches_total, r.participations, r.wins, r.losses, r.draws, r.score_sum,
 		       (SELECT count(*) FROM game_player_seen s WHERE s.game_id = r.game_id)
 		FROM game_rollup r WHERE r.game_id = $1`, gameID).
-		Scan(&out.Matches, &participations, &out.Wins, &scoreSum, &out.UniquePlayers)
+		Scan(&out.Matches, &participations, &out.Wins, &out.Losses, &out.Draws, &scoreSum, &out.UniquePlayers)
 	if err != nil && err != pgx.ErrNoRows {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: game analytics: %w", err)
 	}

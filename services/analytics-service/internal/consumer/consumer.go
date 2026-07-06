@@ -102,7 +102,8 @@ func parse(body []byte) (domain.MatchResult, error) {
 		GameID  string `json:"gameId"`
 		Results []struct {
 			PlayerID string `json:"playerId"`
-			Won      bool   `json:"won"`
+			Outcome  string `json:"outcome"` // "win"|"loss"|"draw" (ADR-0023)
+			Won      bool   `json:"won"`     // compat/fallback (envelope v1)
 			Score    int64  `json:"score"`
 		} `json:"results"`
 	}
@@ -111,9 +112,26 @@ func parse(body []byte) (domain.MatchResult, error) {
 	}
 	m := domain.MatchResult{MatchID: env.MatchID, GameID: env.GameID}
 	for _, r := range env.Results {
-		m.Results = append(m.Results, domain.PlayerResult{PlayerID: r.PlayerID, Won: r.Won, Score: r.Score})
+		m.Results = append(m.Results, domain.PlayerResult{
+			PlayerID: r.PlayerID,
+			Outcome:  outcomeOf(r.Outcome, r.Won),
+			Won:      r.Won,
+			Score:    r.Score,
+		})
 	}
 	return m, nil
+}
+
+// outcomeOf devolve o desfecho do envelope; se ausente (v1 legado), deriva de
+// won (win/loss) — o empate só existe no envelope v2 (ADR-0023).
+func outcomeOf(outcome string, won bool) string {
+	if outcome != "" {
+		return outcome
+	}
+	if won {
+		return domain.OutcomeWin
+	}
+	return domain.OutcomeLoss
 }
 
 func (c *Consumer) sleep(ctx context.Context, d time.Duration) {

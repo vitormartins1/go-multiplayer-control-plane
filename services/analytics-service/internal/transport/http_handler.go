@@ -41,6 +41,8 @@ type gameStatDTO struct {
 	UniquePlayers  int64   `json:"uniquePlayers"`
 	Participations int64   `json:"participations"`
 	Wins           int64   `json:"wins"`
+	Losses         int64   `json:"losses"`
+	Draws          int64   `json:"draws"`
 	AvgScore       float64 `json:"avgScore"`
 }
 
@@ -112,6 +114,8 @@ func toGameStatDTO(g domain.GameStat) gameStatDTO {
 		UniquePlayers:  g.UniquePlayers,
 		Participations: g.Participations,
 		Wins:           g.Wins,
+		Losses:         g.Losses,
+		Draws:          g.Draws,
 		AvgScore:       g.AvgScore,
 	}
 }

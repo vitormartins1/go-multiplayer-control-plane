@@ -26,7 +26,10 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 		tcpostgres.WithDatabase("analytics"),
 		tcpostgres.WithUsername("dev"),
 		tcpostgres.WithPassword("dev"),
-		tcpostgres.WithInitScripts("../../migrations/001_create_analytics.sql"),
+		tcpostgres.WithInitScripts(
+			"../../migrations/001_create_analytics.sql",
+			"../../migrations/002_outcome_counts.sql",
+		),
 		tcpostgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
@@ -49,8 +52,8 @@ func TestApplyMatch_AgregaRollupEDaily(t *testing.T) {
 	ctx := context.Background()
 
 	dup, err := repo.ApplyMatch(ctx, match("m1", "g1",
-		domain.PlayerResult{PlayerID: "p1", Won: true, Score: 10},
-		domain.PlayerResult{PlayerID: "p2", Won: false, Score: 4},
+		domain.PlayerResult{PlayerID: "p1", Outcome: domain.OutcomeWin, Won: true, Score: 10},
+		domain.PlayerResult{PlayerID: "p2", Outcome: domain.OutcomeLoss, Won: false, Score: 4},
 	))
 	require.NoError(t, err)
 	assert.False(t, dup)
@@ -60,16 +63,39 @@ func TestApplyMatch_AgregaRollupEDaily(t *testing.T) {
 	assert.Equal(t, int64(1), ga.Matches)
 	assert.Equal(t, int64(2), ga.Participations)
 	assert.Equal(t, int64(1), ga.Wins)
+	assert.Equal(t, int64(1), ga.Losses)
 	assert.Equal(t, int64(2), ga.UniquePlayers)
 	assert.Equal(t, 7.0, ga.AvgScore) // (10+4)/2
 	require.Len(t, ga.Daily, 1)
 	assert.Equal(t, int64(1), ga.Daily[0].Matches)
 }
 
+// win/loss/draw agregam em contadores distintos; empate ≠ derrota; a soma dos
+// três iguala as participações (ADR-0023).
+func TestApplyMatch_WinLossDraw_ContadoresDistintos(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	_, err := repo.ApplyMatch(ctx, match("m1", "g1",
+		domain.PlayerResult{PlayerID: "p1", Outcome: domain.OutcomeWin, Score: 5},
+		domain.PlayerResult{PlayerID: "p2", Outcome: domain.OutcomeLoss, Score: 2},
+		domain.PlayerResult{PlayerID: "p3", Outcome: domain.OutcomeDraw, Score: 3},
+		domain.PlayerResult{PlayerID: "p4", Outcome: domain.OutcomeDraw, Score: 3},
+	))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), ga.Wins)
+	assert.Equal(t, int64(1), ga.Losses)
+	assert.Equal(t, int64(2), ga.Draws, "empate contado à parte, não como derrota")
+	assert.Equal(t, ga.Participations, ga.Wins+ga.Losses+ga.Draws)
+}
+
 func TestApplyMatch_Reprocessada_NaoDobra(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
-	m := match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Won: true, Score: 5})
+	m := match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Outcome: domain.OutcomeWin, Won: true, Score: 5})
 
 	dup, err := repo.ApplyMatch(ctx, m)
 	require.NoError(t, err)
