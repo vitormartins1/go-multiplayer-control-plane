@@ -30,11 +30,13 @@ func New(session sessionv1.SessionClient) *Client {
 
 // Provision chama o CreateSession do session e traduz a resposta para o domínio.
 // codes.ResourceExhausted (pool esgotado) vira domain.ErrNoServer.
-func (c *Client) Provision(ctx context.Context, matchID string, players []string, gameID string) (domain.Provisioned, error) {
+func (c *Client) Provision(ctx context.Context, matchID string, teams []domain.TeamAssignment, gameID string) (domain.Provisioned, error) {
+	players, pbTeams := flattenTeams(teams)
 	resp, err := c.session.CreateSession(ctx, &sessionv1.CreateSessionRequest{
 		MatchId: matchID,
 		Players: players,
 		GameId:  gameID,
+		Teams:   pbTeams,
 	})
 	if err != nil {
 		if status.Code(err) == codes.ResourceExhausted {
@@ -48,4 +50,26 @@ func (c *Client) Provision(ctx context.Context, matchID string, players []string
 		tokens[g.GetPlayerId()] = g.GetConnectToken()
 	}
 	return domain.Provisioned{ServerAddress: resp.GetServerAddress(), Tokens: tokens}, nil
+}
+
+// flattenTeams monta a lista completa de players (união, em ordem) e os Team do
+// proto. Em FFA (nenhum TeamID) os teams são omitidos (nil) — o session trata a
+// ausência como partida sem times.
+func flattenTeams(teams []domain.TeamAssignment) ([]string, []*sessionv1.Team) {
+	var players []string
+	hasTeams := false
+	for _, t := range teams {
+		players = append(players, t.Players...)
+		if t.TeamID != "" {
+			hasTeams = true
+		}
+	}
+	if !hasTeams {
+		return players, nil
+	}
+	pbTeams := make([]*sessionv1.Team, len(teams))
+	for i, t := range teams {
+		pbTeams[i] = &sessionv1.Team{TeamId: t.TeamID, Players: t.Players}
+	}
+	return players, pbTeams
 }

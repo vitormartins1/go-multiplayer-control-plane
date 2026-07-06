@@ -29,6 +29,30 @@ type Provisioned struct {
 	Tokens        map[string]string // playerID -> connect token
 }
 
+// Estruturas de formação do arquétipo queue_arena (ADR-0023).
+const (
+	StructureFFA   = "ffa"
+	StructureTeams = "teams"
+)
+
+// MatchFormat é a forma da partida derivada do perfil de multiplayer do jogo
+// (ADR-0023, queue_arena): o tamanho (critério de agrupamento) e, em teams, a
+// composição de lados. Size = playerCount (ffa) ou teamCount*teamSize (teams).
+type MatchFormat struct {
+	Size      int
+	Structure string // "ffa" | "teams"
+	TeamCount int    // >0 só em teams
+	TeamSize  int    // >0 só em teams
+}
+
+// TeamAssignment é um lado da partida NvN: um rótulo estável no match e seus
+// jogadores (ADR-0023). Em FFA a composição é um único assignment com TeamID
+// vazio e todos os jogadores.
+type TeamAssignment struct {
+	TeamID  string
+	Players []string
+}
+
 // Matchmaker é a Port de entrada: enfileira tickets e forma matches. O
 // gameID escopa a fila — só casa jogadores do mesmo jogo (ADR-0017).
 type Matchmaker interface {
@@ -41,18 +65,20 @@ type Matchmaker interface {
 
 // SessionProvisioner é a Port de saída para o session-service: ao formar um
 // match, provisiona a sessão (aloca server + emite os connect tokens) para o
-// jogo. Devolve ErrNoServer quando o session responde ResourceExhausted.
+// jogo, levando a composição de times (ADR-0023). Em FFA, um único
+// TeamAssignment com TeamID vazio. Devolve ErrNoServer quando o session
+// responde ResourceExhausted.
 type SessionProvisioner interface {
-	Provision(ctx context.Context, matchID string, players []string, gameID string) (Provisioned, error)
+	Provision(ctx context.Context, matchID string, teams []TeamAssignment, gameID string) (Provisioned, error)
 }
 
-// ProfileProvider é a Port de saída que devolve o tamanho do match derivado do
-// perfil de multiplayer do jogo (ADR-0023, arquétipo queue_arena): ffa ->
-// playerCount, teams -> teamCount*teamSize. A derivação mora no adapter; o
-// domínio só recebe o tamanho. Devolve ErrProfileUnavailable quando o perfil
-// não está disponível/utilizável.
+// ProfileProvider é a Port de saída que devolve a formação do match derivada do
+// perfil de multiplayer do jogo (ADR-0023, arquétipo queue_arena): o tamanho
+// (ffa -> playerCount, teams -> teamCount*teamSize) e a composição de lados. A
+// derivação mora no adapter; o domínio recebe o MatchFormat pronto. Devolve
+// ErrProfileUnavailable quando o perfil não está disponível/utilizável.
 type ProfileProvider interface {
-	MatchSize(ctx context.Context, gameID string) (int, error)
+	Format(ctx context.Context, gameID string) (MatchFormat, error)
 }
 
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).
