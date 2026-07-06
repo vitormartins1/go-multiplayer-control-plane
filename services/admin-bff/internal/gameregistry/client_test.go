@@ -113,6 +113,66 @@ func TestGamesOfPlayer_200(t *testing.T) {
 	assert.Equal(t, "tetris", got[0].Slug)
 }
 
+func TestGetMultiplayerProfile_200_RawPassthrough(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa"}}`))
+	}))
+	defer srv.Close()
+
+	raw, err := New(srv.URL, srv.Client()).GetMultiplayerProfile(context.Background(), "g1")
+	require.NoError(t, err)
+	assert.Equal(t, "/games/g1/multiplayer-profile", gotPath)
+	assert.JSONEq(t, `{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa"}}`, string(raw))
+}
+
+func TestGetMultiplayerProfile_404_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"profile_not_found"}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).GetMultiplayerProfile(context.Background(), "g1")
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusNotFound, ue.Status)
+	assert.Equal(t, "profile_not_found", ue.Code)
+}
+
+func TestSetMultiplayerProfile_PutRaw(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(b)
+		_, _ = w.Write(b) // eco: game-registry devolve o perfil persistido
+	}))
+	defer srv.Close()
+
+	body := `{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"teams","teamCount":2,"teamSize":3}}`
+	raw, err := New(srv.URL, nil).SetMultiplayerProfile(context.Background(), "g1", []byte(body))
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPut, gotMethod)
+	assert.Equal(t, "/games/g1/multiplayer-profile", gotPath)
+	assert.JSONEq(t, body, gotBody)
+	assert.JSONEq(t, body, string(raw))
+}
+
+func TestSetMultiplayerProfile_400_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_profile_params"}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).SetMultiplayerProfile(context.Background(), "g1", []byte(`{}`))
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusBadRequest, ue.Status)
+	assert.Equal(t, "invalid_profile_params", ue.Code)
+}
+
 func TestRenameGame_PutName(t *testing.T) {
 	var gotMethod, gotPath, gotBody string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

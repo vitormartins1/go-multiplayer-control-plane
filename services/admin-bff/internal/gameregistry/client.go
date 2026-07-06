@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -77,6 +78,41 @@ func (c *Client) RenameGame(ctx context.Context, id, name string) (*domain.Game,
 		return nil, fmt.Errorf("gameregistry: decode: %w", err)
 	}
 	return &g, nil
+}
+
+// GetMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023). Devolve o
+// corpo cru — o BFF não interpreta a forma (que cresce por arquétipo).
+func (c *Client) GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error) {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gameregistry: read profile: %w", err)
+	}
+	return raw, nil
+}
+
+// SetMultiplayerProfile faz upsert do perfil (PUT, internal key). Repassa o corpo
+// cru recebido do painel e devolve o perfil persistido cru.
+func (c *Client) SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(profile))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gameregistry: read profile: %w", err)
+	}
+	return raw, nil
 }
 
 // PlayersOf lê a player base do jogo (presença, ADR-0019).

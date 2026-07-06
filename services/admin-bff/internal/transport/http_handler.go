@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -21,6 +22,8 @@ type AdminService interface {
 	Games(ctx context.Context) ([]domain.Game, error)
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
 	RenameGame(ctx context.Context, id, name string) (*domain.Game, error)
+	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
+	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
 	GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error)
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
 	UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error
@@ -59,6 +62,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games", h.games)
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
+	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profile", h.getMultiplayerProfile)
+	mux.HandleFunc("PUT /api/games/{gameId}/multiplayer-profile", h.setMultiplayerProfile)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements/{id}/progress", h.achievementProgress)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements/import", h.importAchievements)
@@ -171,6 +176,33 @@ func (h *Handler) renameGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, g)
+}
+
+// getMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023, spec 012).
+// 404 (jogo/perfil ausente) é propagado — a UI trata como "não configurado".
+func (h *Handler) getMultiplayerProfile(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.svc.GetMultiplayerProfile(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeRawJSON(w, http.StatusOK, raw)
+}
+
+// setMultiplayerProfile faz upsert do perfil; repassa o corpo cru e os erros de
+// validação (400) / não-encontrado (404) do game-registry.
+func (h *Handler) setMultiplayerProfile(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	raw, err := h.svc.SetMultiplayerProfile(r.Context(), r.PathValue("gameId"), body)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeRawJSON(w, http.StatusOK, raw)
 }
 
 // gameCatalog lê o catálogo de conquistas do jogo (achievements).
@@ -466,6 +498,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeRawJSON repassa um corpo JSON já serializado (passthrough cru, sem
+// re-decodificar) — usado no perfil de multiplayer (spec 012).
+func writeRawJSON(w http.ResponseWriter, status int, raw json.RawMessage) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(raw)
 }
 
 func writeError(w http.ResponseWriter, status int, code string) {
