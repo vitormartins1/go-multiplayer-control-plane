@@ -27,6 +27,11 @@ type Service struct {
 	publisher domain.ResultPublisher
 	now       func() time.Time // injetável: o sweeper de TTL precisa ser testável
 
+	// reconciliação de órfãs (spec 008): registry nil = sem fonte de verdade de
+	// liveness (modo static) → só o TTL sweeper roda.
+	registry    domain.ServerRegistry
+	orphanGrace time.Duration
+
 	mu       sync.Mutex
 	sessions map[string]*domain.Session // matchID -> sessão ativa
 	closed   map[domain.CloseReason]float64
@@ -54,6 +59,24 @@ func WithHistoryLimit(n int) Option {
 	}
 }
 
+// WithServerRegistry liga a reconciliação de órfãs (spec 008): o sweeper passa a
+// fechar sessões cujo game server sumiu da fonte de verdade. Sem esta option
+// (registry nil), o service só reconcilia por TTL.
+func WithServerRegistry(r domain.ServerRegistry) Option {
+	return func(s *Service) { s.registry = r }
+}
+
+// WithOrphanGrace define a janela mínima de vida antes de uma sessão ser
+// candidata a fechamento por reconciliação (default 60s) — tolera staleness do
+// LIST e alocação recém-propagada.
+func WithOrphanGrace(d time.Duration) Option {
+	return func(s *Service) {
+		if d > 0 {
+			s.orphanGrace = d
+		}
+	}
+}
+
 // New cria o service a partir das Ports de saída.
 func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, publisher domain.ResultPublisher, opts ...Option) *Service {
 	s := &Service{
@@ -61,6 +84,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		issuer:       issuer,
 		publisher:    publisher,
 		now:          time.Now,
+		orphanGrace:  time.Minute,
 		sessions:     make(map[string]*domain.Session),
 		closed:       make(map[domain.CloseReason]float64),
 		historyLimit: 200,
@@ -186,8 +210,44 @@ func (s *Service) Sweep(ctx context.Context, ttl time.Duration) int {
 	return len(expired)
 }
 
-// RunSweeper roda Sweep a cada interval até o ctx encerrar (goroutine no main,
-// shutdown limpo via context — mesmo padrão do Run do matchmaking).
+// reconcile fecha (CLOSED/abandoned) as sessões OPEN cujo game server sumiu da
+// fonte de verdade (registry) — o game server abandonou a partida sem
+// ReportResult (spec 008, ADR-0022). No-op se não há registry (modo static).
+// Respeita o grace period: sessões abertas há menos que grace ficam de fora,
+// para tolerar staleness do LIST logo após o Create. Se a listagem falhar, NÃO
+// fecha nada nesse tick — um blip de leitura no k8s não pode causar fechamento
+// em massa de sessões saudáveis.
+func (s *Service) reconcile(ctx context.Context, grace time.Duration, log *slog.Logger) int {
+	if s.registry == nil {
+		return 0
+	}
+	live, err := s.registry.LiveServerIDs(ctx)
+	if err != nil {
+		log.Warn("reconcile: listagem de game servers falhou — tick pulado", "err", err)
+		return 0
+	}
+
+	cutoff := s.now().Add(-grace)
+	s.mu.Lock()
+	var orphans []string
+	for matchID, sess := range s.sessions {
+		if _, alive := live[sess.ServerID]; !alive && sess.OpenedAt.Before(cutoff) {
+			orphans = append(orphans, matchID)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, matchID := range orphans {
+		// ErrSessionNotFound = fechada por result/admin entre a varredura e o close; ok.
+		_, _ = s.closeSession(ctx, matchID, domain.CloseAbandoned)
+	}
+	return len(orphans)
+}
+
+// RunSweeper roda Sweep (TTL) e reconcile (órfãs) a cada interval até o ctx
+// encerrar (goroutine no main, shutdown limpo via context — mesmo padrão do Run
+// do matchmaking). O TTL é backstop; a reconciliação fecha órfãs em segundos
+// quando há registry (modo Agones).
 func (s *Service) RunSweeper(ctx context.Context, ttl, interval time.Duration, log *slog.Logger) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -198,6 +258,9 @@ func (s *Service) RunSweeper(ctx context.Context, ttl, interval time.Duration, l
 		case <-ticker.C:
 			if n := s.Sweep(ctx, ttl); n > 0 {
 				log.Info("sweeper: sessões expiradas fechadas", "count", n, "ttl", ttl)
+			}
+			if n := s.reconcile(ctx, s.orphanGrace, log); n > 0 {
+				log.Info("reconcile: sessões órfãs fechadas", "count", n, "grace", s.orphanGrace)
 			}
 		}
 	}

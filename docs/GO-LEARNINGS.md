@@ -687,3 +687,32 @@ func (p *Pool) Stop() { close(p.jobs); p.wg.Wait() }
 ```
 
 **Pegadinha / nuance:** três detalhes que só o Go ensina direito aqui. (1) **`done` com buffer 1** — o worker faz `j.done <- err` e segue sem bloquear, mesmo que o consumidor ainda não esteja lendo aquele `done` específico (ele lê todos em sequência depois). (2) **`close(jobs)` é o sinal de "acabou"**: o `for range`/`<-jobs` com o segundo retorno `ok` deixa os workers **drenarem** o que já estava enfileirado antes de sair — nenhum trabalho aceito se perde. (3) **Ordem de shutdown**: parar o consumidor → `pool.Stop()`; inverter isso daria `send on closed channel`. Contraste com C#/.NET: é o mesmo território de `Channel<T>` + `BackgroundService`, mas em Go o `select` sobre `ctx.Done()` e o channel é a espinha do cancelamento cooperativo — sem `CancellationToken` separado, o `context` já é o canal de parada. Reaproveita as entradas [[13]] (channels + select) e [[05]] (graceful shutdown).
+
+---
+
+## 19 — Dependência opcional como interface `nil` (e a armadilha do *typed-nil*)
+
+**O que é / por que importa:** nem toda Port precisa existir sempre. O session-service (spec 008, ADR-0022) reconcilia sessões órfãs contra o Agones **quando** há uma fonte de verdade de liveness — no modo `static` (dev) não há. Em vez de criar um *null object* ou uma flag, a Port `ServerRegistry` é **opcional**: o `Service` guarda `registry domain.ServerRegistry` e o método simplesmente **retorna cedo se `registry == nil`**. `nil` É o "desligado". Diferente do #07 (que detecta uma capacidade *extra* de um valor presente via type assertion), aqui a **dependência inteira** pode estar ausente.
+
+**Onde no projeto:** `session-service/internal/service/session_service.go` (`reconcile` começa com `if s.registry == nil { return 0 }`) e `cmd/server/main.go` (`buildAllocator` devolve `registry` = adapter Agones no modo agones, **interface nil** no static).
+
+```go
+// no service: nil = sem fonte de verdade de liveness → não reconcilia.
+func (s *Service) reconcile(ctx context.Context, grace time.Duration, log *slog.Logger) int {
+	if s.registry == nil {
+		return 0
+	}
+	// ...
+}
+
+// no main: a variável é declarada como o TIPO DA INTERFACE e só é atribuída
+// no modo agones. No static ela permanece uma interface genuinamente nil.
+var registry domain.ServerRegistry // nil
+switch mode { /* ... */
+case "agones":
+	ag := allocator.NewAgones(client, ns, fleet)
+	alloc, registry = ag, ag // mesmo adapter serve alocação E liveness
+}
+```
+
+**Pegadinha / nuance:** o *typed-nil* é o buraco clássico de Go. Se eu tivesse escrito `var ag *allocator.Agones` (ponteiro nil concreto) e passado esse `ag` para `WithServerRegistry(ag)`, a interface resultante **não seria nil** — ela carrega o par `(tipo=*Agones, valor=nil)`, e `s.registry == nil` daria **false**, entrando no `reconcile` e chamando método num ponteiro nil → panic. A defesa é declarar a variável já como **o tipo da interface** (`var registry domain.ServerRegistry`) e só atribuir um valor concreto quando ele existe de verdade — assim o "vazio" é uma interface nil de verdade. Contraste com C#: lá `null` é só `null`, não existe esse par tipo+valor; a checagem `_registry is null` nunca te surpreende. Em Go, "interface nil" ≠ "interface com ponteiro nil dentro". Relaciona com [[07]] (capacidade opcional de um valor presente) e [[10]] (interfaces implícitas).
