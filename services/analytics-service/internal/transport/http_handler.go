@@ -82,6 +82,7 @@ type gameAnalyticsDTO struct {
 	Daily              []dailyDTO             `json:"daily"`
 	RoleParticipations []participationStatDTO `json:"roleParticipations"`
 	Placement          *placementDTO          `json:"placement,omitempty"` // battle_royale (spec 005); ausente fora do BR
+	Mission            *missionDTO            `json:"mission,omitempty"`   // coop_mission (spec 006); ausente fora do coop
 }
 
 // placementDTO é a distribuição de colocação do battle_royale (spec 005).
@@ -91,6 +92,13 @@ type placementDTO struct {
 	Rest          int64   `json:"rest"`
 	Entries       int64   `json:"entries"`
 	AvgSurvivedMs float64 `json:"avgSurvivedMs"`
+}
+
+// missionDTO é a distribuição de desfecho da missão do coop_mission (spec 006).
+type missionDTO struct {
+	Successes   int64   `json:"successes"`
+	Failures    int64   `json:"failures"`
+	SuccessRate float64 `json:"successRate"`
 }
 
 type dailyDTO struct {
@@ -130,6 +138,9 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 		dto.Placement = &placementDTO{
 			Winners: pd.Winners, TopN: pd.TopN, Rest: pd.Rest, Entries: pd.Entries, AvgSurvivedMs: pd.AvgSurvivedMs,
 		}
+	}
+	if md := ga.Mission; md != nil {
+		dto.Mission = &missionDTO{Successes: md.Successes, Failures: md.Failures, SuccessRate: md.SuccessRate}
 	}
 	writeJSON(w, http.StatusOK, dto)
 }

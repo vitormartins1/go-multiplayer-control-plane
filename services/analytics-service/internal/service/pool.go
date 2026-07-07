@@ -16,13 +16,14 @@ import (
 var _ domain.Ingestor = (*Pool)(nil)
 
 // job é uma unidade a agregar + o channel de retorno do resultado. É polimórfica
-// (specs 004/005): placement não-nil => caminho de colocação (battle_royale);
-// senão participation não-nil => participação (host_world_dropin); senão => o
-// match (queue_arena).
+// (specs 004/005/006): collective não-nil => desfecho de missão (coop_mission);
+// senão placement não-nil => colocação (battle_royale); senão participation
+// não-nil => participação (host_world_dropin); senão => o match (queue_arena).
 type job struct {
 	match         domain.MatchResult
 	participation *domain.ParticipationEvent
 	placement     *domain.PlacementResult
+	collective    *domain.CollectiveResult
 	done          chan error
 }
 
@@ -85,6 +86,8 @@ func (p *Pool) process(ctx context.Context, j job) {
 		err error
 	)
 	switch {
+	case j.collective != nil:
+		dup, err = p.repo.ApplyCollective(ctx, *j.collective)
 	case j.placement != nil:
 		dup, err = p.repo.ApplyPlacement(ctx, *j.placement)
 	case j.participation != nil:
@@ -138,6 +141,21 @@ func (p *Pool) SubmitPlacement(ctx context.Context, pr domain.PlacementResult) <
 	case <-ctx.Done():
 		done <- ctx.Err()
 	case p.jobs <- job{placement: &pr, done: done}:
+	}
+	return done
+}
+
+// SubmitCollective entrega um desfecho de missão ao pool (spec 006), pelo mesmo
+// mecanismo de fan-in (channel de retorno) do Submit.
+func (p *Pool) SubmitCollective(ctx context.Context, cr domain.CollectiveResult) <-chan error {
+	done := make(chan error, 1)
+	if p.metrics != nil {
+		p.metrics.received.Inc()
+	}
+	select {
+	case <-ctx.Done():
+		done <- ctx.Err()
+	case p.jobs <- job{collective: &cr, done: done}:
 	}
 	return done
 }

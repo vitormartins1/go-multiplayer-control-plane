@@ -77,6 +77,15 @@ func TestParsePlacement_LeEntradas(t *testing.T) {
 	assert.Equal(t, domain.PlacementEntry{Placement: 42, SurvivedMs: 100000}, pr.Entries[1])
 }
 
+// O envelope collective (coop_mission) é lido em matchId/gameId/outcome (o
+// analytics ignora players/stats — o desfecho é da sessão).
+func TestParseCollective_LeDesfecho(t *testing.T) {
+	body := []byte(`{"kind":"collective","matchId":"m1","gameId":"g1","outcome":"MISSION_SUCCESS","players":[{"playerId":"p1","stats":{"kills":9}}]}`)
+	cr, err := parseCollective(body)
+	require.NoError(t, err)
+	assert.Equal(t, domain.CollectiveResult{MatchID: "m1", GameID: "g1", Outcome: "MISSION_SUCCESS"}, cr)
+}
+
 // Envelope v1 legado (sem outcome): deriva de won (win/loss), sem empate.
 func TestParse_EnvelopeV1_FallbackPorWon(t *testing.T) {
 	body := []byte(`{

@@ -19,6 +19,7 @@ type fakeRepo struct {
 	applied      atomic.Int64
 	participated atomic.Int64
 	placed       atomic.Int64
+	collected    atomic.Int64
 	mu           sync.Mutex
 	byGame       map[string]int64
 	err          error
@@ -53,6 +54,16 @@ func (f *fakeRepo) ApplyPlacement(_ context.Context, pr domain.PlacementResult) 
 	f.placed.Add(1)
 	f.mu.Lock()
 	f.byGame[pr.GameID]++
+	f.mu.Unlock()
+	return false, nil
+}
+func (f *fakeRepo) ApplyCollective(_ context.Context, cr domain.CollectiveResult) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	f.collected.Add(1)
+	f.mu.Lock()
+	f.byGame[cr.GameID]++
 	f.mu.Unlock()
 	return false, nil
 }
@@ -92,6 +103,23 @@ func TestPool_SubmitPlacement_RoteiaParaApplyPlacement(t *testing.T) {
 	assert.Equal(t, int64(1), repo.placed.Load())
 	assert.Equal(t, int64(0), repo.applied.Load(), "não passou pelo caminho de match")
 	assert.Equal(t, int64(0), repo.participated.Load())
+}
+
+// SubmitCollective roteia para ApplyCollective (não para os demais caminhos).
+func TestPool_SubmitCollective_RoteiaParaApplyCollective(t *testing.T) {
+	repo := newFakeRepo()
+	pool := NewPool(repo, 2, 4, logger.New("test"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	done := pool.SubmitCollective(ctx, domain.CollectiveResult{GameID: "g1", MatchID: "m1", Outcome: domain.MissionSuccess})
+	require.NoError(t, <-done)
+	pool.Stop()
+
+	assert.Equal(t, int64(1), repo.collected.Load())
+	assert.Equal(t, int64(0), repo.applied.Load(), "não passou pelo caminho de match")
+	assert.Equal(t, int64(0), repo.placed.Load())
 }
 
 // N partidas submetidas concorrentemente são todas agregadas, sem corrida.
