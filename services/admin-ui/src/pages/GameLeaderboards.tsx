@@ -1,12 +1,23 @@
-import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, Stack, Table, Text } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, Select, Stack, Table, Text } from "@mantine/core";
 import { IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { api, type LeaderEntry } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 
+const SCORE_BOARD = "score";
+
 export function GameLeaderboards({ gameId }: { gameId: string }) {
-  const { data, loading, error, reload } = useAsync((s) => api.gameLeaderboard(gameId, 20, s), [gameId]);
+  const [board, setBoard] = useState(SCORE_BOARD);
+  // Boards disponíveis = score + scoringStats do perfil de multiplayer (ADR-0023).
+  // Jogo sem perfil -> só o board score.
+  const { data: profile } = useAsync((s) => api.getMultiplayerProfile(gameId, s), [gameId]);
+  const boards = [SCORE_BOARD, ...(profile?.params.scoringStats ?? [])];
+
+  const { data, loading, error, reload } = useAsync(
+    (s) => api.gameLeaderboard(gameId, board === SCORE_BOARD ? undefined : board, 20, s),
+    [gameId, board],
+  );
   const [editing, setEditing] = useState<LeaderEntry | null>(null);
   const [score, setScore] = useState<string | number>("");
   const [saving, setSaving] = useState(false);
@@ -25,7 +36,12 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
     if (!editing || score === "" || score === undefined) return;
     setSaving(true);
     try {
-      await api.setLeaderboardScore(gameId, editing.playerId, Number(score));
+      await api.setLeaderboardScore(
+        gameId,
+        editing.playerId,
+        Number(score),
+        board === SCORE_BOARD ? undefined : board,
+      );
       notifications.show({ color: "green", message: `Score de ${editing.playerId.slice(0, 8)}… atualizado.` });
       closeEdit();
       reload();
@@ -40,9 +56,25 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
     <Stack>
       <Group justify="space-between">
         <Text fw={600}>Ranking do jogo (top 20)</Text>
-        <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
-          Atualizar
-        </Button>
+        <Group gap="xs">
+          {boards.length > 1 && (
+            <Select
+              size="xs"
+              w={160}
+              aria-label="Board"
+              value={board}
+              onChange={(v) => v && setBoard(v)}
+              data={boards.map((b) => ({
+                value: b,
+                label: b === SCORE_BOARD ? "Score" : b,
+              }))}
+              allowDeselect={false}
+            />
+          )}
+          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+            Atualizar
+          </Button>
+        </Group>
       </Group>
 
       {loading && !data && <Loader />}
@@ -56,7 +88,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             <Table.Tr>
               <Table.Th w={60}>#</Table.Th>
               <Table.Th>Jogador</Table.Th>
-              <Table.Th>Score</Table.Th>
+              <Table.Th>{board === SCORE_BOARD ? "Score" : board}</Table.Th>
               <Table.Th w={50}></Table.Th>
             </Table.Tr>
           </Table.Thead>

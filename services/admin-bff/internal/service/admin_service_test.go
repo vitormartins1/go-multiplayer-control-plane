@@ -118,15 +118,16 @@ type fakeLeaderboard struct {
 	err       error
 	gotGameID string
 	gotLimit  int
+	gotBoard  string
 }
 
-func (f *fakeLeaderboard) TopForGame(_ context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
-	f.gotGameID, f.gotLimit = gameID, limit
+func (f *fakeLeaderboard) TopForGame(_ context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotBoard, f.gotLimit = gameID, board, limit
 	return f.entries, f.err
 }
 
-func (f *fakeLeaderboard) SetScore(_ context.Context, gameID, _ string, _ int64) (domain.LeaderboardEntry, error) {
-	f.gotGameID = gameID
+func (f *fakeLeaderboard) SetScore(_ context.Context, gameID, _, board string, _ int64) (domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotBoard = gameID, board
 	return domain.LeaderboardEntry{}, f.err
 }
 
@@ -324,9 +325,10 @@ func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
 
 func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
-	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb}).GameLeaderboard(context.Background(), "game-9", 10)
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb}).GameLeaderboard(context.Background(), "game-9", "kills", 10)
 	require.NoError(t, err)
 	assert.Equal(t, "game-9", lb.gotGameID)
+	assert.Equal(t, "kills", lb.gotBoard)
 	assert.Equal(t, 10, lb.gotLimit)
 	require.Len(t, got, 1)
 	assert.Equal(t, "bob", got[0].PlayerID)

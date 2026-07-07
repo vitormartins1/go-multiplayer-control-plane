@@ -43,13 +43,15 @@ type topResponse struct {
 }
 
 // SetScore substitui o score do jogador independente do valor atual (admin override).
-func (c *Client) SetScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error) {
+func (c *Client) SetScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error) {
 	payload, _ := json.Marshal(struct {
 		Score int64 `json:"score"`
 	}{score})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPut,
-		c.baseURL+"/admin/games/"+url.PathEscape(gameID)+"/players/"+url.PathEscape(playerID)+"/scores",
-		bytes.NewReader(payload))
+	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/players/" + url.PathEscape(playerID) + "/scores"
+	if board != "" {
+		u += "?board=" + url.QueryEscape(board)
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := upstream.Do(c.http, req, domain.ErrLeaderboardUnavailable)
 	if err != nil {
@@ -67,11 +69,18 @@ func (c *Client) SetScore(ctx context.Context, gameID, playerID string, score in
 	return domain.LeaderboardEntry{Rank: e.Rank, PlayerID: e.PlayerID, Score: e.Score}, nil
 }
 
-// TopForGame lê o top-N do jogo.
-func (c *Client) TopForGame(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
-	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/leaderboard"
+// TopForGame lê o top-N do board do jogo.
+func (c *Client) TopForGame(ctx context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
+	q := url.Values{}
 	if limit > 0 {
-		u += "?limit=" + strconv.Itoa(limit)
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if board != "" {
+		q.Set("board", board)
+	}
+	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/leaderboard"
+	if len(q) > 0 {
+		u += "?" + q.Encode()
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	resp, err := upstream.Do(c.http, req, domain.ErrLeaderboardUnavailable)

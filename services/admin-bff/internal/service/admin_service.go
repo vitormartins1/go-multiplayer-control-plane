@@ -126,14 +126,14 @@ func (s *Service) ImportAchievements(ctx context.Context, gameID string, items [
 	return s.reader.ImportAchievements(ctx, gameID, items)
 }
 
-// GameLeaderboard lê o top-N do jogo (leaderboard).
-func (s *Service) GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
-	return s.leaderboard.TopForGame(ctx, gameID, limit)
+// GameLeaderboard lê o top-N do board do jogo (leaderboard).
+func (s *Service) GameLeaderboard(ctx context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
+	return s.leaderboard.TopForGame(ctx, gameID, board, limit)
 }
 
-// SetLeaderboardScore substitui o score do jogador (admin override, sem ZADD GT).
-func (s *Service) SetLeaderboardScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error) {
-	return s.leaderboard.SetScore(ctx, gameID, playerID, score)
+// SetLeaderboardScore substitui o score do jogador no board (admin override, sem ZADD GT).
+func (s *Service) SetLeaderboardScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error) {
+	return s.leaderboard.SetScore(ctx, gameID, playerID, board, score)
 }
 
 // AchievementProgress devolve o progresso de todos os jogadores na conquista.
