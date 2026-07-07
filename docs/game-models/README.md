@@ -125,7 +125,7 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
 | Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
 | **Arquétipo `host_world_dropin` — declaração** | game-registry + admin-ui | `HostWorldDropInParams` (roles, slots, matchmaking criteria, invasion); form no painel com Fieldsets + tooltips; select de arquétipo agora real; refactor completo de `MultiplayerSettings` | ✅ **main** (commit `6fbb3cf`) |
-| **`host_world_dropin` — sessão host-cêntrica (H0)** | session (`011`) | mundo persistente sem match: `OpenWorld`/`JoinWorld`/`LeaveWorld`/`CloseWorld`; slots por papel (coop/invasor) do perfil; connect token com claim `role`; rechaveação por `sessionID` sem regredir queue_arena; GO-LEARNINGS #27 | 🔵 **branch** |
+| **`host_world_dropin` — sessão host-cêntrica (H0)** | session (`011`) | mundo persistente sem match: `OpenWorld`/`JoinWorld`/`LeaveWorld`/`CloseWorld`; slots por papel (coop/invasor) do perfil; connect token com claim `role`; rechaveação por `sessionID` sem regredir queue_arena; GO-LEARNINGS #27 | ✅ **main** |
 | **`host_world_dropin` — H1→H3** | matchmaking + fan-out + console | injeção/sinais por papel, resultado por evento, surfacing; planejado no [host_world_dropin-roadmap.md](./host_world_dropin-roadmap.md) | ⬜ planejado |
 | **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective) | ⬜ futuro |
 
