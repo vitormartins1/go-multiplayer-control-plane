@@ -144,49 +144,51 @@ function QueueArenaForm({
             />
           </div>
 
-          {p.structure === "ffa" ? (
-            <NumberInput
-              label={
-                <FieldLabel
-                  label="Jogadores na partida"
-                  help="Total de jogadores formados por partida. O matchmaking aguarda exatamente este número antes de criar a sessão."
-                />
-              }
-              min={2}
-              value={p.playerCount}
-              onChange={(v) => set("playerCount", typeof v === "number" ? v : 2)}
-            />
-          ) : (
-            <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            {p.structure === "ffa" ? (
               <NumberInput
                 label={
                   <FieldLabel
-                    label="Nº de times"
-                    help="Quantos times disputam a partida. Mínimo 2 (ex.: 2 = NvN)."
+                    label="Jogadores na partida"
+                    help="Total de jogadores formados por partida. O matchmaking aguarda exatamente este número antes de criar a sessão."
                   />
                 }
                 min={2}
-                value={p.teamCount}
-                onChange={(v) => set("teamCount", typeof v === "number" ? v : 2)}
+                value={p.playerCount}
+                onChange={(v) => set("playerCount", typeof v === "number" ? v : 2)}
               />
-              <NumberInput
-                label={
-                  <FieldLabel
-                    label="Jogadores por time"
-                    help="Tamanho de cada time. Todos os times têm o mesmo tamanho (partida simétrica)."
-                  />
-                }
-                min={1}
-                value={p.teamSize}
-                onChange={(v) => set("teamSize", typeof v === "number" ? v : 1)}
-              />
-            </SimpleGrid>
-          )}
+            ) : (
+              <>
+                <NumberInput
+                  label={
+                    <FieldLabel
+                      label="Nº de times"
+                      help="Quantos times disputam a partida. Mínimo 2 (ex.: 2 = NvN)."
+                    />
+                  }
+                  min={2}
+                  value={p.teamCount}
+                  onChange={(v) => set("teamCount", typeof v === "number" ? v : 2)}
+                />
+                <NumberInput
+                  label={
+                    <FieldLabel
+                      label="Jogadores por time"
+                      help="Tamanho de cada time. Todos os times têm o mesmo tamanho (partida simétrica)."
+                    />
+                  }
+                  min={1}
+                  value={p.teamSize}
+                  onChange={(v) => set("teamSize", typeof v === "number" ? v : 1)}
+                />
+              </>
+            )}
+          </SimpleGrid>
         </Stack>
       </Fieldset>
 
       <Fieldset legend="Condição de vitória">
-        <Stack gap="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <Select
             label={
               <FieldLabel
@@ -205,7 +207,7 @@ function QueueArenaForm({
             ]}
           />
 
-          {p.winCondition === "first_to_score" && (
+          {p.winCondition === "first_to_score" ? (
             <NumberInput
               label={
                 <FieldLabel
@@ -217,9 +219,7 @@ function QueueArenaForm({
               value={p.scoreTarget}
               onChange={(v) => set("scoreTarget", typeof v === "number" ? v : 1)}
             />
-          )}
-
-          {p.winCondition === "highest_at_time" && (
+          ) : p.winCondition === "highest_at_time" ? (
             <NumberInput
               label={
                 <FieldLabel
@@ -231,41 +231,47 @@ function QueueArenaForm({
               value={p.durationSeconds}
               onChange={(v) => set("durationSeconds", typeof v === "number" ? v : 60)}
             />
+          ) : (
+            <div />
           )}
-        </Stack>
+        </SimpleGrid>
       </Fieldset>
 
       <Fieldset legend="Formato">
         <Stack gap="sm">
-          <div>
-            <FieldLabel
-              label="Estrutura de rounds"
-              help="Partida única: um confronto decide o vencedor. Melhor de N: série de rounds — vence quem ganhar mais rounds (ex.: melhor de 3 rounds)."
-            />
-            <SegmentedControl
-              mt={4}
-              value={p.matchStructure}
-              onChange={(v) => set("matchStructure", v as QueueArenaParams["matchStructure"])}
-              data={[
-                { value: "single", label: "Partida única" },
-                { value: "best_of_rounds", label: "Melhor de N rounds" },
-              ]}
-            />
-          </div>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" style={{ alignItems: "end" }}>
+            <div>
+              <FieldLabel
+                label="Estrutura de rounds"
+                help="Partida única: um confronto decide o vencedor. Melhor de N: série de rounds — vence quem ganhar mais rounds (ex.: melhor de 3 rounds)."
+              />
+              <SegmentedControl
+                mt={4}
+                value={p.matchStructure}
+                onChange={(v) => set("matchStructure", v as QueueArenaParams["matchStructure"])}
+                data={[
+                  { value: "single", label: "Partida única" },
+                  { value: "best_of_rounds", label: "Melhor de N rounds" },
+                ]}
+              />
+            </div>
 
-          {p.matchStructure === "best_of_rounds" && (
-            <NumberInput
-              label={
-                <FieldLabel
-                  label="Rounds para vencer"
-                  help="Número de rounds necessários para ganhar a série. Ex.: 2 = melhor de 3 (primeiro a 2 rounds)."
-                />
-              }
-              min={1}
-              value={p.roundsToWin}
-              onChange={(v) => set("roundsToWin", typeof v === "number" ? v : 1)}
-            />
-          )}
+            {p.matchStructure === "best_of_rounds" ? (
+              <NumberInput
+                label={
+                  <FieldLabel
+                    label="Rounds para vencer"
+                    help="Número de rounds necessários para ganhar a série. Ex.: 2 = melhor de 3 (primeiro a 2 rounds)."
+                  />
+                }
+                min={1}
+                value={p.roundsToWin}
+                onChange={(v) => set("roundsToWin", typeof v === "number" ? v : 1)}
+              />
+            ) : (
+              <div />
+            )}
+          </SimpleGrid>
 
           <SwitchWithHelp
             label="Permitir empate"
@@ -379,7 +385,7 @@ function HostWorldDropInForm({
       </Fieldset>
 
       <Fieldset legend="Critérios de matchmaking">
-        <Stack gap="sm">
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
           <SwitchWithHelp
             label="Faixa de nível"
             help="Filtra quem pode entrar pelo nível do personagem. Co-ops são limitados a uma faixa próxima do host; invasores têm faixa assimétrica (ligeiramente acima). Desativar permite qualquer nível."
@@ -398,7 +404,7 @@ function HostWorldDropInForm({
             checked={p.passwordEnabled}
             onChange={(v) => set("passwordEnabled", v)}
           />
-        </Stack>
+        </SimpleGrid>
       </Fieldset>
 
       <Fieldset legend="Comportamento">
@@ -493,7 +499,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
   if (loading) return <Loader size="sm" />;
 
   return (
-    <Stack maw={600}>
+    <Stack maw={860}>
       {!configured && (
         <Alert color="blue" variant="light">
           Este jogo ainda não tem um perfil de multiplayer. Defina abaixo e salve para configurá-lo.
@@ -501,7 +507,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
       )}
 
       <Fieldset legend="Arquétipo e topologia">
-        <Stack gap="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <Select
             label={
               <FieldLabel
@@ -535,7 +541,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
               ]}
             />
           </Tooltip>
-        </Stack>
+        </SimpleGrid>
       </Fieldset>
 
       <Divider label="Configurações do arquétipo" labelPosition="left" />
