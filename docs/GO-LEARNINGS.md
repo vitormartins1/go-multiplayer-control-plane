@@ -849,3 +849,27 @@ q := `... ON CONFLICT (...) DO UPDATE SET progress = ` + progressExpr + ` WHERE 
 ```
 
 **Pegadinha / nuance:** o `$6` (delta, um `int64`) sem cast explícito fez o Postgres inferir o tipo como **`text`** — porque o mesmo placeholder aparece em vários contextos e o planner não conseguiu unificar. Resultado: `GREATEST(integer, text) cannot be matched` / `column is of type integer but expression is of type bigint`. A cura é **castar o parâmetro na própria SQL** (`$6::bigint`) e o resultado final para a coluna (`::int`, já capado em `$4`). Diferente de C#/EF, onde o tipo do parâmetro vem do CLR e o provider resolve; no pgx o parâmetro chega ao servidor com tipo a inferir, e em query montada essa inferência falha calada até o operador reclamar. Regra: quando um placeholder numérico entra em `GREATEST`/`LEAST`/aritmética misturada, casta explícito.
+
+---
+
+## 25 — Script Lua no Redis: idempotência atômica que a operação não dá de graça
+
+**O que é / por que importa:** o Redis executa cada script Lua (`EVAL`/`redis.NewScript`) de forma **atômica** — nenhum outro comando entrelaça no meio. Isso o torna a ferramenta certa quando você precisa de "checa-e-age" indivisível que um único comando não oferece. No leaderboard cumulativo (ADR-0023 A2) o problema é: `ZINCRBY` **não** é idempotente (somar de novo dobra), e o SQS entrega at-least-once. A solução é um script que faz `SADD` do `matchID` num SET de processados e, **só se for novo**, aplica os `ZINCRBY` — tudo num passo. Reprocessar a mesma partida vira no-op.
+
+**Onde no projeto:** `leaderboard-service/internal/storage/redis_store.go` — `applyCumulativeScript` + `ApplyCumulative`. O consumer (`cmd/consumer`) monta as parcelas (`wins` +1, `<stat>_total` += valor) e chama uma vez por partida.
+
+```go
+var applyCumulativeScript = redis.NewScript(`
+if redis.call('SADD', KEYS[1], ARGV[1]) == 0 then
+  return 1                    -- matchID já processado: no-op (dup)
+end
+for i = 2, #ARGV, 3 do
+  redis.call('ZINCRBY', ARGV[i], ARGV[i+2], ARGV[i+1])  -- board, delta, member
+end
+return 0
+`)
+// Run(ctx, client, KEYS, ARGV...): KEYS[1]=SET processed; ARGV=[matchID, (boardKey,member,delta)...]
+res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID)}, argv...).Int()
+```
+
+**Pegadinha / nuance:** é o **mesmo problema de idempotência, três respostas conforme o storage** — vale internalizar o eixo: (1) `ZADD GT` do highscore é idempotente **por natureza** (só sobe se maior → reaplicar não muda nada, fatia 003); (2) o achievements ([[24]]) resolve com uma **transação Postgres** que marca `processed_matches` e incrementa juntos; (3) aqui, sem transação multi-key trivial no Redis, o **script Lua** é o análogo — a atomicidade vem do engine, não de locks meus. Detalhe cross-storage: passei as keys de board no **ARGV** (não como `KEYS`), o que quebra em Redis Cluster (keys de um script devem casar o mesmo slot, via hash-tag); num nó único (o setup local) é seguro. E `redis.NewScript` usa `EVALSHA` com fallback para `EVAL` sozinho — não preciso gerenciar o cache do script à mão, diferente de chamar `EVAL` cru.

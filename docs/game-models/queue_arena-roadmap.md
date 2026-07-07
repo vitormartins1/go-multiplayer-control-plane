@@ -69,7 +69,9 @@ admin-bff threada `?board` pela cadeia (top-N + override de score); admin-ui gan
 
 ---
 
-## A2 — Leaderboard acumulativo / por outcome  (aprofunda o colher)
+## A2 — Leaderboard acumulativo / por outcome  ✅ **FEITO** (main)
+
+> Mergeado: leaderboard/004 (boards `wins` + `<stat>_total` via `ZINCRBY`; idempotência por matchID num **script Lua atômico** — `SADD` guard + `ZINCRBY` num só passo; highscore intacto por fora) + cauda admin-ui/019 (seletor com recorde/total/vitórias). Validado ponta a ponta pelo fan-out (2 vitórias → `wins`=2, `kills_total`=13; reenvio não dobrou; `kills` highscore independente). GO-LEARNINGS #25. **Fecha o roadmap `queue_arena` (B1+B2+A1+A2).**
 
 **Objetivo:** rankings acumulativos além do highscore-por-partida atual: ranking de **vitórias** e **totais de stat** (ex.: total de kills na temporada).
 
@@ -97,6 +99,6 @@ admin-bff threada `?board` pela cadeia (top-N + override de score); admin-ui gan
 | B2a — analytics loss/draw ✅ | admin-bff (campos) + admin-ui/016 | S | — |
 | B2b — seletor de board ✅ | admin-bff/013 + admin-ui/017 | S–M | B1 (GET perfil) |
 | A1 — conquistas por stats ✅ | achievements/008 (+admin-ui/018) | M–L | — |
-| A2 — leaderboard acumulativo | leaderboard/004 | M | — |
+| A2 — leaderboard acumulativo ✅ | leaderboard/004 (+admin-ui/019) | M | — |
 
 Concluídas B1+B2+A1+A2, o `queue_arena` está **completo** (backend + console). Próxima etapa: bloco C.

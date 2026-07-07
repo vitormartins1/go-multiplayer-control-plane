@@ -120,6 +120,7 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | **Perfil no console (B1)** | admin-bff (`012`) + admin-ui (`015`) | cadastrar/editar o perfil de multiplayer pelo painel (aba Configurações, form condicional); BFF é passthrough cru | ✅ **main** |
 | **Surfacing no console (B2)** | admin-bff + admin-ui (`016`/`017`) | derrotas/empates na Analytics (B2a) + seletor de board no leaderboard, derivado do perfil (B2b) | ✅ **main** |
 | **Conquistas por `stats` (A1)** | achievements (`008`) + admin-bff/admin-ui (`018`) | critério por métrica: `cumulative` (soma entre partidas) / `per_match` (melhor de uma); consumer lê `stats`; editor no console. `teamId` fica como follow-up | ✅ **main** |
+| **Leaderboard cumulativo (A2)** | leaderboard (`004`) + admin-ui (`019`) | boards `wins` + `<stat>_total` via `ZINCRBY`, idempotentes por matchID (script Lua atômico); seletor no console | ✅ **main** |
 | **Conquistas por `teamId`** | achievements | conquistas por time / "vencer como time X" (o outcome já carrega `teamId`) | ⬜ planejado |
 | **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
 | Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
