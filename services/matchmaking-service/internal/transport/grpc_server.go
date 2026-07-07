@@ -21,12 +21,13 @@ type Server struct {
 	pb.UnimplementedMatchmakingServer
 	mm  domain.Matchmaker
 	inv domain.Invader
+	sum domain.Summoner
 }
 
-// NewServer cria o server a partir do matchmaker (queue-form) e do invader
-// (host_world_dropin, spec 006), as duas Ports de entrada.
-func NewServer(mm domain.Matchmaker, inv domain.Invader) *Server {
-	return &Server{mm: mm, inv: inv}
+// NewServer cria o server a partir das três Ports de entrada: matchmaker
+// (queue-form), invader (invasão, spec 006) e summoner (co-op, spec 007).
+func NewServer(mm domain.Matchmaker, inv domain.Invader, sum domain.Summoner) *Server {
+	return &Server{mm: mm, inv: inv, sum: sum}
 }
 
 // FindMatch enfileira o jogador no jogo e transmite o status do ticket até o
@@ -100,6 +101,98 @@ func (s *Server) Invade(ctx context.Context, req *pb.InvadeRequest) (*pb.InvadeR
 		ServerAddress: invaded.ServerAddress,
 		ConnectToken:  invaded.ConnectToken,
 	}, nil
+}
+
+// PostSummonSign é o aliado anunciando um sinal de co-op e aguardando ser
+// invocado (host_world_dropin, spec 007). Server-streaming: envia POSTED e depois
+// bloqueia até SUMMONED (invocado) ou EXPIRED (TTL/cancelado). O playerID vem do
+// JWT (StreamAuthInterceptor). Fechar o stream cancela o sinal.
+func (s *Server) PostSummonSign(req *pb.PostSummonSignRequest, stream pb.Matchmaking_PostSummonSignServer) error {
+	gameID := req.GetGameId()
+	if gameID == "" {
+		return status.Error(codes.InvalidArgument, "game_id é obrigatório")
+	}
+	playerID := playerIDFromContext(stream.Context())
+	crit := domain.CoopCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
+
+	signID, ch, err := s.sum.PostSign(stream.Context(), gameID, playerID, crit)
+	if err != nil {
+		return coopError(err, "post summon sign")
+	}
+	if err := stream.Send(&pb.SummonUpdate{Status: pb.SummonStatus_SUMMON_STATUS_POSTED, SignId: signID}); err != nil {
+		s.sum.CancelSign(signID)
+		return err
+	}
+
+	select {
+	case <-stream.Context().Done():
+		s.sum.CancelSign(signID) // aliado fechou o stream -> tira o sinal do quadro
+		return stream.Context().Err()
+	case summoned, ok := <-ch:
+		if !ok {
+			// canal fechado sem valor = TTL venceu (o sweeper fechou).
+			return stream.Send(&pb.SummonUpdate{Status: pb.SummonStatus_SUMMON_STATUS_EXPIRED})
+		}
+		return stream.Send(&pb.SummonUpdate{
+			Status:        pb.SummonStatus_SUMMON_STATUS_SUMMONED,
+			SessionId:     summoned.SessionID,
+			ServerAddress: summoned.ServerAddress,
+			ConnectToken:  summoned.ConnectToken,
+		})
+	}
+}
+
+// ListSigns devolve os sinais compatíveis com o mundo do host (spec 007).
+func (s *Server) ListSigns(ctx context.Context, req *pb.ListSignsRequest) (*pb.ListSignsResponse, error) {
+	gameID := req.GetGameId()
+	if gameID == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id é obrigatório")
+	}
+	host := domain.CoopCriteria{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetHostWeaponTier())}
+	signs, err := s.sum.ListSigns(ctx, gameID, host)
+	if err != nil {
+		return nil, coopError(err, "list signs")
+	}
+	pbSigns := make([]*pb.SummonSign, len(signs))
+	for i, sg := range signs {
+		pbSigns[i] = &pb.SummonSign{
+			SignId:     sg.SignID,
+			PlayerId:   sg.PlayerID,
+			SoulLevel:  int32(sg.SoulLevel),
+			WeaponTier: int32(sg.WeaponTier),
+		}
+	}
+	return &pb.ListSignsResponse{Signs: pbSigns}, nil
+}
+
+// SummonSign injeta o aliado do sinal no mundo do host como coop (spec 007). O
+// server/token vão ao aliado pelo stream do PostSummonSign; aqui devolvemos só o
+// playerID invocado.
+func (s *Server) SummonSign(ctx context.Context, req *pb.SummonSignRequest) (*pb.SummonSignResponse, error) {
+	if req.GetSessionId() == "" || req.GetSignId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id e sign_id são obrigatórios")
+	}
+	allyID, err := s.sum.Summon(ctx, req.GetSessionId(), req.GetSignId())
+	if err != nil {
+		return nil, coopError(err, "summon sign")
+	}
+	return &pb.SummonSignResponse{PlayerId: allyID}, nil
+}
+
+// coopError mapeia os erros de domínio do co-op para gRPC codes (spec 007).
+func coopError(err error, op string) error {
+	switch {
+	case errors.Is(err, domain.ErrCoopNotSupported), errors.Is(err, domain.ErrProfileUnavailable):
+		return status.Error(codes.FailedPrecondition, "jogo não aceita co-op")
+	case errors.Is(err, domain.ErrSignConsumed):
+		return status.Error(codes.FailedPrecondition, "sinal já consumido")
+	case errors.Is(err, domain.ErrSignNotFound), errors.Is(err, domain.ErrWorldNotFound):
+		return status.Error(codes.NotFound, "sinal ou mundo não encontrado")
+	case errors.Is(err, domain.ErrRoleFull):
+		return status.Error(codes.ResourceExhausted, "sem vaga de co-op")
+	default:
+		return status.Error(codes.Internal, op)
+	}
 }
 
 // --- auth interceptor ---

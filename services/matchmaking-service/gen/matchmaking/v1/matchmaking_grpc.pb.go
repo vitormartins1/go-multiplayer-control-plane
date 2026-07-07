@@ -19,8 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Matchmaking_FindMatch_FullMethodName = "/matchmaking.v1.Matchmaking/FindMatch"
-	Matchmaking_Invade_FullMethodName    = "/matchmaking.v1.Matchmaking/Invade"
+	Matchmaking_FindMatch_FullMethodName      = "/matchmaking.v1.Matchmaking/FindMatch"
+	Matchmaking_Invade_FullMethodName         = "/matchmaking.v1.Matchmaking/Invade"
+	Matchmaking_PostSummonSign_FullMethodName = "/matchmaking.v1.Matchmaking/PostSummonSign"
+	Matchmaking_ListSigns_FullMethodName      = "/matchmaking.v1.Matchmaking/ListSigns"
+	Matchmaking_SummonSign_FullMethodName     = "/matchmaking.v1.Matchmaking/SummonSign"
 )
 
 // MatchmakingClient is the client API for Matchmaking service.
@@ -38,6 +41,17 @@ type MatchmakingClient interface {
 	// FailedPrecondition (jogo não aceita invasão), NotFound (nenhum mundo na
 	// faixa). O playerID do invasor vem do JWT, não do request.
 	Invade(ctx context.Context, in *InvadeRequest, opts ...grpc.CallOption) (*InvadeResponse, error)
+	// Co-op por quadro de sinais (host_world_dropin, spec 007) — dois passos:
+	// PostSummonSign é o aliado anunciando e AGUARDANDO ser invocado (server-
+	// streaming: POSTED → SUMMONED com server+token, ou EXPIRED no TTL). Fechar o
+	// stream cancela o sinal. FailedPrecondition se o jogo não aceita co-op.
+	PostSummonSign(ctx context.Context, in *PostSummonSignRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SummonUpdate], error)
+	// ListSigns: o host vê os sinais compatíveis com o mundo dele (faixa de co-op).
+	ListSigns(ctx context.Context, in *ListSignsRequest, opts ...grpc.CallOption) (*ListSignsResponse, error)
+	// SummonSign: o host escolhe um sinal; o aliado é injetado como coop e recebe
+	// server+token pelo stream do PostSummonSign. NotFound (sinal inexistente),
+	// FailedPrecondition (já consumido), ResourceExhausted (sem vaga de co-op).
+	SummonSign(ctx context.Context, in *SummonSignRequest, opts ...grpc.CallOption) (*SummonSignResponse, error)
 }
 
 type matchmakingClient struct {
@@ -77,6 +91,45 @@ func (c *matchmakingClient) Invade(ctx context.Context, in *InvadeRequest, opts 
 	return out, nil
 }
 
+func (c *matchmakingClient) PostSummonSign(ctx context.Context, in *PostSummonSignRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SummonUpdate], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Matchmaking_ServiceDesc.Streams[1], Matchmaking_PostSummonSign_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PostSummonSignRequest, SummonUpdate]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Matchmaking_PostSummonSignClient = grpc.ServerStreamingClient[SummonUpdate]
+
+func (c *matchmakingClient) ListSigns(ctx context.Context, in *ListSignsRequest, opts ...grpc.CallOption) (*ListSignsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSignsResponse)
+	err := c.cc.Invoke(ctx, Matchmaking_ListSigns_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingClient) SummonSign(ctx context.Context, in *SummonSignRequest, opts ...grpc.CallOption) (*SummonSignResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SummonSignResponse)
+	err := c.cc.Invoke(ctx, Matchmaking_SummonSign_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchmakingServer is the server API for Matchmaking service.
 // All implementations must embed UnimplementedMatchmakingServer
 // for forward compatibility.
@@ -92,6 +145,17 @@ type MatchmakingServer interface {
 	// FailedPrecondition (jogo não aceita invasão), NotFound (nenhum mundo na
 	// faixa). O playerID do invasor vem do JWT, não do request.
 	Invade(context.Context, *InvadeRequest) (*InvadeResponse, error)
+	// Co-op por quadro de sinais (host_world_dropin, spec 007) — dois passos:
+	// PostSummonSign é o aliado anunciando e AGUARDANDO ser invocado (server-
+	// streaming: POSTED → SUMMONED com server+token, ou EXPIRED no TTL). Fechar o
+	// stream cancela o sinal. FailedPrecondition se o jogo não aceita co-op.
+	PostSummonSign(*PostSummonSignRequest, grpc.ServerStreamingServer[SummonUpdate]) error
+	// ListSigns: o host vê os sinais compatíveis com o mundo dele (faixa de co-op).
+	ListSigns(context.Context, *ListSignsRequest) (*ListSignsResponse, error)
+	// SummonSign: o host escolhe um sinal; o aliado é injetado como coop e recebe
+	// server+token pelo stream do PostSummonSign. NotFound (sinal inexistente),
+	// FailedPrecondition (já consumido), ResourceExhausted (sem vaga de co-op).
+	SummonSign(context.Context, *SummonSignRequest) (*SummonSignResponse, error)
 	mustEmbedUnimplementedMatchmakingServer()
 }
 
@@ -107,6 +171,15 @@ func (UnimplementedMatchmakingServer) FindMatch(*FindMatchRequest, grpc.ServerSt
 }
 func (UnimplementedMatchmakingServer) Invade(context.Context, *InvadeRequest) (*InvadeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Invade not implemented")
+}
+func (UnimplementedMatchmakingServer) PostSummonSign(*PostSummonSignRequest, grpc.ServerStreamingServer[SummonUpdate]) error {
+	return status.Error(codes.Unimplemented, "method PostSummonSign not implemented")
+}
+func (UnimplementedMatchmakingServer) ListSigns(context.Context, *ListSignsRequest) (*ListSignsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSigns not implemented")
+}
+func (UnimplementedMatchmakingServer) SummonSign(context.Context, *SummonSignRequest) (*SummonSignResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SummonSign not implemented")
 }
 func (UnimplementedMatchmakingServer) mustEmbedUnimplementedMatchmakingServer() {}
 func (UnimplementedMatchmakingServer) testEmbeddedByValue()                     {}
@@ -158,6 +231,53 @@ func _Matchmaking_Invade_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Matchmaking_PostSummonSign_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(PostSummonSignRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(MatchmakingServer).PostSummonSign(m, &grpc.GenericServerStream[PostSummonSignRequest, SummonUpdate]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Matchmaking_PostSummonSignServer = grpc.ServerStreamingServer[SummonUpdate]
+
+func _Matchmaking_ListSigns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSignsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServer).ListSigns(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Matchmaking_ListSigns_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServer).ListSigns(ctx, req.(*ListSignsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Matchmaking_SummonSign_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SummonSignRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServer).SummonSign(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Matchmaking_SummonSign_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServer).SummonSign(ctx, req.(*SummonSignRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Matchmaking_ServiceDesc is the grpc.ServiceDesc for Matchmaking service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -169,11 +289,24 @@ var Matchmaking_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Invade",
 			Handler:    _Matchmaking_Invade_Handler,
 		},
+		{
+			MethodName: "ListSigns",
+			Handler:    _Matchmaking_ListSigns_Handler,
+		},
+		{
+			MethodName: "SummonSign",
+			Handler:    _Matchmaking_SummonSign_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "FindMatch",
 			Handler:       _Matchmaking_FindMatch_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "PostSummonSign",
+			Handler:       _Matchmaking_PostSummonSign_Handler,
 			ServerStreams: true,
 		},
 	},

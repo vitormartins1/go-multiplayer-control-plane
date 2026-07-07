@@ -16,6 +16,18 @@ service Matchmaking {
   // FailedPrecondition (jogo não aceita invasão), NotFound (nenhum mundo na
   // faixa). O playerID do invasor vem do JWT, não do request.
   rpc Invade(InvadeRequest) returns (InvadeResponse);
+
+  // Co-op por quadro de sinais (host_world_dropin, spec 007) — dois passos:
+  // PostSummonSign é o aliado anunciando e AGUARDANDO ser invocado (server-
+  // streaming: POSTED → SUMMONED com server+token, ou EXPIRED no TTL). Fechar o
+  // stream cancela o sinal. FailedPrecondition se o jogo não aceita co-op.
+  rpc PostSummonSign(PostSummonSignRequest) returns (stream SummonUpdate);
+  // ListSigns: o host vê os sinais compatíveis com o mundo dele (faixa de co-op).
+  rpc ListSigns(ListSignsRequest) returns (ListSignsResponse);
+  // SummonSign: o host escolhe um sinal; o aliado é injetado como coop e recebe
+  // server+token pelo stream do PostSummonSign. NotFound (sinal inexistente),
+  // FailedPrecondition (já consumido), ResourceExhausted (sem vaga de co-op).
+  rpc SummonSign(SummonSignRequest) returns (SummonSignResponse);
 }
 
 message FindMatchRequest {
@@ -50,4 +62,55 @@ message InvadeResponse {
   string session_id = 1;     // mundo em que o invasor entrou
   string server_address = 2; // endereço do game server do mundo
   string connect_token = 3;  // connect token EdDSA do invasor (claim role=invader)
+}
+
+// Co-op por quadro de sinais (spec 007). O aliado anuncia com a sua faixa; o
+// playerID vem do JWT (interceptor), não do request.
+message PostSummonSignRequest {
+  string game_id = 1;    // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+  int32 soul_level = 2;  // nível do aliado (faixa simétrica de co-op)
+  int32 weapon_tier = 3; // tier de arma do aliado (se o perfil exigir)
+}
+
+// SummonStatus é o ciclo do sinal no stream do aliado (spec 007).
+enum SummonStatus {
+  SUMMON_STATUS_UNSPECIFIED = 0;
+  SUMMON_STATUS_POSTED = 1;    // publicado; aguardando invocação (traz sign_id)
+  SUMMON_STATUS_SUMMONED = 2;  // invocado por um host (traz server + token)
+  SUMMON_STATUS_EXPIRED = 3;   // TTL venceu / cancelado sem invocação
+}
+
+message SummonUpdate {
+  SummonStatus status = 1;
+  string sign_id = 2;        // preenchido em POSTED
+  string session_id = 3;     // mundo do host (SUMMONED)
+  string server_address = 4; // endereço do game server (SUMMONED)
+  string connect_token = 5;  // connect token EdDSA do aliado, claim role=coop (SUMMONED)
+}
+
+message ListSignsRequest {
+  string game_id = 1;          // jogo (multi-tenant)
+  int32 host_soul_level = 2;   // faixa do mundo do host (filtra os sinais compatíveis)
+  int32 host_weapon_tier = 3;
+}
+
+message ListSignsResponse {
+  repeated SummonSign signs = 1; // vazio se nenhum sinal compatível
+}
+
+// SummonSign é um sinal ativo no quadro, do ponto de vista do host que navega.
+message SummonSign {
+  string sign_id = 1;
+  string player_id = 2; // o aliado que anunciou
+  int32 soul_level = 3;
+  int32 weapon_tier = 4;
+}
+
+message SummonSignRequest {
+  string session_id = 1; // mundo do host onde injetar o aliado
+  string sign_id = 2;    // o sinal escolhido
+}
+
+message SummonSignResponse {
+  string player_id = 1; // o aliado invocado (o server/token vão pelo stream dele)
 }

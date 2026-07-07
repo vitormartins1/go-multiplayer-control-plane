@@ -29,3 +29,15 @@ var (
 	ErrRoleFull     = errors.New("matchmaking: invader slot full")
 	ErrWorldNotFound = errors.New("matchmaking: world not found")
 )
+
+// ErrCoopNotSupported indica que o jogo não aceita co-op (host_world_dropin,
+// spec 007): arquétipo diferente ou papel coop não habilitado. FailedPrecondition.
+var ErrCoopNotSupported = errors.New("matchmaking: coop not supported")
+
+// ErrSignNotFound / ErrSignConsumed são os erros da invocação de um sinal (spec
+// 007): o sinal não existe/expirou (NotFound), ou já foi consumido por outra
+// invocação (FailedPrecondition — idempotência: consumo no máximo uma vez).
+var (
+	ErrSignNotFound = errors.New("matchmaking: summon sign not found")
+	ErrSignConsumed = errors.New("matchmaking: summon sign already consumed")
+)

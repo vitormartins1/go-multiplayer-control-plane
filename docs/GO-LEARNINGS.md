@@ -1029,3 +1029,49 @@ flowchart LR
 **Contraste com C#:** em C# a classe precisa *declarar* `class SessionClient : ISessionProvisioner, IWorldDirectory, IWorldInjector` — o acoplamento nome↔tipo é explícito e a interface normalmente vive perto de quem a implementa. Em Go a interface é **definida do lado de quem consome** (o `domain` do matchmaking declara `WorldDirectory` do jeito que *ele* precisa) e qualquer tipo com a forma certa serve. Isso inverte a dependência sem o consumidor jamais importar o adapter.
 
 **Pegadinha / nuance:** a asserção `var _ Interface = (*T)(nil)` não é decoração — é o que transforma "esqueci de atualizar um método" num **erro de compilação no arquivo do adapter**, e não num erro obscuro lá no wire-up. Segundo achado da mesma fatia, pela mesma razão de "método a mais, sem herança": o `Invade` é **unary** e o interceptor de auth existente era **stream-only** (`grpc.StreamServerInterceptor`); foi preciso um `UnaryAuthInterceptor` irmão (`grpc.UnaryServerInterceptor`) — o gRPC-Go trata os dois mundos por assinaturas distintas, registradas separadamente (`StreamInterceptor` vs `ChainUnaryInterceptor`). Reusei a mesma `bearerFromMetadata`/`playerIDKey`; só a moldura muda.
+
+---
+
+## 29 — `close` vs `send`: um canal como sinal de duas vias (`v, ok := <-ch`)
+
+**O que é / por que importa:** um canal Go carrega **dois** sinais, não um. Um `send` entrega um **valor**; um `close` entrega o fato de que **não virá mais valor**. Quem recebe distingue com `v, ok := <-ch`: `ok==true` → veio valor; `ok==false` → canal fechado. No co-op (spec 007) isso modela **um desfecho com duas saídas** sem um segundo canal nem um campo de status: o aliado abre o stream e **bloqueia** num canal; um **outro** ator o acorda — o host que invoca **envia** um `Summoned` (→ `SUMMONED`), ou o sweeper de TTL **fecha** sem valor (→ `EXPIRED`).
+
+**Onde no projeto:** `matchmaking-service/internal/service/summoner.go` (`Summon` envia; `SweepExpired`/`CancelSign` fecham) e o handler `PostSummonSign` em `internal/transport/grpc_server.go` (o `select` que traduz para o stream gRPC).
+
+```mermaid
+sequenceDiagram
+    participant A as Aliado (stream)
+    participant H as Handler PostSummonSign
+    participant S as Summoner
+    participant Host
+    participant TTL as Sweeper
+    A->>H: PostSummonSign
+    H->>S: PostSign → (signID, ch)
+    H-->>A: POSTED{signID}
+    Note over H: select { <-ctx.Done() | <-ch }
+    alt host invoca
+        Host->>S: Summon(signID)
+        S-->>H: ch <- Summoned   %% send: ok=true
+        H-->>A: SUMMONED{server,token}
+    else TTL vence
+        TTL->>S: SweepExpired → close(ch)  %% close: ok=false
+        H-->>A: EXPIRED
+    end
+```
+
+```go
+select {
+case <-stream.Context().Done(): // o aliado desistiu
+    s.sum.CancelSign(signID)
+    return stream.Context().Err()
+case summoned, ok := <-ch:
+    if !ok { // canal fechado sem valor = TTL/cancelado
+        return stream.Send(&pb.SummonUpdate{Status: pb.SummonStatus_SUMMON_STATUS_EXPIRED})
+    }
+    return stream.Send(&pb.SummonUpdate{Status: pb.SummonStatus_SUMMON_STATUS_SUMMONED, /* server+token */})
+}
+```
+
+**Contraste com C#:** o equivalente seria um `TaskCompletionSource<Summoned?>` com `TrySetResult(value)` vs `TrySetResult(null)` (ou `TrySetCanceled`) — dá para fazer, mas o "canal como fila + fechamento" do Go junta **entrega** e **fim de vida** numa primitiva só, e o `select` compõe isso com o cancelamento do stream (`ctx.Done()`) de forma uniforme.
+
+**Pegadinha / nuance:** `send` num canal **fechado** dá **panic** — então "enviar" (`Summon`) e "fechar" (`SweepExpired`/`CancelSign`) precisam ser **mutuamente exclusivos**. É o que o estado `claimed` garante: ao iniciar uma invocação, o sinal vira `claimed` **sob o lock** e some da varredura/cancelamento; só o `Summon` que ganhou a transição envia. O canal tem **buffer 1** para o `send` nunca bloquear o `Summon` (o handler pode ainda não estar no `receive`). E o "consumido não é o mesmo que inexistente": um `Summon` de um sinal já consumido deve dizer `ErrSignConsumed`, não `ErrSignNotFound` — por isso o store guarda um **tombstone** (`consumed map[signID]time.Time`, limpo pelo sweeper) além do mapa de ativos; deletar e pronto perderia a distinção que a idempotência precisa.
