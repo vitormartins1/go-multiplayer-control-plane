@@ -2,12 +2,16 @@
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
-> **Frente ativa (2026-07-07): ADR-0023 — multiplayer por arquétipo/perfil.** O estado por fatia vive em `docs/game-models/README.md` → "Estado da implementação". **Dois arquétipos completos no control plane** (validados com server mockado — adapter `static` + cliente de teste):
+> **ADR-0023 — COMPLETO no control plane (2026-07-07): os 4 arquétipos ponta a ponta.** Estado por fatia: `docs/game-models/README.md` → "Estado da implementação". Todos validados com server mockado (adapter `static` + cliente de teste); nenhum data plane Unity específico existe ainda além do `queue_arena`:
 >
-> - **`queue_arena`** (partida simétrica FFA/NvN, resultado win/loss/draw): declarar → formar (com **composição de times**, `team_id` no connect token) → resultado terminal → fan-out → console. Contrato: `docs/game-models/queue_arena-dataplane-contract.md`.
-> - **`host_world_dropin`** (Souls-like — mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento): **H0–H3 + contrato FEITOS**. Ver o bloco dedicado abaixo.
+> - **`queue_arena`** (FFA/NvN, `win_loss_draw`) — completo + contrato; data plane de referência existe (`go-game-dataplane`, Fases 0–7).
+> - **`host_world_dropin`** (Souls-like, `participation_event`) — H0–H3 + contrato; follow-ups em `host_world_dropin-follow-ups.md`.
+> - **`battle_royale`** (lobby/squads, `placement`) — BR0–BR4 + contrato.
+> - **`coop_mission`** (co-op vs. ambiente, `collective`) — C0–C4 + contrato (C4 mergeado na main em 2026-07-07).
 >
-> Docs de suporte: **`docs/REPO-TOPOLOGY.md`** — nomes de repo **decididos** (control plane `go-multiplayer-control-plane`; data planes `unity-<archetype>-data-plane`), **rename ainda não executado**. Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane** — pode quebrar o Unity, migra-se depois.
+> **Frente ativa nova: ADR-0024 — modos de jogo (perfis nomeados) + session manifest** (Accepted, 2026-07-07; origem no review do ADR-0023). Jogo 1—N modos (`modeId`), snapshot do perfil por sessão, validação `kind`×arquétipo no `ReportResult`, manifest p/ o data plane ler params (mata o `first-to-5` hardcoded), `modeId` aditivo no envelope. Fatias **M0–M2** em `docs/game-models/multiplayer-modes-roadmap.md`; **spec M0 (`game-registry/009`) rascunhada, aguardando aprovação** na branch `feat/game-registry/009-multiplayer-modes`.
+>
+> Docs de suporte: **`docs/REPO-TOPOLOGY.md`** — rename do control plane **executado** (module path `go-multiplayer-control-plane`; falta o `mv` da pasta); SDK Unity compartilhado registrado como **futuro** (princípio 5). Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane**.
 
 ## `host_world_dropin` — completo no control plane + console + contrato (2026-07-07)
 
