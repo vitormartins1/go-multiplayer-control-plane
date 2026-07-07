@@ -40,6 +40,11 @@ func (m *mockStore) Range(ctx context.Context, gameID, board string, start, stop
 	return e, args.Error(1)
 }
 
+func (m *mockStore) ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []domain.Increment) (bool, error) {
+	args := m.Called(ctx, gameID, matchID, incrs)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestSubmit_RetornaEntryComRank1Based(t *testing.T) {
 	store := &mockStore{}
 	store.On("Submit", mock.Anything, "g1", score, "p1", int64(1500)).Return(nil)
@@ -70,6 +75,34 @@ func TestSubmit_BoardInvalido_ErrInvalidBoard(t *testing.T) {
 	_, err := New(store).Submit(context.Background(), "g1", "Kills!", "p1", 7)
 	require.ErrorIs(t, err, domain.ErrInvalidBoard)
 	store.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestApplyCumulative_FiltraBoardInvalido_EDelegaValidos(t *testing.T) {
+	store := &mockStore{}
+	valid := []domain.Increment{
+		{Board: "wins", PlayerID: "p1", Delta: 1},
+		{Board: "kills_total", PlayerID: "p1", Delta: 7},
+	}
+	// só as parcelas válidas chegam ao store (a "K/D!" é descartada).
+	store.On("ApplyCumulative", mock.Anything, "g1", "m1", valid).Return(false, nil)
+
+	dup, err := New(store).ApplyCumulative(context.Background(), "g1", "m1", []domain.Increment{
+		{Board: "wins", PlayerID: "p1", Delta: 1},
+		{Board: "K/D!", PlayerID: "p1", Delta: 2}, // inválido
+		{Board: "kills_total", PlayerID: "p1", Delta: 7},
+	})
+	require.NoError(t, err)
+	require.False(t, dup)
+	store.AssertExpectations(t)
+}
+
+func TestApplyCumulative_PropagaDup(t *testing.T) {
+	store := &mockStore{}
+	store.On("ApplyCumulative", mock.Anything, "g1", "m1", mock.Anything).Return(true, nil)
+	dup, err := New(store).ApplyCumulative(context.Background(), "g1", "m1",
+		[]domain.Increment{{Board: "wins", PlayerID: "p1", Delta: 1}})
+	require.NoError(t, err)
+	require.True(t, dup)
 }
 
 func TestTop_BoardInvalido_ErrInvalidBoard(t *testing.T) {

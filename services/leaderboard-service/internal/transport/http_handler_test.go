@@ -69,6 +69,10 @@ func (f *fakeService) Around(_ context.Context, gameID, board, playerID string, 
 	return f.aroundEntries, f.aroundErr
 }
 
+func (f *fakeService) ApplyCumulative(_ context.Context, _, _ string, _ []domain.Increment) (bool, error) {
+	return false, nil
+}
+
 func newServer(svc domain.LeaderboardService, v domain.TokenVerifier) *httptest.Server {
 	mux := http.NewServeMux()
 	NewHandler(svc, v).Register(mux)

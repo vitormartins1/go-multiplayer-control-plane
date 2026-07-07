@@ -104,8 +104,10 @@ func run(log *slog.Logger) error {
 	return nil
 }
 
-// makeHandler desserializa o envelope e submete o score de cada jogador. Sem
-// dedup: ZADD GT é idempotente (reprocessar não altera o top-N).
+// makeHandler desserializa o envelope e aplica dois modos de agregação por
+// jogador: highscore (score + cada stat, ZADD GT — idempotente) e cumulative
+// (vitórias + totais de stat, ZINCRBY — idempotente por matchID via
+// ApplyCumulative). A parte cumulativa é uma única chamada atômica por partida.
 func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 	return func(ctx context.Context, body []byte) (bool, error) {
 		var env struct {
@@ -114,14 +116,17 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 			Results []struct {
 				PlayerID string           `json:"playerId"`
 				Score    int64            `json:"score"`
-				Stats    map[string]int64 `json:"stats"` // ADR-0023: um board por métrica
+				Outcome  string           `json:"outcome"` // ADR-0023 A2: ranking de vitórias
+				Stats    map[string]int64 `json:"stats"`   // um board highscore + um _total por métrica
 			} `json:"results"`
 		}
 		if err := json.Unmarshal(body, &env); err != nil {
 			return false, fmt.Errorf("unmarshal envelope: %w", err)
 		}
+
+		var incrs []domain.Increment // parcelas cumulativas (todas as partes numa chamada)
 		for _, r := range env.Results {
-			// board "score" (como sempre) + um board por stat presente.
+			// highscore: board "score" (como sempre) + um board por stat presente.
 			if _, err := svc.Submit(ctx, env.GameID, domain.BoardScore, r.PlayerID, r.Score); err != nil {
 				return false, fmt.Errorf("submit %s score: %w", r.PlayerID, err)
 			}
@@ -132,11 +137,28 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 				if _, err := svc.Submit(ctx, env.GameID, stat, r.PlayerID, val); err != nil {
 					return false, fmt.Errorf("submit %s %s: %w", r.PlayerID, stat, err)
 				}
+				// cumulative: soma do stat na temporada ("<stat>_total").
+				incrs = append(incrs, domain.Increment{Board: domain.TotalBoard(stat), PlayerID: r.PlayerID, Delta: val})
+			}
+			// cumulative: ranking de vitórias.
+			if r.Outcome == outcomeWin {
+				incrs = append(incrs, domain.Increment{Board: domain.BoardWins, PlayerID: r.PlayerID, Delta: 1})
 			}
 		}
-		return false, nil
+
+		dup, err := svc.ApplyCumulative(ctx, env.GameID, env.MatchID, incrs)
+		if err != nil {
+			return false, fmt.Errorf("apply cumulative: %w", err)
+		}
+		if dup {
+			log.Info("cumulativo já aplicado (no-op)", slog.String("match_id", env.MatchID))
+		}
+		return dup, nil
 	}
 }
+
+// outcomeWin é o valor do outcome que conta como vitória no ranking (ADR-0023).
+const outcomeWin = "win"
 
 func pingWithRetry(ctx context.Context, store *storage.RedisStore, log *slog.Logger) error {
 	var lastErr error

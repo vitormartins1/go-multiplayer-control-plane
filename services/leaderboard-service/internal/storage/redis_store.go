@@ -35,6 +35,46 @@ func (s *RedisStore) key(gameID, board string) string {
 	return s.prefix + ":" + gameID + ":" + board
 }
 
+// processedKey é o SET de matchIDs já aplicados nos boards cumulativos do jogo
+// (guarda de idempotência do ZINCRBY, ADR-0023 A2).
+func (s *RedisStore) processedKey(gameID string) string {
+	return s.prefix + ":processed:" + gameID
+}
+
+// applyCumulativeScript aplica os ZINCRBY de uma partida sob uma guarda de
+// idempotência, atômico (o Redis executa o script inteiro sem interleaving).
+// KEYS[1] = SET processed; ARGV[1] = matchID; ARGV[2..] = trios (boardKey,
+// member, delta). Se o matchID já estava no SET (SADD devolve 0) -> no-op e
+// retorna 1 (dup); senão soma cada parcela e retorna 0. É o análogo Redis da tx
+// idempotente do achievements (Postgres): SADD+ZINCRBY num só passo indivisível.
+var applyCumulativeScript = redis.NewScript(`
+if redis.call('SADD', KEYS[1], ARGV[1]) == 0 then
+  return 1
+end
+for i = 2, #ARGV, 3 do
+  redis.call('ZINCRBY', ARGV[i], ARGV[i+2], ARGV[i+1])
+end
+return 0
+`)
+
+// ApplyCumulative soma as parcelas nos boards cumulativos de uma partida (ZINCRBY)
+// idempotente por matchID via applyCumulativeScript. Sem parcelas -> no-op.
+func (s *RedisStore) ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []domain.Increment) (bool, error) {
+	if len(incrs) == 0 {
+		return false, nil // nada a somar: não há o que deduplicar
+	}
+	argv := make([]any, 0, 1+len(incrs)*3)
+	argv = append(argv, matchID)
+	for _, inc := range incrs {
+		argv = append(argv, s.key(gameID, inc.Board), inc.PlayerID, inc.Delta)
+	}
+	res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID)}, argv...).Int()
+	if err != nil {
+		return false, fmt.Errorf("leaderboard storage: apply cumulative: %w", err)
+	}
+	return res == 1, nil // 1 = partida já aplicada (dup)
+}
+
 // Ping verifica a conectividade (usado no boot, com retry).
 func (s *RedisStore) Ping(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
