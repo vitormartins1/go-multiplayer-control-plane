@@ -52,6 +52,7 @@ type fakeService struct {
 	importErr    error
 	gotGameID    string
 	gotPlayer    string
+	gotBoard     string
 	gotLimit     int
 	gotOffset    int
 	gotState     string
@@ -118,8 +119,8 @@ func (f *fakeService) ImportAchievements(_ context.Context, gameID string, _ []d
 	f.gotGameID = gameID
 	return f.importResp, f.importErr
 }
-func (f *fakeService) GameLeaderboard(_ context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error) {
-	f.gotGameID, f.gotLimit = gameID, limit
+func (f *fakeService) GameLeaderboard(_ context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotBoard, f.gotLimit = gameID, board, limit
 	return f.leaders, f.leadErr
 }
 func (f *fakeService) PlayerData(_ context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error) {
@@ -164,8 +165,8 @@ func (f *fakeService) AnalyticsOverview(context.Context) (domain.AnalyticsOvervi
 	return f.analytics, f.analyticsErr
 }
 
-func (f *fakeService) SetLeaderboardScore(_ context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error) {
-	f.gotGameID, f.gotPlayer = gameID, playerID
+func (f *fakeService) SetLeaderboardScore(_ context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotPlayer, f.gotBoard = gameID, playerID, board
 	return domain.LeaderboardEntry{Rank: 1, PlayerID: playerID, Score: score}, f.leadErr
 }
 
@@ -424,11 +425,12 @@ func TestGameLeaderboard_200(t *testing.T) {
 	srv := newServer(svc)
 	defer srv.Close()
 
-	resp := get(t, srv, "/api/games/game-9/leaderboard?limit=5")
+	resp := get(t, srv, "/api/games/game-9/leaderboard?limit=5&board=kills")
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "game-9", svc.gotGameID)
 	assert.Equal(t, 5, svc.gotLimit)
+	assert.Equal(t, "kills", svc.gotBoard)
 
 	var body []domain.LeaderboardEntry
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))

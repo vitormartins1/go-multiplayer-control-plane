@@ -31,8 +31,8 @@ type AdminService interface {
 	ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error)
 	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error)
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
-	GameLeaderboard(ctx context.Context, gameID string, limit int) ([]domain.LeaderboardEntry, error)
-	SetLeaderboardScore(ctx context.Context, gameID, playerID string, score int64) (domain.LeaderboardEntry, error)
+	GameLeaderboard(ctx context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error)
+	SetLeaderboardScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error)
 	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
 	CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error)
 	GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error)
@@ -304,7 +304,7 @@ func (h *Handler) playerAchievements(w http.ResponseWriter, r *http.Request) {
 // gameLeaderboard lê o top-N do jogo (leaderboard).
 func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
 	limit := atoiOr(r.URL.Query().Get("limit"), 0)
-	entries, err := h.svc.GameLeaderboard(r.Context(), r.PathValue("gameId"), limit)
+	entries, err := h.svc.GameLeaderboard(r.Context(), r.PathValue("gameId"), r.URL.Query().Get("board"), limit)
 	if err != nil {
 		writeUpstream(w, err)
 		return
@@ -324,7 +324,7 @@ func (h *Handler) setLeaderboardScore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
-	entry, err := h.svc.SetLeaderboardScore(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), *req.Score)
+	entry, err := h.svc.SetLeaderboardScore(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), r.URL.Query().Get("board"), *req.Score)
 	if err != nil {
 		writeUpstream(w, err)
 		return

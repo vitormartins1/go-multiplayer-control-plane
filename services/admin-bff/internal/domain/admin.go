@@ -172,13 +172,14 @@ type LeaderboardEntry struct {
 }
 
 // LeaderboardReader é a Port de saída para a API admin do leaderboard-service
-// (top-N por jogo, ADR-0017).
+// (top-N por jogo, ADR-0017). O board seleciona o ranking (score ou um por stat,
+// ADR-0023 / leaderboard/003); "" -> o leaderboard-service assume "score".
 type LeaderboardReader interface {
-	// TopForGame lê o top-N do jogo. Indisponibilidade -> ErrLeaderboardUnavailable.
-	TopForGame(ctx context.Context, gameID string, limit int) ([]LeaderboardEntry, error)
-	// SetScore substitui o score do jogador independente do valor atual (admin override).
-	// Indisponibilidade -> ErrLeaderboardUnavailable.
-	SetScore(ctx context.Context, gameID, playerID string, score int64) (LeaderboardEntry, error)
+	// TopForGame lê o top-N do board do jogo. Indisponibilidade -> ErrLeaderboardUnavailable.
+	TopForGame(ctx context.Context, gameID, board string, limit int) ([]LeaderboardEntry, error)
+	// SetScore substitui o score do jogador no board independente do valor atual
+	// (admin override). Indisponibilidade -> ErrLeaderboardUnavailable.
+	SetScore(ctx context.Context, gameID, playerID, board string, score int64) (LeaderboardEntry, error)
 }
 
 // AchievementProgressEntry é uma linha do relatório de progresso de uma conquista:

@@ -304,16 +304,22 @@ export const api = {
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/achievements`,
       signal,
     ),
-  gameLeaderboard: (gameId: string, limit = 20, signal?: AbortSignal) =>
-    getJSON<LeaderEntry[]>(
-      `/api/games/${encodeURIComponent(gameId)}/leaderboard?limit=${limit}`,
+  // board seleciona o ranking (score ou um por stat, ADR-0023). Omitido -> score.
+  gameLeaderboard: (gameId: string, board?: string, limit = 20, signal?: AbortSignal) => {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (board) q.set("board", board);
+    return getJSON<LeaderEntry[]>(
+      `/api/games/${encodeURIComponent(gameId)}/leaderboard?${q.toString()}`,
       signal,
-    ),
-  setLeaderboardScore: (gameId: string, playerId: string, score: number) =>
-    putJSON<LeaderEntry>(
-      `/api/games/${encodeURIComponent(gameId)}/leaderboard/${encodeURIComponent(playerId)}/score`,
+    );
+  },
+  setLeaderboardScore: (gameId: string, playerId: string, score: number, board?: string) => {
+    const q = board ? `?board=${encodeURIComponent(board)}` : "";
+    return putJSON<LeaderEntry>(
+      `/api/games/${encodeURIComponent(gameId)}/leaderboard/${encodeURIComponent(playerId)}/score${q}`,
       { score },
-    ),
+    );
+  },
   achievementProgress: (gameId: string, achievementId: string, signal?: AbortSignal) =>
     getJSON<{ progress: AchievementProgressEntry[] }>(
       `/api/games/${encodeURIComponent(gameId)}/achievements/${encodeURIComponent(achievementId)}/progress`,
