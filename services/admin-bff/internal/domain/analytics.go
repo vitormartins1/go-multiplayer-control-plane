@@ -50,18 +50,30 @@ type ParticipationStat struct {
 }
 
 // GameAnalyticsDetail é o detalhe de analytics de um jogo (resumo + série diária
-// + participações por papel). gameName é injetado pelo BFF (spec 014).
+// + participações por papel + distribuição de colocação). gameName é injetado
+// pelo BFF (spec 014).
 type GameAnalyticsDetail struct {
-	GameID             string              `json:"gameId"`
-	GameName           string              `json:"gameName"`
-	Matches            int64               `json:"matches"`
-	UniquePlayers      int64               `json:"uniquePlayers"`
-	Wins               int64               `json:"wins"`
-	Losses             int64               `json:"losses"`
-	Draws              int64               `json:"draws"`
-	AvgScore           float64             `json:"avgScore"`
-	Daily              []AnalyticsDaily    `json:"daily"`
-	RoleParticipations []ParticipationStat `json:"roleParticipations"`
+	GameID             string                 `json:"gameId"`
+	GameName           string                 `json:"gameName"`
+	Matches            int64                  `json:"matches"`
+	UniquePlayers      int64                  `json:"uniquePlayers"`
+	Wins               int64                  `json:"wins"`
+	Losses             int64                  `json:"losses"`
+	Draws              int64                  `json:"draws"`
+	AvgScore           float64                `json:"avgScore"`
+	Daily              []AnalyticsDaily       `json:"daily"`
+	RoleParticipations []ParticipationStat    `json:"roleParticipations"`
+	Placement          *PlacementDistribution `json:"placement,omitempty"` // battle_royale (BR4); nil fora do BR
+}
+
+// PlacementDistribution é a distribuição de colocação do battle_royale (BR3/BR4):
+// histograma 1º/top-10/resto + sobrevivência média. Passthrough do analytics.
+type PlacementDistribution struct {
+	Winners       int64   `json:"winners"`
+	TopN          int64   `json:"topN"`
+	Rest          int64   `json:"rest"`
+	Entries       int64   `json:"entries"`
+	AvgSurvivedMs float64 `json:"avgSurvivedMs"`
 }
 
 // AnalyticsReader é a Port de saída para a read API do analytics-service.

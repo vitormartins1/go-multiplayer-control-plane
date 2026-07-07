@@ -60,6 +60,34 @@ func TestGameAnalytics_ParseiaRoleParticipations(t *testing.T) {
 	assert.Empty(t, d.GameName, "nome é injetado pelo service")
 }
 
+// battle_royale (BR4): o campo placement do analytics é propagado no detalhe.
+func TestGameAnalytics_ParseiaPlacement(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"br","matches":1,"daily":[],"roleParticipations":[],
+			"placement":{"winners":1,"topN":9,"rest":2,"entries":12,"avgSurvivedMs":6500}}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "br", 0)
+	require.NoError(t, err)
+	require.NotNil(t, d.Placement)
+	assert.Equal(t, domain.PlacementDistribution{Winners: 1, TopN: 9, Rest: 2, Entries: 12, AvgSurvivedMs: 6500}, *d.Placement)
+}
+
+// Jogo não-BR: sem placement no upstream -> campo nil (omitido no repasse).
+func TestGameAnalytics_SemPlacement_Nil(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"qa","matches":1,"daily":[],"roleParticipations":[]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "qa", 0)
+	require.NoError(t, err)
+	assert.Nil(t, d.Placement)
+}
+
 func TestGameAnalytics_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
