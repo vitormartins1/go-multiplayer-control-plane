@@ -150,6 +150,7 @@ message ReportResultRequest {
   // setado; novos arquétipos entram como novos campos do oneof.
   oneof outcome {
     WinLossDrawResult win_loss_draw = 2; // arquétipo queue_arena
+    PlacementResult placement = 3;       // arquétipo battle_royale (ADR-0023/BR2)
   }
 }
 
@@ -168,4 +169,23 @@ message PlayerOutcome {
   string outcome = 3;             // "win" | "loss" | "draw"
   int64 score = 4;
   map<string, int64> stats = 5;   // métricas declaradas (kills, assists, ...)
+}
+
+// PlacementResult é o outcome do arquétipo battle_royale (ADR-0023/BR2):
+// colocação ordinal (1º..Nº) por participante. Resultado terminal — o server do
+// BR reporta as colocações de todos no fim; a eliminação progressiva é gameplay
+// do data plane.
+message PlacementResult {
+  repeated PlacementEntry entries = 1;
+}
+
+// PlacementEntry é a colocação de um participante no battle_royale. Squads
+// (squad-K, BR1) compartilham a colocação do time; o session carimba o team_id
+// canônico a partir da formação.
+message PlacementEntry {
+  string player_id = 1;
+  string team_id = 2;             // squad; vazio em solo/FFA (carimbado pelo session)
+  int32 placement = 3;            // colocação ordinal (1 = vencedor)
+  int64 survived_ms = 4;          // tempo de sobrevivência (ms); intrínseco ao BR
+  map<string, int64> stats = 5;   // métricas extras opcionais (ex.: kills)
 }
