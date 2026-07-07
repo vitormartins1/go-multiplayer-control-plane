@@ -1,19 +1,16 @@
 # Integração Unity ↔ Backend Go — guia genérico
 
-> Como integrar um jogo Unity com os serviços de backend em Go deste projeto.
-> Escrito de forma **genérica**: serve de **template reutilizável** para qualquer jogo, não só o jogo de estudo.
-> **Status: rascunho** — evolui conforme os serviços são implementados. Itens marcados `(TODO)` dependem de código que ainda não existe.
-
----
+> Setup **genérico** de um data plane Unity contra o control plane Go. O **handshake concreto e os claims do connect token são por arquétipo** — a fonte de verdade é o contrato de cada um:
+> - `queue_arena` → [`game-models/queue_arena-dataplane-contract.md`](game-models/queue_arena-dataplane-contract.md)
+> - `host_world_dropin` → [`game-models/host_world_dropin-dataplane-contract.md`](game-models/host_world_dropin-dataplane-contract.md)
+>
+> Este doc guarda só o que é **comum a todos os arquétipos** (requisitos do projeto Unity, Agones, canais). Topologia de repos: [`REPO-TOPOLOGY.md`](REPO-TOPOLOGY.md) (um `go-multiplayer-control-plane` + N `unity-<archetype>-data-plane`).
 
 ## Visão geral
 
-Recap (detalhes em [ARCHITECTURE.md](ARCHITECTURE.md)):
-
-- **Control plane (Go, este repo):** identity, matchmaking, session, leaderboard, achievements, player-data, cloud-save, analytics.
-- **Data plane (Unity Dedicated Server):** simulação realtime da partida.
-- **2 repos:** `go-game-backend` + `game-unity` (client e server são o mesmo projeto Unity, em 2 build targets).
-- **Go não entra no loop realtime** — só no control plane e em chamadas fora do caminho de tick. Ver ARCHITECTURE "Onde o Go entra".
+- **Control plane (Go, este repo):** identity, matchmaking, session, leaderboard, achievements, player-data, cloud-save, analytics. Agnóstico de arquétipo (orientado por perfil, ADR-0023).
+- **Data plane (Unity Dedicated Server):** simulação realtime da partida/mundo. Um repo por arquétipo.
+- **Go não entra no loop realtime** — só no control plane e em chamadas fora do caminho de tick (ver [ARCHITECTURE.md](ARCHITECTURE.md) "Onde o Go entra").
 
 ## Canais de comunicação
 
@@ -21,49 +18,22 @@ Recap (detalhes em [ARCHITECTURE.md](ARCHITECTURE.md)):
 |---|---|---|
 | Client → backend | HTTP/gRPC | login, matchmaking, leaderboard (fora de partida) |
 | Client ↔ Dedicated Server | UDP (Unity Transport) | gameplay realtime |
-| Dedicated Server → backend | HTTP/gRPC | valida connect token, heartbeat, resultado |
+| Dedicated Server → backend | gRPC | valida connect token (offline via JWKS), heartbeat, resultado/eventos |
 
-## Requisitos do projeto Unity
+## Requisitos do projeto Unity (comum a todo arquétipo)
 
 - Unity 6.x, **Netcode for GameObjects** + **Unity Transport**.
-- Dois build targets: **Client** (com gráficos) e **Dedicated Server** (Linux headless, **ARM64** para o homelab).
-- Server build **containerizado** (Docker) para deploy.
-- `(TODO)` Cliente HTTP/gRPC no Unity para falar com o backend Go (gerado do `.proto` compartilhado).
+- Dois build targets no mesmo projeto: **Client** (com gráficos) e **Dedicated Server** (Linux headless, **ARM64** para o homelab); server build **containerizado**.
+- Stub do cliente gRPC gerado do `.proto` compartilhado (`session.v1`, `matchmaking.v1`).
 - **Agones C# SDK** no server build (orquestração desde o início — ADR-0012).
+- Ler o **connect token** no *connection approval* do NGO: validar offline (JWKS do session) e aplicar o **claim por arquétipo** (`team_id` no queue_arena, `role` no host_world_dropin) no gameplay.
 
-## Infra / deploy
+## Agones (orquestração de game servers — ADR-0012)
 
-- **Control plane:** compute por serviço (Lambda/Fargate/...), ver ADR-0005.
-- **Game servers:** container do Unity headless. Espectro (ver ARCHITECTURE §7):
-  - **Local/dev:** rodar o container localmente (ou no docker-compose).
-  - **1 VPS/EC2 com Docker:** bom para testar com amigos, custo baixo.
-  - **Escala:** **Agones em EKS** (fleet + allocation).
+- Agones orquestra desde o início: **k3s (homelab, Raspberry Pi 5 ARM64)** no dev, **EKS efêmero** na nuvem. Game servers rodam como `GameServer` dentro de um `Fleet`.
+- O **server build** usa o Agones SDK (C#): `Ready()` no boot, `Health()` periódico, `Allocate()`/`Shutdown()`.
+- O **session-service (Go)** é cliente da **Allocation API** do Agones — não reimplementa o fleet.
 
-## Contrato de integração (handshake)
+## O que cada data plane Unity precisa implementar
 
-Visão de alto nível; endpoints/proto concretos são `(TODO)` conforme os serviços nascem.
-
-1. Client → **identity**: login → recebe JWT.
-2. Client → **matchmaking**: pede partida (ticket).
-3. **matchmaking** → **session**: partida formada.
-4. **session** aloca um game server e devolve `{ serverAddress, port, connect token }`.
-5. Client conecta no **Dedicated Server** com o token.
-6. Dedicated Server **valida o token** contra a identity/session.
-7. Fim da partida: Dedicated Server → backend reporta **resultado** → leaderboard/achievements/analytics.
-
-> O **connect token** (passos 4–6) é um JWT assinado em Ed25519 pelo backend e validado **localmente** pelo Dedicated Server, sem round-trip. No NGO viaja no payload de *connection approval*. Detalhes em [ARCHITECTURE.md](ARCHITECTURE.md) §7 e [GO-LEARNINGS.md](GO-LEARNINGS.md) §02.
-
-## Como o Agones se encaixa (orquestração de game servers — ADR-0012)
-
-- Agones é o orquestrador **desde o início**. Roda em **k3s (homelab, Raspberry Pi 5 ARM64)** no dev e em **EKS sob demanda** na nuvem. Os game servers rodam como `GameServer` dentro de um `Fleet`.
-- O **server build (Unity)** é compilado para **Linux ARM64** (Unity 6) e usa o **Agones SDK (C#)**: `Ready()` no boot, `Health()` periódico, `Allocate()`/`Shutdown()`.
-- O **session-service (Go)** chama a **API de Allocation do Agones** (cliente gRPC) para obter um server `Ready` — não reimplementa o fleet.
-
-## TODO (conforme a implementação avança)
-
-- [ ] Definir e versionar os contratos `.proto` (matchmaking, session).
-- [ ] Documentar os endpoints concretos de cada serviço.
-- [ ] Exemplo de cliente Unity (C#) chamando identity/matchmaking.
-- [ ] Dockerfile de referência do Unity Dedicated Server.
-- [ ] Manifest de `Fleet` de referência do Agones.
-- [ ] Jogo de exemplo mínimo demonstrando as features (ver task de setup do repo Unity).
+Depende do arquétipo — a tabela concreta está em cada contrato (`…-dataplane-contract.md`). Em comum: gerar os stubs C# do `.proto`, ler o claim do token no connection approval, e reportar ao backend (resultado terminal no `queue_arena`; eventos de participação no `host_world_dropin`). O `unity-queue-arena-data-plane` (ex-`go-game-dataplane`) é o exemplo de referência já existente.

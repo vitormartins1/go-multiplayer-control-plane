@@ -2,7 +2,7 @@
 
 > **Propósito:** backlog consolidado das **evoluções deliberadamente adiadas** ao longo das fatias H0–H2 do `host_world_dropin`. Cada item foi cortado do escopo por foco (control plane primeiro) ou por depender de validação no data plane. Aqui ficam reunidos com **contexto suficiente para retomar** — o quê, por que foi adiado, onde mexer, e o que destrava.
 >
-> **Quando voltar:** o plano é **validar a funcionalidade no repo de data plane específico** (`go-game-host-world-dropin-dataplane`, Unity) e, com esse feedback, evoluir os detalhes. Priorize por evidência: o que o gameplay real mostrar que falta primeiro.
+> **Quando voltar:** o plano é **validar a funcionalidade no repo de data plane específico** (`unity-host-world-dropin-data-plane`, Unity) e, com esse feedback, evoluir os detalhes. Priorize por evidência: o que o gameplay real mostrar que falta primeiro.
 >
 > **Fontes:** a seção "Aberturas" do [`host_world_dropin-roadmap.md`](./host_world_dropin-roadmap.md) e o "Fora de escopo" de cada spec (`session/011–013`, `matchmaking/006–007`, `achievements/009`, `analytics/004`). A tabela de estado vive no [README](./README.md).
 

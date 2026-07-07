@@ -32,7 +32,7 @@ Três decisões estruturais que atravessam as fatias. **Recomendação anotada; 
 
 ## Realidade cross-repo: o data plane não existe ainda
 
-O `go-game-host-world-dropin-dataplane` (Unity) é **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — não há server que encarne o "mundo do host" nem emita `ParticipationEvent`. Consequência (igual ao princípio do `queue_arena`: **control plane primeiro**):
+O `unity-host-world-dropin-data-plane` (Unity) é **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — não há server que encarne o "mundo do host" nem emita `ParticipationEvent`. Consequência (igual ao princípio do `queue_arena`: **control plane primeiro**):
 
 - Todo H0–H2 se **valida no control plane** com o adapter `static` do `ServerAllocator` (server mockado) e um **cliente de teste** simulando o server do mundo (chama `JoinWorld`/`ReportParticipationEvent` como o Unity chamaria). É o mesmo padrão que fechou o `queue_arena` antes do Unity.
 - A validação **end-to-end real** (Agones + Unity encarnando o mundo, drop-in de verdade) é etapa **cross-repo posterior**, no novo repo de data plane. Este roadmap entrega o **contrato** que ela vai consumir — candidato a um `host_world_dropin-dataplane-contract.md` (par do que existe para o `queue_arena`) na fatia H2.
@@ -127,7 +127,7 @@ O `go-game-host-world-dropin-dataplane` (Unity) é **⬜ planejado** ([REPO-TOPO
 | H2 — evento/papel + contrato | session/013 (+consumers) | L–XL | H0 |
 | H3 — console | admin-bff + admin-ui | M | H0, H2 |
 
-Concluídas H0–H3, o `host_world_dropin` está **completo no control plane** (declarar → abrir mundo → descobrir/injetar por papel → reportar eventos → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `go-game-host-world-dropin-dataplane` (Unity) encarnando o mundo de verdade, consumindo o contrato de H2.
+Concluídas H0–H3, o `host_world_dropin` está **completo no control plane** (declarar → abrir mundo → descobrir/injetar por papel → reportar eventos → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-host-world-dropin-data-plane` (Unity) encarnando o mundo de verdade, consumindo o contrato de H2.
 
 ## Aberturas que este roadmap **não** cobre (declaradas, adiadas)
 

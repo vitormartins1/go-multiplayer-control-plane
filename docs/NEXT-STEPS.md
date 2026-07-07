@@ -7,7 +7,7 @@ Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fi
 > - **`queue_arena`** (partida simétrica FFA/NvN, resultado win/loss/draw): declarar → formar (com **composição de times**, `team_id` no connect token) → resultado terminal → fan-out → console. Contrato: `docs/game-models/queue_arena-dataplane-contract.md`.
 > - **`host_world_dropin`** (Souls-like — mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento): **H0–H3 + contrato FEITOS**. Ver o bloco dedicado abaixo.
 >
-> Docs de suporte: **`docs/REPO-TOPOLOGY.md`** (um `go-game-<archetype>-dataplane` por arquétipo + rename proposto do backend → `go-game-control-plane`; **decisão pendente**, nada renomeado). Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane** — pode quebrar o Unity, migra-se depois.
+> Docs de suporte: **`docs/REPO-TOPOLOGY.md`** — nomes de repo **decididos** (control plane `go-multiplayer-control-plane`; data planes `unity-<archetype>-data-plane`), **rename ainda não executado**. Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane** — pode quebrar o Unity, migra-se depois.
 
 ## `host_world_dropin` — completo no control plane + console + contrato (2026-07-07)
 
@@ -24,7 +24,7 @@ Arquétipo Souls-like (ficha `docs/game-models/01-soulslike-invasion-coop.md`) �
 
 **Evoluções adiadas** (backlog com contexto para retomar): `docs/game-models/host_world_dropin-follow-ups.md` — senha/play-with-friends, pools/região, store Redis+pub/sub, `eventId` por ocorrência, dimensão `outcome` no analytics, critério por stat, alocação sob demanda, observabilidade fina do funil. **Plano:** evoluir esses detalhes **depois de validar a funcionalidade no data plane específico** (Unity).
 
-**Falta (cross-repo, não control plane):** criar o `go-game-host-world-dropin-dataplane` (Unity, ⬜ planejado em `REPO-TOPOLOGY.md`) consumindo o contrato + Agones — o e2e real do drop-in. Leaderboard de invasões/co-ops é cauda opcional.
+**Falta (cross-repo, não control plane):** criar o `unity-host-world-dropin-data-plane` (Unity, ⬜ planejado em `REPO-TOPOLOGY.md`) consumindo o contrato + Agones — o e2e real do drop-in. Leaderboard de invasões/co-ops é cauda opcional.
 
 ## Estado atual (`main` verde, stack local de pé)
 
@@ -53,7 +53,7 @@ ADRs recentes: 0018 (service auth), 0019 (presença por jogo), 0020 (fan-out dur
 ## ⚠️ Pendente de você (ações fora do código)
 
 1. **Push pro GitHub** — o repo ainda é **local**. Criar `github.com/vitormartins1/go-game-backend`, `git remote add origin …`, `git push -u origin main`. **Só então o CI (GitHub Actions) roda de verdade.** Reproduzi os 4 jobs verdes localmente, mas o ambiente do Actions nunca rodou (testcontainers às vezes pede ajuste no runner).
-2. **Nomes de repo decididos:** `go-game-backend` (este) e `go-game-unity` (o data plane Unity, repo separado — ADR-0010). O module path já foi renomeado de `c130n/game-backend` → **`github.com/vitormartins1/go-game-backend`**.
+2. **Rename de repos (decidido, não executado):** control plane `go-game-backend` → **`go-multiplayer-control-plane`**; data planes por arquétipo **`unity-<archetype>-data-plane`** (ver `REPO-TOPOLOGY.md` com o checklist de rename — module path Go + refs). Executar numa janela dedicada. O module path atual é `github.com/vitormartins1/go-game-backend`.
 
 ## Painel jogo-cêntrico (✅ completo)
 
@@ -62,25 +62,7 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 - **Games** (`admin-ui/005-game-library` + `003-generated-cover`): biblioteca de **capas 9:16** geradas no cliente por **DiceBear** a partir de `generatedImageSeed` (=slug); metadados no game-registry (`image`/`imageSource`/`generatedImageSeed`/`generatedImageStyle`) deixam espaço p/ upload futuro. Abrir um jogo → abas **Achievements** (CRUD completo, `achievements/006-catalog-crud`), **Leaderboards**, **Players** (base do jogo = presença), Configurações (ComingSoon).
 - **Players**: base **global** do identity (paginada) + **avatares DiceBear** `adventurer` (seed = playerId, `admin-ui/006-player-avatars`). Abrir um player → **seletor escopado aos jogos DELE** (`GET /api/players/{id}/games`, consulta reversa da presença, `game-registry/004-games-of-player`) → abas Achievements/Player data/Cloud saves.
 
-## O que foi feito nesta sessão (para referência)
-
-**Admin-UI — expansão do painel (sem specs formais — usaram endpoints já existentes):**
-
-- **Analytics por jogo** (`GameAnalytics.tsx`): aba Analytics no GameDetail; filtra o `analyticsOverview` cross-game pelo `gameId` e exibe 4 StatCards (partidas, jogadores únicos, vitórias, score médio).
-- **JSON viewer** (Player Data e Cloud Save): valores objeto/array renderizados como `<Code block>` com scroll; primitivos inline — facilita inspeção de dados de gameplay.
-- **Busca de jogadores** (`Players.tsx`): `TextInput` filtra a lista local por handle; paginação oculta durante busca ativa.
-- **Ajuste de score no leaderboard** (feature 8): novo endpoint `PUT /admin/games/{g}/players/{p}/scores` no **leaderboard-service** (Redis `ZADD` sem GT — admin pode diminuir) + passthrough no **admin-bff** + modal com `NumberInput` na UI. Distingue de `adminSubmit` (highscore via `ZADD GT`).
-- **Histórico de progresso de conquista** (feature 7): novo endpoint `GET /admin/games/{g}/achievements/{id}/progress` no **achievements-service** (query `player_achievements ORDER BY progress DESC`) + passthrough no **admin-bff** + modal na aba Achievements mostrando todos os jogadores com progress, status (desbloqueado/em progresso) e data.
-- **CountBadge** (badges de contagem nas abas): suporta até 3 caracteres; cap em 999 (não "99+"); removido o prop `circle` do Mantine que espremía o conteúdo.
-
-**Admin-bff cleanup:**
-
-- Extraído `internal/upstream` (`DefaultClient`, `ErrorCode`, `Do`) — lógica de classificação 2xx/4xx/5xx centralizada; 5 adapters (achievements, cloudsave, playerdata, leaderboard, gameregistry) sem mais `do()`/`classify()`/`errorCode()` locais. Build + testes com `-race` verdes.
-
-*Sessões anteriores (histórico):*
-
-- Commit `1947ce4`: Review Grafana, dashboards `game-lifecycle.json` + `analytics-workers.json`, importação CSV de conquistas (specs `admin-bff/011` + `admin-ui/014`).
-- `player-data/002-game-scope`, `cloud-save/002-game-scope`, `admin-bff/006-player-tabs`, `admin-ui/005-game-library`, `game-registry/002-004`, `achievements/006-catalog-crud`, chore module path + CI + code-splitting, code-review `high`.
+> **Histórico por sessão:** vive no `git log` (Conventional Commits com escopo de serviço) e na tabela de estado de `docs/game-models/README.md`. Este handoff não é changelog — mantém só o estado atual + o backlog. O trabalho mais recente é o arco `host_world_dropin` (bloco acima).
 
 ## Backlog priorizado (sem spec ainda)
 
@@ -96,7 +78,7 @@ Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-
 8. **SQS queue depth no Grafana** (observabilidade futura): visibilidade de profundidade de fila e DLQ requer `yet-another-cloudwatch-exporter` (YACE). Métricas do lado consumidor já estão no dashboard `game-lifecycle`. Implementar quando chegar em produção AWS.
 9. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR.
 10. **Infra / deploy — payoff da tese (ADR-0008):** falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005); medir custo/performance vs AWS GameKit.
-11. **Data plane / o jogo (repos Unity por arquétipo, não-Go — `REPO-TOPOLOGY.md`):** o `go-game-dataplane` (queue_arena, Fases 0–7) valida o `queue_arena`; o **`go-game-host-world-dropin-dataplane`** (⬜ planejado) é o próximo — encarna o mundo do host consumindo `host_world_dropin-dataplane-contract.md` (claim `role`, join-in-progress, `ReportParticipationEvent`) + Agones. É onde a funcionalidade do drop-in vira e2e real e destrava os follow-ups do arquétipo.
+11. **Data plane / o jogo (repos Unity por arquétipo, não-Go — `REPO-TOPOLOGY.md`):** o `go-game-dataplane` (queue_arena, Fases 0–7) valida o `queue_arena`; o **`unity-host-world-dropin-data-plane`** (⬜ planejado) é o próximo — encarna o mundo do host consumindo `host_world_dropin-dataplane-contract.md` (claim `role`, join-in-progress, `ReportParticipationEvent`) + Agones. É onde a funcionalidade do drop-in vira e2e real e destrava os follow-ups do arquétipo.
 12. ✅ **Sessão órfã: fechar por sinal do GameServer — FEITO (opção a)** (ADR-0022, spec `session/008-orphan-reconcile`). O session-service **reconcilia** as sessões OPEN contra o Agones a cada tick do sweeper: nova Port `domain.ServerRegistry.LiveServerIDs` (LIST dos GameServers da fleet por label — só o adapter Agones implementa, `nil` no modo static) fecha com motivo novo **`abandoned`** toda sessão cujo `ServerID` sumiu da fleet, respeitando um **grace period** (`SESSION_ORPHAN_GRACE`, default 60s, contra staleness do LIST). Falha no LIST = tick pulado (não fecha nada). O TTL sweeper vira **backstop** (e único mecanismo no static). Métrica `sessions_closed_total{reason="abandoned"}` distinta; o painel "Sessões encerradas/s por motivo" pega o motivo sozinho (`{{reason}}`). GO-LEARNINGS #19 (dependência opcional como interface nil + armadilha do typed-nil). *Complemento futuro adiado:* opção (b) — game server **notificar abandono** no `Shutdown` — não cobre crash e é cross-repo, fica como evolução. *Não era bug de métrica:* `session_active_sessions` = `len(s.sessions)` e o `closeSession` faz `delete` — decrementa certo; o "6 na métrica × 0 na lista" pós-limpeza foi só lag de scrape do Prometheus, não contabilidade furada.
 
 ## Gotchas operacionais
