@@ -64,6 +64,7 @@ type GameAnalyticsDetail struct {
 	Daily              []AnalyticsDaily       `json:"daily"`
 	RoleParticipations []ParticipationStat    `json:"roleParticipations"`
 	Placement          *PlacementDistribution `json:"placement,omitempty"` // battle_royale (BR4); nil fora do BR
+	Mission            *MissionDistribution   `json:"mission,omitempty"`   // coop_mission (C4); nil fora do coop
 }
 
 // PlacementDistribution é a distribuição de colocação do battle_royale (BR3/BR4):
@@ -74,6 +75,14 @@ type PlacementDistribution struct {
 	Rest          int64   `json:"rest"`
 	Entries       int64   `json:"entries"`
 	AvgSurvivedMs float64 `json:"avgSurvivedMs"`
+}
+
+// MissionDistribution é a distribuição de desfecho da missão do coop_mission
+// (C3/C4): sucessos/falhas + taxa de sucesso. Passthrough do analytics.
+type MissionDistribution struct {
+	Successes   int64   `json:"successes"`
+	Failures    int64   `json:"failures"`
+	SuccessRate float64 `json:"successRate"`
 }
 
 // AnalyticsReader é a Port de saída para a read API do analytics-service.

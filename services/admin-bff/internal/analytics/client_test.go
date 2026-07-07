@@ -86,6 +86,24 @@ func TestGameAnalytics_SemPlacement_Nil(t *testing.T) {
 	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "qa", 0)
 	require.NoError(t, err)
 	assert.Nil(t, d.Placement)
+	assert.Nil(t, d.Mission)
+}
+
+// coop_mission (C4): o campo mission do analytics é propagado no detalhe.
+func TestGameAnalytics_ParseiaMission(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"coop","matches":3,"daily":[],"roleParticipations":[],
+			"mission":{"successes":2,"failures":1,"successRate":0.6666666666666666}}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "coop", 0)
+	require.NoError(t, err)
+	require.NotNil(t, d.Mission)
+	assert.Equal(t, int64(2), d.Mission.Successes)
+	assert.Equal(t, int64(1), d.Mission.Failures)
+	assert.InDelta(t, 2.0/3.0, d.Mission.SuccessRate, 0.001)
 }
 
 func TestGameAnalytics_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {
