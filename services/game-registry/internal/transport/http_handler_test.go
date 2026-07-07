@@ -308,6 +308,56 @@ func TestGet_IncluiMultiplayerProfile_BattleRoyale(t *testing.T) {
 	assert.Equal(t, float64(4), params["teamSize"])
 }
 
+func cmProfile() *domain.MultiplayerProfile {
+	return &domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeCoopMission, Topology: domain.TopologyDedicated,
+		CoopMission: &domain.CoopMissionParams{
+			TeamSize: 4, Missions: []string{"salvage_op"}, Difficulties: []string{"hazard_5"},
+			BotfillEnabled: true, ScoringStats: []string{"kills", "revives"},
+		},
+	}
+}
+
+const validCMProfileBody = `{"archetype":"coop_mission","topology":"dedicated","params":{"teamSize":4,"missions":["salvage_op"],"difficulties":["hazard_5"],"botfillEnabled":true,"scoringStats":["kills","revives"]}}`
+
+func TestSetProfile_CoopMission_200_MapeiaParams(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, "id-1", mock.MatchedBy(func(p domain.MultiplayerProfile) bool {
+		return p.Archetype == "coop_mission" && p.Topology == "dedicated" &&
+			p.CoopMission != nil && p.CoopMission.TeamSize == 4 && p.CoopMission.BotfillEnabled &&
+			len(p.CoopMission.Missions) == 1 && p.CoopMission.Missions[0] == "salvage_op"
+	})).Return(cmProfile(), nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/multiplayer-profile", validCMProfileBody)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, "coop_mission", resp["archetype"])
+	params, ok := resp["params"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(4), params["teamSize"])
+	assert.Equal(t, true, params["botfillEnabled"])
+	svc.AssertExpectations(t)
+}
+
+func TestGet_IncluiMultiplayerProfile_CoopMission(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Get", mock.Anything, "id-1").
+		Return(&domain.Game{ID: "id-1", Slug: "cm", Name: "CM", MultiplayerProfile: cmProfile()}, nil)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-1", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	prof, ok := resp["multiplayerProfile"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "coop_mission", prof["archetype"])
+	params, ok := prof["params"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(4), params["teamSize"])
+}
+
 func TestSetProfile_BodyInvalido_400(t *testing.T) {
 	rr := do(newServer(new(mockService)), http.MethodPut, "/games/id-1/multiplayer-profile", `{`)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)

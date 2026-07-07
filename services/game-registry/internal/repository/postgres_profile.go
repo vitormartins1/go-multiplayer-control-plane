@@ -44,6 +44,15 @@ type storedBattleRoyale struct {
 	ScoringStats []string `json:"scoringStats,omitempty"`
 }
 
+// storedCoopMission é o shape persistido dos params do arquétipo coop_mission.
+type storedCoopMission struct {
+	TeamSize       int      `json:"teamSize,omitempty"`
+	Missions       []string `json:"missions,omitempty"`
+	Difficulties   []string `json:"difficulties,omitempty"`
+	BotfillEnabled bool     `json:"botfillEnabled"`
+	ScoringStats   []string `json:"scoringStats,omitempty"`
+}
+
 // storedHostWorldDropIn é o shape persistido dos params do arquétipo host_world_dropin.
 type storedHostWorldDropIn struct {
 	EnabledRoles      []string `json:"enabledRoles"`
@@ -129,6 +138,22 @@ func encodeProfile(p *domain.MultiplayerProfile) ([]byte, error) {
 			return nil, err
 		}
 		sp.Params = params
+	case domain.ArchetypeCoopMission:
+		if p.CoopMission == nil {
+			return nil, fmt.Errorf("perfil %q sem params", p.Archetype)
+		}
+		cm := p.CoopMission
+		params, err := json.Marshal(storedCoopMission{
+			TeamSize:       cm.TeamSize,
+			Missions:       cm.Missions,
+			Difficulties:   cm.Difficulties,
+			BotfillEnabled: cm.BotfillEnabled,
+			ScoringStats:   cm.ScoringStats,
+		})
+		if err != nil {
+			return nil, err
+		}
+		sp.Params = params
 	default:
 		return nil, fmt.Errorf("arquétipo não persistível: %q", p.Archetype)
 	}
@@ -195,6 +220,20 @@ func decodeProfile(raw []byte) (*domain.MultiplayerProfile, error) {
 			TeamSize:     sb.TeamSize,
 			RespawnMode:  sb.RespawnMode,
 			ScoringStats: sb.ScoringStats,
+		}
+	case domain.ArchetypeCoopMission:
+		var sc storedCoopMission
+		if len(sp.Params) > 0 {
+			if err := json.Unmarshal(sp.Params, &sc); err != nil {
+				return nil, err
+			}
+		}
+		p.CoopMission = &domain.CoopMissionParams{
+			TeamSize:       sc.TeamSize,
+			Missions:       sc.Missions,
+			Difficulties:   sc.Difficulties,
+			BotfillEnabled: sc.BotfillEnabled,
+			ScoringStats:   sc.ScoringStats,
 		}
 	}
 	return p, nil

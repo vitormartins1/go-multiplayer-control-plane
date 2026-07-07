@@ -26,6 +26,7 @@ import {
   type QueueArenaParams,
   type HostWorldDropInParams,
   type BattleRoyaleParams,
+  type CoopMissionParams,
 } from "../lib/api";
 
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
@@ -58,6 +59,14 @@ const BR_DEFAULTS: BattleRoyaleParams = {
   lobbySize: 60,
   teamSize: 1,
   respawnMode: "one_life",
+  scoringStats: [],
+};
+
+const CM_DEFAULTS: CoopMissionParams = {
+  teamSize: 4,
+  missions: [],
+  difficulties: [],
+  botfillEnabled: true,
   scoringStats: [],
 };
 
@@ -114,6 +123,10 @@ function buildQueueArenaProfile(topology: "dedicated" | "p2p", p: QueueArenaPara
 
 function buildBattleRoyaleProfile(topology: "dedicated" | "p2p", p: BattleRoyaleParams): MultiplayerProfile {
   return { archetype: "battle_royale", topology, params: { ...p } };
+}
+
+function buildCoopMissionProfile(topology: "dedicated" | "p2p", p: CoopMissionParams): MultiplayerProfile {
+  return { archetype: "coop_mission", topology, params: { ...p } };
 }
 
 function buildHWDProfile(topology: "dedicated" | "p2p", p: HostWorldDropInParams): MultiplayerProfile {
@@ -531,15 +544,119 @@ function BattleRoyaleForm({
   );
 }
 
+// --- Formulário do Co-op Mission ---
+// Layout: SimpleGrid 2-col (md+): [Time e bots | Catálogo (missões/dificuldades)] + [Métricas — full].
+function CoopMissionForm({
+  p,
+  set,
+}: {
+  p: CoopMissionParams;
+  set: <K extends keyof CoopMissionParams>(k: K, v: CoopMissionParams[K]) => void;
+}) {
+  const invalidStats = p.scoringStats.filter((s) => !STAT_RE.test(s));
+  const invalidMissions = p.missions.filter((s) => !STAT_RE.test(s));
+  const invalidDiffs = p.difficulties.filter((s) => !STAT_RE.test(s));
+
+  return (
+    <>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Fieldset legend="Time e bots">
+          <Stack gap="sm">
+            <NumberInput
+              label={
+                <FieldLabel
+                  label="Tamanho do time"
+                  help="Jogadores no time co-op (ex.: 4). Todos enfrentam o ambiente juntos e recebem o mesmo desfecho — sucesso ou falha da missão."
+                />
+              }
+              min={2}
+              value={p.teamSize}
+              onChange={(v) => set("teamSize", typeof v === "number" ? v : 2)}
+            />
+            <SwitchWithHelp
+              label="Bot-fill"
+              help="Se vagas humanas são preenchidas por bots (comportamento do data plane; o backend só armazena a flag). Permite jogar a missão sem o time cheio."
+              checked={p.botfillEnabled}
+              onChange={(v) => set("botfillEnabled", v)}
+            />
+          </Stack>
+        </Fieldset>
+
+        <Fieldset legend="Catálogo (data plane)">
+          <Stack gap="sm">
+            <TagsInput
+              label={
+                <FieldLabel
+                  label="Missões"
+                  help="Catálogo de missões que o host pode escolher (identificadores estáveis, ex.: salvage_op). O conteúdo real da missão mora no data plane; aqui só declaramos os identificadores. Pode ficar vazio."
+                />
+              }
+              description="Enter para adicionar. Identificadores em minúsculas."
+              value={p.missions}
+              onChange={(v) => set("missions", v)}
+              error={
+                invalidMissions.length > 0
+                  ? `Inválido: ${invalidMissions.join(", ")} (só minúsculas, começa com letra)`
+                  : undefined
+              }
+              clearable
+            />
+            <TagsInput
+              label={
+                <FieldLabel
+                  label="Dificuldades"
+                  help="Catálogo de dificuldades (ex.: hazard_1, hazard_5). Filtra a experiência, não o desfecho. Identificadores estáveis; pode ficar vazio."
+                />
+              }
+              description="Enter para adicionar. Identificadores em minúsculas."
+              value={p.difficulties}
+              onChange={(v) => set("difficulties", v)}
+              error={
+                invalidDiffs.length > 0
+                  ? `Inválido: ${invalidDiffs.join(", ")} (só minúsculas, começa com letra)`
+                  : undefined
+              }
+              clearable
+            />
+          </Stack>
+        </Fieldset>
+      </SimpleGrid>
+
+      <Fieldset legend="Métricas">
+        <TagsInput
+          label={
+            <FieldLabel
+              label="Stats de pontuação"
+              help="Métricas por jogador que o resultado carrega (ex.: kills, revives, ore_mined). Modulam recompensa/XP — não mudam o desfecho coletivo. Cada stat gera um leaderboard automático. Use identificadores em minúsculas."
+            />
+          }
+          description="Pressione Enter para adicionar cada stat."
+          value={p.scoringStats}
+          onChange={(v) => set("scoringStats", v)}
+          error={
+            invalidStats.length > 0
+              ? `Stat inválido: ${invalidStats.join(", ")} (só minúsculas, começa com letra)`
+              : undefined
+          }
+          clearable
+        />
+      </Fieldset>
+    </>
+  );
+}
+
 // --- Componente principal ---
 export function MultiplayerSettings({ gameId }: { gameId: string }) {
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(false);
   const [topology, setTopology] = useState<"dedicated" | "p2p">("dedicated");
-  const [archetype, setArchetype] = useState<"queue_arena" | "host_world_dropin" | "battle_royale">("queue_arena");
+  const [archetype, setArchetype] = useState<
+    "queue_arena" | "host_world_dropin" | "battle_royale" | "coop_mission"
+  >("queue_arena");
   const [qa, setQA] = useState<QueueArenaParams>(QA_DEFAULTS);
   const [hwd, setHWD] = useState<HostWorldDropInParams>(HWD_DEFAULTS);
   const [br, setBR] = useState<BattleRoyaleParams>(BR_DEFAULTS);
+  const [cm, setCM] = useState<CoopMissionParams>(CM_DEFAULTS);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -556,8 +673,10 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             setQA({ ...QA_DEFAULTS, ...profile.params });
           } else if (profile.archetype === "host_world_dropin") {
             setHWD({ ...HWD_DEFAULTS, ...profile.params });
-          } else {
+          } else if (profile.archetype === "battle_royale") {
             setBR({ ...BR_DEFAULTS, ...profile.params });
+          } else {
+            setCM({ ...CM_DEFAULTS, ...profile.params });
           }
         } else {
           setConfigured(false);
@@ -566,6 +685,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           setQA(QA_DEFAULTS);
           setHWD(HWD_DEFAULTS);
           setBR(BR_DEFAULTS);
+          setCM(CM_DEFAULTS);
         }
       })
       .catch((err) => {
@@ -591,12 +711,25 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
     setBR((prev) => ({ ...prev, [key]: value }));
   }
 
+  function setCMField<K extends keyof CoopMissionParams>(key: K, value: CoopMissionParams[K]) {
+    setCM((prev) => ({ ...prev, [key]: value }));
+  }
+
   const invalidQAStats = qa.scoringStats.filter((s) => !STAT_RE.test(s));
   const hwdRolesEmpty = archetype === "host_world_dropin" && hwd.enabledRoles.length === 0;
   const invalidBRStats = br.scoringStats.filter((s) => !STAT_RE.test(s));
   const brLobbyInvalid = archetype === "battle_royale" && br.lobbySize < 2 * br.teamSize;
+  const cmFieldsInvalid =
+    archetype === "coop_mission" &&
+    (cm.teamSize < 2 ||
+      [...cm.scoringStats, ...cm.missions, ...cm.difficulties].some((s) => !STAT_RE.test(s)));
   const canSave =
-    invalidQAStats.length === 0 && !hwdRolesEmpty && invalidBRStats.length === 0 && !brLobbyInvalid && !saving;
+    invalidQAStats.length === 0 &&
+    !hwdRolesEmpty &&
+    invalidBRStats.length === 0 &&
+    !brLobbyInvalid &&
+    !cmFieldsInvalid &&
+    !saving;
 
   async function save() {
     setSaving(true);
@@ -606,7 +739,9 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           ? buildQueueArenaProfile(topology, qa)
           : archetype === "host_world_dropin"
             ? buildHWDProfile(topology, hwd)
-            : buildBattleRoyaleProfile(topology, br);
+            : archetype === "battle_royale"
+              ? buildBattleRoyaleProfile(topology, br)
+              : buildCoopMissionProfile(topology, cm);
       await api.setMultiplayerProfile(gameId, profile);
       setConfigured(true);
       notifications.show({ color: "green", message: "Perfil de multiplayer salvo." });
@@ -637,7 +772,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             label={
               <FieldLabel
                 label="Arquétipo"
-                help="Define o modelo de multiplayer do jogo. Queue Arena: partida simétrica formada por fila (FFA ou NvN). Host World Drop-in: mundo persistente de um host onde phantoms entram com papéis assimétricos (estilo Soulslike)."
+                help="Define o modelo de multiplayer do jogo. Queue Arena: partida simétrica formada por fila (FFA ou NvN). Host World Drop-in: mundo persistente de um host onde phantoms entram com papéis assimétricos (estilo Soulslike). Battle Royale: lobby grande, colocação ordinal. Co-op Mission: time pequeno vs. ambiente, resultado coletivo (L4D/Deep Rock)."
               />
             }
             value={archetype}
@@ -647,6 +782,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
               { value: "queue_arena", label: "Queue Arena — partida simétrica (FFA / NvN)" },
               { value: "host_world_dropin", label: "Host World Drop-in — mundo persistente (Soulslike)" },
               { value: "battle_royale", label: "Battle Royale — lobby grande, colocação (PUBG/Fortnite)" },
+              { value: "coop_mission", label: "Co-op Mission — time vs. ambiente, resultado coletivo (L4D/Deep Rock)" },
             ]}
           />
 
@@ -676,8 +812,10 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
         <QueueArenaForm p={qa} set={setQAField} />
       ) : archetype === "host_world_dropin" ? (
         <HostWorldDropInForm p={hwd} set={setHWDField} />
-      ) : (
+      ) : archetype === "battle_royale" ? (
         <BattleRoyaleForm p={br} set={setBRField} />
+      ) : (
+        <CoopMissionForm p={cm} set={setCMField} />
       )}
 
       <Group>

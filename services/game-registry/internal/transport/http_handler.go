@@ -102,6 +102,14 @@ type battleRoyaleParamsDTO struct {
 	ScoringStats []string `json:"scoringStats,omitempty"`
 }
 
+type coopMissionParamsDTO struct {
+	TeamSize       int      `json:"teamSize,omitempty"`
+	Missions       []string `json:"missions,omitempty"`
+	Difficulties   []string `json:"difficulties,omitempty"`
+	BotfillEnabled bool     `json:"botfillEnabled"`
+	ScoringStats   []string `json:"scoringStats,omitempty"`
+}
+
 // gameWithProfileDTO estende o jogo com o perfil no GET /games/{id}. O perfil
 // serializa como objeto ou null (sem omitempty); a lista usa gameDTO puro.
 type gameWithProfileDTO struct {
@@ -141,6 +149,16 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			TeamSize:     br.TeamSize,
 			RespawnMode:  br.RespawnMode,
 			ScoringStats: br.ScoringStats,
+		}
+	case domain.ArchetypeCoopMission:
+		var cm coopMissionParamsDTO
+		_ = json.Unmarshal(d.Params, &cm)
+		p.CoopMission = &domain.CoopMissionParams{
+			TeamSize:       cm.TeamSize,
+			Missions:       cm.Missions,
+			Difficulties:   cm.Difficulties,
+			BotfillEnabled: cm.BotfillEnabled,
+			ScoringStats:   cm.ScoringStats,
 		}
 	}
 	return p
@@ -185,6 +203,18 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 				TeamSize:     br.TeamSize,
 				RespawnMode:  br.RespawnMode,
 				ScoringStats: br.ScoringStats,
+			})
+			d.Params = raw
+		}
+	case domain.ArchetypeCoopMission:
+		if p.CoopMission != nil {
+			cm := p.CoopMission
+			raw, _ := json.Marshal(coopMissionParamsDTO{
+				TeamSize:       cm.TeamSize,
+				Missions:       cm.Missions,
+				Difficulties:   cm.Difficulties,
+				BotfillEnabled: cm.BotfillEnabled,
+				ScoringStats:   cm.ScoringStats,
 			})
 			d.Params = raw
 		}

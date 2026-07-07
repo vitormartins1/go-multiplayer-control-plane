@@ -19,6 +19,7 @@ var (
 		domain.ArchetypeQueueArena:      true,
 		domain.ArchetypeHostWorldDropIn: true,
 		domain.ArchetypeBattleRoyale:    true,
+		domain.ArchetypeCoopMission:     true,
 	}
 	supportedTopologies = map[string]bool{domain.TopologyDedicated: true}
 
@@ -68,6 +69,13 @@ func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p do
 			return nil, domain.ErrInvalidProfileParams
 		}
 		if err := validateBattleRoyale(*p.BattleRoyale); err != nil {
+			return nil, err
+		}
+	case domain.ArchetypeCoopMission:
+		if p.CoopMission == nil {
+			return nil, domain.ErrInvalidProfileParams
+		}
+		if err := validateCoopMission(*p.CoopMission); err != nil {
 			return nil, err
 		}
 	}
@@ -138,6 +146,43 @@ func validateQueueArena(p domain.QueueArenaParams) error {
 		if !scoringStatRE.MatchString(stat) {
 			return domain.ErrInvalidProfileParams
 		}
+	}
+	return nil
+}
+
+// validateCoopMission aplica as regras do arquétipo coop_mission (ADR-0023,
+// ficha 04). Exige um time co-op válido (TeamSize >= 2). Missions e Difficulties
+// são catálogos declarados: identificadores estáveis sem duplicata (podem ser
+// vazios — o catálogo real mora no data plane). ScoringStats segue a convenção
+// dos demais arquétipos (regex-only, sem checagem de duplicata).
+func validateCoopMission(p domain.CoopMissionParams) error {
+	if p.TeamSize < 2 {
+		return domain.ErrInvalidProfileParams
+	}
+	if err := validateStableCatalog(p.Missions); err != nil {
+		return err
+	}
+	if err := validateStableCatalog(p.Difficulties); err != nil {
+		return err
+	}
+	for _, stat := range p.ScoringStats {
+		if !scoringStatRE.MatchString(stat) {
+			return domain.ErrInvalidProfileParams
+		}
+	}
+	return nil
+}
+
+// validateStableCatalog valida uma lista de identificadores estáveis sem
+// duplicata (missions/difficulties). Lista vazia é válida. Erro:
+// ErrInvalidProfileParams.
+func validateStableCatalog(items []string) error {
+	seen := make(map[string]bool, len(items))
+	for _, it := range items {
+		if !scoringStatRE.MatchString(it) || seen[it] {
+			return domain.ErrInvalidProfileParams
+		}
+		seen[it] = true
 	}
 	return nil
 }
