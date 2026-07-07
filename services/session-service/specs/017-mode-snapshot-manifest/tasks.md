@@ -9,4 +9,4 @@
 - [x] T7 — transport: gRPC (normalização default, GetSessionConfig, FailedPrecondition) + `modeId` no board admin (e passthrough tipado no admin-bff se houver)
 - [x] T8 — main: wiring do cache
 - [x] T9 — testes: casos da spec + migração mecânica dos mocks/arranges; suíte verde `-race`, lint
-- [ ] T10 — docs: 4 contratos de data plane (claim `mode_id` + seção manifest + migração first-to-5 no queue_arena)
+- [x] T10 — docs: 4 contratos de data plane (claim `mode_id` + seção manifest + migração first-to-5 no queue_arena)

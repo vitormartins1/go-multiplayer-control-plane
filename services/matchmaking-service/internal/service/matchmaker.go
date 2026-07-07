@@ -22,6 +22,7 @@ const provisionTimeout = 5 * time.Second
 
 type ticket struct {
 	gameID   string // o jogo do ticket — só casa com tickets do mesmo jogo
+	modeID   string // o modo do ticket (ADR-0024) — só casa com o mesmo (jogo, modo)
 	playerID string
 	format   domain.MatchFormat      // formação do match, derivada do perfil no Join (ADR-0023)
 	ch       chan domain.MatchResult // buffer 1: a entrega nunca bloqueia
@@ -56,16 +57,16 @@ func New(interval time.Duration, provider domain.ProfileProvider, provisioner do
 
 // Join enfileira o jogador (um ticket por jogador) e devolve o canal do Match.
 // Quando o ctx é cancelado (stream fechado), o ticket sai da fila.
-func (m *Matchmaker) Join(ctx context.Context, gameID, playerID string) (<-chan domain.MatchResult, error) {
-	// A formação do match vem do perfil do jogo (ADR-0023). Resolver antes de
-	// enfileirar: se o jogo não tem perfil utilizável, o ticket não entra na fila
-	// (ErrProfileUnavailable). Fora da seção crítica — nada de I/O sob o lock.
-	format, err := m.provider.Format(ctx, gameID)
+func (m *Matchmaker) Join(ctx context.Context, gameID, modeID, playerID string) (<-chan domain.MatchResult, error) {
+	// A formação vem do perfil do MODO (ADR-0023/0024). Resolver antes de
+	// enfileirar: se o (jogo, modo) não tem perfil utilizável, o ticket não entra
+	// na fila (ErrProfileUnavailable). Fora da seção crítica — nada de I/O sob o lock.
+	format, err := m.provider.Format(ctx, gameID, modeID)
 	if err != nil {
 		return nil, err
 	}
 
-	t := &ticket{gameID: gameID, playerID: playerID, format: format, ch: make(chan domain.MatchResult, 1)}
+	t := &ticket{gameID: gameID, modeID: modeID, playerID: playerID, format: format, ch: make(chan domain.MatchResult, 1)}
 
 	m.mu.Lock()
 	m.removeByPlayerLocked(playerID) // garante um ticket por jogador
@@ -94,21 +95,28 @@ func (m *Matchmaker) Run(ctx context.Context) {
 	}
 }
 
-// tryForm agrupa matchSize tickets do MESMO jogo (FIFO por jogo) e, fora da
-// seção crítica, dispara uma goroutine por match para provisionar a sessão.
-// Jogadores de jogos diferentes nunca entram no mesmo match (ADR-0017).
+// queueKey agrupa a fila por (jogo, modo): jogadores de jogos diferentes
+// (ADR-0017) OU de modos diferentes (ADR-0024) nunca entram no mesmo match.
+type queueKey struct {
+	gameID string
+	modeID string
+}
+
+// tryForm agrupa matchSize tickets do MESMO (jogo, modo) — FIFO por chave — e,
+// fora da seção crítica, dispara uma goroutine por match para provisionar.
 func (m *Matchmaker) tryForm() {
 	var formed [][]*ticket
 
 	m.mu.Lock()
-	// agrupa por jogo preservando a ordem de chegada.
-	byGame := map[string][]*ticket{}
+	// agrupa por (jogo, modo) preservando a ordem de chegada.
+	byGame := map[queueKey][]*ticket{}
 	for _, t := range m.queue {
-		byGame[t.gameID] = append(byGame[t.gameID], t)
+		k := queueKey{gameID: t.gameID, modeID: t.modeID}
+		byGame[k] = append(byGame[k], t)
 	}
 	taken := map[*ticket]bool{}
 	for _, ts := range byGame {
-		// tickets do mesmo jogo compartilham a formação (derivada do perfil no Join).
+		// tickets da mesma chave compartilham a formação (derivada do perfil no Join).
 		size := ts[0].format.Size
 		for len(ts) >= size {
 			group := ts[:size:size]
@@ -139,12 +147,13 @@ func (m *Matchmaker) tryForm() {
 // no sucesso, o connect token do PRÓPRIO jogador; na falha, MatchResult{Failed}.
 func (m *Matchmaker) provision(matchID string, group []*ticket) {
 	players := playerIDs(group)
-	gameID := group[0].gameID // o grupo é de um único jogo
+	gameID := group[0].gameID // o grupo é de um único (jogo, modo)
+	modeID := group[0].modeID
 	teams := composeTeams(group)
 
 	ctx, cancel := context.WithTimeout(m.baseCtx, provisionTimeout)
 	defer cancel()
-	prov, err := m.provisioner.Provision(ctx, matchID, teams, gameID)
+	prov, err := m.provisioner.Provision(ctx, matchID, teams, gameID, modeID)
 	if err != nil {
 		m.deliverFailure(group, matchID, players, reasonFor(err))
 		return

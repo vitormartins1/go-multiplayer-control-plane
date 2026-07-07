@@ -35,7 +35,7 @@ func (fakeVerifier) Verify(_ context.Context, token string) (string, error) {
 // provisionerFunc adapta uma func à Port domain.SessionProvisioner.
 type provisionerFunc func(matchID string, teams []domain.TeamAssignment) (domain.Provisioned, error)
 
-func (f provisionerFunc) Provision(_ context.Context, matchID string, teams []domain.TeamAssignment, _ string) (domain.Provisioned, error) {
+func (f provisionerFunc) Provision(_ context.Context, matchID string, teams []domain.TeamAssignment, _, _ string) (domain.Provisioned, error) {
 	return f(matchID, teams)
 }
 
@@ -56,7 +56,7 @@ type stubProvider struct {
 	err  error
 }
 
-func (s stubProvider) Format(context.Context, string) (domain.MatchFormat, error) {
+func (s stubProvider) Format(context.Context, string, string) (domain.MatchFormat, error) {
 	return domain.MatchFormat{Size: s.size, Structure: domain.StructureFFA}, s.err
 }
 
@@ -111,7 +111,7 @@ type stubInvader struct {
 	gotPlayerID *string
 }
 
-func (s stubInvader) Invade(_ context.Context, _, playerID string, _ domain.InvaderCriteria) (domain.Invaded, error) {
+func (s stubInvader) Invade(_ context.Context, _, _, playerID string, _ domain.InvaderCriteria) (domain.Invaded, error) {
 	if s.gotPlayerID != nil {
 		*s.gotPlayerID = playerID
 	}
@@ -121,7 +121,7 @@ func (s stubInvader) Invade(_ context.Context, _, playerID string, _ domain.Inva
 // coopPolicyStub / injectorStub alimentam um Summoner real nos testes de co-op.
 type coopPolicyStub struct{ policy domain.CoopPolicy }
 
-func (c coopPolicyStub) CoopPolicy(context.Context, string) (domain.CoopPolicy, error) {
+func (c coopPolicyStub) CoopPolicy(context.Context, string, string) (domain.CoopPolicy, error) {
 	return c.policy, nil
 }
 

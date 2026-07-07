@@ -34,12 +34,13 @@ func New(session sessionv1.SessionClient) *Client {
 
 // Provision chama o CreateSession do session e traduz a resposta para o domínio.
 // codes.ResourceExhausted (pool esgotado) vira domain.ErrNoServer.
-func (c *Client) Provision(ctx context.Context, matchID string, teams []domain.TeamAssignment, gameID string) (domain.Provisioned, error) {
+func (c *Client) Provision(ctx context.Context, matchID string, teams []domain.TeamAssignment, gameID, modeID string) (domain.Provisioned, error) {
 	players, pbTeams := flattenTeams(teams)
 	resp, err := c.session.CreateSession(ctx, &sessionv1.CreateSessionRequest{
 		MatchId: matchID,
 		Players: players,
 		GameId:  gameID,
+		ModeId:  modeID, // o session congela o snapshot do perfil do modo (ADR-0024)
 		Teams:   pbTeams,
 	})
 	if err != nil {

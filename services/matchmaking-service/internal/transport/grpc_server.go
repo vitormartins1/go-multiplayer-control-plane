@@ -30,15 +30,24 @@ func NewServer(mm domain.Matchmaker, inv domain.Invader, sum domain.Summoner) *S
 	return &Server{mm: mm, inv: inv, sum: sum}
 }
 
-// FindMatch enfileira o jogador no jogo e transmite o status do ticket até o
-// match. O game_id vem do request (contexto do cliente, ADR-0017).
+// normalizeMode aplica a retrocompat do ADR-0024 na borda: mode_id ausente/
+// vazio = "default". Domain/service sempre recebem um modo não-vazio.
+func normalizeMode(modeID string) string {
+	if modeID == "" {
+		return domain.DefaultModeID
+	}
+	return modeID
+}
+
+// FindMatch enfileira o jogador no (jogo, modo) e transmite o status do ticket
+// até o match. game_id/mode_id vêm do request (contexto do cliente, ADR-0017/0024).
 func (s *Server) FindMatch(req *pb.FindMatchRequest, stream pb.Matchmaking_FindMatchServer) error {
 	gameID := req.GetGameId()
 	if gameID == "" {
 		return status.Error(codes.InvalidArgument, "game_id é obrigatório")
 	}
 	playerID := playerIDFromContext(stream.Context())
-	ch, err := s.mm.Join(stream.Context(), gameID, playerID)
+	ch, err := s.mm.Join(stream.Context(), gameID, normalizeMode(req.GetModeId()), playerID)
 	if err != nil {
 		if errors.Is(err, domain.ErrProfileUnavailable) {
 			// jogo sem perfil de multiplayer utilizável (ADR-0023): não dá para
@@ -83,7 +92,7 @@ func (s *Server) Invade(ctx context.Context, req *pb.InvadeRequest) (*pb.InvadeR
 	playerID := playerIDFromContext(ctx)
 	crit := domain.InvaderCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
 
-	invaded, err := s.inv.Invade(ctx, gameID, playerID, crit)
+	invaded, err := s.inv.Invade(ctx, gameID, normalizeMode(req.GetModeId()), playerID, crit)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvasionNotSupported):
@@ -115,7 +124,7 @@ func (s *Server) PostSummonSign(req *pb.PostSummonSignRequest, stream pb.Matchma
 	playerID := playerIDFromContext(stream.Context())
 	crit := domain.CoopCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
 
-	signID, ch, err := s.sum.PostSign(stream.Context(), gameID, playerID, crit)
+	signID, ch, err := s.sum.PostSign(stream.Context(), gameID, normalizeMode(req.GetModeId()), playerID, crit)
 	if err != nil {
 		return coopError(err, "post summon sign")
 	}
@@ -149,7 +158,7 @@ func (s *Server) ListSigns(ctx context.Context, req *pb.ListSignsRequest) (*pb.L
 		return nil, status.Error(codes.InvalidArgument, "game_id é obrigatório")
 	}
 	host := domain.CoopCriteria{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetHostWeaponTier())}
-	signs, err := s.sum.ListSigns(ctx, gameID, host)
+	signs, err := s.sum.ListSigns(ctx, gameID, normalizeMode(req.GetModeId()), host)
 	if err != nil {
 		return nil, coopError(err, "list signs")
 	}

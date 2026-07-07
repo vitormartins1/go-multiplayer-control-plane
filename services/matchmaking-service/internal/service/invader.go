@@ -53,8 +53,8 @@ func NewInvader(policies domain.InvasionPolicyProvider, directory domain.WorldDi
 // (domain.Eligible) e injeta o invasor no primeiro elegível. A corrida
 // listar→injetar (mundo encheu: ErrRoleFull) ou o mundo que fechou
 // (ErrWorldNotFound) apenas descartam o candidato e seguem para o próximo.
-func (in *Invader) Invade(ctx context.Context, gameID, playerID string, crit domain.InvaderCriteria) (domain.Invaded, error) {
-	policy, err := in.policyOf(ctx, gameID)
+func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, crit domain.InvaderCriteria) (domain.Invaded, error) {
+	policy, err := in.policyOf(ctx, gameID, modeID)
 	if err != nil {
 		return domain.Invaded{}, err // ErrProfileUnavailable propaga
 	}
@@ -89,10 +89,10 @@ func (in *Invader) Invade(ctx context.Context, gameID, playerID string, crit dom
 }
 
 // policyOf lê a política com timeout próprio.
-func (in *Invader) policyOf(ctx context.Context, gameID string) (domain.InvasionPolicy, error) {
+func (in *Invader) policyOf(ctx context.Context, gameID, modeID string) (domain.InvasionPolicy, error) {
 	ctx, cancel := context.WithTimeout(ctx, invadeTimeout)
 	defer cancel()
-	return in.policies.InvasionPolicy(ctx, gameID)
+	return in.policies.InvasionPolicy(ctx, gameID, modeID)
 }
 
 // listWorlds lista os mundos invadíveis com timeout próprio.

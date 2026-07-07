@@ -30,7 +30,7 @@ func newFakeProvider(defSize int) *fakeProvider {
 	}
 }
 
-func (f *fakeProvider) Format(_ context.Context, gameID string) (domain.MatchFormat, error) {
+func (f *fakeProvider) Format(_ context.Context, gameID, _ string) (domain.MatchFormat, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -48,6 +48,7 @@ type fakeProvisioner struct {
 	mu       sync.Mutex
 	fn       func(matchID string, teams []domain.TeamAssignment) (domain.Provisioned, error)
 	gotGames []string                  // game_ids recebidos (para o teste de isolamento)
+	gotModes []string                  // mode_ids recebidos (ADR-0024)
 	gotTeams [][]domain.TeamAssignment // composições recebidas (para o teste de times)
 }
 
@@ -57,10 +58,11 @@ func (f *fakeProvisioner) set(fn func(matchID string, teams []domain.TeamAssignm
 	f.fn = fn
 }
 
-func (f *fakeProvisioner) Provision(_ context.Context, matchID string, teams []domain.TeamAssignment, gameID string) (domain.Provisioned, error) {
+func (f *fakeProvisioner) Provision(_ context.Context, matchID string, teams []domain.TeamAssignment, gameID, modeID string) (domain.Provisioned, error) {
 	f.mu.Lock()
 	fn := f.fn
 	f.gotGames = append(f.gotGames, gameID)
+	f.gotModes = append(f.gotModes, modeID)
 	f.gotTeams = append(f.gotTeams, teams)
 	f.mu.Unlock()
 	return fn(matchID, teams)
@@ -90,8 +92,8 @@ func TestProvision_MatchSizeJogadores_TokenPorJogador(t *testing.T) {
 	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ctx := context.Background()
 
-	ch1, _ := mm.Join(ctx, "game-1", "p1")
-	ch2, _ := mm.Join(ctx, "game-1", "p2")
+	ch1, _ := mm.Join(ctx, "game-1", "default", "p1")
+	ch2, _ := mm.Join(ctx, "game-1", "default", "p2")
 	mm.tryForm()
 
 	m1 := <-ch1
@@ -112,8 +114,8 @@ func TestProvision_SemServer_EntregaFailed(t *testing.T) {
 	})
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
-	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
-	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
+	ch1, _ := mm.Join(context.Background(), "game-1", "default", "p1")
+	ch2, _ := mm.Join(context.Background(), "game-1", "default", "p2")
 	mm.tryForm()
 
 	m1 := <-ch1
@@ -131,8 +133,8 @@ func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
 	})
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
-	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
-	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
+	ch1, _ := mm.Join(context.Background(), "game-1", "default", "p1")
+	ch2, _ := mm.Join(context.Background(), "game-1", "default", "p2")
 	mm.tryForm()
 
 	m1 := <-ch1
@@ -148,8 +150,8 @@ func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 	})
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
-	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
-	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
+	ch1, _ := mm.Join(context.Background(), "game-1", "default", "p1")
+	ch2, _ := mm.Join(context.Background(), "game-1", "default", "p2")
 	mm.tryForm()
 	<-ch1
 	<-ch2 // ambos falharam, saíram da fila
@@ -158,8 +160,8 @@ func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 	prov.set(func(_ string, teams []domain.TeamAssignment) (domain.Provisioned, error) {
 		return domain.Provisioned{ServerAddress: "10.0.0.2:7777", Tokens: tokensFor(teams)}, nil
 	})
-	ch1b, _ := mm.Join(context.Background(), "game-1", "p1")
-	ch2b, _ := mm.Join(context.Background(), "game-1", "p2")
+	ch1b, _ := mm.Join(context.Background(), "game-1", "default", "p1")
+	ch2b, _ := mm.Join(context.Background(), "game-1", "default", "p2")
 	mm.tryForm()
 
 	m := <-ch1b
@@ -170,7 +172,7 @@ func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 
 func TestTryForm_MenosQueMatchSize_NaoForma(t *testing.T) {
 	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
-	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
+	ch1, _ := mm.Join(context.Background(), "game-1", "default", "p1")
 	mm.tryForm()
 
 	select {
@@ -184,8 +186,8 @@ func TestTryForm_MenosQueMatchSize_NaoForma(t *testing.T) {
 func TestJoin_Cancelado_SaiDaFila(t *testing.T) {
 	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	mm.Join(ctx1, "game-1", "p1")
-	ch2, _ := mm.Join(context.Background(), "game-1", "p2")
+	mm.Join(ctx1, "game-1", "default", "p1")
+	ch2, _ := mm.Join(context.Background(), "game-1", "default", "p2")
 
 	cancel1() // p1 sai
 	require.Eventually(t, func() bool { return mm.QueueSize() == 1 }, time.Second, 10*time.Millisecond)
@@ -201,8 +203,8 @@ func TestJoin_Cancelado_SaiDaFila(t *testing.T) {
 func TestJoin_MesmoJogador_UmTicket(t *testing.T) {
 	mm := New(time.Hour, newFakeProvider(2), successProvisioner())
 	ctx := context.Background()
-	mm.Join(ctx, "game-1", "p1")
-	mm.Join(ctx, "game-1", "p1") // segundo Join do mesmo jogador
+	mm.Join(ctx, "game-1", "default", "p1")
+	mm.Join(ctx, "game-1", "default", "p1") // segundo Join do mesmo jogador
 
 	assert.Equal(t, 1, mm.QueueSize(), "um ticket por jogador")
 }
@@ -213,8 +215,8 @@ func TestRun_FormaPeloTicker(t *testing.T) {
 	defer cancel()
 	go mm.Run(ctx)
 
-	ch1, _ := mm.Join(ctx, "game-1", "p1")
-	ch2, _ := mm.Join(ctx, "game-1", "p2")
+	ch1, _ := mm.Join(ctx, "game-1", "default", "p1")
+	ch2, _ := mm.Join(ctx, "game-1", "default", "p2")
 
 	select {
 	case m := <-ch1:
@@ -232,7 +234,7 @@ func TestJoin_TamanhoDoPerfil_FormaComQuatro(t *testing.T) {
 
 	var chs []<-chan domain.MatchResult
 	for _, p := range []string{"p1", "p2", "p3", "p4"} {
-		ch, err := mm.Join(ctx, "game-1", p)
+		ch, err := mm.Join(ctx, "game-1", "default", p)
 		require.NoError(t, err)
 		chs = append(chs, ch)
 	}
@@ -256,11 +258,11 @@ func TestJoin_JogosComTamanhosDiferentes_FormamIndependente(t *testing.T) {
 	ctx := context.Background()
 
 	// game-a: 2 jogadores (forma); game-b: 3 jogadores (forma).
-	a1, _ := mm.Join(ctx, "game-a", "a1")
-	a2, _ := mm.Join(ctx, "game-a", "a2")
-	b1, _ := mm.Join(ctx, "game-b", "b1")
-	b2, _ := mm.Join(ctx, "game-b", "b2")
-	b3, _ := mm.Join(ctx, "game-b", "b3")
+	a1, _ := mm.Join(ctx, "game-a", "default", "a1")
+	a2, _ := mm.Join(ctx, "game-a", "default", "a2")
+	b1, _ := mm.Join(ctx, "game-b", "default", "b1")
+	b2, _ := mm.Join(ctx, "game-b", "default", "b2")
+	b3, _ := mm.Join(ctx, "game-b", "default", "b3")
 	mm.tryForm()
 
 	ma := <-a1
@@ -278,7 +280,7 @@ func TestJoin_PerfilIndisponivel_NaoEntraNaFila(t *testing.T) {
 	prov.err = domain.ErrProfileUnavailable
 	mm := New(time.Hour, prov, successProvisioner())
 
-	ch, err := mm.Join(context.Background(), "sem-perfil", "p1")
+	ch, err := mm.Join(context.Background(), "sem-perfil", "default", "p1")
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 	assert.Nil(t, ch)
 	assert.Equal(t, 0, mm.QueueSize(), "ticket não entra na fila sem perfil")
@@ -289,8 +291,8 @@ func TestTryForm_JogosDiferentes_NaoCasam(t *testing.T) {
 	mm := New(time.Hour, newFakeProvider(2), prov)
 	ctx := context.Background()
 
-	chA, _ := mm.Join(ctx, "game-a", "p1")
-	chB, _ := mm.Join(ctx, "game-b", "p2") // jogo diferente
+	chA, _ := mm.Join(ctx, "game-a", "default", "p1")
+	chB, _ := mm.Join(ctx, "game-b", "default", "p2") // jogo diferente
 	mm.tryForm()
 
 	// nenhum forma: só 1 jogador por jogo.
@@ -304,7 +306,7 @@ func TestTryForm_JogosDiferentes_NaoCasam(t *testing.T) {
 	assert.Equal(t, 2, mm.QueueSize())
 
 	// chega outro jogador no game-a -> forma só no game-a.
-	chA2, _ := mm.Join(ctx, "game-a", "p3")
+	chA2, _ := mm.Join(ctx, "game-a", "default", "p3")
 	mm.tryForm()
 	m := <-chA
 	<-chA2
@@ -331,7 +333,7 @@ func TestTryForm_Teams_ParticionaEmLados(t *testing.T) {
 
 	var chs []<-chan domain.MatchResult
 	for _, p := range []string{"p1", "p2", "p3", "p4"} {
-		ch, _ := mm.Join(ctx, "game-1", p)
+		ch, _ := mm.Join(ctx, "game-1", "default", p)
 		chs = append(chs, ch)
 	}
 	mm.tryForm()
@@ -360,7 +362,7 @@ func TestTryForm_Teams3x3_SeisJogadoresDoisTimesDeTres(t *testing.T) {
 
 	var chs []<-chan domain.MatchResult
 	for _, p := range []string{"a", "b", "c", "d", "e", "f"} {
-		ch, _ := mm.Join(ctx, "g", p)
+		ch, _ := mm.Join(ctx, "g", "default", p)
 		chs = append(chs, ch)
 	}
 	mm.tryForm()
@@ -387,7 +389,7 @@ func TestTryForm_CoopMission_TimeUnico(t *testing.T) {
 
 	var chs []<-chan domain.MatchResult
 	for _, p := range []string{"p1", "p2", "p3", "p4"} {
-		ch, _ := mm.Join(ctx, "coop", p)
+		ch, _ := mm.Join(ctx, "coop", "default", p)
 		chs = append(chs, ch)
 	}
 	mm.tryForm()
@@ -415,7 +417,7 @@ func TestTryForm_Squads_ParticionaEmSquadsCheios(t *testing.T) {
 
 	var chs []<-chan domain.MatchResult
 	for _, p := range []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
-		ch, _ := mm.Join(ctx, "br", p)
+		ch, _ := mm.Join(ctx, "br", "default", p)
 		chs = append(chs, ch)
 	}
 	mm.tryForm()
@@ -446,7 +448,7 @@ func TestTryForm_Squads_UltimoSquadRagged(t *testing.T) {
 	var chs []<-chan domain.MatchResult
 	players := []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"}
 	for _, p := range players {
-		ch, _ := mm.Join(ctx, "br", p)
+		ch, _ := mm.Join(ctx, "br", "default", p)
 		chs = append(chs, ch)
 	}
 	mm.tryForm()
@@ -480,7 +482,7 @@ func TestTryForm_BattleRoyaleSolo_FFA(t *testing.T) {
 
 	var chs []<-chan domain.MatchResult
 	for _, p := range []string{"p1", "p2", "p3"} {
-		ch, _ := mm.Join(ctx, "br", p)
+		ch, _ := mm.Join(ctx, "br", "default", p)
 		chs = append(chs, ch)
 	}
 	mm.tryForm()
@@ -502,8 +504,8 @@ func TestTryForm_FFA_UmAssignmentSemTime(t *testing.T) {
 	mm := New(time.Hour, newFakeProvider(2), prov)
 	ctx := context.Background()
 
-	ch1, _ := mm.Join(ctx, "game-1", "p1")
-	ch2, _ := mm.Join(ctx, "game-1", "p2")
+	ch1, _ := mm.Join(ctx, "game-1", "default", "p1")
+	ch2, _ := mm.Join(ctx, "game-1", "default", "p2")
 	mm.tryForm()
 	<-ch1
 	<-ch2

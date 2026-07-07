@@ -71,10 +71,11 @@ type profileResponse struct {
 	} `json:"params"`
 }
 
-// getProfile faz o GET do perfil e decodifica. Erro de rede/status/parse vira
-// ErrProfileUnavailable — compartilhado por Format (queue_arena) e InvasionPolicy.
-func (c *Client) getProfile(ctx context.Context, gameID string) (profileResponse, error) {
-	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
+// getProfile faz o GET do perfil do MODO (ADR-0024: URL da coleção do M0; o
+// alias legado saiu) e decodifica. Erro de rede/status/parse vira
+// ErrProfileUnavailable — compartilhado por Format, InvasionPolicy e CoopPolicy.
+func (c *Client) getProfile(ctx context.Context, gameID, modeID string) (profileResponse, error) {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profiles/" + url.PathEscape(modeID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return profileResponse{}, fmt.Errorf("registryclient: build request: %w", err)
@@ -98,8 +99,8 @@ func (c *Client) getProfile(ctx context.Context, gameID string) (profileResponse
 // != host_world_dropin devolve a policy com o Archetype preenchido (SupportsInvasion
 // = false) — o service decide ErrInvasionNotSupported. Rede/404/parse →
 // ErrProfileUnavailable.
-func (c *Client) InvasionPolicy(ctx context.Context, gameID string) (domain.InvasionPolicy, error) {
-	p, err := c.getProfile(ctx, gameID)
+func (c *Client) InvasionPolicy(ctx context.Context, gameID, modeID string) (domain.InvasionPolicy, error) {
+	p, err := c.getProfile(ctx, gameID, modeID)
 	if err != nil {
 		return domain.InvasionPolicy{}, err
 	}
@@ -115,8 +116,8 @@ func (c *Client) InvasionPolicy(ctx context.Context, gameID string) (domain.Inva
 // params.enabledRoles contém "coop". Arquétipo != host_world_dropin devolve a
 // policy com o Archetype preenchido (SupportsCoop = false) — o service decide
 // ErrCoopNotSupported. Rede/404/parse → ErrProfileUnavailable.
-func (c *Client) CoopPolicy(ctx context.Context, gameID string) (domain.CoopPolicy, error) {
-	p, err := c.getProfile(ctx, gameID)
+func (c *Client) CoopPolicy(ctx context.Context, gameID, modeID string) (domain.CoopPolicy, error) {
+	p, err := c.getProfile(ctx, gameID, modeID)
 	if err != nil {
 		return domain.CoopPolicy{}, err
 	}
@@ -141,8 +142,8 @@ func (c *Client) CoopPolicy(ctx context.Context, gameID string) (domain.CoopPoli
 // entrar na fila. Serve queue_arena (ffa/teams), battle_royale (ffa/squads) e
 // coop_mission (um único time = teams com TeamCount=1); host_world_dropin não
 // usa fila.
-func (c *Client) Format(ctx context.Context, gameID string) (domain.MatchFormat, error) {
-	p, err := c.getProfile(ctx, gameID)
+func (c *Client) Format(ctx context.Context, gameID, modeID string) (domain.MatchFormat, error) {
+	p, err := c.getProfile(ctx, gameID, modeID)
 	if err != nil {
 		return domain.MatchFormat{}, err
 	}

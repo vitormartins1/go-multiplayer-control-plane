@@ -9,6 +9,7 @@ import (
 // disponibilidade para ajudar, com a sua faixa. Dado puro — o canal de entrega e
 // o estado (active/claimed) vivem no store interno do serviço, não aqui.
 type Sign struct {
+	ModeID string // modo do jogo (ADR-0024): o sinal só casa com hosts do mesmo modo
 	SignID     string
 	GameID     string
 	PlayerID   string // o aliado que anunciou
@@ -95,11 +96,11 @@ type Summoner interface {
 	// o Summoned chega quando um host o invoca (server-streaming: o aliado aguarda).
 	// O canal é fechado sem valor se o sinal expira/cancela (o handler manda EXPIRED).
 	// ErrCoopNotSupported se o jogo não aceita co-op. O playerID vem do JWT.
-	PostSign(ctx context.Context, gameID, playerID string, crit CoopCriteria) (signID string, updates <-chan Summoned, err error)
+	PostSign(ctx context.Context, gameID, modeID, playerID string, crit CoopCriteria) (signID string, updates <-chan Summoned, err error)
 	// ListSigns devolve os sinais ativos do jogo compatíveis com o mundo do host
 	// (faixa de co-op). Lista vazia se nada casa. ErrCoopNotSupported se o jogo não
 	// aceita co-op.
-	ListSigns(ctx context.Context, gameID string, host CoopCriteria) ([]Sign, error)
+	ListSigns(ctx context.Context, gameID, modeID string, host CoopCriteria) ([]Sign, error)
 	// Summon injeta o aliado do sinal no mundo sessionID como coop, consome o sinal
 	// (no máximo uma vez) e entrega o Summoned ao aliado pelo canal. Devolve o
 	// playerID do aliado invocado. ErrSignNotFound, ErrSignConsumed, ErrRoleFull,
@@ -113,5 +114,5 @@ type Summoner interface {
 // game-registry (spec 007). Irmã do InvasionPolicyProvider — mesma origem, campos
 // distintos. ErrProfileUnavailable em falha de leitura.
 type CoopPolicyProvider interface {
-	CoopPolicy(ctx context.Context, gameID string) (CoopPolicy, error)
+	CoopPolicy(ctx context.Context, gameID, modeID string) (CoopPolicy, error)
 }
