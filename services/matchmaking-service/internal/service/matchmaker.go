@@ -233,20 +233,35 @@ func playerIDs(ts []*ticket) []string {
 }
 
 // composeTeams particiona o grupo em lados conforme a formação do jogo
-// (ADR-0023). teams: blocos contíguos de teamSize na ordem FIFO, rótulos
-// "team-1".."team-N". ffa: um único assignment sem TeamID com todos os
-// jogadores. O grupo tem exatamente Size = TeamCount*TeamSize tickets (garantido
-// por tryForm), então o fatiamento é seguro. Atribuição posicional, sem
-// skill/MMR (backlog).
+// (ADR-0023). Atribuição posicional (ordem FIFO), sem skill/MMR (backlog).
+//   - teams (queue_arena): blocos contíguos de teamSize, rótulos "team-1".."team-N".
+//     O grupo tem exatamente Size = TeamCount*TeamSize tickets (garantido por tryForm).
+//   - squads (battle_royale): blocos de teamSize, rótulos "squad-1".."squad-K".
+//     lobbySize pode não ser múltiplo de teamSize → o último squad é "ragged"
+//     (menor). K = ⌈len/teamSize⌉.
+//   - ffa (queue_arena FFA e battle_royale solo): um único assignment sem TeamID
+//     com todos os jogadores.
 func composeTeams(group []*ticket) []domain.TeamAssignment {
 	format := group[0].format
-	if format.Structure != domain.StructureTeams {
+	switch format.Structure {
+	case domain.StructureTeams:
+		teams := make([]domain.TeamAssignment, 0, format.TeamCount)
+		for k := 0; k < format.TeamCount; k++ {
+			members := playerIDs(group[k*format.TeamSize : (k+1)*format.TeamSize])
+			teams = append(teams, domain.TeamAssignment{TeamID: fmt.Sprintf("team-%d", k+1), Players: members})
+		}
+		return teams
+	case domain.StructureSquads:
+		var squads []domain.TeamAssignment
+		for i, k := 0, 1; i < len(group); i, k = i+format.TeamSize, k+1 {
+			end := i + format.TeamSize
+			if end > len(group) {
+				end = len(group) // último squad ragged
+			}
+			squads = append(squads, domain.TeamAssignment{TeamID: fmt.Sprintf("squad-%d", k), Players: playerIDs(group[i:end])})
+		}
+		return squads
+	default: // ffa
 		return []domain.TeamAssignment{{Players: playerIDs(group)}}
 	}
-	teams := make([]domain.TeamAssignment, 0, format.TeamCount)
-	for k := 0; k < format.TeamCount; k++ {
-		members := playerIDs(group[k*format.TeamSize : (k+1)*format.TeamSize])
-		teams = append(teams, domain.TeamAssignment{TeamID: fmt.Sprintf("team-%d", k+1), Players: members})
-	}
-	return teams
 }
