@@ -1075,3 +1075,31 @@ case summoned, ok := <-ch:
 **Contraste com C#:** o equivalente seria um `TaskCompletionSource<Summoned?>` com `TrySetResult(value)` vs `TrySetResult(null)` (ou `TrySetCanceled`) — dá para fazer, mas o "canal como fila + fechamento" do Go junta **entrega** e **fim de vida** numa primitiva só, e o `select` compõe isso com o cancelamento do stream (`ctx.Done()`) de forma uniforme.
 
 **Pegadinha / nuance:** `send` num canal **fechado** dá **panic** — então "enviar" (`Summon`) e "fechar" (`SweepExpired`/`CancelSign`) precisam ser **mutuamente exclusivos**. É o que o estado `claimed` garante: ao iniciar uma invocação, o sinal vira `claimed` **sob o lock** e some da varredura/cancelamento; só o `Summon` que ganhou a transição envia. O canal tem **buffer 1** para o `send` nunca bloquear o `Summon` (o handler pode ainda não estar no `receive`). E o "consumido não é o mesmo que inexistente": um `Summon` de um sinal já consumido deve dizer `ErrSignConsumed`, não `ErrSignNotFound` — por isso o store guarda um **tombstone** (`consumed map[signID]time.Time`, limpo pelo sweeper) além do mapa de ativos; deletar e pronto perderia a distinção que a idempotência precisa.
+
+## 30 — Module path é a identidade do código: renomear o repo é renomear todos os imports
+
+**O que é / por que importa:** em Go, o **module path** (`module github.com/vitormartins1/go-multiplayer-control-plane` no `go.mod`) não é só o "nome do projeto" — é o **prefixo literal de todo import interno**. Diferente de C#, onde renomear o repositório/assembly não muda os `using` (namespace e assembly são identidades separadas do local do código), em Go **o nome do módulo É o caminho de import**: renomear o repo implica reescrever o `go.mod` **e cada linha de import** que aponte para dentro dele (aqui: 128 arquivos). Não existe "alias de módulo" para esconder isso — a identidade é única e explícita.
+
+**Onde no projeto:** rename `go-game-backend` → `go-multiplayer-control-plane` (2026-07-07, `docs/REPO-TOPOLOGY.md`).
+
+```mermaid
+flowchart TB
+    GM["go.mod<br/>module github.com/.../go-multiplayer-control-plane"]
+    IMP["imports em todos os .go<br/>github.com/.../go-multiplayer-control-plane/services/..."]
+    PROTO["*.proto<br/>option go_package = github.com/.../gen/..."]
+    GEN["*.pb.go regenerados via buf<br/>(go_package fica embutido no rawDesc)"]
+    GM -->|"mesmo prefixo, sempre"| IMP
+    PROTO -->|"buf generate"| GEN
+```
+
+```go
+// go.mod — a única declaração; todo o resto é consequência textual dela
+module github.com/vitormartins1/go-multiplayer-control-plane
+
+// qualquer arquivo do monorepo: o import interno repete o module path por extenso
+import (
+    "github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
+)
+```
+
+**Pegadinha / nuance:** os arquivos **gerados** de protobuf têm **duas** camadas com o module path: (1) as linhas de `import` normais — seguras de reescrever com `sed` — e (2) o `option go_package` do `.proto`, que fica **serializado dentro do `rawDesc`** do `.pb.go` (o FileDescriptor binário, com strings prefixadas por tamanho). Um `sed` no `.pb.go` que altere a string dentro do `rawDesc` **corrompe o descriptor** (o tamanho gravado deixa de bater). O caminho certo: editar o `go_package` no `.proto` e **regenerar com `buf generate`**. Em C#, o análogo seria mexer à mão em código gerado por source generator — a regra é a mesma: muda-se a fonte, regenera-se o artefato.
