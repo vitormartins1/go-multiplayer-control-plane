@@ -112,9 +112,11 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C4 — Surfacing no console (+ contrato do data plane)
+## C4 — Surfacing no console (+ contrato do data plane) ✅ branch
 
 **Objetivo:** o painel mostra o `coop_mission` — a taxa de sucesso/falha das missões e o modo co-op no Rooms; e o contrato control↔data plane fica escrito.
+
+> **Status:** implementado na branch `feat/coop-mission/c4-console` (specs `admin-bff/016` + `admin-ui/022` + doc). admin-bff propaga o campo `mission` no `GameAnalyticsDetail` (passthrough; perfil já fluía cru). admin-ui: bloco "Desfecho das missões" (cumpridas/falhas/taxa) em `GameAnalytics.tsx` + badge `co-op N/teamSize` em `Rooms.tsx` (cache de perfil por gameId) + tipo `mission` em `api.ts`. O form de perfil já saíra na C0. Contrato: `docs/game-models/coop_mission-dataplane-contract.md` (par dos 3 existentes). Verde: admin-bff testes + lint 0; admin-ui `npm run build`.
 
 **Specs:** `admin-bff` + `admin-ui` (numeração seguinte livre) + doc `coop_mission-dataplane-contract.md`.
 
@@ -135,7 +137,9 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 | C1 — formação do time co-op ✅ main | matchmaking/009 | S (session intacto — confirmado) | C0 |
 | C2 — resultado coletivo **(núcleo)** ✅ main | session/016 | M | C1 |
 | C3 — colher (3 sinks) ✅ main | achievements/011 + leaderboard/006 + analytics/006 | L | C2 |
-| C4 — console + contrato | admin-bff + admin-ui + doc | M | C1, C3 |
+| C4 — console + contrato ✅ branch | admin-bff/016 + admin-ui/022 + doc | M | C1, C3 |
+
+✅ **C0–C4 concluídas (C0–C3 na main, C4 na branch)** — o `coop_mission` está **completo no control plane** (declarar → formar time → reportar desfecho coletivo → colher → console), validado com server mockado. Com o kind `collective`, os **quatro modelos de resultado** do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos. Próxima etapa (cross-repo): o `unity-coop-mission-data-plane` (Unity) com AI Director/objetivo/wipe, consumindo o [contrato de C4](./coop_mission-dataplane-contract.md).
 
 Ao fim de C0–C4 o `coop_mission` estará **completo no control plane** (declarar → formar time → reportar desfecho coletivo → colher → console), validado com server mockado — e os **quatro modelos de resultado** do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos. Próxima etapa (cross-repo): o `unity-coop-mission-data-plane` (Unity) com AI Director/objetivo/wipe, consumindo o contrato de C4.
 
