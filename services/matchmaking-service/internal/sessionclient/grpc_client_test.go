@@ -106,3 +106,70 @@ func TestProvision_PoolEsgotado_ErrNoServer(t *testing.T) {
 	_, err := c.Provision(context.Background(), "m1", ffa("p1"), "game-1")
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }
+
+// --- host_world_dropin (spec 006): diretório + injeção ---
+
+// worldFake estende o contrato do session com os RPCs do diretório/injeção.
+// joinCode != OK faz o JoinWorld falhar com esse código (corrida / mundo fechou).
+type worldFake struct {
+	sessionv1.UnimplementedSessionServer
+	worlds       []*sessionv1.InvadableWorld
+	gotListGame  string
+	gotJoin      *sessionv1.JoinWorldRequest
+	joinCode     codes.Code // OK = sucesso
+	joinAddress  string
+}
+
+func (f *worldFake) ListInvadableWorlds(_ context.Context, req *sessionv1.ListInvadableWorldsRequest) (*sessionv1.ListInvadableWorldsResponse, error) {
+	f.gotListGame = req.GetGameId()
+	return &sessionv1.ListInvadableWorldsResponse{Worlds: f.worlds}, nil
+}
+
+func (f *worldFake) JoinWorld(_ context.Context, req *sessionv1.JoinWorldRequest) (*sessionv1.JoinWorldResponse, error) {
+	f.gotJoin = req
+	if f.joinCode != codes.OK {
+		return nil, status.Error(f.joinCode, "join failed")
+	}
+	return &sessionv1.JoinWorldResponse{
+		Grant:         &sessionv1.ConnectGrant{PlayerId: req.GetPlayerId(), ConnectToken: "tok-" + req.GetPlayerId()},
+		ServerAddress: f.joinAddress,
+	}, nil
+}
+
+func TestListInvadableWorlds_TraduzMundos(t *testing.T) {
+	fake := &worldFake{worlds: []*sessionv1.InvadableWorld{
+		{SessionId: "w1", HostSoulLevel: 100, WeaponTier: 5, FreeInvaderSlots: 1},
+		{SessionId: "w2", HostSoulLevel: 200, WeaponTier: 8, FreeInvaderSlots: 2},
+	}}
+	c := setup(t, fake)
+
+	worlds, err := c.ListInvadableWorlds(context.Background(), "game-1")
+	require.NoError(t, err)
+	assert.Equal(t, "game-1", fake.gotListGame)
+	require.Len(t, worlds, 2)
+	assert.Equal(t, domain.InvadableWorld{SessionID: "w1", HostSoulLevel: 100, WeaponTier: 5, FreeInvaderSlots: 1}, worlds[0])
+	assert.Equal(t, 2, worlds[1].FreeInvaderSlots)
+}
+
+func TestInject_Sucesso_DevolveServerEToken(t *testing.T) {
+	fake := &worldFake{joinCode: codes.OK, joinAddress: "10.0.0.7:7777"}
+	c := setup(t, fake)
+
+	got, err := c.Inject(context.Background(), "w1", "invader-1", "invader")
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.7:7777", got.ServerAddress)
+	assert.Equal(t, "tok-invader-1", got.ConnectToken)
+	assert.Equal(t, "invader", fake.gotJoin.GetRole(), "papel invader repassado ao JoinWorld")
+}
+
+func TestInject_SlotCheio_ErrRoleFull(t *testing.T) {
+	c := setup(t, &worldFake{joinCode: codes.ResourceExhausted})
+	_, err := c.Inject(context.Background(), "w1", "invader-1", "invader")
+	assert.ErrorIs(t, err, domain.ErrRoleFull)
+}
+
+func TestInject_MundoFechado_ErrWorldNotFound(t *testing.T) {
+	c := setup(t, &worldFake{joinCode: codes.NotFound})
+	_, err := c.Inject(context.Background(), "w1", "invader-1", "invader")
+	assert.ErrorIs(t, err, domain.ErrWorldNotFound)
+}

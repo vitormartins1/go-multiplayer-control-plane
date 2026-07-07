@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Matchmaking_FindMatch_FullMethodName = "/matchmaking.v1.Matchmaking/FindMatch"
+	Matchmaking_Invade_FullMethodName    = "/matchmaking.v1.Matchmaking/Invade"
 )
 
 // MatchmakingClient is the client API for Matchmaking service.
@@ -32,6 +33,11 @@ type MatchmakingClient interface {
 	// FindMatch enfileira o jogador e transmite o status do ticket até o match
 	// (server-streaming). Cancelar a chamada remove o ticket da fila.
 	FindMatch(ctx context.Context, in *FindMatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TicketUpdate], error)
+	// Invade é o segundo modo (host_world_dropin, spec 006): o invasor descobre um
+	// mundo aberto elegível e é injetado nele (unary — resolve na hora ou falha).
+	// FailedPrecondition (jogo não aceita invasão), NotFound (nenhum mundo na
+	// faixa). O playerID do invasor vem do JWT, não do request.
+	Invade(ctx context.Context, in *InvadeRequest, opts ...grpc.CallOption) (*InvadeResponse, error)
 }
 
 type matchmakingClient struct {
@@ -61,6 +67,16 @@ func (c *matchmakingClient) FindMatch(ctx context.Context, in *FindMatchRequest,
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Matchmaking_FindMatchClient = grpc.ServerStreamingClient[TicketUpdate]
 
+func (c *matchmakingClient) Invade(ctx context.Context, in *InvadeRequest, opts ...grpc.CallOption) (*InvadeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InvadeResponse)
+	err := c.cc.Invoke(ctx, Matchmaking_Invade_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchmakingServer is the server API for Matchmaking service.
 // All implementations must embed UnimplementedMatchmakingServer
 // for forward compatibility.
@@ -71,6 +87,11 @@ type MatchmakingServer interface {
 	// FindMatch enfileira o jogador e transmite o status do ticket até o match
 	// (server-streaming). Cancelar a chamada remove o ticket da fila.
 	FindMatch(*FindMatchRequest, grpc.ServerStreamingServer[TicketUpdate]) error
+	// Invade é o segundo modo (host_world_dropin, spec 006): o invasor descobre um
+	// mundo aberto elegível e é injetado nele (unary — resolve na hora ou falha).
+	// FailedPrecondition (jogo não aceita invasão), NotFound (nenhum mundo na
+	// faixa). O playerID do invasor vem do JWT, não do request.
+	Invade(context.Context, *InvadeRequest) (*InvadeResponse, error)
 	mustEmbedUnimplementedMatchmakingServer()
 }
 
@@ -83,6 +104,9 @@ type UnimplementedMatchmakingServer struct{}
 
 func (UnimplementedMatchmakingServer) FindMatch(*FindMatchRequest, grpc.ServerStreamingServer[TicketUpdate]) error {
 	return status.Error(codes.Unimplemented, "method FindMatch not implemented")
+}
+func (UnimplementedMatchmakingServer) Invade(context.Context, *InvadeRequest) (*InvadeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Invade not implemented")
 }
 func (UnimplementedMatchmakingServer) mustEmbedUnimplementedMatchmakingServer() {}
 func (UnimplementedMatchmakingServer) testEmbeddedByValue()                     {}
@@ -116,13 +140,36 @@ func _Matchmaking_FindMatch_Handler(srv interface{}, stream grpc.ServerStream) e
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Matchmaking_FindMatchServer = grpc.ServerStreamingServer[TicketUpdate]
 
+func _Matchmaking_Invade_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvadeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServer).Invade(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Matchmaking_Invade_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServer).Invade(ctx, req.(*InvadeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Matchmaking_ServiceDesc is the grpc.ServiceDesc for Matchmaking service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Matchmaking_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "matchmaking.v1.Matchmaking",
 	HandlerType: (*MatchmakingServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Invade",
+			Handler:    _Matchmaking_Invade_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "FindMatch",

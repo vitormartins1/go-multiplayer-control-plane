@@ -16,7 +16,10 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
 )
 
-var _ domain.ProfileProvider = (*Client)(nil)
+var (
+	_ domain.ProfileProvider        = (*Client)(nil)
+	_ domain.InvasionPolicyProvider = (*Client)(nil)
+)
 
 // archetypeQueueArena é o único arquétipo cujo tamanho o matchmaking sabe
 // derivar nesta fatia (ADR-0023). Vocabulário do game-registry.
@@ -37,7 +40,8 @@ func New(baseURL string, httpClient *http.Client) *Client {
 	return &Client{baseURL: baseURL, http: httpClient}
 }
 
-// profileResponse espelha o subconjunto do perfil que importa para o tamanho.
+// profileResponse espelha o subconjunto do perfil que importa para o tamanho
+// (queue_arena) e para a política de invasão (host_world_dropin, spec 006).
 type profileResponse struct {
 	Archetype string `json:"archetype"`
 	Params    struct {
@@ -45,7 +49,52 @@ type profileResponse struct {
 		PlayerCount int    `json:"playerCount"`
 		TeamCount   int    `json:"teamCount"`
 		TeamSize    int    `json:"teamSize"`
+		// host_world_dropin (spec 006): flags que ligam/desligam cada filtro da
+		// invasão. Ausentes em queue_arena (ficam false).
+		InvasionEnabled   bool `json:"invasionEnabled"`
+		LevelRangeEnabled bool `json:"levelRangeEnabled"`
+		WeaponTierEnabled bool `json:"weaponTierEnabled"`
 	} `json:"params"`
+}
+
+// getProfile faz o GET do perfil e decodifica. Erro de rede/status/parse vira
+// ErrProfileUnavailable — compartilhado por Format (queue_arena) e InvasionPolicy.
+func (c *Client) getProfile(ctx context.Context, gameID string) (profileResponse, error) {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return profileResponse{}, fmt.Errorf("registryclient: build request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return profileResponse{}, fmt.Errorf("registryclient: get profile: %v: %w", err, domain.ErrProfileUnavailable)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return profileResponse{}, fmt.Errorf("registryclient: get profile: status %d: %w", resp.StatusCode, domain.ErrProfileUnavailable)
+	}
+	var p profileResponse
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		return profileResponse{}, fmt.Errorf("registryclient: decode profile: %v: %w", err, domain.ErrProfileUnavailable)
+	}
+	return p, nil
+}
+
+// InvasionPolicy lê o perfil e monta a política de invasão (spec 006). Arquétipo
+// != host_world_dropin devolve a policy com o Archetype preenchido (SupportsInvasion
+// = false) — o service decide ErrInvasionNotSupported. Rede/404/parse →
+// ErrProfileUnavailable.
+func (c *Client) InvasionPolicy(ctx context.Context, gameID string) (domain.InvasionPolicy, error) {
+	p, err := c.getProfile(ctx, gameID)
+	if err != nil {
+		return domain.InvasionPolicy{}, err
+	}
+	return domain.InvasionPolicy{
+		Archetype:         p.Archetype,
+		InvasionEnabled:   p.Params.InvasionEnabled,
+		LevelRangeEnabled: p.Params.LevelRangeEnabled,
+		WeaponTierEnabled: p.Params.WeaponTierEnabled,
+	}, nil
 }
 
 // Format lê o perfil do jogo e deriva a formação do match (tamanho + estrutura
@@ -53,24 +102,9 @@ type profileResponse struct {
 // queue_arena, tamanho inválido, rede) vira ErrProfileUnavailable — o ticket
 // não deve entrar na fila.
 func (c *Client) Format(ctx context.Context, gameID string) (domain.MatchFormat, error) {
-	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	p, err := c.getProfile(ctx, gameID)
 	if err != nil {
-		return domain.MatchFormat{}, fmt.Errorf("registryclient: build request: %w", err)
-	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return domain.MatchFormat{}, fmt.Errorf("registryclient: get profile: %v: %w", err, domain.ErrProfileUnavailable)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return domain.MatchFormat{}, fmt.Errorf("registryclient: get profile: status %d: %w", resp.StatusCode, domain.ErrProfileUnavailable)
-	}
-
-	var p profileResponse
-	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
-		return domain.MatchFormat{}, fmt.Errorf("registryclient: decode profile: %v: %w", err, domain.ErrProfileUnavailable)
+		return domain.MatchFormat{}, err
 	}
 	if p.Archetype != archetypeQueueArena {
 		return domain.MatchFormat{}, fmt.Errorf("registryclient: archetype %q não suportado: %w", p.Archetype, domain.ErrProfileUnavailable)

@@ -16,7 +16,11 @@ import (
 	sessionv1 "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
 )
 
-var _ domain.SessionProvisioner = (*Client)(nil)
+var (
+	_ domain.SessionProvisioner = (*Client)(nil)
+	_ domain.WorldDirectory     = (*Client)(nil)
+	_ domain.WorldInjector      = (*Client)(nil)
+)
 
 // Client adapta o sessionv1.SessionClient para a Port domain.SessionProvisioner.
 type Client struct {
@@ -50,6 +54,52 @@ func (c *Client) Provision(ctx context.Context, matchID string, teams []domain.T
 		tokens[g.GetPlayerId()] = g.GetConnectToken()
 	}
 	return domain.Provisioned{ServerAddress: resp.GetServerAddress(), Tokens: tokens}, nil
+}
+
+// ListInvadableWorlds chama o diretório do session (session/012) e traduz os
+// mundos invadíveis para o domínio. A política de faixa é aplicada no service,
+// não aqui — este adapter é passthrough.
+func (c *Client) ListInvadableWorlds(ctx context.Context, gameID string) ([]domain.InvadableWorld, error) {
+	resp, err := c.session.ListInvadableWorlds(ctx, &sessionv1.ListInvadableWorldsRequest{GameId: gameID})
+	if err != nil {
+		return nil, fmt.Errorf("sessionclient: list invadable worlds: %w", err)
+	}
+	worlds := make([]domain.InvadableWorld, 0, len(resp.GetWorlds()))
+	for _, w := range resp.GetWorlds() {
+		worlds = append(worlds, domain.InvadableWorld{
+			SessionID:        w.GetSessionId(),
+			HostSoulLevel:    int(w.GetHostSoulLevel()),
+			WeaponTier:       int(w.GetWeaponTier()),
+			FreeInvaderSlots: int(w.GetFreeInvaderSlots()),
+		})
+	}
+	return worlds, nil
+}
+
+// Inject injeta o invasor num mundo via JoinWorld do session (H0). Devolve o
+// endereço do server (JoinWorldResponse.server_address, spec 012) + o token.
+// codes.ResourceExhausted (slot cheio na corrida) → ErrRoleFull (dirige o retry);
+// codes.NotFound (mundo fechou) → ErrWorldNotFound.
+func (c *Client) Inject(ctx context.Context, sessionID, playerID, role string) (domain.Injected, error) {
+	resp, err := c.session.JoinWorld(ctx, &sessionv1.JoinWorldRequest{
+		SessionId: sessionID,
+		PlayerId:  playerID,
+		Role:      role,
+	})
+	if err != nil {
+		switch status.Code(err) {
+		case codes.ResourceExhausted:
+			return domain.Injected{}, domain.ErrRoleFull
+		case codes.NotFound:
+			return domain.Injected{}, domain.ErrWorldNotFound
+		default:
+			return domain.Injected{}, fmt.Errorf("sessionclient: inject: %w", err)
+		}
+	}
+	return domain.Injected{
+		ServerAddress: resp.GetServerAddress(),
+		ConnectToken:  resp.GetGrant().GetConnectToken(),
+	}, nil
 }
 
 // flattenTeams monta a lista completa de players (união, em ordem) e os Team do

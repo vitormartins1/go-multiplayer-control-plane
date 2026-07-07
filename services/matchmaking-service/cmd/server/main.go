@@ -42,6 +42,16 @@ const (
 	profileCacheTTL = 30 * time.Second // TTL do cache do perfil de multiplayer (ADR-0023)
 )
 
+// invasionsCounter monta o CounterFunc de invasions_total para um resultado,
+// com o rótulo result fixo (ConstLabels) — o valor vem do contador do Invader.
+func invasionsCounter(inv *service.Invader, result string) prometheus.Collector {
+	return prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name:        "invasions_total",
+		Help:        "Total de invasões por resultado (host_world_dropin, spec 006).",
+		ConstLabels: prometheus.Labels{"result": result},
+	}, func() float64 { return inv.InvasionsTotal(result) })
+}
+
 func main() {
 	log := logger.New(serviceName)
 	if err := run(log); err != nil {
@@ -89,7 +99,9 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("session grpc client: %w", err)
 	}
 	defer func() { _ = sessionConn.Close() }()
-	provisioner := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
+	// o mesmo adapter satisfaz SessionProvisioner (queue-form), WorldDirectory e
+	// WorldInjector (invasão, spec 006) — reusa o client gRPC do session.
+	sessionClient := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
 
 	// Perfil de multiplayer por jogo (ADR-0023): o tamanho do match vem do
 	// game-registry. Sem ele o matchmaking não forma nenhum match -> fail-fast no
@@ -106,9 +118,13 @@ func run(log *slog.Logger) error {
 		Timeout:   5 * time.Second,
 		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
 	}
-	provider := profilecache.New(registryclient.New(gameRegistryURL, profileHTTP), profileCacheTTL)
+	// o registryclient cru serve as duas leituras: Format (queue-form, embrulhado
+	// no cache do caminho crítico) e InvasionPolicy (invasão, sem cache — spec 006 D2).
+	registry := registryclient.New(gameRegistryURL, profileHTTP)
+	provider := profilecache.New(registry, profileCacheTTL)
 
-	mm := service.New(formInterval, provider, provisioner)
+	mm := service.New(formInterval, provider, sessionClient)
+	inv := service.NewInvader(registry, sessionClient, sessionClient)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -125,13 +141,19 @@ func run(log *slog.Logger) error {
 		prometheus.NewCounterFunc(prometheus.CounterOpts{
 			Name: "matchmaking_matches_failed_total", Help: "Total de matches que falharam no provisionamento da sessão.",
 		}, mm.MatchesFailed),
+		// funil de invasão (host_world_dropin, spec 006): injetadas / sem mundo /
+		// não suportado. ConstLabels por resultado (padrão do sessions_closed_total).
+		invasionsCounter(inv, "injected"),
+		invasionsCounter(inv, "no_world"),
+		invasionsCounter(inv, "not_supported"),
 	)
 
 	grpcSrv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
 		grpc.StreamInterceptor(transport.StreamAuthInterceptor(verifier)),
+		grpc.ChainUnaryInterceptor(transport.UnaryAuthInterceptor(verifier)), // Invade é unary (spec 006)
 	)
-	pb.RegisterMatchmakingServer(grpcSrv, transport.NewServer(mm))
+	pb.RegisterMatchmakingServer(grpcSrv, transport.NewServer(mm, inv))
 	reflection.Register(grpcSrv) // permite grpcurl sem o .proto
 
 	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)

@@ -19,12 +19,14 @@ import (
 // Server implementa o serviço gRPC Matchmaking.
 type Server struct {
 	pb.UnimplementedMatchmakingServer
-	mm domain.Matchmaker
+	mm  domain.Matchmaker
+	inv domain.Invader
 }
 
-// NewServer cria o server a partir do matchmaker (Port de entrada).
-func NewServer(mm domain.Matchmaker) *Server {
-	return &Server{mm: mm}
+// NewServer cria o server a partir do matchmaker (queue-form) e do invader
+// (host_world_dropin, spec 006), as duas Ports de entrada.
+func NewServer(mm domain.Matchmaker, inv domain.Invader) *Server {
+	return &Server{mm: mm, inv: inv}
 }
 
 // FindMatch enfileira o jogador no jogo e transmite o status do ticket até o
@@ -69,6 +71,37 @@ func (s *Server) FindMatch(req *pb.FindMatchRequest, stream pb.Matchmaking_FindM
 	}
 }
 
+// Invade descobre um mundo elegível e injeta o invasor (host_world_dropin, spec
+// 006). O playerID vem do JWT (UnaryAuthInterceptor), não do request. Mapeia os
+// erros de domínio para gRPC codes.
+func (s *Server) Invade(ctx context.Context, req *pb.InvadeRequest) (*pb.InvadeResponse, error) {
+	gameID := req.GetGameId()
+	if gameID == "" {
+		return nil, status.Error(codes.InvalidArgument, "game_id é obrigatório")
+	}
+	playerID := playerIDFromContext(ctx)
+	crit := domain.InvaderCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
+
+	invaded, err := s.inv.Invade(ctx, gameID, playerID, crit)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvasionNotSupported):
+			return nil, status.Error(codes.FailedPrecondition, "jogo não aceita invasão")
+		case errors.Is(err, domain.ErrNoEligibleWorld):
+			return nil, status.Error(codes.NotFound, "nenhum mundo elegível")
+		case errors.Is(err, domain.ErrProfileUnavailable):
+			return nil, status.Error(codes.FailedPrecondition, "jogo sem perfil de multiplayer configurado")
+		default:
+			return nil, status.Error(codes.Internal, "invade")
+		}
+	}
+	return &pb.InvadeResponse{
+		SessionId:     invaded.SessionID,
+		ServerAddress: invaded.ServerAddress,
+		ConnectToken:  invaded.ConnectToken,
+	}, nil
+}
+
 // --- auth interceptor ---
 
 type ctxKey int
@@ -94,6 +127,23 @@ func StreamAuthInterceptor(verifier domain.TokenVerifier) grpc.StreamServerInter
 		}
 		ctx := context.WithValue(ss.Context(), playerIDKey, playerID)
 		return handler(srv, &wrappedStream{ServerStream: ss, ctx: ctx})
+	}
+}
+
+// UnaryAuthInterceptor valida o Bearer JWT e injeta o playerID no context da
+// chamada unary (espelho do StreamAuthInterceptor — o Invade é unary, spec 006).
+// Falha vira codes.Unauthenticated.
+func UnaryAuthInterceptor(verifier domain.TokenVerifier) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		token := bearerFromMetadata(ctx)
+		if token == "" {
+			return nil, status.Error(codes.Unauthenticated, "token ausente")
+		}
+		playerID, err := verifier.Verify(ctx, token)
+		if err != nil {
+			return nil, status.Error(codes.Unauthenticated, "token inválido")
+		}
+		return handler(context.WithValue(ctx, playerIDKey, playerID), req)
 	}
 }
 

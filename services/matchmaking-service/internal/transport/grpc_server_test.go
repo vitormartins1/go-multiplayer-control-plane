@@ -65,14 +65,23 @@ func setup(t *testing.T, prov domain.SessionProvisioner) pb.MatchmakingClient {
 }
 
 func setupWith(t *testing.T, prov domain.SessionProvisioner, profile domain.ProfileProvider) pb.MatchmakingClient {
+	return setupFull(t, prov, profile, stubInvader{})
+}
+
+// setupFull sobe o server com os dois interceptors (stream + unary) e um invader
+// injetável — os testes de Invade passam o seu.
+func setupFull(t *testing.T, prov domain.SessionProvisioner, profile domain.ProfileProvider, inv domain.Invader) pb.MatchmakingClient {
 	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
 	mm := service.New(10*time.Millisecond, profile, prov)
 	ctx, cancel := context.WithCancel(context.Background())
 	go mm.Run(ctx)
 
-	srv := grpc.NewServer(grpc.StreamInterceptor(StreamAuthInterceptor(fakeVerifier{})))
-	pb.RegisterMatchmakingServer(srv, NewServer(mm))
+	srv := grpc.NewServer(
+		grpc.StreamInterceptor(StreamAuthInterceptor(fakeVerifier{})),
+		grpc.UnaryInterceptor(UnaryAuthInterceptor(fakeVerifier{})),
+	)
+	pb.RegisterMatchmakingServer(srv, NewServer(mm, inv))
 	go func() { _ = srv.Serve(lis) }()
 
 	conn, err := grpc.NewClient("passthrough://bufnet",
@@ -87,6 +96,21 @@ func setupWith(t *testing.T, prov domain.SessionProvisioner, profile domain.Prof
 		cancel()
 	})
 	return pb.NewMatchmakingClient(conn)
+}
+
+// stubInvader adapta um resultado/erro fixo à Port domain.Invader. gotPlayerID
+// captura o playerID que chegou via interceptor (prova o wire do JWT no unary).
+type stubInvader struct {
+	result     domain.Invaded
+	err        error
+	gotPlayerID *string
+}
+
+func (s stubInvader) Invade(_ context.Context, _, playerID string, _ domain.InvaderCriteria) (domain.Invaded, error) {
+	if s.gotPlayerID != nil {
+		*s.gotPlayerID = playerID
+	}
+	return s.result, s.err
 }
 
 func authCtx(token string) context.Context {
@@ -164,6 +188,52 @@ func TestFindMatch_SemPerfil_FailedPrecondition(t *testing.T) {
 	_, err = s.Recv()
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.FailedPrecondition, st.Code(), "jogo sem perfil -> FailedPrecondition")
+}
+
+// --- Invade (host_world_dropin, spec 006) ---
+
+func TestInvade_Sucesso_DevolveServerETokenEPlayerDoJWT(t *testing.T) {
+	var gotPlayer string
+	inv := stubInvader{
+		result:      domain.Invaded{SessionID: "w1", ServerAddress: "10.0.0.7:7777", ConnectToken: "tok-invader"},
+		gotPlayerID: &gotPlayer,
+	}
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, inv)
+
+	resp, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
+	require.NoError(t, err)
+	assert.Equal(t, "w1", resp.GetSessionId())
+	assert.Equal(t, "10.0.0.7:7777", resp.GetServerAddress())
+	assert.Equal(t, "tok-invader", resp.GetConnectToken())
+	assert.Equal(t, "invader-1", gotPlayer, "playerID veio do JWT via UnaryAuthInterceptor")
+}
+
+func TestInvade_SemToken_Unauthenticated(t *testing.T) {
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{})
+
+	_, err := client.Invade(context.Background(), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
+	assert.Equal(t, codes.Unauthenticated, status.Code(err), "sem Bearer -> Unauthenticated")
+}
+
+func TestInvade_SemGameID_InvalidArgument(t *testing.T) {
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{})
+
+	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{SoulLevel: 100})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestInvade_NaoSuportado_FailedPrecondition(t *testing.T) {
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrInvasionNotSupported})
+
+	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestInvade_NenhumMundo_NotFound(t *testing.T) {
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrNoEligibleWorld})
+
+	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func recvSearching(t *testing.T, s pb.Matchmaking_FindMatchClient) error {
