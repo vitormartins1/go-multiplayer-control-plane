@@ -9,10 +9,18 @@ const SCORE_BOARD = "score";
 
 export function GameLeaderboards({ gameId }: { gameId: string }) {
   const [board, setBoard] = useState(SCORE_BOARD);
-  // Boards disponíveis = score + scoringStats do perfil de multiplayer (ADR-0023).
-  // Jogo sem perfil -> só o board score.
+  // Boards derivados do perfil de multiplayer (ADR-0023). Dois modos:
+  //   highscore (melhor de uma partida): score + cada stat;
+  //   cumulative (soma na temporada): vitórias + <stat>_total.
   const { data: profile } = useAsync((s) => api.getMultiplayerProfile(gameId, s), [gameId]);
-  const boards = [SCORE_BOARD, ...(profile?.params.scoringStats ?? [])];
+  const stats = profile?.params.scoringStats ?? [];
+  const boardOptions = [
+    { value: SCORE_BOARD, label: "Score" },
+    ...stats.map((s) => ({ value: s, label: `${s} (recorde)` })),
+    { value: "wins", label: "Vitórias (total)" },
+    ...stats.map((s) => ({ value: `${s}_total`, label: `${s} (total)` })),
+  ];
+  const boardLabel = boardOptions.find((o) => o.value === board)?.label ?? board;
 
   const { data, loading, error, reload } = useAsync(
     (s) => api.gameLeaderboard(gameId, board === SCORE_BOARD ? undefined : board, 20, s),
@@ -57,17 +65,14 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       <Group justify="space-between">
         <Text fw={600}>Ranking do jogo (top 20)</Text>
         <Group gap="xs">
-          {boards.length > 1 && (
+          {boardOptions.length > 1 && (
             <Select
               size="xs"
-              w={160}
+              w={180}
               aria-label="Board"
               value={board}
               onChange={(v) => v && setBoard(v)}
-              data={boards.map((b) => ({
-                value: b,
-                label: b === SCORE_BOARD ? "Score" : b,
-              }))}
+              data={boardOptions}
               allowDeselect={false}
             />
           )}
@@ -88,7 +93,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             <Table.Tr>
               <Table.Th w={60}>#</Table.Th>
               <Table.Th>Jogador</Table.Th>
-              <Table.Th>{board === SCORE_BOARD ? "Score" : board}</Table.Th>
+              <Table.Th>{boardLabel}</Table.Th>
               <Table.Th w={50}></Table.Th>
             </Table.Tr>
           </Table.Thead>

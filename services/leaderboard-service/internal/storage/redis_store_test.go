@@ -138,3 +138,62 @@ func TestSubmit_IsoladoPorJogo(t *testing.T) {
 	_, _, err = store.Rank(ctx, "game-b", "score", "p1")
 	assert.True(t, errors.Is(err, domain.ErrNotRanked))
 }
+
+// ApplyCumulative soma (ZINCRBY) entre partidas distintas e é idempotente por
+// matchID (ADR-0023 A2): reprocessar a mesma partida não dobra o total.
+func TestApplyCumulative_SomaEntrePartidasEIdempotente(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	m1 := []domain.Increment{
+		{Board: domain.BoardWins, PlayerID: "p1", Delta: 1},
+		{Board: domain.TotalBoard("kills"), PlayerID: "p1", Delta: 5},
+	}
+	m2 := []domain.Increment{
+		{Board: domain.BoardWins, PlayerID: "p1", Delta: 1},
+		{Board: domain.TotalBoard("kills"), PlayerID: "p1", Delta: 8},
+	}
+
+	dup, err := store.ApplyCumulative(ctx, "g1", "match-1", m1)
+	require.NoError(t, err)
+	assert.False(t, dup, "1ª aplicação não é dup")
+
+	// reentrega da MESMA partida: no-op (não dobra).
+	dup, err = store.ApplyCumulative(ctx, "g1", "match-1", m1)
+	require.NoError(t, err)
+	assert.True(t, dup, "reentrega detectada")
+
+	// nova partida acumula.
+	dup, err = store.ApplyCumulative(ctx, "g1", "match-2", m2)
+	require.NoError(t, err)
+	assert.False(t, dup)
+
+	// wins: 1 (m1) + 1 (m2) = 2; a reentrega de m1 não contou.
+	_, wins, err := store.Rank(ctx, "g1", domain.BoardWins, "p1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), wins)
+
+	// kills_total: 5 + 8 = 13.
+	_, kills, err := store.Rank(ctx, "g1", domain.TotalBoard("kills"), "p1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(13), kills)
+}
+
+// Boards cumulativos e highscore convivem sem se misturar no mesmo jogo.
+func TestApplyCumulative_NaoAfetaBoardsHighscore(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	require.NoError(t, store.Submit(ctx, "g1", "kills", "p1", 7)) // highscore "kills" (melhor de uma partida)
+	_, err := store.ApplyCumulative(ctx, "g1", "m1",
+		[]domain.Increment{{Board: domain.TotalBoard("kills"), PlayerID: "p1", Delta: 7}})
+	require.NoError(t, err)
+
+	_, best, err := store.Rank(ctx, "g1", "kills", "p1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(7), best, "board highscore intacto")
+
+	_, total, err := store.Rank(ctx, "g1", domain.TotalBoard("kills"), "p1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(7), total, "board cumulativo é independente")
+}

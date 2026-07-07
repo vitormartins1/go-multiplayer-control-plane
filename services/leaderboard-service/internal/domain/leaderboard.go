@@ -8,8 +8,18 @@ import (
 )
 
 // Board é a métrica de um ranking (ADR-0023). Cada jogo tem N rankings, um por
-// board: "score" (default) + um por stat do resultado (ex.: "kills").
-const BoardScore = "score"
+// board. Dois modos de agregação convivem:
+//   - highscore (ZADD GT): "score" (default) + um por stat (melhor de uma
+//     partida) — fatia 003.
+//   - cumulative (ZINCRBY): "wins" (nº de vitórias) + "<stat>_total" (soma do
+//     stat ao longo das partidas) — fatia 004 (A2).
+const (
+	BoardScore = "score"
+	BoardWins  = "wins"
+)
+
+// TotalBoard é o board cumulativo de um stat (ex.: "kills" -> "kills_total").
+func TotalBoard(stat string) string { return stat + "_total" }
 
 // boardRE valida o nome de um board — mesmo identificador estável do scoringStats
 // no game-registry (`^[a-z][a-z0-9_]*$`).
@@ -25,6 +35,14 @@ type Entry struct {
 	Score    int64
 }
 
+// Increment é uma parcela cumulativa a somar num board (ZINCRBY). Usado no
+// fan-out para totalizar vitórias e stats por jogador (ADR-0023 A2).
+type Increment struct {
+	Board    string
+	PlayerID string
+	Delta    int64
+}
+
 // LeaderboardService é a Port de entrada do leaderboard-service. Tudo é escopado
 // por (gameID, board) — ranking por jogo (ADR-0017) e por métrica (ADR-0023).
 type LeaderboardService interface {
@@ -34,6 +52,10 @@ type LeaderboardService interface {
 	ForceSubmit(ctx context.Context, gameID, board, playerID string, score int64) (Entry, error)
 	Top(ctx context.Context, gameID, board string, limit int) ([]Entry, error)
 	Around(ctx context.Context, gameID, board, playerID string, k int) ([]Entry, error)
+	// ApplyCumulative soma as parcelas nos boards cumulativos de uma partida, de
+	// forma atômica e idempotente por matchID (ZINCRBY não é idempotente de graça,
+	// diferente do ZADD GT). dup=true se a partida já havia sido aplicada (no-op).
+	ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []Increment) (dup bool, err error)
 }
 
 // LeaderboardStore é a Port de saída (implementada por um adapter Redis). Cada
@@ -48,6 +70,9 @@ type LeaderboardStore interface {
 	Top(ctx context.Context, gameID, board string, limit int) ([]Entry, error)
 	// Range devolve as entradas das posições [start, stop] (0-based, inclusivo).
 	Range(ctx context.Context, gameID, board string, start, stop int64) ([]Entry, error)
+	// ApplyCumulative aplica os ZINCRBY de uma partida sob uma guarda de
+	// idempotência por matchID, tudo atômico (script Lua). dup=true = já aplicada.
+	ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []Increment) (dup bool, err error)
 }
 
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).

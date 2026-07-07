@@ -59,6 +59,23 @@ func (s *Service) ForceSubmit(ctx context.Context, gameID, board, playerID strin
 	return domain.Entry{Rank: rank0 + 1, PlayerID: playerID, Score: best}, nil
 }
 
+// ApplyCumulative soma as parcelas nos boards cumulativos de uma partida (vitórias,
+// totais de stat) de forma idempotente por matchID. Parcelas com board inválido são
+// descartadas (não derrubam o processamento); sem parcelas válidas é no-op.
+func (s *Service) ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []domain.Increment) (bool, error) {
+	valid := incrs[:0:0] // nova slice, não reusa o array do caller
+	for _, inc := range incrs {
+		if domain.ValidBoard(inc.Board) {
+			valid = append(valid, inc)
+		}
+	}
+	dup, err := s.store.ApplyCumulative(ctx, gameID, matchID, valid)
+	if err != nil {
+		return false, fmt.Errorf("leaderboard service: apply cumulative: %w", err)
+	}
+	return dup, nil
+}
+
 func (s *Service) Top(ctx context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
 	if !domain.ValidBoard(board) {
 		return nil, domain.ErrInvalidBoard
