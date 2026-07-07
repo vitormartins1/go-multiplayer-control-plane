@@ -111,9 +111,10 @@ func run(log *slog.Logger) error {
 }
 
 // makeHandler desserializa o envelope do fan-out e o despacha por kind (ADR-0023,
-// spec 013/009): win_loss_draw (queue_arena) → ApplyMatchResult; participation_event
-// (host_world_dropin) → ApplyParticipationEvent; kind desconhecido → descarta (o
-// SNS faz fan-out para todas as filas). Mensagem malformada vai à DLQ.
+// spec 013/009/010): win_loss_draw (queue_arena) → ApplyMatchResult;
+// participation_event (host_world_dropin) → ApplyParticipationEvent; placement
+// (battle_royale) → ApplyPlacementResult; kind desconhecido → descarta (o SNS faz
+// fan-out para todas as filas). Mensagem malformada vai à DLQ.
 func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 	return func(ctx context.Context, body []byte) (bool, error) {
 		var head struct {
@@ -127,6 +128,9 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 		switch {
 		case head.Kind == "participation_event":
 			return handleParticipation(ctx, svc, log, body)
+		case head.Kind == "placement":
+			// battle_royale (session/015): tem matchId, então precede o ramo abaixo.
+			return handlePlacement(ctx, svc, log, body)
 		case head.Kind == "win_loss_draw" || head.MatchID != "":
 			// win_loss_draw explícito, ou envelope v1 legado (sem kind, com matchId).
 			return handleMatchResult(ctx, svc, log, body)
@@ -164,6 +168,38 @@ func handleMatchResult(ctx context.Context, svc *service.Service, log *slog.Logg
 	}
 	if dup {
 		log.Info("partida já processada (no-op)", slog.String("match_id", env.MatchID))
+	}
+	return dup, nil
+}
+
+// handlePlacement aplica o resultado por colocação (battle_royale, session/015),
+// idempotente por matchId. survivedMs é exposto como stat no service.
+func handlePlacement(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Entries []struct {
+			PlayerID   string           `json:"playerId"`
+			Placement  int              `json:"placement"`
+			SurvivedMs int64            `json:"survivedMs"`
+			Stats      map[string]int64 `json:"stats"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal placement envelope: %w", err)
+	}
+	entries := make([]domain.PlacementEntry, 0, len(env.Entries))
+	for _, e := range env.Entries {
+		entries = append(entries, domain.PlacementEntry{
+			PlayerID: e.PlayerID, Placement: e.Placement, SurvivedMs: e.SurvivedMs, Stats: e.Stats,
+		})
+	}
+	dup, err := svc.ApplyPlacementResult(ctx, env.GameID, env.MatchID, entries)
+	if err != nil {
+		return false, err
+	}
+	if dup {
+		log.Info("partida (placement) já processada (no-op)", slog.String("match_id", env.MatchID))
 	}
 	return dup, nil
 }
