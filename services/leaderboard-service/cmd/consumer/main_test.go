@@ -99,6 +99,39 @@ func TestMakeHandler_Placement_Duplicado_PropagaDup(t *testing.T) {
 	assert.True(t, dup, "reprocessar a mesma partida é no-op (dup do ApplyCumulative)")
 }
 
+// coop_mission (C3): missão cumprida → todos ganham missions_completed +1; os
+// stats por jogador viram highscore + <stat>_total.
+func TestMakeHandler_Collective_Sucesso_MissionsCompletedParaTodos(t *testing.T) {
+	store, handle := newHandler(t)
+	_, err := handle([]byte(`{"kind":"collective","matchId":"m1","gameId":"g","outcome":"MISSION_SUCCESS","players":[{"playerId":"p1","stats":{"kills":5}},{"playerId":"p2","stats":{"revives":2}}]}`))
+	require.NoError(t, err)
+
+	assert.Equal(t, "m1", store.cumMatchID)
+	assert.True(t, hasIncr(store.incrs, domain.BoardMissionsCompleted, "p1", 1), "missão cumprida conta para todo o time")
+	assert.True(t, hasIncr(store.incrs, domain.BoardMissionsCompleted, "p2", 1))
+	assert.True(t, hasIncr(store.incrs, domain.TotalBoard("kills"), "p1", 5), "kills_total cumulativo")
+	assert.True(t, hasIncr(store.incrs, domain.TotalBoard("revives"), "p2", 2))
+	assert.Contains(t, store.submits, submitCall{board: "kills", playerID: "p1", score: 5})
+}
+
+// Falha da missão: os stats ainda contam, mas missions_completed não incrementa.
+func TestMakeHandler_Collective_Falha_SemMissionsCompleted(t *testing.T) {
+	store, handle := newHandler(t)
+	_, err := handle([]byte(`{"kind":"collective","matchId":"m1","gameId":"g","outcome":"MISSION_FAILURE","players":[{"playerId":"p1","stats":{"kills":3}}]}`))
+	require.NoError(t, err)
+
+	assert.False(t, hasIncr(store.incrs, domain.BoardMissionsCompleted, "p1", 1), "falha não conta missão cumprida")
+	assert.True(t, hasIncr(store.incrs, domain.TotalBoard("kills"), "p1", 3), "performance vale mesmo na falha")
+}
+
+func TestMakeHandler_Collective_Duplicado_PropagaDup(t *testing.T) {
+	store, handle := newHandler(t)
+	store.dup = true
+	dup, err := handle([]byte(`{"kind":"collective","matchId":"m1","gameId":"g","outcome":"MISSION_SUCCESS","players":[{"playerId":"p1"}]}`))
+	require.NoError(t, err)
+	assert.True(t, dup, "reprocessar a mesma missão é no-op")
+}
+
 func TestMakeHandler_WinLossDraw_SemRegressao(t *testing.T) {
 	store, handle := newHandler(t)
 	_, err := handle([]byte(`{"kind":"win_loss_draw","matchId":"m1","gameId":"g","results":[{"playerId":"p1","outcome":"win","score":10,"stats":{"kills":2}}]}`))
