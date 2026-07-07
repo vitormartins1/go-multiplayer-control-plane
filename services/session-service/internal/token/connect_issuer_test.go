@@ -11,13 +11,15 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 )
 
 func TestIssue_TokenVerificavelComChavePublica_RetornaClaims(t *testing.T) {
 	iss, err := Generate()
 	require.NoError(t, err)
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", domain.ConnectClaims{})
 	require.NoError(t, err)
 
 	parsed, err := jwt.Parse(signed, func(*jwt.Token) (any, error) {
@@ -42,7 +44,7 @@ func TestIssue_ComTime_TokenCarregaTeamID(t *testing.T) {
 	iss, err := Generate()
 	require.NoError(t, err)
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "team-1")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-1"})
 	require.NoError(t, err)
 
 	parsed, err := jwt.Parse(signed, func(*jwt.Token) (any, error) {
@@ -52,6 +54,27 @@ func TestIssue_ComTime_TokenCarregaTeamID(t *testing.T) {
 
 	claims := parsed.Claims.(jwt.MapClaims)
 	assert.Equal(t, "team-1", claims["team_id"])
+	assert.NotContains(t, claims, "role", "queue_arena não seta role")
+}
+
+// host_world_dropin (spec 011): com um role não vazio o token carrega o claim
+// role (host/coop/invader) e o refID vira o match_id claim (aqui um sessionID).
+func TestIssue_ComRole_TokenCarregaRole(t *testing.T) {
+	iss, err := Generate()
+	require.NoError(t, err)
+
+	signed, err := iss.Issue("player-123", "session-9", "10.0.0.1:7777", domain.ConnectClaims{Role: domain.RoleInvader})
+	require.NoError(t, err)
+
+	parsed, err := jwt.Parse(signed, func(*jwt.Token) (any, error) {
+		return iss.PublicKey(), nil
+	}, jwt.WithValidMethods([]string{"EdDSA"}))
+	require.NoError(t, err)
+
+	claims := parsed.Claims.(jwt.MapClaims)
+	assert.Equal(t, "invader", claims["role"])
+	assert.Equal(t, "session-9", claims["match_id"], "refID vira o match_id claim")
+	assert.NotContains(t, claims, "team_id", "host_world não seta team_id")
 }
 
 func TestIssue_TokenExpirado_FalhaNaVerificacao(t *testing.T) {
@@ -59,7 +82,7 @@ func TestIssue_TokenExpirado_FalhaNaVerificacao(t *testing.T) {
 	require.NoError(t, err)
 	iss.ttl = -time.Minute // já nasce expirado
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", domain.ConnectClaims{})
 	require.NoError(t, err)
 
 	_, err = jwt.Parse(signed, func(*jwt.Token) (any, error) {
@@ -95,7 +118,7 @@ func TestConnectToken_ValidadoPelaChaveReconstruidaDoJWKS(t *testing.T) {
 	iss, err := Generate()
 	require.NoError(t, err)
 
-	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", "")
+	signed, err := iss.Issue("player-123", "match-42", "10.0.0.1:7777", domain.ConnectClaims{})
 	require.NoError(t, err)
 
 	raw, err := iss.JWKS(context.Background())
