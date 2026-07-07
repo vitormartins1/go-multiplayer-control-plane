@@ -32,6 +32,7 @@ const roleCoop = "coop"
 const (
 	archetypeQueueArena   = "queue_arena"
 	archetypeBattleRoyale = "battle_royale"
+	archetypeCoopMission  = "coop_mission"
 )
 
 // Client chama o game-registry em baseURL (ex.: http://game-registry:8080).
@@ -137,8 +138,9 @@ func (c *Client) CoopPolicy(ctx context.Context, gameID string) (domain.CoopPoli
 // Format lê o perfil do jogo e deriva a formação do match (tamanho + estrutura
 // + composição de lados). Qualquer falha (jogo/perfil ausente, arquétipo sem
 // fila, tamanho inválido, rede) vira ErrProfileUnavailable — o ticket não deve
-// entrar na fila. Serve queue_arena (ffa/teams) e battle_royale (ffa/squads);
-// host_world_dropin não usa fila.
+// entrar na fila. Serve queue_arena (ffa/teams), battle_royale (ffa/squads) e
+// coop_mission (um único time = teams com TeamCount=1); host_world_dropin não
+// usa fila.
 func (c *Client) Format(ctx context.Context, gameID string) (domain.MatchFormat, error) {
 	p, err := c.getProfile(ctx, gameID)
 	if err != nil {
@@ -169,6 +171,14 @@ func (c *Client) Format(ctx context.Context, gameID string) (domain.MatchFormat,
 		} else {
 			format = domain.MatchFormat{Structure: domain.StructureSquads, Size: p.Params.LobbySize, TeamSize: p.Params.TeamSize}
 		}
+	case archetypeCoopMission:
+		// co-op = um único time contra o ambiente (ficha 04): caso degenerado do
+		// NvN (TeamCount=1). composeTeams/StructureTeams já produz o time único.
+		if p.Params.TeamSize < 2 {
+			return domain.MatchFormat{}, fmt.Errorf("registryclient: teamSize inválido (%d) para coop_mission: %w",
+				p.Params.TeamSize, domain.ErrProfileUnavailable)
+		}
+		format = domain.MatchFormat{Structure: domain.StructureTeams, TeamCount: 1, TeamSize: p.Params.TeamSize, Size: p.Params.TeamSize}
 	default:
 		return domain.MatchFormat{}, fmt.Errorf("registryclient: archetype %q não suportado: %w", p.Archetype, domain.ErrProfileUnavailable)
 	}

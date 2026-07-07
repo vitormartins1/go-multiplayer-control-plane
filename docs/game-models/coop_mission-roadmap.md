@@ -38,7 +38,7 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C0 — Declaração do perfil (a base) ✅ branch
+## C0 — Declaração do perfil (a base) ✅ main
 
 **Objetivo:** o jogo declara `coop_mission` com seus parâmetros; o console cadastra/edita. Espelha a declaração que abriu `host_world_dropin` (commit `6fbb3cf`) e `battle_royale` (BR0, `game-registry/007`).
 
@@ -55,9 +55,11 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C1 — Formação do time co-op (matchmaking)
+## C1 — Formação do time co-op (matchmaking) ✅ branch
 
 **Objetivo:** o matchmaking forma **um único time** de `teamSize` (do perfil) e abre a sessão. Caso degenerado da composição NvN do `queue_arena` — um lado só.
+
+> **Status:** implementado na branch `feat/matchmaking/009-coop-mission-team` (spec `matchmaking/009`). Reuso máximo: co-op = `StructureTeams` com `TeamCount=1` → `composeTeams`/domínio/**session intactos** (confirmou a descoberta da BR1). A mudança é um único `case archetypeCoopMission` no `registryclient.Format` (valida `teamSize ≥ 2`, monta `{teams, TeamCount:1, TeamSize, Size:teamSize}`). Verde: unit 113 (`-race`), service 93.4%/registryclient 92.6%, lint 0.
 
 **Specs:** `matchmaking/009-coop-mission-team`.
 
@@ -125,8 +127,8 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 | Fatia | Specs | Tamanho | Depende |
 |---|---|---|---|
-| C0 — declaração do perfil ✅ branch | game-registry/008 + admin-ui | M | — |
-| C1 — formação do time co-op | matchmaking/009 | S–M (session provável intacto) | C0 |
+| C0 — declaração do perfil ✅ main | game-registry/008 + admin-ui | M | — |
+| C1 — formação do time co-op ✅ branch | matchmaking/009 | S (session intacto — confirmado) | C0 |
 | C2 — resultado coletivo **(núcleo)** | session/016 | M | C1 |
 | C3 — colher (3 sinks) | achievements/011 + leaderboard/006 + analytics/006 | L | C2 |
 | C4 — console + contrato | admin-bff + admin-ui + doc | M | C1, C3 |
