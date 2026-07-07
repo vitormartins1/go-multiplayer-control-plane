@@ -15,7 +15,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { api, type GameSession } from "../lib/api";
+import { api, type GameSession, type RoleSlot } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
@@ -196,16 +196,20 @@ function RoomRow({
           )}
         </Table.Td>
         <Table.Td>
-          <Group gap="xs" wrap="nowrap">
-            {s.players.map((p) => (
-              <Tooltip key={p.id} label={p.handle ? `${p.handle} (${p.id})` : p.id}>
-                <Group gap={6} wrap="nowrap">
-                  <PlayerAvatar seed={p.id} />
-                  <Text size="sm">{p.handle || truncate(p.id)}</Text>
-                </Group>
-              </Tooltip>
-            ))}
-          </Group>
+          {s.origin === "host_world" ? (
+            <RoleSlots slots={s.roleSlots ?? []} />
+          ) : (
+            <Group gap="xs" wrap="nowrap">
+              {s.players.map((p) => (
+                <Tooltip key={p.id} label={p.handle ? `${p.handle} (${p.id})` : p.id}>
+                  <Group gap={6} wrap="nowrap">
+                    <PlayerAvatar seed={p.id} />
+                    <Text size="sm">{p.handle || truncate(p.id)}</Text>
+                  </Group>
+                </Tooltip>
+              ))}
+            </Group>
+          )}
         </Table.Td>
         <Table.Td>
           <Text ff="monospace" size="sm">
@@ -237,10 +241,22 @@ function RoomRow({
                 <Stack gap="xs">
                   <Group gap="xl" wrap="wrap">
                     <Field label="JOGO" value={s.gameName || s.gameId || "—"} />
-                    <Field label="MATCH ID" value={s.matchId} mono />
+                    <Field label={s.origin === "host_world" ? "MUNDO" : "MATCH ID"} value={s.matchId || s.sessionId} mono />
                     <Field label="SESSION ID" value={s.sessionId} mono />
                     <Field label="SERVIDOR" value={s.serverAddress || "—"} mono />
+                    {s.origin === "host_world" && s.hostPlayerId && (
+                      <Field label="HOST" value={s.hostPlayerId} mono />
+                    )}
                   </Group>
+
+                  {s.origin === "host_world" && (s.roleSlots?.length ?? 0) > 0 && (
+                    <Stack gap={2}>
+                      <Text size="xs" c="dimmed" fw={600}>
+                        SLOTS POR PAPEL
+                      </Text>
+                      <RoleSlots slots={s.roleSlots ?? []} />
+                    </Stack>
+                  )}
 
                   <Stack gap={2}>
                     <Text size="xs" c="dimmed" fw={600}>
@@ -277,6 +293,32 @@ function RoomRow({
         </Table.Tr>
       )}
     </>
+  );
+}
+
+// rótulos e cores dos papéis do host_world_dropin.
+const ROLE_META: Record<string, { label: string; color: string }> = {
+  coop: { label: "co-op", color: "teal" },
+  invader: { label: "invasor", color: "red" },
+  host: { label: "host", color: "blue" },
+};
+
+// RoleSlots mostra a ocupação por papel (co-op X/2, invasor Y/1) — a leitura do
+// board para mundos host_world (spec 020). Slot cheio fica destacado.
+function RoleSlots({ slots }: { slots: RoleSlot[] }) {
+  if (slots.length === 0) return <Text size="sm" c="dimmed">—</Text>;
+  return (
+    <Group gap="xs" wrap="wrap">
+      {slots.map((slot) => {
+        const meta = ROLE_META[slot.role] ?? { label: slot.role, color: "gray" };
+        const full = slot.occupied >= slot.capacity;
+        return (
+          <Badge key={slot.role} color={full ? "gray" : meta.color} variant={full ? "outline" : "light"}>
+            {meta.label} {slot.occupied}/{slot.capacity}
+          </Badge>
+        );
+      })}
+    </Group>
   );
 }
 

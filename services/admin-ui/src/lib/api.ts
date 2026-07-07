@@ -158,6 +158,13 @@ export interface SessionPlayer {
   handle: string; // vazio quando o identity não resolveu (best-effort do BFF)
 }
 
+// host_world_dropin (spec 020): ocupação de um papel num mundo (co-op X/2, etc.).
+export interface RoleSlot {
+  role: string;
+  capacity: number;
+  occupied: number;
+}
+
 export interface GameSession {
   sessionId: string;
   matchId: string;
@@ -168,7 +175,12 @@ export interface GameSession {
   serverAddress: string;
   openedAt: string;
   closedAt?: string;
-  closeReason?: "result" | "ttl" | "admin";
+  closeReason?: "result" | "ttl" | "admin" | "host_left" | "host_killed" | "abandoned";
+  // host_world_dropin (spec 014/020): origem e slots por papel. queue_arena =
+  // origin "match", sem host/roleSlots.
+  origin?: "match" | "host_world";
+  hostPlayerId?: string;
+  roleSlots?: RoleSlot[];
 }
 
 export interface GameSessions {
@@ -197,6 +209,27 @@ export interface AnalyticsOverview {
   totals: { matches: number; uniquePlayers: number; games: number };
   games: AnalyticsGameStat[];
   daily: AnalyticsDaily[];
+}
+
+// host_world_dropin (spec 004/020): contagem por papel/evento no detalhe do jogo.
+export interface ParticipationStat {
+  role: string;
+  event: string;
+  count: number;
+}
+
+// Detalhe de analytics por jogo (GET /api/analytics/games/{id}).
+export interface GameAnalyticsDetail {
+  gameId: string;
+  gameName: string;
+  matches: number;
+  uniquePlayers: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  avgScore: number;
+  daily: AnalyticsDaily[];
+  roleParticipations: ParticipationStat[];
 }
 
 // LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.
@@ -271,6 +304,8 @@ export const api = {
   liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
   analyticsOverview: (signal?: AbortSignal) =>
     getJSON<AnalyticsOverview>("/api/analytics/overview", signal),
+  gameAnalytics: (gameId: string, signal?: AbortSignal) =>
+    getJSON<GameAnalyticsDetail>(`/api/analytics/games/${encodeURIComponent(gameId)}`, signal),
 
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
