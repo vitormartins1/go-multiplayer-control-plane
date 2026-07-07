@@ -1103,3 +1103,24 @@ import (
 ```
 
 **Pegadinha / nuance:** os arquivos **gerados** de protobuf têm **duas** camadas com o module path: (1) as linhas de `import` normais — seguras de reescrever com `sed` — e (2) o `option go_package` do `.proto`, que fica **serializado dentro do `rawDesc`** do `.pb.go` (o FileDescriptor binário, com strings prefixadas por tamanho). Um `sed` no `.pb.go` que altere a string dentro do `rawDesc` **corrompe o descriptor** (o tamanho gravado deixa de bater). O caminho certo: editar o `go_package` no `.proto` e **regenerar com `buf generate`**. Em C#, o análogo seria mexer à mão em código gerado por source generator — a regra é a mesma: muda-se a fonte, regenera-se o artefato.
+
+## 31 — `*string` como argumento opcional: nil = "não informado" ≠ zero value
+
+**O que é / por que importa:** Go não tem parâmetros opcionais nem `default` de argumento (C# tem `string name = null` e sobrecargas). Quando uma função precisa distinguir **"o chamador não passou o valor"** de **"o chamador passou o valor vazio"**, o idioma é receber um **ponteiro**: `nil` = não informado (preserve/derive), não-nil = use este valor (mesmo que seja `""`). É a mesma distinção que o `omitempty`/`*T` faz em JSON, aplicada à assinatura interna.
+
+**Onde no projeto:** `game-registry/internal/service/profile_service.go` — `setMode(ctx, gameID, modeID string, displayName *string, p)`. O `SetMode` público passa `&displayName` (o console sempre informa, até para limpar); o alias legado `SetMultiplayerProfile` passa `nil` (o corpo das specs 006–008 não tem `displayName` → **preserva** o do modo existente em vez de apagá-lo).
+
+```go
+// SetMode (API nova): displayName explícito — "" significa "limpe".
+func (s *service) SetMode(ctx context.Context, gameID, modeID, displayName string, p domain.MultiplayerProfile) (*domain.MultiplayerMode, error) {
+    return s.setMode(ctx, gameID, modeID, &displayName, p)
+}
+
+// Alias legado: nil = "não sei nada sobre displayName, preserve o que existe".
+func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) (*domain.MultiplayerProfile, error) {
+    m, err := s.setMode(ctx, gameID, domain.DefaultModeID, nil, p)
+    // ...
+}
+```
+
+**Pegadinha / nuance:** não confundir com o typed-nil da entrada #19 (interface embrulhando ponteiro nil). Aqui o ponteiro é usado **de propósito** como tri-estado (`nil` / `""` / valor). Alternativas quando o tri-estado cresce: um struct de "patch" com campos `*T` (estilo JSON merge patch) ou functional options — para **um** campo, o ponteiro simples é o mais direto. Em C# o equivalente moderno seria `string?` + um `bool` separado ou `Optional<T>` — o ponteiro do Go junta os dois.
