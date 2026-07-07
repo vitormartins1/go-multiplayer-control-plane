@@ -65,12 +65,17 @@ func setup(t *testing.T, prov domain.SessionProvisioner) pb.MatchmakingClient {
 }
 
 func setupWith(t *testing.T, prov domain.SessionProvisioner, profile domain.ProfileProvider) pb.MatchmakingClient {
-	return setupFull(t, prov, profile, stubInvader{})
+	return setupFull(t, prov, profile, stubInvader{}, defaultSummoner())
 }
 
-// setupFull sobe o server com os dois interceptors (stream + unary) e um invader
-// injetável — os testes de Invade passam o seu.
-func setupFull(t *testing.T, prov domain.SessionProvisioner, profile domain.ProfileProvider, inv domain.Invader) pb.MatchmakingClient {
+// defaultSummoner é um Summoner real com stubs — usado onde o co-op não é o foco.
+func defaultSummoner() domain.Summoner {
+	return service.NewSummoner(coopPolicyStub{policy: coopSupported()}, injectorStub{addr: "10.0.0.9:7777"})
+}
+
+// setupFull sobe o server com os dois interceptors (stream + unary) e as três
+// Ports de entrada injetáveis — os testes de cada modo passam a sua.
+func setupFull(t *testing.T, prov domain.SessionProvisioner, profile domain.ProfileProvider, inv domain.Invader, sum domain.Summoner) pb.MatchmakingClient {
 	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
 	mm := service.New(10*time.Millisecond, profile, prov)
@@ -81,7 +86,7 @@ func setupFull(t *testing.T, prov domain.SessionProvisioner, profile domain.Prof
 		grpc.StreamInterceptor(StreamAuthInterceptor(fakeVerifier{})),
 		grpc.UnaryInterceptor(UnaryAuthInterceptor(fakeVerifier{})),
 	)
-	pb.RegisterMatchmakingServer(srv, NewServer(mm, inv))
+	pb.RegisterMatchmakingServer(srv, NewServer(mm, inv, sum))
 	go func() { _ = srv.Serve(lis) }()
 
 	conn, err := grpc.NewClient("passthrough://bufnet",
@@ -111,6 +116,25 @@ func (s stubInvader) Invade(_ context.Context, _, playerID string, _ domain.Inva
 		*s.gotPlayerID = playerID
 	}
 	return s.result, s.err
+}
+
+// coopPolicyStub / injectorStub alimentam um Summoner real nos testes de co-op.
+type coopPolicyStub struct{ policy domain.CoopPolicy }
+
+func (c coopPolicyStub) CoopPolicy(context.Context, string) (domain.CoopPolicy, error) {
+	return c.policy, nil
+}
+
+type injectorStub struct{ addr string }
+
+func (i injectorStub) Inject(_ context.Context, _, playerID, _ string) (domain.Injected, error) {
+	return domain.Injected{ServerAddress: i.addr, ConnectToken: "tok-" + playerID}, nil
+}
+
+// coopSupported é uma política host_world_dropin com co-op ligado, sem filtro de
+// faixa (todo sinal casa) — simplifica os testes de transport.
+func coopSupported() domain.CoopPolicy {
+	return domain.CoopPolicy{Archetype: "host_world_dropin", CoopEnabled: true, LevelRangeEnabled: false}
 }
 
 func authCtx(token string) context.Context {
@@ -198,7 +222,7 @@ func TestInvade_Sucesso_DevolveServerETokenEPlayerDoJWT(t *testing.T) {
 		result:      domain.Invaded{SessionID: "w1", ServerAddress: "10.0.0.7:7777", ConnectToken: "tok-invader"},
 		gotPlayerID: &gotPlayer,
 	}
-	client := setupFull(t, okProvisioner, stubProvider{size: 2}, inv)
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, inv, defaultSummoner())
 
 	resp, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
 	require.NoError(t, err)
@@ -209,30 +233,101 @@ func TestInvade_Sucesso_DevolveServerETokenEPlayerDoJWT(t *testing.T) {
 }
 
 func TestInvade_SemToken_Unauthenticated(t *testing.T) {
-	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{})
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{}, defaultSummoner())
 
 	_, err := client.Invade(context.Background(), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err), "sem Bearer -> Unauthenticated")
 }
 
 func TestInvade_SemGameID_InvalidArgument(t *testing.T) {
-	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{})
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{}, defaultSummoner())
 
 	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{SoulLevel: 100})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestInvade_NaoSuportado_FailedPrecondition(t *testing.T) {
-	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrInvasionNotSupported})
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrInvasionNotSupported}, defaultSummoner())
 
 	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 func TestInvade_NenhumMundo_NotFound(t *testing.T) {
-	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrNoEligibleWorld})
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrNoEligibleWorld}, defaultSummoner())
 
 	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// --- co-op por sinais (host_world_dropin, spec 007) ---
+
+// setupCoop sobe o server com um Summoner real (stubs de policy + injector),
+// para dirigir post → list → summon ponta a ponta via bufconn.
+func setupCoop(t *testing.T, policy domain.CoopPolicy) (pb.MatchmakingClient, *service.Summoner) {
+	sum := service.NewSummoner(coopPolicyStub{policy: policy}, injectorStub{addr: "10.0.0.9:7777"})
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{}, sum)
+	return client, sum
+}
+
+// Fluxo completo: aliado anuncia (POSTED) → host lista e invoca → aliado recebe
+// SUMMONED com server+token → o sinal some da lista.
+func TestSummonSigns_FluxoCompleto(t *testing.T) {
+	client, _ := setupCoop(t, coopSupported())
+
+	stream, err := client.PostSummonSign(authCtx("ally-1"), &pb.PostSummonSignRequest{GameId: "hw", SoulLevel: 100})
+	require.NoError(t, err)
+	posted, err := stream.Recv()
+	require.NoError(t, err)
+	assert.Equal(t, pb.SummonStatus_SUMMON_STATUS_POSTED, posted.GetStatus())
+	signID := posted.GetSignId()
+	require.NotEmpty(t, signID)
+
+	list, err := client.ListSigns(authCtx("host-1"), &pb.ListSignsRequest{GameId: "hw", HostSoulLevel: 100})
+	require.NoError(t, err)
+	require.Len(t, list.GetSigns(), 1)
+	assert.Equal(t, "ally-1", list.GetSigns()[0].GetPlayerId())
+
+	summon, err := client.SummonSign(authCtx("host-1"), &pb.SummonSignRequest{SessionId: "world-7", SignId: signID})
+	require.NoError(t, err)
+	assert.Equal(t, "ally-1", summon.GetPlayerId())
+
+	// o aliado recebe SUMMONED pelo stream aberto.
+	summoned, err := stream.Recv()
+	require.NoError(t, err)
+	assert.Equal(t, pb.SummonStatus_SUMMON_STATUS_SUMMONED, summoned.GetStatus())
+	assert.Equal(t, "world-7", summoned.GetSessionId())
+	assert.Equal(t, "10.0.0.9:7777", summoned.GetServerAddress())
+	assert.Equal(t, "tok-ally-1", summoned.GetConnectToken())
+
+	// consumido → some da lista.
+	list, err = client.ListSigns(authCtx("host-1"), &pb.ListSignsRequest{GameId: "hw", HostSoulLevel: 100})
+	require.NoError(t, err)
+	assert.Empty(t, list.GetSigns())
+}
+
+func TestPostSummonSign_CoopNaoSuportado_FailedPrecondition(t *testing.T) {
+	client, _ := setupCoop(t, domain.CoopPolicy{Archetype: "queue_arena"})
+
+	stream, err := client.PostSummonSign(authCtx("ally-1"), &pb.PostSummonSignRequest{GameId: "hw", SoulLevel: 100})
+	require.NoError(t, err)
+	_, err = stream.Recv()
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestPostSummonSign_SemToken_Unauthenticated(t *testing.T) {
+	client, _ := setupCoop(t, coopSupported())
+
+	stream, err := client.PostSummonSign(context.Background(), &pb.PostSummonSignRequest{GameId: "hw", SoulLevel: 100})
+	require.NoError(t, err)
+	_, err = stream.Recv()
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestSummonSign_SinalInexistente_NotFound(t *testing.T) {
+	client, _ := setupCoop(t, coopSupported())
+
+	_, err := client.SummonSign(authCtx("host-1"), &pb.SummonSignRequest{SessionId: "world-1", SignId: "nope"})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 

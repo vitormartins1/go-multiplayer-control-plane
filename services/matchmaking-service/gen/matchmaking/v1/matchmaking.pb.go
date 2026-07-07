@@ -73,6 +73,59 @@ func (Status) EnumDescriptor() ([]byte, []int) {
 	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{0}
 }
 
+// SummonStatus é o ciclo do sinal no stream do aliado (spec 007).
+type SummonStatus int32
+
+const (
+	SummonStatus_SUMMON_STATUS_UNSPECIFIED SummonStatus = 0
+	SummonStatus_SUMMON_STATUS_POSTED      SummonStatus = 1 // publicado; aguardando invocação (traz sign_id)
+	SummonStatus_SUMMON_STATUS_SUMMONED    SummonStatus = 2 // invocado por um host (traz server + token)
+	SummonStatus_SUMMON_STATUS_EXPIRED     SummonStatus = 3 // TTL venceu / cancelado sem invocação
+)
+
+// Enum value maps for SummonStatus.
+var (
+	SummonStatus_name = map[int32]string{
+		0: "SUMMON_STATUS_UNSPECIFIED",
+		1: "SUMMON_STATUS_POSTED",
+		2: "SUMMON_STATUS_SUMMONED",
+		3: "SUMMON_STATUS_EXPIRED",
+	}
+	SummonStatus_value = map[string]int32{
+		"SUMMON_STATUS_UNSPECIFIED": 0,
+		"SUMMON_STATUS_POSTED":      1,
+		"SUMMON_STATUS_SUMMONED":    2,
+		"SUMMON_STATUS_EXPIRED":     3,
+	}
+)
+
+func (x SummonStatus) Enum() *SummonStatus {
+	p := new(SummonStatus)
+	*p = x
+	return p
+}
+
+func (x SummonStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SummonStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_matchmaking_v1_matchmaking_proto_enumTypes[1].Descriptor()
+}
+
+func (SummonStatus) Type() protoreflect.EnumType {
+	return &file_matchmaking_v1_matchmaking_proto_enumTypes[1]
+}
+
+func (x SummonStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SummonStatus.Descriptor instead.
+func (SummonStatus) EnumDescriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{1}
+}
+
 type FindMatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // o jogo do cliente (multi-tenant, ADR-0017)
@@ -323,6 +376,413 @@ func (x *InvadeResponse) GetConnectToken() string {
 	return ""
 }
 
+// Co-op por quadro de sinais (spec 007). O aliado anuncia com a sua faixa; o
+// playerID vem do JWT (interceptor), não do request.
+type PostSummonSignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`              // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+	SoulLevel     int32                  `protobuf:"varint,2,opt,name=soul_level,json=soulLevel,proto3" json:"soul_level,omitempty"`    // nível do aliado (faixa simétrica de co-op)
+	WeaponTier    int32                  `protobuf:"varint,3,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"` // tier de arma do aliado (se o perfil exigir)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostSummonSignRequest) Reset() {
+	*x = PostSummonSignRequest{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostSummonSignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostSummonSignRequest) ProtoMessage() {}
+
+func (x *PostSummonSignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostSummonSignRequest.ProtoReflect.Descriptor instead.
+func (*PostSummonSignRequest) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PostSummonSignRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+func (x *PostSummonSignRequest) GetSoulLevel() int32 {
+	if x != nil {
+		return x.SoulLevel
+	}
+	return 0
+}
+
+func (x *PostSummonSignRequest) GetWeaponTier() int32 {
+	if x != nil {
+		return x.WeaponTier
+	}
+	return 0
+}
+
+type SummonUpdate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        SummonStatus           `protobuf:"varint,1,opt,name=status,proto3,enum=matchmaking.v1.SummonStatus" json:"status,omitempty"`
+	SignId        string                 `protobuf:"bytes,2,opt,name=sign_id,json=signId,proto3" json:"sign_id,omitempty"`                      // preenchido em POSTED
+	SessionId     string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`             // mundo do host (SUMMONED)
+	ServerAddress string                 `protobuf:"bytes,4,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server (SUMMONED)
+	ConnectToken  string                 `protobuf:"bytes,5,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`    // connect token EdDSA do aliado, claim role=coop (SUMMONED)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SummonUpdate) Reset() {
+	*x = SummonUpdate{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SummonUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SummonUpdate) ProtoMessage() {}
+
+func (x *SummonUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SummonUpdate.ProtoReflect.Descriptor instead.
+func (*SummonUpdate) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SummonUpdate) GetStatus() SummonStatus {
+	if x != nil {
+		return x.Status
+	}
+	return SummonStatus_SUMMON_STATUS_UNSPECIFIED
+}
+
+func (x *SummonUpdate) GetSignId() string {
+	if x != nil {
+		return x.SignId
+	}
+	return ""
+}
+
+func (x *SummonUpdate) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SummonUpdate) GetServerAddress() string {
+	if x != nil {
+		return x.ServerAddress
+	}
+	return ""
+}
+
+func (x *SummonUpdate) GetConnectToken() string {
+	if x != nil {
+		return x.ConnectToken
+	}
+	return ""
+}
+
+type ListSignsRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	GameId         string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`                         // jogo (multi-tenant)
+	HostSoulLevel  int32                  `protobuf:"varint,2,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"` // faixa do mundo do host (filtra os sinais compatíveis)
+	HostWeaponTier int32                  `protobuf:"varint,3,opt,name=host_weapon_tier,json=hostWeaponTier,proto3" json:"host_weapon_tier,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListSignsRequest) Reset() {
+	*x = ListSignsRequest{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSignsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSignsRequest) ProtoMessage() {}
+
+func (x *ListSignsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSignsRequest.ProtoReflect.Descriptor instead.
+func (*ListSignsRequest) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListSignsRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+func (x *ListSignsRequest) GetHostSoulLevel() int32 {
+	if x != nil {
+		return x.HostSoulLevel
+	}
+	return 0
+}
+
+func (x *ListSignsRequest) GetHostWeaponTier() int32 {
+	if x != nil {
+		return x.HostWeaponTier
+	}
+	return 0
+}
+
+type ListSignsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Signs         []*SummonSign          `protobuf:"bytes,1,rep,name=signs,proto3" json:"signs,omitempty"` // vazio se nenhum sinal compatível
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSignsResponse) Reset() {
+	*x = ListSignsResponse{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSignsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSignsResponse) ProtoMessage() {}
+
+func (x *ListSignsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSignsResponse.ProtoReflect.Descriptor instead.
+func (*ListSignsResponse) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListSignsResponse) GetSigns() []*SummonSign {
+	if x != nil {
+		return x.Signs
+	}
+	return nil
+}
+
+// SummonSign é um sinal ativo no quadro, do ponto de vista do host que navega.
+type SummonSign struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SignId        string                 `protobuf:"bytes,1,opt,name=sign_id,json=signId,proto3" json:"sign_id,omitempty"`
+	PlayerId      string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"` // o aliado que anunciou
+	SoulLevel     int32                  `protobuf:"varint,3,opt,name=soul_level,json=soulLevel,proto3" json:"soul_level,omitempty"`
+	WeaponTier    int32                  `protobuf:"varint,4,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SummonSign) Reset() {
+	*x = SummonSign{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SummonSign) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SummonSign) ProtoMessage() {}
+
+func (x *SummonSign) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SummonSign.ProtoReflect.Descriptor instead.
+func (*SummonSign) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SummonSign) GetSignId() string {
+	if x != nil {
+		return x.SignId
+	}
+	return ""
+}
+
+func (x *SummonSign) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *SummonSign) GetSoulLevel() int32 {
+	if x != nil {
+		return x.SoulLevel
+	}
+	return 0
+}
+
+func (x *SummonSign) GetWeaponTier() int32 {
+	if x != nil {
+		return x.WeaponTier
+	}
+	return 0
+}
+
+type SummonSignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"` // mundo do host onde injetar o aliado
+	SignId        string                 `protobuf:"bytes,2,opt,name=sign_id,json=signId,proto3" json:"sign_id,omitempty"`          // o sinal escolhido
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SummonSignRequest) Reset() {
+	*x = SummonSignRequest{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SummonSignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SummonSignRequest) ProtoMessage() {}
+
+func (x *SummonSignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SummonSignRequest.ProtoReflect.Descriptor instead.
+func (*SummonSignRequest) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SummonSignRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SummonSignRequest) GetSignId() string {
+	if x != nil {
+		return x.SignId
+	}
+	return ""
+}
+
+type SummonSignResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"` // o aliado invocado (o server/token vão pelo stream dele)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SummonSignResponse) Reset() {
+	*x = SummonSignResponse{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SummonSignResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SummonSignResponse) ProtoMessage() {}
+
+func (x *SummonSignResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SummonSignResponse.ProtoReflect.Descriptor instead.
+func (*SummonSignResponse) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SummonSignResponse) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
 var File_matchmaking_v1_matchmaking_proto protoreflect.FileDescriptor
 
 const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
@@ -347,15 +807,57 @@ const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x12#\n" +
-	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken*]\n" +
+	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken\"p\n" +
+	"\x15PostSummonSignRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1d\n" +
+	"\n" +
+	"soul_level\x18\x02 \x01(\x05R\tsoulLevel\x12\x1f\n" +
+	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
+	"weaponTier\"\xc8\x01\n" +
+	"\fSummonUpdate\x124\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x1c.matchmaking.v1.SummonStatusR\x06status\x12\x17\n" +
+	"\asign_id\x18\x02 \x01(\tR\x06signId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12%\n" +
+	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12#\n" +
+	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\"}\n" +
+	"\x10ListSignsRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12&\n" +
+	"\x0fhost_soul_level\x18\x02 \x01(\x05R\rhostSoulLevel\x12(\n" +
+	"\x10host_weapon_tier\x18\x03 \x01(\x05R\x0ehostWeaponTier\"E\n" +
+	"\x11ListSignsResponse\x120\n" +
+	"\x05signs\x18\x01 \x03(\v2\x1a.matchmaking.v1.SummonSignR\x05signs\"\x82\x01\n" +
+	"\n" +
+	"SummonSign\x12\x17\n" +
+	"\asign_id\x18\x01 \x01(\tR\x06signId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x1d\n" +
+	"\n" +
+	"soul_level\x18\x03 \x01(\x05R\tsoulLevel\x12\x1f\n" +
+	"\vweapon_tier\x18\x04 \x01(\x05R\n" +
+	"weaponTier\"K\n" +
+	"\x11SummonSignRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
+	"\asign_id\x18\x02 \x01(\tR\x06signId\"1\n" +
+	"\x12SummonSignResponse\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\tR\bplayerId*]\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_SEARCHING\x10\x01\x12\x12\n" +
 	"\x0eSTATUS_MATCHED\x10\x02\x12\x11\n" +
-	"\rSTATUS_FAILED\x10\x032\xa5\x01\n" +
+	"\rSTATUS_FAILED\x10\x03*~\n" +
+	"\fSummonStatus\x12\x1d\n" +
+	"\x19SUMMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14SUMMON_STATUS_POSTED\x10\x01\x12\x1a\n" +
+	"\x16SUMMON_STATUS_SUMMONED\x10\x02\x12\x19\n" +
+	"\x15SUMMON_STATUS_EXPIRED\x10\x032\xa5\x03\n" +
 	"\vMatchmaking\x12M\n" +
 	"\tFindMatch\x12 .matchmaking.v1.FindMatchRequest\x1a\x1c.matchmaking.v1.TicketUpdate0\x01\x12G\n" +
-	"\x06Invade\x12\x1d.matchmaking.v1.InvadeRequest\x1a\x1e.matchmaking.v1.InvadeResponseBhZfgithub.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
+	"\x06Invade\x12\x1d.matchmaking.v1.InvadeRequest\x1a\x1e.matchmaking.v1.InvadeResponse\x12W\n" +
+	"\x0ePostSummonSign\x12%.matchmaking.v1.PostSummonSignRequest\x1a\x1c.matchmaking.v1.SummonUpdate0\x01\x12P\n" +
+	"\tListSigns\x12 .matchmaking.v1.ListSignsRequest\x1a!.matchmaking.v1.ListSignsResponse\x12S\n" +
+	"\n" +
+	"SummonSign\x12!.matchmaking.v1.SummonSignRequest\x1a\".matchmaking.v1.SummonSignResponseBhZfgithub.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
 
 var (
 	file_matchmaking_v1_matchmaking_proto_rawDescOnce sync.Once
@@ -369,26 +871,42 @@ func file_matchmaking_v1_matchmaking_proto_rawDescGZIP() []byte {
 	return file_matchmaking_v1_matchmaking_proto_rawDescData
 }
 
-var file_matchmaking_v1_matchmaking_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_matchmaking_v1_matchmaking_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_matchmaking_v1_matchmaking_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_matchmaking_v1_matchmaking_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_matchmaking_v1_matchmaking_proto_goTypes = []any{
-	(Status)(0),              // 0: matchmaking.v1.Status
-	(*FindMatchRequest)(nil), // 1: matchmaking.v1.FindMatchRequest
-	(*TicketUpdate)(nil),     // 2: matchmaking.v1.TicketUpdate
-	(*InvadeRequest)(nil),    // 3: matchmaking.v1.InvadeRequest
-	(*InvadeResponse)(nil),   // 4: matchmaking.v1.InvadeResponse
+	(Status)(0),                   // 0: matchmaking.v1.Status
+	(SummonStatus)(0),             // 1: matchmaking.v1.SummonStatus
+	(*FindMatchRequest)(nil),      // 2: matchmaking.v1.FindMatchRequest
+	(*TicketUpdate)(nil),          // 3: matchmaking.v1.TicketUpdate
+	(*InvadeRequest)(nil),         // 4: matchmaking.v1.InvadeRequest
+	(*InvadeResponse)(nil),        // 5: matchmaking.v1.InvadeResponse
+	(*PostSummonSignRequest)(nil), // 6: matchmaking.v1.PostSummonSignRequest
+	(*SummonUpdate)(nil),          // 7: matchmaking.v1.SummonUpdate
+	(*ListSignsRequest)(nil),      // 8: matchmaking.v1.ListSignsRequest
+	(*ListSignsResponse)(nil),     // 9: matchmaking.v1.ListSignsResponse
+	(*SummonSign)(nil),            // 10: matchmaking.v1.SummonSign
+	(*SummonSignRequest)(nil),     // 11: matchmaking.v1.SummonSignRequest
+	(*SummonSignResponse)(nil),    // 12: matchmaking.v1.SummonSignResponse
 }
 var file_matchmaking_v1_matchmaking_proto_depIdxs = []int32{
-	0, // 0: matchmaking.v1.TicketUpdate.status:type_name -> matchmaking.v1.Status
-	1, // 1: matchmaking.v1.Matchmaking.FindMatch:input_type -> matchmaking.v1.FindMatchRequest
-	3, // 2: matchmaking.v1.Matchmaking.Invade:input_type -> matchmaking.v1.InvadeRequest
-	2, // 3: matchmaking.v1.Matchmaking.FindMatch:output_type -> matchmaking.v1.TicketUpdate
-	4, // 4: matchmaking.v1.Matchmaking.Invade:output_type -> matchmaking.v1.InvadeResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0,  // 0: matchmaking.v1.TicketUpdate.status:type_name -> matchmaking.v1.Status
+	1,  // 1: matchmaking.v1.SummonUpdate.status:type_name -> matchmaking.v1.SummonStatus
+	10, // 2: matchmaking.v1.ListSignsResponse.signs:type_name -> matchmaking.v1.SummonSign
+	2,  // 3: matchmaking.v1.Matchmaking.FindMatch:input_type -> matchmaking.v1.FindMatchRequest
+	4,  // 4: matchmaking.v1.Matchmaking.Invade:input_type -> matchmaking.v1.InvadeRequest
+	6,  // 5: matchmaking.v1.Matchmaking.PostSummonSign:input_type -> matchmaking.v1.PostSummonSignRequest
+	8,  // 6: matchmaking.v1.Matchmaking.ListSigns:input_type -> matchmaking.v1.ListSignsRequest
+	11, // 7: matchmaking.v1.Matchmaking.SummonSign:input_type -> matchmaking.v1.SummonSignRequest
+	3,  // 8: matchmaking.v1.Matchmaking.FindMatch:output_type -> matchmaking.v1.TicketUpdate
+	5,  // 9: matchmaking.v1.Matchmaking.Invade:output_type -> matchmaking.v1.InvadeResponse
+	7,  // 10: matchmaking.v1.Matchmaking.PostSummonSign:output_type -> matchmaking.v1.SummonUpdate
+	9,  // 11: matchmaking.v1.Matchmaking.ListSigns:output_type -> matchmaking.v1.ListSignsResponse
+	12, // 12: matchmaking.v1.Matchmaking.SummonSign:output_type -> matchmaking.v1.SummonSignResponse
+	8,  // [8:13] is the sub-list for method output_type
+	3,  // [3:8] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_matchmaking_v1_matchmaking_proto_init() }
@@ -401,8 +919,8 @@ func file_matchmaking_v1_matchmaking_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_matchmaking_v1_matchmaking_proto_rawDesc), len(file_matchmaking_v1_matchmaking_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   4,
+			NumEnums:      2,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

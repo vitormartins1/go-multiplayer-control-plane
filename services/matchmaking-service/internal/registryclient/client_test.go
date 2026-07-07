@@ -93,6 +93,32 @@ func TestInvasionPolicy_404_ErrProfileUnavailable(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
+func TestCoopPolicy_EnabledRolesComCoop_SuportaCoop(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"host_world_dropin","params":{"enabledRoles":["coop","invader"],"levelRangeEnabled":true,"weaponTierEnabled":true}}`, nil)
+	policy, err := New(srv.URL, srv.Client()).CoopPolicy(t.Context(), "g1")
+	require.NoError(t, err)
+	assert.True(t, policy.CoopEnabled)
+	assert.True(t, policy.LevelRangeEnabled)
+	assert.True(t, policy.WeaponTierEnabled)
+	assert.True(t, policy.SupportsCoop())
+}
+
+func TestCoopPolicy_SemCoopNosRoles_NaoSuporta(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"host_world_dropin","params":{"enabledRoles":["invader"]}}`, nil)
+	policy, err := New(srv.URL, srv.Client()).CoopPolicy(t.Context(), "g1")
+	require.NoError(t, err)
+	assert.False(t, policy.CoopEnabled)
+	assert.False(t, policy.SupportsCoop(), "só invasão habilitada")
+}
+
+func TestCoopPolicy_404_ErrProfileUnavailable(t *testing.T) {
+	srv := serverReturning(t, http.StatusNotFound, `{"error":"profile_not_found"}`, nil)
+	_, err := New(srv.URL, srv.Client()).CoopPolicy(t.Context(), "g1")
+	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+}
+
 func TestMatchSize_InjetaInternalKey(t *testing.T) {
 	var gotKey string
 	srv := serverReturning(t, http.StatusOK,

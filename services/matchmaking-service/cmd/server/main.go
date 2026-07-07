@@ -40,6 +40,10 @@ const (
 	serviceName     = "matchmaking-service"
 	formInterval    = time.Second
 	profileCacheTTL = 30 * time.Second // TTL do cache do perfil de multiplayer (ADR-0023)
+	// quadro de sinais de co-op (host_world_dropin, spec 007): TTL do sinal e
+	// intervalo do sweeper que expira os vencidos.
+	signTTL       = 2 * time.Minute
+	sweepInterval = 15 * time.Second
 )
 
 // invasionsCounter monta o CounterFunc de invasions_total para um resultado,
@@ -50,6 +54,16 @@ func invasionsCounter(inv *service.Invader, result string) prometheus.Collector 
 		Help:        "Total de invasões por resultado (host_world_dropin, spec 006).",
 		ConstLabels: prometheus.Labels{"result": result},
 	}, func() float64 { return inv.InvasionsTotal(result) })
+}
+
+// summonsCounter monta o CounterFunc de summons_total para um resultado, com o
+// rótulo result fixo (ConstLabels) — o valor vem do contador do Summoner (spec 007).
+func summonsCounter(sum *service.Summoner, result string) prometheus.Collector {
+	return prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name:        "summons_total",
+		Help:        "Total de sinais de co-op por desfecho (host_world_dropin, spec 007).",
+		ConstLabels: prometheus.Labels{"result": result},
+	}, func() float64 { return sum.SummonsTotal(result) })
 }
 
 func main() {
@@ -125,10 +139,12 @@ func run(log *slog.Logger) error {
 
 	mm := service.New(formInterval, provider, sessionClient)
 	inv := service.NewInvader(registry, sessionClient, sessionClient)
+	sum := service.NewSummoner(registry, sessionClient) // co-op por sinais (spec 007)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go mm.Run(ctx)
+	go sum.RunSweeper(ctx, signTTL, sweepInterval, log) // expira sinais vencidos
 
 	// métricas custom (a fila e os matches são o que interessa observar aqui).
 	prometheus.MustRegister(
@@ -146,14 +162,21 @@ func run(log *slog.Logger) error {
 		invasionsCounter(inv, "injected"),
 		invasionsCounter(inv, "no_world"),
 		invasionsCounter(inv, "not_supported"),
+		// funil de co-op (host_world_dropin, spec 007): desfecho dos sinais + ativos.
+		summonsCounter(sum, "summoned"),
+		summonsCounter(sum, "expired"),
+		summonsCounter(sum, "cancelled"),
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "summon_signs_active", Help: "Sinais de co-op no quadro (host_world_dropin, spec 007).",
+		}, sum.SignsActive),
 	)
 
 	grpcSrv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
 		grpc.StreamInterceptor(transport.StreamAuthInterceptor(verifier)),
-		grpc.ChainUnaryInterceptor(transport.UnaryAuthInterceptor(verifier)), // Invade é unary (spec 006)
+		grpc.ChainUnaryInterceptor(transport.UnaryAuthInterceptor(verifier)), // Invade/SummonSign unary (spec 006/007)
 	)
-	pb.RegisterMatchmakingServer(grpcSrv, transport.NewServer(mm, inv))
+	pb.RegisterMatchmakingServer(grpcSrv, transport.NewServer(mm, inv, sum))
 	reflection.Register(grpcSrv) // permite grpcurl sem o .proto
 
 	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)

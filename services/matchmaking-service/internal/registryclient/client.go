@@ -19,7 +19,12 @@ import (
 var (
 	_ domain.ProfileProvider        = (*Client)(nil)
 	_ domain.InvasionPolicyProvider = (*Client)(nil)
+	_ domain.CoopPolicyProvider     = (*Client)(nil)
 )
+
+// roleCoop é o papel cujo habilitação (em params.enabledRoles) o quadro de sinais
+// exige (spec 007). Vocabulário do game-registry.
+const roleCoop = "coop"
 
 // archetypeQueueArena é o único arquétipo cujo tamanho o matchmaking sabe
 // derivar nesta fatia (ADR-0023). Vocabulário do game-registry.
@@ -49,11 +54,13 @@ type profileResponse struct {
 		PlayerCount int    `json:"playerCount"`
 		TeamCount   int    `json:"teamCount"`
 		TeamSize    int    `json:"teamSize"`
-		// host_world_dropin (spec 006): flags que ligam/desligam cada filtro da
-		// invasão. Ausentes em queue_arena (ficam false).
-		InvasionEnabled   bool `json:"invasionEnabled"`
-		LevelRangeEnabled bool `json:"levelRangeEnabled"`
-		WeaponTierEnabled bool `json:"weaponTierEnabled"`
+		// host_world_dropin (spec 006/007): flags que ligam/desligam cada filtro.
+		// Ausentes em queue_arena (ficam false). enabledRoles lista os papéis
+		// habilitados (coop/invader) — o co-op (spec 007) exige "coop".
+		InvasionEnabled   bool     `json:"invasionEnabled"`
+		LevelRangeEnabled bool     `json:"levelRangeEnabled"`
+		WeaponTierEnabled bool     `json:"weaponTierEnabled"`
+		EnabledRoles      []string `json:"enabledRoles"`
 	} `json:"params"`
 }
 
@@ -92,6 +99,30 @@ func (c *Client) InvasionPolicy(ctx context.Context, gameID string) (domain.Inva
 	return domain.InvasionPolicy{
 		Archetype:         p.Archetype,
 		InvasionEnabled:   p.Params.InvasionEnabled,
+		LevelRangeEnabled: p.Params.LevelRangeEnabled,
+		WeaponTierEnabled: p.Params.WeaponTierEnabled,
+	}, nil
+}
+
+// CoopPolicy lê o perfil e monta a política de co-op (spec 007). CoopEnabled =
+// params.enabledRoles contém "coop". Arquétipo != host_world_dropin devolve a
+// policy com o Archetype preenchido (SupportsCoop = false) — o service decide
+// ErrCoopNotSupported. Rede/404/parse → ErrProfileUnavailable.
+func (c *Client) CoopPolicy(ctx context.Context, gameID string) (domain.CoopPolicy, error) {
+	p, err := c.getProfile(ctx, gameID)
+	if err != nil {
+		return domain.CoopPolicy{}, err
+	}
+	coopEnabled := false
+	for _, role := range p.Params.EnabledRoles {
+		if role == roleCoop {
+			coopEnabled = true
+			break
+		}
+	}
+	return domain.CoopPolicy{
+		Archetype:         p.Archetype,
+		CoopEnabled:       coopEnabled,
 		LevelRangeEnabled: p.Params.LevelRangeEnabled,
 		WeaponTierEnabled: p.Params.WeaponTierEnabled,
 	}, nil
