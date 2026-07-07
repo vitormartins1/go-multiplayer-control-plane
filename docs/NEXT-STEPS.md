@@ -1,8 +1,30 @@
-# NEXT-STEPS — handoff (atualizado 2026-07-04)
+# NEXT-STEPS — handoff (atualizado 2026-07-07)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
-> **Frente ativa (2026-07-06): ADR-0023 — multiplayer por arquétipo/perfil.** O estado por fatia vive em `docs/game-models/README.md` → "Estado da implementação". Em andamento: **composição de times** no `queue_arena` (specs `matchmaking/005-team-composition` + `session/010-team-registration`, branch `feat/matchmaking/005-team-composition`) — matchmaking atribui lados, session vira dono canônico do `team_id` (carimba no resultado) e o **connect token passa a carregar `team_id`** para o data plane rodar NvN. Docs novos: **`docs/game-models/queue_arena-dataplane-contract.md`** (contrato control↔data plane + dívidas cross-repo do data plane) e **`docs/REPO-TOPOLOGY.md`** (padrão de nomes: um `go-game-<archetype>-dataplane` por arquétipo + rename proposto do backend → `go-game-control-plane`; **decisão pendente**, nada renomeado ainda). Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane** — pode quebrar o Unity, migra-se depois.
+> **Frente ativa (2026-07-07): ADR-0023 — multiplayer por arquétipo/perfil.** O estado por fatia vive em `docs/game-models/README.md` → "Estado da implementação". **Dois arquétipos completos no control plane** (validados com server mockado — adapter `static` + cliente de teste):
+>
+> - **`queue_arena`** (partida simétrica FFA/NvN, resultado win/loss/draw): declarar → formar (com **composição de times**, `team_id` no connect token) → resultado terminal → fan-out → console. Contrato: `docs/game-models/queue_arena-dataplane-contract.md`.
+> - **`host_world_dropin`** (Souls-like — mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento): **H0–H3 + contrato FEITOS**. Ver o bloco dedicado abaixo.
+>
+> Docs de suporte: **`docs/REPO-TOPOLOGY.md`** (um `go-game-<archetype>-dataplane` por arquétipo + rename proposto do backend → `go-game-control-plane`; **decisão pendente**, nada renomeado). Princípio firmado: **forma certa do control plane acima de compatibilidade do data plane** — pode quebrar o Unity, migra-se depois.
+
+## `host_world_dropin` — completo no control plane + console + contrato (2026-07-07)
+
+Arquétipo Souls-like (ficha `docs/game-models/01-soulslike-invasion-coop.md`) — **quebra o modelo do `queue_arena` em quase todos os eixos** (sem partida formada por fila, sem placar terminal, sessão = mundo persistente de um host, papéis assimétricos, resultado por participante). **Fechado ponta a ponta no que é nosso**, na `main`, validado com server mockado. Roadmap: `docs/game-models/host_world_dropin-roadmap.md`.
+
+| Fatia | Specs | O que entrega |
+|---|---|---|
+| **H0** — sessão host-cêntrica | `session/011` | `OpenWorld`/`JoinWorld`/`LeaveWorld`/`CloseWorld`; slots por papel (coop/invasor) do perfil; connect token com claim `role` |
+| **H1a** — invasão (busca+injeção) | `session/012` + `matchmaking/006` | diretório de invadíveis (`ListInvadableWorlds`); RPC `Invade` filtra por faixa assimétrica (`Eligible` pura) e injeta `role=invader`; `UnaryAuthInterceptor` novo |
+| **H1b** — co-op (quadro de sinais) | `matchmaking/007` | `PostSummonSign` (stream, aliado anuncia e aguarda), `ListSigns`, `SummonSign` (host invoca → injeta `role=coop`); store efêmero em memória + TTL; banda `CoopEligible` simétrica |
+| **H2** — resultado por evento/papel | `session/013` + `achievements/009` + `analytics/004` | `ReportParticipationEvent` (JOINED/BOSS_DEFEATED/HOST_KILLED/DIED/LEFT); envelope `kind=participation_event` no mesmo tópico `match-results`; sinks despacham por `kind` (achievements por papel, analytics agrega participações) |
+| **H3** — surfacing no console | `session/014` + `admin-bff/014` + `admin-ui/020` | board expõe `origin`/`host`/`roleSlots`; BFF repassa + endpoint per-game `/api/analytics/games/{id}`; Rooms mostra slots por papel (co-op X/2, invasor Y/1), GameAnalytics mostra participações por papel |
+| **Contrato** | doc | `docs/game-models/host_world_dropin-dataplane-contract.md` — fonte de verdade control↔data plane (fluxos, claim `role`, `ReportParticipationEvent`, envelope, mudanças p/ o repo Unity) |
+
+**Evoluções adiadas** (backlog com contexto para retomar): `docs/game-models/host_world_dropin-follow-ups.md` — senha/play-with-friends, pools/região, store Redis+pub/sub, `eventId` por ocorrência, dimensão `outcome` no analytics, critério por stat, alocação sob demanda, observabilidade fina do funil. **Plano:** evoluir esses detalhes **depois de validar a funcionalidade no data plane específico** (Unity).
+
+**Falta (cross-repo, não control plane):** criar o `go-game-host-world-dropin-dataplane` (Unity, ⬜ planejado em `REPO-TOPOLOGY.md`) consumindo o contrato + Agones — o e2e real do drop-in. Leaderboard de invasões/co-ops é cauda opcional.
 
 ## Estado atual (`main` verde, stack local de pé)
 
@@ -74,7 +96,7 @@ Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-
 8. **SQS queue depth no Grafana** (observabilidade futura): visibilidade de profundidade de fila e DLQ requer `yet-another-cloudwatch-exporter` (YACE). Métricas do lado consumidor já estão no dashboard `game-lifecycle`. Implementar quando chegar em produção AWS.
 9. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR.
 10. **Infra / deploy — payoff da tese (ADR-0008):** falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005); medir custo/performance vs AWS GameKit.
-11. **Data plane / o jogo (repo `go-game-unity`, não-Go):** Unity Dedicated Server + Netcode + Agones/EKS (ADR-0010/0011/0012).
+11. **Data plane / o jogo (repos Unity por arquétipo, não-Go — `REPO-TOPOLOGY.md`):** o `go-game-dataplane` (queue_arena, Fases 0–7) valida o `queue_arena`; o **`go-game-host-world-dropin-dataplane`** (⬜ planejado) é o próximo — encarna o mundo do host consumindo `host_world_dropin-dataplane-contract.md` (claim `role`, join-in-progress, `ReportParticipationEvent`) + Agones. É onde a funcionalidade do drop-in vira e2e real e destrava os follow-ups do arquétipo.
 12. ✅ **Sessão órfã: fechar por sinal do GameServer — FEITO (opção a)** (ADR-0022, spec `session/008-orphan-reconcile`). O session-service **reconcilia** as sessões OPEN contra o Agones a cada tick do sweeper: nova Port `domain.ServerRegistry.LiveServerIDs` (LIST dos GameServers da fleet por label — só o adapter Agones implementa, `nil` no modo static) fecha com motivo novo **`abandoned`** toda sessão cujo `ServerID` sumiu da fleet, respeitando um **grace period** (`SESSION_ORPHAN_GRACE`, default 60s, contra staleness do LIST). Falha no LIST = tick pulado (não fecha nada). O TTL sweeper vira **backstop** (e único mecanismo no static). Métrica `sessions_closed_total{reason="abandoned"}` distinta; o painel "Sessões encerradas/s por motivo" pega o motivo sozinho (`{{reason}}`). GO-LEARNINGS #19 (dependência opcional como interface nil + armadilha do typed-nil). *Complemento futuro adiado:* opção (b) — game server **notificar abandono** no `Shutdown` — não cobre crash e é cross-repo, fica como evolução. *Não era bug de métrica:* `session_active_sessions` = `len(s.sessions)` e o `closeSession` faz `delete` — decrementa certo; o "6 na métrica × 0 na lista" pós-limpeza foi só lag de scrape do Prometheus, não contabilidade furada.
 
 ## Gotchas operacionais
