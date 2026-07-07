@@ -103,7 +103,7 @@ O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [R
 **Escopo:**
 - **Rooms:** a sala de um jogo `battle_royale` mostra o lobby (N/`lobbySize`) e o modo (solo/squad). Reusa o board de Rooms (`session/007`). *Vivos/eliminados ao vivo = follow-up (decisão #1).*
 - **Analytics:** bloco condicional por perfil (reusa o surfacing da B2/H3) — distribuição de colocações, taxa de "top 10", sobrevivência média.
-- **Contrato:** `battle_royale-dataplane-contract.md` (par do `queue_arena`/`host_world_dropin`) — o que o server do BR chama: recebe o lobby via connect token (com `team_id` do squad), roda a partida com o `respawnMode` declarado, chama `ReportResult` com o `PlacementResult`. Fonte de verdade das mudanças cross-repo no futuro `unity-battle-royale-data-plane`.
+- **Contrato:** ✅ **escrito** — [`battle_royale-dataplane-contract.md`](./battle_royale-dataplane-contract.md) (par do `queue_arena`/`host_world_dropin`): o server do BR recebe o lobby via connect token (com `team_id` do squad), roda a partida com o `respawnMode` declarado, chama `ReportResult` com o `PlacementResult` terminal. Fonte de verdade das mudanças cross-repo no futuro `unity-battle-royale-data-plane`.
 
 **Depende de:** BR1 (Rooms lê lobby), BR3 (analytics lê colocações). **Tamanho:** **M**.
 
@@ -117,7 +117,7 @@ O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [R
 | BR1 — lobby grande + squads ✅ main | matchmaking/008 | M (menor: session intacto) | BR0 |
 | BR2 — resultado por colocação ✅ main | session/015 | M | BR1 |
 | BR3 — colher (3 sinks) ✅ main | achievements/010 + leaderboard/005 + analytics/005 | L | BR2 |
-| BR4 — console + contrato | admin-bff + admin-ui + doc | M | BR1, BR3 |
+| BR4 — console + contrato 🟡 (contrato ✅, surfacing pendente) | admin-bff + admin-ui + doc | M | BR1, BR3 |
 
 Concluídas BR0–BR4, o `battle_royale` está **completo no control plane** (declarar → encher lobby/squads → reportar colocações → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-battle-royale-data-plane` (Unity) encarnando a zona/eliminação, consumindo o contrato de BR4.
 
