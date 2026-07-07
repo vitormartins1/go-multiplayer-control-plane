@@ -165,6 +165,13 @@ type GameRegistry interface {
 	// SetMultiplayerProfile faz upsert do perfil (cru). Validação/estado do
 	// upstream (400/404) viram UpstreamError; indisponibilidade -> unavailable.
 	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
+	// Modos nomeados (ADR-0024, spec 017): passthrough cru da coleção
+	// /multiplayer-profiles. Erros do upstream (400/404/409) viram UpstreamError
+	// com o código intacto; indisponibilidade -> ErrGameRegistryUnavailable.
+	ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error)
+	GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error)
+	SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error)
+	DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error
 }
 
 // LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).

@@ -112,6 +112,25 @@ func (f *fakeRegistry) SetMultiplayerProfile(_ context.Context, gameID string, p
 	}
 	return profile, nil
 }
+func (f *fakeRegistry) ListMultiplayerModes(_ context.Context, gameID string) (json.RawMessage, error) {
+	f.gotGameID = gameID
+	return f.profile, f.err
+}
+func (f *fakeRegistry) GetMultiplayerMode(_ context.Context, gameID, _ string) (json.RawMessage, error) {
+	f.gotGameID = gameID
+	return f.profile, f.err
+}
+func (f *fakeRegistry) SetMultiplayerMode(_ context.Context, gameID, _ string, mode json.RawMessage) (json.RawMessage, error) {
+	f.gotGameID, f.gotProfile = gameID, mode
+	if f.err != nil {
+		return nil, f.err
+	}
+	return mode, nil
+}
+func (f *fakeRegistry) DeleteMultiplayerMode(_ context.Context, gameID, _ string) error {
+	f.gotGameID = gameID
+	return f.err
+}
 
 type fakeLeaderboard struct {
 	entries   []domain.LeaderboardEntry

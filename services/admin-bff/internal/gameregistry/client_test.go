@@ -190,3 +190,73 @@ func TestRenameGame_PutName(t *testing.T) {
 	assert.Contains(t, gotBody, `"name":"Novo"`)
 	assert.Equal(t, "Novo", g.Name)
 }
+
+// --- modos nomeados (ADR-0024, spec 017) ---
+
+func TestListMultiplayerModes_200_RawPassthrough(t *testing.T) {
+	raw := `[{"modeId":"default","archetype":"queue_arena"},{"modeId":"tdm","archetype":"queue_arena"}]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/games/g1/multiplayer-profiles", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+		_, _ = w.Write([]byte(raw))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).ListMultiplayerModes(context.Background(), "g1")
+	require.NoError(t, err)
+	assert.JSONEq(t, raw, string(got), "corpo cru, sem re-serializar")
+}
+
+func TestSetMultiplayerMode_PutRawNoPath(t *testing.T) {
+	body := `{"displayName":"TDM","archetype":"queue_arena","topology":"dedicated","params":{}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/games/g1/multiplayer-profiles/tdm", r.URL.Path)
+		assert.Equal(t, http.MethodPut, r.Method)
+		got, _ := io.ReadAll(r.Body)
+		assert.JSONEq(t, body, string(got), "corpo repassado cru")
+		_, _ = w.Write(got)
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).SetMultiplayerMode(context.Background(), "g1", "tdm", []byte(body))
+	require.NoError(t, err)
+	assert.JSONEq(t, body, string(got))
+}
+
+func TestDeleteMultiplayerMode_204(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/games/g1/multiplayer-profiles/tdm", r.URL.Path)
+		assert.Equal(t, http.MethodDelete, r.Method)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	require.NoError(t, New(srv.URL, srv.Client()).DeleteMultiplayerMode(context.Background(), "g1", "tdm"))
+}
+
+func TestDeleteMultiplayerMode_409_UpstreamErrorComCodigo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"default_mode_protected"}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).DeleteMultiplayerMode(context.Background(), "g1", "default")
+	var ue *domain.UpstreamError
+	require.True(t, errors.As(err, &ue))
+	assert.Equal(t, http.StatusConflict, ue.Status)
+	assert.Equal(t, "default_mode_protected", ue.Code, "código do upstream preservado")
+}
+
+func TestGetMultiplayerMode_404_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"mode_not_found"}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).GetMultiplayerMode(context.Background(), "g1", "nao")
+	var ue *domain.UpstreamError
+	require.True(t, errors.As(err, &ue))
+	assert.Equal(t, "mode_not_found", ue.Code)
+}

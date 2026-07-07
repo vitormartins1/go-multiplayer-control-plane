@@ -52,6 +52,8 @@ export interface Game {
   imageSource?: string;
   generatedImageSeed?: string;
   generatedImageStyle?: string;
+  // Modos de multiplayer (ADR-0024): resumo devolvido pelo GET /games/{id}.
+  multiplayerModes?: ModeSummary[];
 }
 
 // Perfis de multiplayer do jogo (ADR-0023). Union discriminada por `archetype`.
@@ -104,6 +106,20 @@ export type MultiplayerProfile =
   | { archetype: "host_world_dropin"; topology: "dedicated" | "p2p"; params: HostWorldDropInParams }
   | { archetype: "battle_royale"; topology: "dedicated" | "p2p"; params: BattleRoyaleParams }
   | { archetype: "coop_mission"; topology: "dedicated" | "p2p"; params: CoopMissionParams };
+
+// Modos nomeados (ADR-0024): um jogo tem 1..N perfis, cada um com um id estável.
+// O corpo do perfil (archetype/topology/params) é o union acima, inalterado.
+export type MultiplayerMode = MultiplayerProfile & { modeId: string; displayName?: string };
+
+export interface ModeSummary {
+  modeId: string;
+  displayName?: string;
+  archetype: MultiplayerProfile["archetype"];
+}
+
+// Regras do modeId (spec game-registry/009): slug estável, imutável na prática.
+export const MODE_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
+export const DEFAULT_MODE_ID = "default";
 
 // Critério por métrica (ADR-0023 A1): statKey preenchido troca o critério de
 // evento para stat; statMode é a agregação.
@@ -373,6 +389,21 @@ export const api = {
     putJSON<MultiplayerProfile>(
       `/api/games/${encodeURIComponent(gameId)}/multiplayer-profile`,
       profile,
+    ),
+  // Modos nomeados (ADR-0024, spec admin-ui/023).
+  listMultiplayerModes: (gameId: string, signal?: AbortSignal) =>
+    getJSON<MultiplayerMode[]>(
+      `/api/games/${encodeURIComponent(gameId)}/multiplayer-profiles`,
+      signal,
+    ),
+  setMultiplayerMode: (gameId: string, modeId: string, mode: MultiplayerProfile & { displayName?: string }) =>
+    putJSON<MultiplayerMode>(
+      `/api/games/${encodeURIComponent(gameId)}/multiplayer-profiles/${encodeURIComponent(modeId)}`,
+      mode,
+    ),
+  deleteMultiplayerMode: (gameId: string, modeId: string) =>
+    del(
+      `/api/games/${encodeURIComponent(gameId)}/multiplayer-profiles/${encodeURIComponent(modeId)}`,
     ),
   gameCatalog: (gameId: string, signal?: AbortSignal) =>
     getJSON<CatalogAchievement[]>(`/api/games/${encodeURIComponent(gameId)}/achievements`, signal),

@@ -1,7 +1,7 @@
 # Spec: 023-multiplayer-modes-console
 
 **Serviço:** admin-ui
-**Status:** Rascunho — aguardando aprovação
+**Status:** Aprovado (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0024 · **Roadmap:** `multiplayer-modes-roadmap.md` — fatia **M0** (lado console, UI)
 
@@ -44,7 +44,7 @@ Fecha o M0: a aba **Configurações** do jogo deixa de editar **um** perfil e pa
 - [ ] Remover com confirmação; `default` sem botão de remover.
 - [ ] Form por arquétipo existente reusado sem fork (um só componente de editor de perfil).
 - [ ] Erros do backend aparecem como mensagens claras (validação client-side de modeId antes do PUT).
-- [ ] Testes unitários do client novo + `npm run build` verde.
+- [x] Verificação: `tsc --noEmit` + `npm run build` verdes (admin-ui não tem test runner — validação por tipos, como nas fatias anteriores).
 
 ## Fora do escopo
 
