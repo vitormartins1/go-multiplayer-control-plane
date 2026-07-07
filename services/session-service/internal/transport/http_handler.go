@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
@@ -49,6 +50,19 @@ type sessionDTO struct {
 	OpenedAt      time.Time  `json:"openedAt"`
 	ClosedAt      *time.Time `json:"closedAt,omitempty"`
 	CloseReason   string     `json:"closeReason,omitempty"`
+
+	// host_world_dropin (spec 014): origem, host e slots por papel. origin sempre
+	// presente; os demais só em mundos host_world (omitidos no queue_arena).
+	Origin       string        `json:"origin"`
+	HostPlayerID string        `json:"hostPlayerId,omitempty"`
+	RoleSlots    []roleSlotDTO `json:"roleSlots,omitempty"`
+}
+
+// roleSlotDTO é a ocupação de um papel num mundo host_world (co-op X/2, etc.).
+type roleSlotDTO struct {
+	Role     string `json:"role"`
+	Capacity int    `json:"capacity"`
+	Occupied int    `json:"occupied"`
 }
 
 type sessionsResponse struct {
@@ -128,12 +142,29 @@ func toSessionDTO(s domain.Session) sessionDTO {
 		ServerAddress: s.ServerAddress,
 		OpenedAt:      s.OpenedAt,
 		CloseReason:   string(s.CloseReason),
+		Origin:        string(s.Origin),
+		HostPlayerID:  s.HostPlayerID,
+		RoleSlots:     roleSlotsDTO(s.RoleSlots),
 	}
 	if !s.ClosedAt.IsZero() {
 		closedAt := s.ClosedAt
 		dto.ClosedAt = &closedAt
 	}
 	return dto
+}
+
+// roleSlotsDTO serializa os slots por papel em ordem estável (coop, invader) para
+// o JSON ser determinístico. Devolve nil (campo omitido) no queue_arena (map vazio).
+func roleSlotsDTO(slots map[string]*domain.RoleSlot) []roleSlotDTO {
+	if len(slots) == 0 {
+		return nil
+	}
+	out := make([]roleSlotDTO, 0, len(slots))
+	for role, slot := range slots {
+		out = append(out, roleSlotDTO{Role: role, Capacity: slot.Capacity, Occupied: len(slot.Occupants)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Role < out[j].Role })
+	return out
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

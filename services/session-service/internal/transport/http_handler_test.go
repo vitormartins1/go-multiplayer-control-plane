@@ -85,6 +85,41 @@ func TestAdminSessions_AtivaEFechada_CamposCompletos(t *testing.T) {
 	assert.Equal(t, closedAt, *body.Closed[0].ClosedAt)
 }
 
+func TestAdminSessions_HostWorld_ExpoeOriginHostESlots(t *testing.T) {
+	dir := &fakeDirectory{
+		active: []domain.Session{{
+			ID: "w1", GameID: "hw", Origin: domain.OriginHostWorld, HostPlayerID: "host-1",
+			Players: []string{"host-1", "coop-1"}, State: domain.SessionOpen,
+			RoleSlots: map[string]*domain.RoleSlot{
+				domain.RoleInvader: {Capacity: 1},
+				domain.RoleCoop:    {Capacity: 2, Occupants: []string{"coop-1"}},
+			},
+		}},
+	}
+	rec, body := doGet(t, newAdminMux(dir), "/admin/games/hw/sessions")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, body.Active, 1)
+	s := body.Active[0]
+	assert.Equal(t, "host_world", s.Origin)
+	assert.Equal(t, "host-1", s.HostPlayerID)
+	require.Len(t, s.RoleSlots, 2)
+	// ordenado por role: coop antes de invader.
+	assert.Equal(t, roleSlotDTO{Role: "coop", Capacity: 2, Occupied: 1}, s.RoleSlots[0])
+	assert.Equal(t, roleSlotDTO{Role: "invader", Capacity: 1, Occupied: 0}, s.RoleSlots[1])
+}
+
+func TestAdminSessions_QueueArena_SemCamposHostWorld(t *testing.T) {
+	dir := &fakeDirectory{
+		active: []domain.Session{{ID: "s1", GameID: "g1", Origin: domain.OriginMatch, State: domain.SessionOpen}},
+	}
+	_, body := doGet(t, newAdminMux(dir), "/admin/games/g1/sessions")
+	require.Len(t, body.Active, 1)
+	assert.Equal(t, "match", body.Active[0].Origin)
+	assert.Empty(t, body.Active[0].HostPlayerID)
+	assert.Empty(t, body.Active[0].RoleSlots)
+}
+
 func TestAdminSessions_FiltroState(t *testing.T) {
 	dir := &fakeDirectory{
 		active: []domain.Session{{ID: "s1", GameID: "g1", State: domain.SessionOpen}},
