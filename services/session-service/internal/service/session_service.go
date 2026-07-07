@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -20,12 +21,13 @@ import (
 var _ domain.SessionService = (*Service)(nil)
 
 // Service orquestra sessões a partir das Ports de saída (allocator, issuer,
-// publisher) e mantém as sessões ativas em memória.
+// publisher, profiles) e mantém as sessões ativas em memória.
 type Service struct {
 	allocator domain.ServerAllocator
 	issuer    domain.ConnectTokenIssuer
 	publisher domain.ResultPublisher
-	now       func() time.Time // injetável: o sweeper de TTL precisa ser testável
+	profiles  domain.ProfileProvider // lê o perfil do jogo (host_world_dropin); spec 011
+	now       func() time.Time       // injetável: o sweeper de TTL precisa ser testável
 
 	// reconciliação de órfãs (spec 008): registry nil = sem fonte de verdade de
 	// liveness (modo static) → só o TTL sweeper roda.
@@ -33,8 +35,11 @@ type Service struct {
 	orphanGrace time.Duration
 
 	mu       sync.Mutex
-	sessions map[string]*domain.Session // matchID -> sessão ativa
-	closed   map[domain.CloseReason]float64
+	sessions map[string]*domain.Session // sessionID -> sessão ativa (spec 011)
+	// matchIndex mapeia matchID -> sessionID para o caminho queue_arena, cuja
+	// identidade externa é o matchID. host_world não popula (identidade = sessionID).
+	matchIndex map[string]string
+	closed     map[domain.CloseReason]float64
 
 	// histórico bounded de fechadas (spec 005): ring em memória, best-effort
 	// de dev — some no restart, persistência é evolução.
@@ -59,6 +64,12 @@ func WithHistoryLimit(n int) Option {
 	}
 }
 
+// WithProfileProvider liga a leitura do perfil de multiplayer (host_world_dropin,
+// spec 011): habilita OpenWorld. Sem ele, OpenWorld responde ErrUnsupportedArchetype.
+func WithProfileProvider(p domain.ProfileProvider) Option {
+	return func(s *Service) { s.profiles = p }
+}
+
 // WithServerRegistry liga a reconciliação de órfãs (spec 008): o sweeper passa a
 // fechar sessões cujo game server sumiu da fonte de verdade. Sem esta option
 // (registry nil), o service só reconcilia por TTL.
@@ -77,7 +88,9 @@ func WithOrphanGrace(d time.Duration) Option {
 	}
 }
 
-// New cria o service a partir das Ports de saída.
+// New cria o service a partir das Ports de saída. O ProfileProvider (host_world
+// _dropin) é opcional via WithProfileProvider — sem ele, OpenWorld falha com
+// ErrUnsupportedArchetype e o queue_arena segue intacto.
 func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, publisher domain.ResultPublisher, opts ...Option) *Service {
 	s := &Service{
 		allocator:    allocator,
@@ -86,6 +99,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		now:          time.Now,
 		orphanGrace:  time.Minute,
 		sessions:     make(map[string]*domain.Session),
+		matchIndex:   make(map[string]string),
 		closed:       make(map[domain.CloseReason]float64),
 		historyLimit: 200,
 	}
@@ -112,7 +126,7 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, teams []do
 	for _, playerID := range players {
 		// o token carrega o team_id do jogador (vazio em FFA) — o game server lê
 		// o time no connection approval para o gameplay NvN (ADR-0023).
-		tok, err := s.issuer.Issue(playerID, matchID, server.Address, teamByPlayer[playerID])
+		tok, err := s.issuer.Issue(playerID, matchID, server.Address, domain.ConnectClaims{TeamID: teamByPlayer[playerID]})
 		if err != nil {
 			// rollback: não deixa o server preso se não conseguimos cunhar os tokens.
 			_ = s.allocator.Release(ctx, server.ID)
@@ -129,12 +143,14 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, teams []do
 		TeamByPlayer:  teamByPlayer,
 		ServerID:      server.ID,
 		ServerAddress: server.Address,
+		Origin:        domain.OriginMatch,
 		State:         domain.SessionOpen,
 		OpenedAt:      s.now(),
 	}
 
 	s.mu.Lock()
-	s.sessions[matchID] = sess
+	s.sessions[sess.ID] = sess
+	s.matchIndex[matchID] = sess.ID // identidade externa do queue_arena é o matchID
 	s.mu.Unlock()
 
 	return sess, grants, nil
@@ -177,7 +193,11 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 	}
 
 	s.mu.Lock()
-	sess, ok := s.sessions[matchID]
+	sessionID, ok := s.matchIndex[matchID]
+	var sess *domain.Session
+	if ok {
+		sess, ok = s.sessions[sessionID]
+	}
 	gameID := ""
 	if ok {
 		gameID = sess.GameID
@@ -196,7 +216,7 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 		return fmt.Errorf("session service: report result: publish: %w", err)
 	}
 
-	if _, err := s.closeSession(ctx, matchID, domain.CloseResult); err != nil {
+	if _, err := s.closeSession(ctx, sessionID, domain.CloseResult); err != nil {
 		return fmt.Errorf("session service: report result: %w", err)
 	}
 	return nil
@@ -234,17 +254,21 @@ func validateOutcome(o domain.MatchOutcome) error {
 }
 
 // closeSession é o fechamento unificado (spec 004): marca CLOSED com motivo,
-// tira do mapa de ativas e libera o server — usado por ReportResult (result) e
-// pelo sweeper (ttl). Libera o server PRIMEIRO em relação a qualquer fan-out:
+// tira do mapa de ativas e libera o server — usado por ReportResult (result),
+// pelo sweeper (ttl/abandoned) e pelo host_world (host_left). Opera pela chave
+// interna (sessionID). Libera o server PRIMEIRO em relação a qualquer fan-out:
 // o fim da partida não pode depender de destino externo.
-func (s *Service) closeSession(ctx context.Context, matchID string, reason domain.CloseReason) (*domain.Session, error) {
+func (s *Service) closeSession(ctx context.Context, sessionID string, reason domain.CloseReason) (*domain.Session, error) {
 	s.mu.Lock()
-	sess, ok := s.sessions[matchID]
+	sess, ok := s.sessions[sessionID]
 	if !ok {
 		s.mu.Unlock()
 		return nil, domain.ErrSessionNotFound
 	}
-	delete(s.sessions, matchID)
+	delete(s.sessions, sessionID)
+	if sess.MatchID != "" {
+		delete(s.matchIndex, sess.MatchID) // queue_arena: limpa o índice reverso
+	}
 	sess.State = domain.SessionClosed
 	sess.ClosedAt = s.now()
 	sess.CloseReason = reason
@@ -267,16 +291,16 @@ func (s *Service) Sweep(ctx context.Context, ttl time.Duration) int {
 	cutoff := s.now().Add(-ttl)
 	s.mu.Lock()
 	var expired []string
-	for matchID, sess := range s.sessions {
+	for sessionID, sess := range s.sessions {
 		if sess.OpenedAt.Before(cutoff) {
-			expired = append(expired, matchID)
+			expired = append(expired, sessionID)
 		}
 	}
 	s.mu.Unlock()
 
-	for _, matchID := range expired {
+	for _, sessionID := range expired {
 		// ErrSessionNotFound = fechada por result entre a varredura e o close; ok.
-		_, _ = s.closeSession(ctx, matchID, domain.CloseTTL)
+		_, _ = s.closeSession(ctx, sessionID, domain.CloseTTL)
 	}
 	return len(expired)
 }
@@ -301,16 +325,16 @@ func (s *Service) reconcile(ctx context.Context, grace time.Duration, log *slog.
 	cutoff := s.now().Add(-grace)
 	s.mu.Lock()
 	var orphans []string
-	for matchID, sess := range s.sessions {
+	for sessionID, sess := range s.sessions {
 		if _, alive := live[sess.ServerID]; !alive && sess.OpenedAt.Before(cutoff) {
-			orphans = append(orphans, matchID)
+			orphans = append(orphans, sessionID)
 		}
 	}
 	s.mu.Unlock()
 
-	for _, matchID := range orphans {
+	for _, sessionID := range orphans {
 		// ErrSessionNotFound = fechada por result/admin entre a varredura e o close; ok.
-		_, _ = s.closeSession(ctx, matchID, domain.CloseAbandoned)
+		_, _ = s.closeSession(ctx, sessionID, domain.CloseAbandoned)
 	}
 	return len(orphans)
 }
@@ -384,11 +408,191 @@ func (s *Service) AllSessions() (active, closed []domain.Session) {
 // ErrSessionNotFound se não houver sessão ativa para o match (idempotente do
 // ponto de vista do operador). Spec 007.
 func (s *Service) CloseByAdmin(ctx context.Context, matchID string) (*domain.Session, error) {
-	sess, err := s.closeSession(ctx, matchID, domain.CloseAdmin)
+	s.mu.Lock()
+	sessionID, ok := s.matchIndex[matchID]
+	s.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("session service: close by admin: %w", domain.ErrSessionNotFound)
+	}
+	sess, err := s.closeSession(ctx, sessionID, domain.CloseAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("session service: close by admin: %w", err)
 	}
 	return sess, nil
+}
+
+// OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011):
+// lê o perfil, aloca um server, deriva os slots por papel e emite o connect
+// token do host. Qualquer problema com o perfil (ausente, arquétipo != host_world
+// _dropin, rede) vira ErrUnsupportedArchetype — só esse arquétipo abre mundo.
+func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string) (*domain.Session, domain.ConnectGrant, error) {
+	if s.profiles == nil {
+		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %w", domain.ErrUnsupportedArchetype)
+	}
+	profile, err := s.profiles.WorldProfile(ctx, gameID)
+	if err != nil {
+		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %v: %w", err, domain.ErrUnsupportedArchetype)
+	}
+
+	sessionID := uuid.NewString()
+	server, err := s.allocator.Allocate(ctx, sessionID, gameID)
+	if err != nil {
+		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: allocate: %w", err)
+	}
+
+	// token do host (papel host) — rollback do server se a emissão falhar.
+	tok, err := s.issuer.Issue(hostPlayerID, sessionID, server.Address, domain.ConnectClaims{Role: domain.RoleHost})
+	if err != nil {
+		_ = s.allocator.Release(ctx, server.ID)
+		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: issue token: %w", err)
+	}
+
+	sess := &domain.Session{
+		ID:            sessionID,
+		GameID:        gameID,
+		Players:       []string{hostPlayerID},
+		ServerID:      server.ID,
+		ServerAddress: server.Address,
+		Origin:        domain.OriginHostWorld,
+		HostPlayerID:  hostPlayerID,
+		RoleSlots:     roleSlotsFromProfile(profile),
+		State:         domain.SessionOpen,
+		OpenedAt:      s.now(),
+	}
+
+	s.mu.Lock()
+	s.sessions[sessionID] = sess // host_world: identidade = sessionID, sem matchIndex
+	s.mu.Unlock()
+
+	return sess, domain.ConnectGrant{PlayerID: hostPlayerID, Token: tok}, nil
+}
+
+// roleSlotsFromProfile deriva a capacidade por papel do perfil, só para os papéis
+// habilitados (EnabledRoles). O host não ocupa slot — é o dono do mundo.
+func roleSlotsFromProfile(p domain.WorldProfile) map[string]*domain.RoleSlot {
+	slots := make(map[string]*domain.RoleSlot)
+	for _, role := range p.EnabledRoles {
+		switch role {
+		case domain.RoleCoop:
+			slots[domain.RoleCoop] = &domain.RoleSlot{Capacity: p.CoopSlots}
+		case domain.RoleInvader:
+			slots[domain.RoleInvader] = &domain.RoleSlot{Capacity: p.InvaderSlots}
+		}
+	}
+	return slots
+}
+
+// JoinWorld injeta um phantom no mundo ocupando um slot do papel e emite o
+// connect token com o claim role. O slot é reservado sob o lock; o token é
+// cunhado fora (cripto) e o slot é revertido se a emissão falhar.
+func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role string) (domain.ConnectGrant, error) {
+	s.mu.Lock()
+	sess, ok := s.sessions[sessionID]
+	if !ok || sess.Origin != domain.OriginHostWorld {
+		s.mu.Unlock()
+		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrWorldNotFound)
+	}
+	slot, ok := sess.RoleSlots[role]
+	if !ok {
+		s.mu.Unlock()
+		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrRoleNotEnabled)
+	}
+	if sess.HostPlayerID == playerID || playerInWorld(sess, playerID) {
+		s.mu.Unlock()
+		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrAlreadyJoined)
+	}
+	if len(slot.Occupants) >= slot.Capacity {
+		s.mu.Unlock()
+		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrRoleFull)
+	}
+	slot.Occupants = append(slot.Occupants, playerID)
+	sess.Players = append(sess.Players, playerID)
+	serverAddr := sess.ServerAddress
+	s.mu.Unlock()
+
+	tok, err := s.issuer.Issue(playerID, sessionID, serverAddr, domain.ConnectClaims{Role: role})
+	if err != nil {
+		s.mu.Lock()
+		removeFromWorld(sess, playerID) // reverte a reserva do slot
+		s.mu.Unlock()
+		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: issue token: %w", err)
+	}
+	return domain.ConnectGrant{PlayerID: playerID, Token: tok}, nil
+}
+
+// LeaveWorld libera o slot do phantom; o mundo segue aberto. No-op idempotente se
+// o jogador não estiver no mundo. Se o jogador for o host, encerra o mundo.
+func (s *Service) LeaveWorld(ctx context.Context, sessionID, playerID string) error {
+	s.mu.Lock()
+	sess, ok := s.sessions[sessionID]
+	if !ok || sess.Origin != domain.OriginHostWorld {
+		s.mu.Unlock()
+		return fmt.Errorf("session service: leave world: %w", domain.ErrWorldNotFound)
+	}
+	if sess.HostPlayerID == playerID {
+		s.mu.Unlock()
+		return s.CloseWorld(ctx, sessionID) // host saindo encerra o mundo
+	}
+	removeFromWorld(sess, playerID) // no-op se ausente
+	s.mu.Unlock()
+	return nil
+}
+
+// CloseWorld encerra o mundo (CloseHostLeft), libera o server e o tira das ativas.
+// Traduz a ausência para ErrWorldNotFound (vocabulário do host_world_dropin).
+func (s *Service) CloseWorld(ctx context.Context, sessionID string) error {
+	if _, err := s.closeSession(ctx, sessionID, domain.CloseHostLeft); err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return fmt.Errorf("session service: close world: %w", domain.ErrWorldNotFound)
+		}
+		return fmt.Errorf("session service: close world: %w", err)
+	}
+	return nil
+}
+
+// OccupiedSlots devolve o total de slots ocupados de um papel entre os mundos
+// abertos (métrica world_role_slots{role}).
+func (s *Service) OccupiedSlots(role string) float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int
+	for _, sess := range s.sessions {
+		if slot, ok := sess.RoleSlots[role]; ok {
+			n += len(slot.Occupants)
+		}
+	}
+	return float64(n)
+}
+
+// playerInWorld indica se o jogador já ocupa algum slot do mundo (não conta o host).
+func playerInWorld(sess *domain.Session, playerID string) bool {
+	for _, slot := range sess.RoleSlots {
+		for _, p := range slot.Occupants {
+			if p == playerID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// removeFromWorld tira o jogador do slot que o contém e da lista de players.
+// Deve ser chamado sob o lock. Idempotente: no-op se o jogador não está presente.
+func removeFromWorld(sess *domain.Session, playerID string) {
+	for _, slot := range sess.RoleSlots {
+		for i, p := range slot.Occupants {
+			if p == playerID {
+				slot.Occupants = append(slot.Occupants[:i], slot.Occupants[i+1:]...)
+				for j, pp := range sess.Players {
+					if pp == playerID {
+						sess.Players = append(sess.Players[:j], sess.Players[j+1:]...)
+						break
+					}
+				}
+				return
+			}
+		}
+	}
 }
 
 // ActiveSessions devolve o número de sessões ativas (métrica).

@@ -31,9 +31,17 @@ func (m *mockAllocator) Release(ctx context.Context, serverID string) error {
 
 type mockIssuer struct{ mock.Mock }
 
-func (m *mockIssuer) Issue(playerID, matchID, serverAddr, teamID string) (string, error) {
-	args := m.Called(playerID, matchID, serverAddr, teamID)
+func (m *mockIssuer) Issue(playerID, refID, serverAddr string, claims domain.ConnectClaims) (string, error) {
+	args := m.Called(playerID, refID, serverAddr, claims)
 	return args.String(0), args.Error(1)
+}
+
+// mockProfile é o ProfileProvider mockado para os testes de OpenWorld (spec 011).
+type mockProfile struct{ mock.Mock }
+
+func (m *mockProfile) WorldProfile(ctx context.Context, gameID string) (domain.WorldProfile, error) {
+	args := m.Called(ctx, gameID)
+	return args.Get(0).(domain.WorldProfile), args.Error(1)
 }
 
 // ffaTeams monta uma composição FFA (um lado sem TeamID) a partir dos playerIDs.
@@ -86,8 +94,8 @@ func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
-	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", "").Return("token-p1", nil)
-	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", "").Return("token-p2", nil)
+	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{}).Return("token-p1", nil)
+	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{}).Return("token-p2", nil)
 
 	svc := New(alloc, iss, pub)
 	sess, grants, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1", "p2"))
@@ -457,7 +465,7 @@ func TestCreate_FalhaAoEmitirToken_LiberaServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
-	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", "").Return("", assert.AnError)
+	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{}).Return("", assert.AnError)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	svc := New(alloc, iss, &mockPublisher{})
@@ -512,8 +520,8 @@ func TestCreate_ComTimes_RegistraTimesEEmiteTokenComTeamID(t *testing.T) {
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	// cada jogador recebe o token com o team_id do seu lado.
-	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", "team-1").Return("t1", nil)
-	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", "team-2").Return("t2", nil)
+	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-1"}).Return("t1", nil)
+	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-2"}).Return("t2", nil)
 
 	svc := New(alloc, iss, pub)
 	teams := []domain.TeamAssignment{

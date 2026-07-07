@@ -49,21 +49,26 @@ func Generate() (*ConnectIssuer, error) {
 	return New(priv), nil
 }
 
-// Issue emite um connect token EdDSA com sub/match_id/server/iat/exp/kid e,
-// quando teamID não é vazio, o claim team_id (ADR-0023). O game server valida
-// offline (JWKS) que o portador foi autorizado para a partida e o servidor
-// indicados e lê o team_id para o gameplay NvN.
-func (i *ConnectIssuer) Issue(playerID, matchID, serverAddr, teamID string) (string, error) {
+// Issue emite um connect token EdDSA com sub/match_id/server/iat/exp/kid e os
+// claims opcionais por arquétipo (ADR-0023): team_id (queue_arena) e role
+// (host_world_dropin), incluídos só quando não-vazios. O game server valida
+// offline (JWKS) que o portador foi autorizado para o ref/servidor indicados e
+// lê os claims no connection approval. refID é o match_id (queue_arena) ou o
+// sessionID do mundo (host_world_dropin).
+func (i *ConnectIssuer) Issue(playerID, refID, serverAddr string, extra domain.ConnectClaims) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"sub":      playerID,
-		"match_id": matchID,
+		"match_id": refID,
 		"server":   serverAddr,
 		"iat":      now.Unix(),
 		"exp":      now.Add(i.ttl).Unix(),
 	}
-	if teamID != "" {
-		claims["team_id"] = teamID // omitido em FFA para não poluir o token
+	if extra.TeamID != "" {
+		claims["team_id"] = extra.TeamID // omitido em FFA para não poluir o token
+	}
+	if extra.Role != "" {
+		claims["role"] = extra.Role // host_world_dropin: host/coop/invader
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tok.Header["kid"] = i.kid

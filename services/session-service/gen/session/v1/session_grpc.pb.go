@@ -21,6 +21,10 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	Session_CreateSession_FullMethodName = "/session.v1.Session/CreateSession"
 	Session_ReportResult_FullMethodName  = "/session.v1.Session/ReportResult"
+	Session_OpenWorld_FullMethodName     = "/session.v1.Session/OpenWorld"
+	Session_JoinWorld_FullMethodName     = "/session.v1.Session/JoinWorld"
+	Session_LeaveWorld_FullMethodName    = "/session.v1.Session/LeaveWorld"
+	Session_CloseWorld_FullMethodName    = "/session.v1.Session/CloseWorld"
 )
 
 // SessionClient is the client API for Session service.
@@ -37,6 +41,21 @@ type SessionClient interface {
 	// ReportResult dispara o fan-out do resultado, libera o server e encerra a
 	// sessão. NotFound se não houver sessão para o match.
 	ReportResult(ctx context.Context, in *ReportResultRequest, opts ...grpc.CallOption) (*ReportResultResponse, error)
+	// OpenWorld abre um mundo persistente para o host: aloca um server, deriva os
+	// slots por papel do perfil e emite o connect token do host. FailedPrecondition
+	// se o jogo não for host_world_dropin; ResourceExhausted se o pool esgotar.
+	OpenWorld(ctx context.Context, in *OpenWorldRequest, opts ...grpc.CallOption) (*OpenWorldResponse, error)
+	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando um
+	// slot, e emite o connect token com o claim role. InvalidArgument (papel não
+	// habilitado), ResourceExhausted (slots cheios), NotFound (mundo inexistente),
+	// FailedPrecondition (já presente).
+	JoinWorld(ctx context.Context, in *JoinWorldRequest, opts ...grpc.CallOption) (*JoinWorldResponse, error)
+	// LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
+	// se ausente. Se o jogador for o host, encerra o mundo.
+	LeaveWorld(ctx context.Context, in *LeaveWorldRequest, opts ...grpc.CallOption) (*LeaveWorldResponse, error)
+	// CloseWorld encerra o mundo (host saiu), libera o server. NotFound se não
+	// houver mundo aberto.
+	CloseWorld(ctx context.Context, in *CloseWorldRequest, opts ...grpc.CallOption) (*CloseWorldResponse, error)
 }
 
 type sessionClient struct {
@@ -67,6 +86,46 @@ func (c *sessionClient) ReportResult(ctx context.Context, in *ReportResultReques
 	return out, nil
 }
 
+func (c *sessionClient) OpenWorld(ctx context.Context, in *OpenWorldRequest, opts ...grpc.CallOption) (*OpenWorldResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OpenWorldResponse)
+	err := c.cc.Invoke(ctx, Session_OpenWorld_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionClient) JoinWorld(ctx context.Context, in *JoinWorldRequest, opts ...grpc.CallOption) (*JoinWorldResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinWorldResponse)
+	err := c.cc.Invoke(ctx, Session_JoinWorld_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionClient) LeaveWorld(ctx context.Context, in *LeaveWorldRequest, opts ...grpc.CallOption) (*LeaveWorldResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveWorldResponse)
+	err := c.cc.Invoke(ctx, Session_LeaveWorld_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionClient) CloseWorld(ctx context.Context, in *CloseWorldRequest, opts ...grpc.CallOption) (*CloseWorldResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseWorldResponse)
+	err := c.cc.Invoke(ctx, Session_CloseWorld_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionServer is the server API for Session service.
 // All implementations must embed UnimplementedSessionServer
 // for forward compatibility.
@@ -81,6 +140,21 @@ type SessionServer interface {
 	// ReportResult dispara o fan-out do resultado, libera o server e encerra a
 	// sessão. NotFound se não houver sessão para o match.
 	ReportResult(context.Context, *ReportResultRequest) (*ReportResultResponse, error)
+	// OpenWorld abre um mundo persistente para o host: aloca um server, deriva os
+	// slots por papel do perfil e emite o connect token do host. FailedPrecondition
+	// se o jogo não for host_world_dropin; ResourceExhausted se o pool esgotar.
+	OpenWorld(context.Context, *OpenWorldRequest) (*OpenWorldResponse, error)
+	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando um
+	// slot, e emite o connect token com o claim role. InvalidArgument (papel não
+	// habilitado), ResourceExhausted (slots cheios), NotFound (mundo inexistente),
+	// FailedPrecondition (já presente).
+	JoinWorld(context.Context, *JoinWorldRequest) (*JoinWorldResponse, error)
+	// LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
+	// se ausente. Se o jogador for o host, encerra o mundo.
+	LeaveWorld(context.Context, *LeaveWorldRequest) (*LeaveWorldResponse, error)
+	// CloseWorld encerra o mundo (host saiu), libera o server. NotFound se não
+	// houver mundo aberto.
+	CloseWorld(context.Context, *CloseWorldRequest) (*CloseWorldResponse, error)
 	mustEmbedUnimplementedSessionServer()
 }
 
@@ -96,6 +170,18 @@ func (UnimplementedSessionServer) CreateSession(context.Context, *CreateSessionR
 }
 func (UnimplementedSessionServer) ReportResult(context.Context, *ReportResultRequest) (*ReportResultResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportResult not implemented")
+}
+func (UnimplementedSessionServer) OpenWorld(context.Context, *OpenWorldRequest) (*OpenWorldResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method OpenWorld not implemented")
+}
+func (UnimplementedSessionServer) JoinWorld(context.Context, *JoinWorldRequest) (*JoinWorldResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinWorld not implemented")
+}
+func (UnimplementedSessionServer) LeaveWorld(context.Context, *LeaveWorldRequest) (*LeaveWorldResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveWorld not implemented")
+}
+func (UnimplementedSessionServer) CloseWorld(context.Context, *CloseWorldRequest) (*CloseWorldResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloseWorld not implemented")
 }
 func (UnimplementedSessionServer) mustEmbedUnimplementedSessionServer() {}
 func (UnimplementedSessionServer) testEmbeddedByValue()                 {}
@@ -154,6 +240,78 @@ func _Session_ReportResult_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Session_OpenWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenWorldRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).OpenWorld(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_OpenWorld_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).OpenWorld(ctx, req.(*OpenWorldRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Session_JoinWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinWorldRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).JoinWorld(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_JoinWorld_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).JoinWorld(ctx, req.(*JoinWorldRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Session_LeaveWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveWorldRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).LeaveWorld(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_LeaveWorld_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).LeaveWorld(ctx, req.(*LeaveWorldRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Session_CloseWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseWorldRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).CloseWorld(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_CloseWorld_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).CloseWorld(ctx, req.(*CloseWorldRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Session_ServiceDesc is the grpc.ServiceDesc for Session service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -168,6 +326,22 @@ var Session_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportResult",
 			Handler:    _Session_ReportResult_Handler,
+		},
+		{
+			MethodName: "OpenWorld",
+			Handler:    _Session_OpenWorld_Handler,
+		},
+		{
+			MethodName: "JoinWorld",
+			Handler:    _Session_JoinWorld_Handler,
+		},
+		{
+			MethodName: "LeaveWorld",
+			Handler:    _Session_LeaveWorld_Handler,
+		},
+		{
+			MethodName: "CloseWorld",
+			Handler:    _Session_CloseWorld_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

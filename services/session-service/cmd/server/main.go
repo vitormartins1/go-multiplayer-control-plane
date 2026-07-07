@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"k8s.io/client-go/dynamic"
@@ -34,9 +35,11 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/allocator"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/publisher"
+	"github.com/vitormartins1/go-game-backend/services/session-service/internal/registryclient"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/service"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/token"
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/transport"
+	"github.com/vitormartins1/go-game-backend/shared/auth"
 	"github.com/vitormartins1/go-game-backend/shared/config"
 	"github.com/vitormartins1/go-game-backend/shared/logger"
 	"github.com/vitormartins1/go-game-backend/shared/telemetry"
@@ -91,6 +94,7 @@ func run(log *slog.Logger) error {
 	// registry nil (modo static) => WithServerRegistry no-op; reconciliação só no
 	// modo agones. Grace protege contra falso-positivo por staleness do LIST.
 	svc := service.New(alloc, issuer, pub,
+		service.WithProfileProvider(buildProfileProvider(log)), // host_world_dropin (spec 011)
 		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)),
 		service.WithServerRegistry(registry),
 		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
@@ -112,6 +116,19 @@ func run(log *slog.Logger) error {
 			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
 			ConstLabels: prometheus.Labels{"reason": string(domain.CloseAbandoned)},
 		}, func() float64 { return svc.ClosedTotal(domain.CloseAbandoned) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
+			ConstLabels: prometheus.Labels{"reason": string(domain.CloseHostLeft)},
+		}, func() float64 { return svc.ClosedTotal(domain.CloseHostLeft) }),
+		// slots ocupados por papel nos mundos host_world_dropin (spec 011).
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "world_role_slots", Help: "Slots ocupados em mundos host_world_dropin, por papel.",
+			ConstLabels: prometheus.Labels{"role": domain.RoleCoop},
+		}, func() float64 { return svc.OccupiedSlots(domain.RoleCoop) }),
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "world_role_slots", Help: "Slots ocupados em mundos host_world_dropin, por papel.",
+			ConstLabels: prometheus.Labels{"role": domain.RoleInvader},
+		}, func() float64 { return svc.OccupiedSlots(domain.RoleInvader) }),
 	)
 
 	grpcSrv := grpc.NewServer(
@@ -305,6 +322,29 @@ func buildPublisher(ctx context.Context, log *slog.Logger) (domain.ResultPublish
 	}
 	log.Info("fan-out: SNS", "topic", arn)
 	return publisher.NewSNS(ctx, arn, log)
+}
+
+// buildProfileProvider monta o adapter que lê o perfil de multiplayer do jogo no
+// game-registry (ADR-0023, spec 011) — necessário para abrir mundos
+// host_world_dropin. A internal key (ADR-0018) é injetada no transport do
+// http.Client. GAME_REGISTRY_URL ausente => provider nil: OpenWorld responde
+// ErrUnsupportedArchetype (o queue_arena não depende disto).
+func buildProfileProvider(log *slog.Logger) domain.ProfileProvider {
+	baseURL := os.Getenv("GAME_REGISTRY_URL")
+	if baseURL == "" {
+		log.Warn("GAME_REGISTRY_URL ausente — OpenWorld (host_world_dropin) indisponível; queue_arena não é afetado")
+		return nil
+	}
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — o game-registry vai negar (401) a leitura de perfil; configure a chave")
+	}
+	httpClient := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
+	}
+	log.Info("profile provider: game-registry", "url", baseURL)
+	return registryclient.New(baseURL, httpClient)
 }
 
 // buildIssuer carrega a chave Ed25519 do config (PEM PKCS8) ou, em dev, gera uma
