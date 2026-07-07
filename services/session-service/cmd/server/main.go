@@ -34,6 +34,7 @@ import (
 	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/allocator"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/profilecache"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/publisher"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/registryclient"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/service"
@@ -94,8 +95,8 @@ func run(log *slog.Logger) error {
 	// registry nil (modo static) => WithServerRegistry no-op; reconciliação só no
 	// modo agones. Grace protege contra falso-positivo por staleness do LIST.
 	svc := service.New(alloc, issuer, pub,
-		service.WithProfileProvider(buildProfileProvider(log)),   // host_world_dropin (spec 011)
-		service.WithParticipationPublisher(pub),                  // eventos de participação (spec 013)
+		service.WithProfileProvider(buildProfileProvider(log)), // snapshot do modo (specs 011/017)
+		service.WithParticipationPublisher(pub),                // eventos de participação (spec 013)
 		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)),
 		service.WithServerRegistry(registry),
 		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
@@ -355,10 +356,11 @@ func buildPublisher(ctx context.Context, log *slog.Logger) (fanoutPublisher, err
 }
 
 // buildProfileProvider monta o adapter que lê o perfil de multiplayer do jogo no
-// game-registry (ADR-0023, spec 011) — necessário para abrir mundos
-// host_world_dropin. A internal key (ADR-0018) é injetada no transport do
-// http.Client. GAME_REGISTRY_URL ausente => provider nil: OpenWorld responde
-// ErrUnsupportedArchetype (o queue_arena não depende disto).
+// game-registry (ADR-0023/0024, specs 011/017), com cache TTL por (game, mode).
+// Desde o ADR-0024 é obrigatório para QUALQUER criação de sessão (snapshot do
+// modo). A internal key (ADR-0018) é injetada no transport do http.Client.
+// GAME_REGISTRY_URL ausente => provider nil: Create/OpenWorld falham alto
+// (wiring incompleto aparece no primeiro uso, não silenciosamente).
 func buildProfileProvider(log *slog.Logger) domain.ProfileProvider {
 	baseURL := os.Getenv("GAME_REGISTRY_URL")
 	if baseURL == "" {
@@ -374,7 +376,9 @@ func buildProfileProvider(log *slog.Logger) domain.ProfileProvider {
 		Transport: auth.InternalKeyTransport(internalKey, otelhttp.NewTransport(http.DefaultTransport)),
 	}
 	log.Info("profile provider: game-registry", "url", baseURL)
-	return registryclient.New(baseURL, httpClient)
+	// cache TTL por (game, mode): o Create não bate no registry a cada partida
+	// (ADR-0024, spec 017). Mesmo padrão do matchmaking.
+	return profilecache.New(registryclient.New(baseURL, httpClient), 15*time.Second)
 }
 
 // buildIssuer carrega a chave Ed25519 do config (PEM PKCS8) ou, em dev, gera uma

@@ -44,6 +44,29 @@ service Session {
   // slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
   // NotFound (mundo inexistente/fechado).
   rpc ReportParticipationEvent(ReportParticipationEventRequest) returns (ReportParticipationEventResponse);
+
+  // GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot
+  // do perfil do modo congelado na criação da sessão. Chamado pelo game server no
+  // boot da sessão — o data plane lê só as chaves de params_json que conhece.
+  // ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
+  // sessão não existir ou já estiver fechada.
+  rpc GetSessionConfig(GetSessionConfigRequest) returns (GetSessionConfigResponse);
+}
+
+// spec 017 (ADR-0024) — session manifest.
+message GetSessionConfigRequest {
+  string ref_id = 1; // match_id ou session_id
+}
+
+message GetSessionConfigResponse {
+  string session_id = 1;
+  string match_id = 2;     // vazio em host_world
+  string game_id = 3;
+  string mode_id = 4;      // modo do jogo (ADR-0024)
+  string archetype = 5;    // "queue_arena" | "host_world_dropin" | "battle_royale" | "coop_mission"
+  string topology = 6;     // "dedicated"
+  string params_json = 7;  // params do arquétipo, JSON cru — o data plane lê o que conhece
+  string profile_hash = 8; // hash do snapshot (correlação/log)
 }
 
 // host_world_dropin (spec 011): o connect token carrega o claim role
@@ -53,6 +76,7 @@ message OpenWorldRequest {
   string game_id = 2;         // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
   int32 host_soul_level = 3;  // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
   int32 weapon_tier = 4;      // tier de arma do host (spec 012); 0 = sem faixa
+  string mode_id = 5;         // modo do jogo (ADR-0024, spec 017); vazio = "default"
 }
 
 message OpenWorldResponse {
@@ -121,6 +145,7 @@ message CreateSessionRequest {
   repeated string players = 2; // playerIDs do match (lista completa; fonte p/ tokens)
   string game_id = 3;          // jogo da partida (multi-tenant, ADR-0017)
   repeated Team teams = 4;     // composição de times (ADR-0023 queue_arena); vazio em FFA
+  string mode_id = 5;          // modo do jogo (ADR-0024, spec 017); vazio = "default"
 }
 
 // Team é um lado da partida NvN: um rótulo estável no match + seus jogadores

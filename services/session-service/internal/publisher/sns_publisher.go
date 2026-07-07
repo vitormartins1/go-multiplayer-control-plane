@@ -53,7 +53,8 @@ type envelope struct {
 	SchemaVersion int            `json:"schemaVersion"`
 	MatchID       string         `json:"matchId"`
 	GameID        string         `json:"gameId"`
-	Kind          string         `json:"kind"` // "win_loss_draw" (ADR-0023)
+	ModeID        string         `json:"modeId,omitempty"` // modo do jogo (ADR-0024, aditivo)
+	Kind          string         `json:"kind"`             // "win_loss_draw" (ADR-0023)
 	Results       []playerResult `json:"results"`
 }
 
@@ -73,6 +74,7 @@ type participationEnvelope struct {
 	SchemaVersion int    `json:"schemaVersion"`
 	Kind          string `json:"kind"`
 	GameID        string `json:"gameId"`
+	ModeID        string `json:"modeId,omitempty"` // ADR-0024, aditivo
 	SessionID     string `json:"sessionId"`
 	PlayerID      string `json:"playerId"`
 	Role          string `json:"role"`
@@ -88,6 +90,7 @@ type placementEnvelope struct {
 	Kind          string              `json:"kind"`
 	MatchID       string              `json:"matchId"`
 	GameID        string              `json:"gameId"`
+	ModeID        string              `json:"modeId,omitempty"` // ADR-0024, aditivo
 	Entries       []placementEntryDTO `json:"entries"`
 }
 
@@ -107,6 +110,7 @@ type collectiveEnvelope struct {
 	Kind          string                `json:"kind"`
 	MatchID       string                `json:"matchId"`
 	GameID        string                `json:"gameId"`
+	ModeID        string                `json:"modeId,omitempty"` // ADR-0024, aditivo
 	Outcome       string                `json:"outcome"` // MISSION_SUCCESS | MISSION_FAILURE (da sessão)
 	Players       []collectivePlayerDTO `json:"players"`
 }
@@ -145,24 +149,25 @@ func NewSNS(ctx context.Context, topicARN string, log *slog.Logger) (*SNS, error
 
 // Publish serializa o envelope do kind ativo e publica no tópico (ADR-0023:
 // despacha por outcome.Kind — win_loss_draw ou placement). Retorna erro em falha.
-func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+func (s *SNS) Publish(ctx context.Context, gameID, matchID, modeID string, outcome domain.MatchOutcome) error {
 	switch outcome.Kind {
 	case domain.OutcomePlacement:
-		return s.publishPlacement(ctx, gameID, matchID, outcome.Placement)
+		return s.publishPlacement(ctx, gameID, matchID, modeID, outcome.Placement)
 	case domain.OutcomeCollective:
-		return s.publishCollective(ctx, gameID, matchID, outcome.Collective)
+		return s.publishCollective(ctx, gameID, matchID, modeID, outcome.Collective)
 	default:
-		return s.publishWinLossDraw(ctx, gameID, matchID, outcome)
+		return s.publishWinLossDraw(ctx, gameID, matchID, modeID, outcome)
 	}
 }
 
 // publishWinLossDraw publica o envelope do queue_arena (kind=win_loss_draw).
-func (s *SNS) publishWinLossDraw(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+func (s *SNS) publishWinLossDraw(ctx context.Context, gameID, matchID, modeID string, outcome domain.MatchOutcome) error {
 	players := outcome.WinLossDraw.Players
 	env := envelope{
 		SchemaVersion: envelopeVersion,
 		MatchID:       matchID,
 		GameID:        gameID,
+		ModeID:        modeID,
 		Kind:          outcome.Kind,
 		Results:       make([]playerResult, 0, len(players)),
 	}
@@ -194,12 +199,13 @@ func (s *SNS) publishWinLossDraw(ctx context.Context, gameID, matchID string, ou
 }
 
 // publishPlacement publica o envelope do battle_royale (kind=placement, BR2).
-func (s *SNS) publishPlacement(ctx context.Context, gameID, matchID string, result *domain.PlacementResult) error {
+func (s *SNS) publishPlacement(ctx context.Context, gameID, matchID, modeID string, result *domain.PlacementResult) error {
 	env := placementEnvelope{
 		SchemaVersion: envelopeVersion,
 		Kind:          kindPlacement,
 		MatchID:       matchID,
 		GameID:        gameID,
+		ModeID:        modeID,
 		Entries:       make([]placementEntryDTO, 0, len(result.Entries)),
 	}
 	for _, e := range result.Entries {
@@ -229,12 +235,13 @@ func (s *SNS) publishPlacement(ctx context.Context, gameID, matchID string, resu
 }
 
 // publishCollective publica o envelope do coop_mission (kind=collective, C2).
-func (s *SNS) publishCollective(ctx context.Context, gameID, matchID string, result *domain.CollectiveResult) error {
+func (s *SNS) publishCollective(ctx context.Context, gameID, matchID, modeID string, result *domain.CollectiveResult) error {
 	env := collectiveEnvelope{
 		SchemaVersion: envelopeVersion,
 		Kind:          kindCollective,
 		MatchID:       matchID,
 		GameID:        gameID,
+		ModeID:        modeID,
 		Outcome:       result.Outcome,
 		Players:       make([]collectivePlayerDTO, 0, len(result.Players)),
 	}
@@ -279,11 +286,12 @@ func (s *SNS) publish(ctx context.Context, body []byte) error {
 
 // PublishParticipation serializa o envelope participation_event e o publica no
 // mesmo tópico match-results (spec 013). Falha propaga (o server refaz o report).
-func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID string, evt domain.ParticipationEvent) error {
+func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID, modeID string, evt domain.ParticipationEvent) error {
 	env := participationEnvelope{
 		SchemaVersion: envelopeVersion,
 		Kind:          kindParticipationEvent,
 		GameID:        gameID,
+		ModeID:        modeID,
 		SessionID:     sessionID,
 		PlayerID:      evt.PlayerID,
 		Role:          evt.Role,

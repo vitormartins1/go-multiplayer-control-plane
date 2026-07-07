@@ -67,8 +67,9 @@ func WithHistoryLimit(n int) Option {
 	}
 }
 
-// WithProfileProvider liga a leitura do perfil de multiplayer (host_world_dropin,
-// spec 011): habilita OpenWorld. Sem ele, OpenWorld responde ErrUnsupportedArchetype.
+// WithProfileProvider liga a leitura do perfil de multiplayer (specs 011/017).
+// Desde o ADR-0024 é OBRIGATÓRIO para criar sessões: sem ele, Create falha com
+// ErrProfileUnavailable e OpenWorld com ErrUnsupportedArchetype (wiring bug).
 func WithProfileProvider(p domain.ProfileProvider) Option {
 	return func(s *Service) { s.profiles = p }
 }
@@ -121,9 +122,16 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 }
 
 // Create aloca um game server, emite um connect token por jogador e registra a
-// sessão (OPEN). Se a emissão falhar, o server alocado é devolvido ao pool.
-func (s *Service) Create(ctx context.Context, matchID, gameID string, teams []domain.TeamAssignment) (*domain.Session, []domain.ConnectGrant, error) {
+// sessão (OPEN). O perfil do MODO é congelado como snapshot ANTES de alocar
+// (ADR-0024, spec 017) — se o perfil não puder ser lido, nada é reservado. Se a
+// emissão de token falhar, o server alocado é devolvido ao pool.
+func (s *Service) Create(ctx context.Context, matchID, gameID, modeID string, teams []domain.TeamAssignment) (*domain.Session, []domain.ConnectGrant, error) {
 	players, teamByPlayer, err := flattenTeams(teams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("session service: create: %w", err)
+	}
+
+	snap, err := s.modeSnapshot(ctx, gameID, modeID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("session service: create: %w", err)
 	}
@@ -135,9 +143,9 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, teams []do
 
 	grants := make([]domain.ConnectGrant, 0, len(players))
 	for _, playerID := range players {
-		// o token carrega o team_id do jogador (vazio em FFA) — o game server lê
-		// o time no connection approval para o gameplay NvN (ADR-0023).
-		tok, err := s.issuer.Issue(playerID, matchID, server.Address, domain.ConnectClaims{TeamID: teamByPlayer[playerID]})
+		// o token carrega o team_id do jogador (vazio em FFA) e o mode_id (sempre)
+		// — o game server lê ambos no connection approval (ADR-0023/0024).
+		tok, err := s.issuer.Issue(playerID, matchID, server.Address, domain.ConnectClaims{TeamID: teamByPlayer[playerID], ModeID: modeID})
 		if err != nil {
 			// rollback: não deixa o server preso se não conseguimos cunhar os tokens.
 			_ = s.allocator.Release(ctx, server.ID)
@@ -150,6 +158,8 @@ func (s *Service) Create(ctx context.Context, matchID, gameID string, teams []do
 		ID:            uuid.NewString(),
 		MatchID:       matchID,
 		GameID:        gameID,
+		ModeID:        modeID,
+		Profile:       &snap,
 		Players:       players,
 		TeamByPlayer:  teamByPlayer,
 		ServerID:      server.ID,
@@ -209,13 +219,21 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 	if ok {
 		sess, ok = s.sessions[sessionID]
 	}
-	gameID := ""
+	gameID, modeID := "", ""
+	var snap *domain.ProfileSnapshot
 	if ok {
-		gameID = sess.GameID
+		gameID, modeID, snap = sess.GameID, sess.ModeID, sess.Profile
 	}
 	s.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("session service: report result: %w", domain.ErrSessionNotFound)
+	}
+
+	// kind × arquétipo do snapshot (ADR-0024, spec 017): um server não consegue
+	// reportar a FORMA errada de resultado — nada é publicado no mismatch e a
+	// sessão segue aberta (o server pode corrigir e reenviar).
+	if err := validateOutcomeKind(snap, outcome.Kind); err != nil {
+		return fmt.Errorf("session service: report result: %w", err)
 	}
 
 	// carimba o team_id canônico a partir da composição registrada na formação
@@ -223,7 +241,7 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 	// TeamByPlayer é imutável após o Create, então é seguro ler fora do lock.
 	stampTeams(outcome, sess.TeamByPlayer)
 
-	if err := s.publisher.Publish(ctx, gameID, matchID, outcome); err != nil {
+	if err := s.publisher.Publish(ctx, gameID, matchID, modeID, outcome); err != nil {
 		return fmt.Errorf("session service: report result: publish: %w", err)
 	}
 
@@ -254,9 +272,73 @@ func stampTeams(o domain.MatchOutcome, teamByPlayer map[string]string) {
 	}
 }
 
+// modeSnapshot lê e congela o perfil do modo (ADR-0024, spec 017). profiles nil
+// é erro de wiring — aparece como ErrProfileUnavailable, alto e cedo.
+func (s *Service) modeSnapshot(ctx context.Context, gameID, modeID string) (domain.ProfileSnapshot, error) {
+	if s.profiles == nil {
+		return domain.ProfileSnapshot{}, fmt.Errorf("profile provider não configurado: %w", domain.ErrProfileUnavailable)
+	}
+	snap, err := s.profiles.ModeProfile(ctx, gameID, modeID)
+	if err != nil {
+		return domain.ProfileSnapshot{}, err
+	}
+	return snap, nil
+}
+
+// kindByArchetype é o kind de outcome terminal que cada arquétipo produz
+// (ADR-0024, spec 017). host_world_dropin não está aqui: usa
+// ReportParticipationEvent — qualquer ReportResult é mismatch.
+var kindByArchetype = map[string]string{
+	domain.ArchetypeQueueArena:   domain.OutcomeWinLossDraw,
+	domain.ArchetypeBattleRoyale: domain.OutcomePlacement,
+	domain.ArchetypeCoopMission:  domain.OutcomeCollective,
+}
+
+// validateOutcomeKind confronta o kind reportado com o arquétipo do snapshot
+// (spec 017). Snapshot ausente não deve ocorrer (o Create o exige) — tratado
+// como mismatch para não deixar passar resultado sem procedência.
+func validateOutcomeKind(snap *domain.ProfileSnapshot, kind string) error {
+	if snap == nil {
+		return fmt.Errorf("sessão sem snapshot de perfil: %w", domain.ErrOutcomeMismatch)
+	}
+	expected, ok := kindByArchetype[snap.Archetype]
+	if !ok || expected != kind {
+		return fmt.Errorf("arquétipo %q não produz outcome %q: %w", snap.Archetype, kind, domain.ErrOutcomeMismatch)
+	}
+	return nil
+}
+
+// GetSessionConfig devolve o session manifest do snapshot (ADR-0024, spec 017).
+// refID resolve primeiro como matchID (queue-form) e depois como sessionID
+// (host_world) — a mesma rechaveação do restante do service.
+func (s *Service) GetSessionConfig(ctx context.Context, refID string) (*domain.SessionManifest, error) {
+	s.mu.Lock()
+	sessionID, ok := s.matchIndex[refID]
+	if !ok {
+		sessionID = refID
+	}
+	sess, ok := s.sessions[sessionID]
+	s.mu.Unlock()
+	if !ok || sess.State != domain.SessionOpen || sess.Profile == nil {
+		return nil, fmt.Errorf("session service: get session config: %w", domain.ErrSessionNotFound)
+	}
+	snap := sess.Profile
+	return &domain.SessionManifest{
+		SessionID:   sess.ID,
+		MatchID:     sess.MatchID,
+		GameID:      sess.GameID,
+		ModeID:      sess.ModeID,
+		Archetype:   snap.Archetype,
+		Topology:    snap.Topology,
+		ParamsJSON:  append([]byte(nil), snap.ParamsJSON...),
+		ProfileHash: snap.Hash,
+	}, nil
+}
+
 // validateOutcome valida o outcome estruturalmente, despachando por kind
-// (ADR-0023). Não valida contra o perfil do jogo — o game server é autoritativo
-// sobre o resultado (não recomputa a corrida nem exige colocações contíguas).
+// (ADR-0023). A coerência kind×arquétipo é de validateOutcomeKind (spec 017);
+// dentro do kind, o game server é autoritativo sobre o resultado (não recomputa
+// a corrida nem exige colocações contíguas).
 func validateOutcome(o domain.MatchOutcome) error {
 	switch o.Kind {
 	case domain.OutcomeWinLossDraw:
@@ -477,13 +559,18 @@ func (s *Service) CloseByAdmin(ctx context.Context, matchID string) (*domain.Ses
 // lê o perfil, aloca um server, deriva os slots por papel e emite o connect
 // token do host. Qualquer problema com o perfil (ausente, arquétipo != host_world
 // _dropin, rede) vira ErrUnsupportedArchetype — só esse arquétipo abre mundo.
-func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string, attrs domain.WorldAttributes) (*domain.Session, domain.ConnectGrant, error) {
+func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs domain.WorldAttributes) (*domain.Session, domain.ConnectGrant, error) {
 	if s.profiles == nil {
 		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %w", domain.ErrUnsupportedArchetype)
 	}
-	profile, err := s.profiles.WorldProfile(ctx, gameID)
+	snap, err := s.modeSnapshot(ctx, gameID, modeID)
 	if err != nil {
 		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %v: %w", err, domain.ErrUnsupportedArchetype)
+	}
+	// a checagem de arquétipo subiu do adapter (que virou genérico por modo,
+	// ADR-0024) para cá: só host_world_dropin abre mundo.
+	if snap.Archetype != domain.ArchetypeHostWorldDropIn {
+		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: archetype %q: %w", snap.Archetype, domain.ErrUnsupportedArchetype)
 	}
 
 	sessionID := uuid.NewString()
@@ -493,7 +580,7 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string, at
 	}
 
 	// token do host (papel host) — rollback do server se a emissão falhar.
-	tok, err := s.issuer.Issue(hostPlayerID, sessionID, server.Address, domain.ConnectClaims{Role: domain.RoleHost})
+	tok, err := s.issuer.Issue(hostPlayerID, sessionID, server.Address, domain.ConnectClaims{Role: domain.RoleHost, ModeID: modeID})
 	if err != nil {
 		_ = s.allocator.Release(ctx, server.ID)
 		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: issue token: %w", err)
@@ -502,12 +589,14 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string, at
 	sess := &domain.Session{
 		ID:            sessionID,
 		GameID:        gameID,
+		ModeID:        modeID,
+		Profile:       &snap,
 		Players:       []string{hostPlayerID},
 		ServerID:      server.ID,
 		ServerAddress: server.Address,
 		Origin:        domain.OriginHostWorld,
 		HostPlayerID:  hostPlayerID,
-		RoleSlots:     roleSlotsFromProfile(profile),
+		RoleSlots:     roleSlotsFromProfile(snap),
 		HostSoulLevel: attrs.SoulLevel,
 		WeaponTier:    attrs.WeaponTier,
 		State:         domain.SessionOpen,
@@ -523,7 +612,7 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string, at
 
 // roleSlotsFromProfile deriva a capacidade por papel do perfil, só para os papéis
 // habilitados (EnabledRoles). O host não ocupa slot — é o dono do mundo.
-func roleSlotsFromProfile(p domain.WorldProfile) map[string]*domain.RoleSlot {
+func roleSlotsFromProfile(p domain.ProfileSnapshot) map[string]*domain.RoleSlot {
 	slots := make(map[string]*domain.RoleSlot)
 	for _, role := range p.EnabledRoles {
 		switch role {
@@ -562,9 +651,10 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 	slot.Occupants = append(slot.Occupants, playerID)
 	sess.Players = append(sess.Players, playerID)
 	serverAddr := sess.ServerAddress
+	modeID := sess.ModeID
 	s.mu.Unlock()
 
-	tok, err := s.issuer.Issue(playerID, sessionID, serverAddr, domain.ConnectClaims{Role: role})
+	tok, err := s.issuer.Issue(playerID, sessionID, serverAddr, domain.ConnectClaims{Role: role, ModeID: modeID})
 	if err != nil {
 		s.mu.Lock()
 		removeFromWorld(sess, playerID) // reverte a reserva do slot
@@ -654,11 +744,11 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 		s.mu.Unlock()
 		return fmt.Errorf("session service: participation event: %w", domain.ErrWorldNotFound)
 	}
-	gameID := sess.GameID
+	gameID, modeID := sess.GameID, sess.ModeID
 	s.mu.Unlock()
 
 	// publica ANTES de mutar: falha => nada muda, o server refaz o report.
-	if err := s.participation.PublishParticipation(ctx, gameID, sessionID, evt); err != nil {
+	if err := s.participation.PublishParticipation(ctx, gameID, sessionID, modeID, evt); err != nil {
 		return fmt.Errorf("session service: participation event: publish: %w", err)
 	}
 	s.countParticipation(evt.Event)

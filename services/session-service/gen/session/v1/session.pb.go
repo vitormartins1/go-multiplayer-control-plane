@@ -21,6 +21,151 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// spec 017 (ADR-0024) — session manifest.
+type GetSessionConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RefId         string                 `protobuf:"bytes,1,opt,name=ref_id,json=refId,proto3" json:"ref_id,omitempty"` // match_id ou session_id
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSessionConfigRequest) Reset() {
+	*x = GetSessionConfigRequest{}
+	mi := &file_session_v1_session_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSessionConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSessionConfigRequest) ProtoMessage() {}
+
+func (x *GetSessionConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSessionConfigRequest.ProtoReflect.Descriptor instead.
+func (*GetSessionConfigRequest) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GetSessionConfigRequest) GetRefId() string {
+	if x != nil {
+		return x.RefId
+	}
+	return ""
+}
+
+type GetSessionConfigResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	MatchId       string                 `protobuf:"bytes,2,opt,name=match_id,json=matchId,proto3" json:"match_id,omitempty"` // vazio em host_world
+	GameId        string                 `protobuf:"bytes,3,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	ModeId        string                 `protobuf:"bytes,4,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`                // modo do jogo (ADR-0024)
+	Archetype     string                 `protobuf:"bytes,5,opt,name=archetype,proto3" json:"archetype,omitempty"`                        // "queue_arena" | "host_world_dropin" | "battle_royale" | "coop_mission"
+	Topology      string                 `protobuf:"bytes,6,opt,name=topology,proto3" json:"topology,omitempty"`                          // "dedicated"
+	ParamsJson    string                 `protobuf:"bytes,7,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`    // params do arquétipo, JSON cru — o data plane lê o que conhece
+	ProfileHash   string                 `protobuf:"bytes,8,opt,name=profile_hash,json=profileHash,proto3" json:"profile_hash,omitempty"` // hash do snapshot (correlação/log)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSessionConfigResponse) Reset() {
+	*x = GetSessionConfigResponse{}
+	mi := &file_session_v1_session_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSessionConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSessionConfigResponse) ProtoMessage() {}
+
+func (x *GetSessionConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSessionConfigResponse.ProtoReflect.Descriptor instead.
+func (*GetSessionConfigResponse) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GetSessionConfigResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetMatchId() string {
+	if x != nil {
+		return x.MatchId
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetModeId() string {
+	if x != nil {
+		return x.ModeId
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetArchetype() string {
+	if x != nil {
+		return x.Archetype
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetTopology() string {
+	if x != nil {
+		return x.Topology
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetParamsJson() string {
+	if x != nil {
+		return x.ParamsJson
+	}
+	return ""
+}
+
+func (x *GetSessionConfigResponse) GetProfileHash() string {
+	if x != nil {
+		return x.ProfileHash
+	}
+	return ""
+}
+
 // host_world_dropin (spec 011): o connect token carrega o claim role
 // (host|coop|invader), lido pelo game server no connection approval.
 type OpenWorldRequest struct {
@@ -29,13 +174,14 @@ type OpenWorldRequest struct {
 	GameId        string                 `protobuf:"bytes,2,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`                         // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
 	HostSoulLevel int32                  `protobuf:"varint,3,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"` // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
 	WeaponTier    int32                  `protobuf:"varint,4,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"`            // tier de arma do host (spec 012); 0 = sem faixa
+	ModeId        string                 `protobuf:"bytes,5,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`                         // modo do jogo (ADR-0024, spec 017); vazio = "default"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *OpenWorldRequest) Reset() {
 	*x = OpenWorldRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[0]
+	mi := &file_session_v1_session_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +193,7 @@ func (x *OpenWorldRequest) String() string {
 func (*OpenWorldRequest) ProtoMessage() {}
 
 func (x *OpenWorldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[0]
+	mi := &file_session_v1_session_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +206,7 @@ func (x *OpenWorldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenWorldRequest.ProtoReflect.Descriptor instead.
 func (*OpenWorldRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{0}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *OpenWorldRequest) GetHostPlayerId() string {
@@ -91,6 +237,13 @@ func (x *OpenWorldRequest) GetWeaponTier() int32 {
 	return 0
 }
 
+func (x *OpenWorldRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
+	}
+	return ""
+}
+
 type OpenWorldResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`             // identidade do mundo (não há match)
@@ -102,7 +255,7 @@ type OpenWorldResponse struct {
 
 func (x *OpenWorldResponse) Reset() {
 	*x = OpenWorldResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[1]
+	mi := &file_session_v1_session_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -114,7 +267,7 @@ func (x *OpenWorldResponse) String() string {
 func (*OpenWorldResponse) ProtoMessage() {}
 
 func (x *OpenWorldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[1]
+	mi := &file_session_v1_session_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -127,7 +280,7 @@ func (x *OpenWorldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenWorldResponse.ProtoReflect.Descriptor instead.
 func (*OpenWorldResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{1}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *OpenWorldResponse) GetSessionId() string {
@@ -162,7 +315,7 @@ type JoinWorldRequest struct {
 
 func (x *JoinWorldRequest) Reset() {
 	*x = JoinWorldRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[2]
+	mi := &file_session_v1_session_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -174,7 +327,7 @@ func (x *JoinWorldRequest) String() string {
 func (*JoinWorldRequest) ProtoMessage() {}
 
 func (x *JoinWorldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[2]
+	mi := &file_session_v1_session_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -187,7 +340,7 @@ func (x *JoinWorldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinWorldRequest.ProtoReflect.Descriptor instead.
 func (*JoinWorldRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{2}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *JoinWorldRequest) GetSessionId() string {
@@ -221,7 +374,7 @@ type JoinWorldResponse struct {
 
 func (x *JoinWorldResponse) Reset() {
 	*x = JoinWorldResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[3]
+	mi := &file_session_v1_session_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -233,7 +386,7 @@ func (x *JoinWorldResponse) String() string {
 func (*JoinWorldResponse) ProtoMessage() {}
 
 func (x *JoinWorldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[3]
+	mi := &file_session_v1_session_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -246,7 +399,7 @@ func (x *JoinWorldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinWorldResponse.ProtoReflect.Descriptor instead.
 func (*JoinWorldResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{3}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *JoinWorldResponse) GetGrant() *ConnectGrant {
@@ -273,7 +426,7 @@ type LeaveWorldRequest struct {
 
 func (x *LeaveWorldRequest) Reset() {
 	*x = LeaveWorldRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[4]
+	mi := &file_session_v1_session_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -285,7 +438,7 @@ func (x *LeaveWorldRequest) String() string {
 func (*LeaveWorldRequest) ProtoMessage() {}
 
 func (x *LeaveWorldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[4]
+	mi := &file_session_v1_session_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -298,7 +451,7 @@ func (x *LeaveWorldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveWorldRequest.ProtoReflect.Descriptor instead.
 func (*LeaveWorldRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{4}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *LeaveWorldRequest) GetSessionId() string {
@@ -323,7 +476,7 @@ type LeaveWorldResponse struct {
 
 func (x *LeaveWorldResponse) Reset() {
 	*x = LeaveWorldResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[5]
+	mi := &file_session_v1_session_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +488,7 @@ func (x *LeaveWorldResponse) String() string {
 func (*LeaveWorldResponse) ProtoMessage() {}
 
 func (x *LeaveWorldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[5]
+	mi := &file_session_v1_session_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +501,7 @@ func (x *LeaveWorldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveWorldResponse.ProtoReflect.Descriptor instead.
 func (*LeaveWorldResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{5}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{7}
 }
 
 type CloseWorldRequest struct {
@@ -360,7 +513,7 @@ type CloseWorldRequest struct {
 
 func (x *CloseWorldRequest) Reset() {
 	*x = CloseWorldRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[6]
+	mi := &file_session_v1_session_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +525,7 @@ func (x *CloseWorldRequest) String() string {
 func (*CloseWorldRequest) ProtoMessage() {}
 
 func (x *CloseWorldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[6]
+	mi := &file_session_v1_session_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +538,7 @@ func (x *CloseWorldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseWorldRequest.ProtoReflect.Descriptor instead.
 func (*CloseWorldRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{6}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CloseWorldRequest) GetSessionId() string {
@@ -403,7 +556,7 @@ type CloseWorldResponse struct {
 
 func (x *CloseWorldResponse) Reset() {
 	*x = CloseWorldResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[7]
+	mi := &file_session_v1_session_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -415,7 +568,7 @@ func (x *CloseWorldResponse) String() string {
 func (*CloseWorldResponse) ProtoMessage() {}
 
 func (x *CloseWorldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[7]
+	mi := &file_session_v1_session_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -428,7 +581,7 @@ func (x *CloseWorldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseWorldResponse.ProtoReflect.Descriptor instead.
 func (*CloseWorldResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{7}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{9}
 }
 
 // spec 012 — diretório de mundos invadíveis. O matchmaking (006) consulta por
@@ -442,7 +595,7 @@ type ListInvadableWorldsRequest struct {
 
 func (x *ListInvadableWorldsRequest) Reset() {
 	*x = ListInvadableWorldsRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[8]
+	mi := &file_session_v1_session_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +607,7 @@ func (x *ListInvadableWorldsRequest) String() string {
 func (*ListInvadableWorldsRequest) ProtoMessage() {}
 
 func (x *ListInvadableWorldsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[8]
+	mi := &file_session_v1_session_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +620,7 @@ func (x *ListInvadableWorldsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvadableWorldsRequest.ProtoReflect.Descriptor instead.
 func (*ListInvadableWorldsRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{8}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListInvadableWorldsRequest) GetGameId() string {
@@ -486,7 +639,7 @@ type ListInvadableWorldsResponse struct {
 
 func (x *ListInvadableWorldsResponse) Reset() {
 	*x = ListInvadableWorldsResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[9]
+	mi := &file_session_v1_session_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -498,7 +651,7 @@ func (x *ListInvadableWorldsResponse) String() string {
 func (*ListInvadableWorldsResponse) ProtoMessage() {}
 
 func (x *ListInvadableWorldsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[9]
+	mi := &file_session_v1_session_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -511,7 +664,7 @@ func (x *ListInvadableWorldsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvadableWorldsResponse.ProtoReflect.Descriptor instead.
 func (*ListInvadableWorldsResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{9}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListInvadableWorldsResponse) GetWorlds() []*InvadableWorld {
@@ -535,7 +688,7 @@ type InvadableWorld struct {
 
 func (x *InvadableWorld) Reset() {
 	*x = InvadableWorld{}
-	mi := &file_session_v1_session_proto_msgTypes[10]
+	mi := &file_session_v1_session_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -547,7 +700,7 @@ func (x *InvadableWorld) String() string {
 func (*InvadableWorld) ProtoMessage() {}
 
 func (x *InvadableWorld) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[10]
+	mi := &file_session_v1_session_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -560,7 +713,7 @@ func (x *InvadableWorld) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvadableWorld.ProtoReflect.Descriptor instead.
 func (*InvadableWorld) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{10}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *InvadableWorld) GetSessionId() string {
@@ -606,7 +759,7 @@ type ReportParticipationEventRequest struct {
 
 func (x *ReportParticipationEventRequest) Reset() {
 	*x = ReportParticipationEventRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[11]
+	mi := &file_session_v1_session_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +771,7 @@ func (x *ReportParticipationEventRequest) String() string {
 func (*ReportParticipationEventRequest) ProtoMessage() {}
 
 func (x *ReportParticipationEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[11]
+	mi := &file_session_v1_session_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +784,7 @@ func (x *ReportParticipationEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportParticipationEventRequest.ProtoReflect.Descriptor instead.
 func (*ReportParticipationEventRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{11}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReportParticipationEventRequest) GetSessionId() string {
@@ -677,7 +830,7 @@ type ReportParticipationEventResponse struct {
 
 func (x *ReportParticipationEventResponse) Reset() {
 	*x = ReportParticipationEventResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[12]
+	mi := &file_session_v1_session_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -689,7 +842,7 @@ func (x *ReportParticipationEventResponse) String() string {
 func (*ReportParticipationEventResponse) ProtoMessage() {}
 
 func (x *ReportParticipationEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[12]
+	mi := &file_session_v1_session_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -702,7 +855,7 @@ func (x *ReportParticipationEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportParticipationEventResponse.ProtoReflect.Descriptor instead.
 func (*ReportParticipationEventResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{12}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{14}
 }
 
 type CreateSessionRequest struct {
@@ -711,13 +864,14 @@ type CreateSessionRequest struct {
 	Players       []string               `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"`             // playerIDs do match (lista completa; fonte p/ tokens)
 	GameId        string                 `protobuf:"bytes,3,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // jogo da partida (multi-tenant, ADR-0017)
 	Teams         []*Team                `protobuf:"bytes,4,rep,name=teams,proto3" json:"teams,omitempty"`                 // composição de times (ADR-0023 queue_arena); vazio em FFA
+	ModeId        string                 `protobuf:"bytes,5,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"` // modo do jogo (ADR-0024, spec 017); vazio = "default"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateSessionRequest) Reset() {
 	*x = CreateSessionRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[13]
+	mi := &file_session_v1_session_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -729,7 +883,7 @@ func (x *CreateSessionRequest) String() string {
 func (*CreateSessionRequest) ProtoMessage() {}
 
 func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[13]
+	mi := &file_session_v1_session_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -742,7 +896,7 @@ func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{13}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateSessionRequest) GetMatchId() string {
@@ -773,6 +927,13 @@ func (x *CreateSessionRequest) GetTeams() []*Team {
 	return nil
 }
 
+func (x *CreateSessionRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
+	}
+	return ""
+}
+
 // Team é um lado da partida NvN: um rótulo estável no match + seus jogadores
 // (ADR-0023). Em FFA não há times (teams vazio). O session é o dono canônico
 // da composição — carimba o team_id no resultado a partir daqui e emite o
@@ -787,7 +948,7 @@ type Team struct {
 
 func (x *Team) Reset() {
 	*x = Team{}
-	mi := &file_session_v1_session_proto_msgTypes[14]
+	mi := &file_session_v1_session_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -799,7 +960,7 @@ func (x *Team) String() string {
 func (*Team) ProtoMessage() {}
 
 func (x *Team) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[14]
+	mi := &file_session_v1_session_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -812,7 +973,7 @@ func (x *Team) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Team.ProtoReflect.Descriptor instead.
 func (*Team) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{14}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Team) GetTeamId() string {
@@ -840,7 +1001,7 @@ type CreateSessionResponse struct {
 
 func (x *CreateSessionResponse) Reset() {
 	*x = CreateSessionResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[15]
+	mi := &file_session_v1_session_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -852,7 +1013,7 @@ func (x *CreateSessionResponse) String() string {
 func (*CreateSessionResponse) ProtoMessage() {}
 
 func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[15]
+	mi := &file_session_v1_session_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -865,7 +1026,7 @@ func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateSessionResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{15}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CreateSessionResponse) GetSessionId() string {
@@ -900,7 +1061,7 @@ type ConnectGrant struct {
 
 func (x *ConnectGrant) Reset() {
 	*x = ConnectGrant{}
-	mi := &file_session_v1_session_proto_msgTypes[16]
+	mi := &file_session_v1_session_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1073,7 @@ func (x *ConnectGrant) String() string {
 func (*ConnectGrant) ProtoMessage() {}
 
 func (x *ConnectGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[16]
+	mi := &file_session_v1_session_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1086,7 @@ func (x *ConnectGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectGrant.ProtoReflect.Descriptor instead.
 func (*ConnectGrant) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{16}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ConnectGrant) GetPlayerId() string {
@@ -960,7 +1121,7 @@ type ReportResultRequest struct {
 
 func (x *ReportResultRequest) Reset() {
 	*x = ReportResultRequest{}
-	mi := &file_session_v1_session_proto_msgTypes[17]
+	mi := &file_session_v1_session_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +1133,7 @@ func (x *ReportResultRequest) String() string {
 func (*ReportResultRequest) ProtoMessage() {}
 
 func (x *ReportResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[17]
+	mi := &file_session_v1_session_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -985,7 +1146,7 @@ func (x *ReportResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResultRequest.ProtoReflect.Descriptor instead.
 func (*ReportResultRequest) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{17}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ReportResultRequest) GetMatchId() string {
@@ -1059,7 +1220,7 @@ type ReportResultResponse struct {
 
 func (x *ReportResultResponse) Reset() {
 	*x = ReportResultResponse{}
-	mi := &file_session_v1_session_proto_msgTypes[18]
+	mi := &file_session_v1_session_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1071,7 +1232,7 @@ func (x *ReportResultResponse) String() string {
 func (*ReportResultResponse) ProtoMessage() {}
 
 func (x *ReportResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[18]
+	mi := &file_session_v1_session_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1245,7 @@ func (x *ReportResultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResultResponse.ProtoReflect.Descriptor instead.
 func (*ReportResultResponse) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{18}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{20}
 }
 
 // WinLossDrawResult é o outcome do arquétipo queue_arena: vitória/derrota/empate
@@ -1098,7 +1259,7 @@ type WinLossDrawResult struct {
 
 func (x *WinLossDrawResult) Reset() {
 	*x = WinLossDrawResult{}
-	mi := &file_session_v1_session_proto_msgTypes[19]
+	mi := &file_session_v1_session_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1271,7 @@ func (x *WinLossDrawResult) String() string {
 func (*WinLossDrawResult) ProtoMessage() {}
 
 func (x *WinLossDrawResult) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[19]
+	mi := &file_session_v1_session_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1284,7 @@ func (x *WinLossDrawResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WinLossDrawResult.ProtoReflect.Descriptor instead.
 func (*WinLossDrawResult) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{19}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *WinLossDrawResult) GetPlayers() []*PlayerOutcome {
@@ -1147,7 +1308,7 @@ type PlayerOutcome struct {
 
 func (x *PlayerOutcome) Reset() {
 	*x = PlayerOutcome{}
-	mi := &file_session_v1_session_proto_msgTypes[20]
+	mi := &file_session_v1_session_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1159,7 +1320,7 @@ func (x *PlayerOutcome) String() string {
 func (*PlayerOutcome) ProtoMessage() {}
 
 func (x *PlayerOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[20]
+	mi := &file_session_v1_session_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1172,7 +1333,7 @@ func (x *PlayerOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlayerOutcome.ProtoReflect.Descriptor instead.
 func (*PlayerOutcome) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{20}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *PlayerOutcome) GetPlayerId() string {
@@ -1223,7 +1384,7 @@ type PlacementResult struct {
 
 func (x *PlacementResult) Reset() {
 	*x = PlacementResult{}
-	mi := &file_session_v1_session_proto_msgTypes[21]
+	mi := &file_session_v1_session_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1235,7 +1396,7 @@ func (x *PlacementResult) String() string {
 func (*PlacementResult) ProtoMessage() {}
 
 func (x *PlacementResult) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[21]
+	mi := &file_session_v1_session_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1248,7 +1409,7 @@ func (x *PlacementResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlacementResult.ProtoReflect.Descriptor instead.
 func (*PlacementResult) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{21}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PlacementResult) GetEntries() []*PlacementEntry {
@@ -1274,7 +1435,7 @@ type PlacementEntry struct {
 
 func (x *PlacementEntry) Reset() {
 	*x = PlacementEntry{}
-	mi := &file_session_v1_session_proto_msgTypes[22]
+	mi := &file_session_v1_session_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1447,7 @@ func (x *PlacementEntry) String() string {
 func (*PlacementEntry) ProtoMessage() {}
 
 func (x *PlacementEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[22]
+	mi := &file_session_v1_session_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1460,7 @@ func (x *PlacementEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlacementEntry.ProtoReflect.Descriptor instead.
 func (*PlacementEntry) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{22}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PlacementEntry) GetPlayerId() string {
@@ -1351,7 +1512,7 @@ type CollectiveResult struct {
 
 func (x *CollectiveResult) Reset() {
 	*x = CollectiveResult{}
-	mi := &file_session_v1_session_proto_msgTypes[23]
+	mi := &file_session_v1_session_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1363,7 +1524,7 @@ func (x *CollectiveResult) String() string {
 func (*CollectiveResult) ProtoMessage() {}
 
 func (x *CollectiveResult) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[23]
+	mi := &file_session_v1_session_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1376,7 +1537,7 @@ func (x *CollectiveResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollectiveResult.ProtoReflect.Descriptor instead.
 func (*CollectiveResult) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{23}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CollectiveResult) GetOutcome() string {
@@ -1407,7 +1568,7 @@ type CollectivePlayer struct {
 
 func (x *CollectivePlayer) Reset() {
 	*x = CollectivePlayer{}
-	mi := &file_session_v1_session_proto_msgTypes[24]
+	mi := &file_session_v1_session_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1419,7 +1580,7 @@ func (x *CollectivePlayer) String() string {
 func (*CollectivePlayer) ProtoMessage() {}
 
 func (x *CollectivePlayer) ProtoReflect() protoreflect.Message {
-	mi := &file_session_v1_session_proto_msgTypes[24]
+	mi := &file_session_v1_session_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1432,7 +1593,7 @@ func (x *CollectivePlayer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollectivePlayer.ProtoReflect.Descriptor instead.
 func (*CollectivePlayer) Descriptor() ([]byte, []int) {
-	return file_session_v1_session_proto_rawDescGZIP(), []int{24}
+	return file_session_v1_session_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CollectivePlayer) GetPlayerId() string {
@@ -1461,13 +1622,27 @@ var File_session_v1_session_proto protoreflect.FileDescriptor
 const file_session_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x18session/v1/session.proto\x12\n" +
-	"session.v1\"\x9a\x01\n" +
+	"session.v1\"0\n" +
+	"\x17GetSessionConfigRequest\x12\x15\n" +
+	"\x06ref_id\x18\x01 \x01(\tR\x05refId\"\x84\x02\n" +
+	"\x18GetSessionConfigResponse\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\bmatch_id\x18\x02 \x01(\tR\amatchId\x12\x17\n" +
+	"\agame_id\x18\x03 \x01(\tR\x06gameId\x12\x17\n" +
+	"\amode_id\x18\x04 \x01(\tR\x06modeId\x12\x1c\n" +
+	"\tarchetype\x18\x05 \x01(\tR\tarchetype\x12\x1a\n" +
+	"\btopology\x18\x06 \x01(\tR\btopology\x12\x1f\n" +
+	"\vparams_json\x18\a \x01(\tR\n" +
+	"paramsJson\x12!\n" +
+	"\fprofile_hash\x18\b \x01(\tR\vprofileHash\"\xb3\x01\n" +
 	"\x10OpenWorldRequest\x12$\n" +
 	"\x0ehost_player_id\x18\x01 \x01(\tR\fhostPlayerId\x12\x17\n" +
 	"\agame_id\x18\x02 \x01(\tR\x06gameId\x12&\n" +
 	"\x0fhost_soul_level\x18\x03 \x01(\x05R\rhostSoulLevel\x12\x1f\n" +
 	"\vweapon_tier\x18\x04 \x01(\x05R\n" +
-	"weaponTier\"\x92\x01\n" +
+	"weaponTier\x12\x17\n" +
+	"\amode_id\x18\x05 \x01(\tR\x06modeId\"\x92\x01\n" +
 	"\x11OpenWorldResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
@@ -1509,12 +1684,13 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12\x14\n" +
 	"\x05event\x18\x04 \x01(\tR\x05event\x12\x18\n" +
 	"\aoutcome\x18\x05 \x01(\tR\aoutcome\"\"\n" +
-	" ReportParticipationEventResponse\"\x8c\x01\n" +
+	" ReportParticipationEventResponse\"\xa5\x01\n" +
 	"\x14CreateSessionRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12\x18\n" +
 	"\aplayers\x18\x02 \x03(\tR\aplayers\x12\x17\n" +
 	"\agame_id\x18\x03 \x01(\tR\x06gameId\x12&\n" +
-	"\x05teams\x18\x04 \x03(\v2\x10.session.v1.TeamR\x05teams\"9\n" +
+	"\x05teams\x18\x04 \x03(\v2\x10.session.v1.TeamR\x05teams\x12\x17\n" +
+	"\amode_id\x18\x05 \x01(\tR\x06modeId\"9\n" +
 	"\x04Team\x12\x17\n" +
 	"\ateam_id\x18\x01 \x01(\tR\x06teamId\x12\x18\n" +
 	"\aplayers\x18\x02 \x03(\tR\aplayers\"\x8f\x01\n" +
@@ -1570,7 +1746,7 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"StatsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012\xbf\x05\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012\x9e\x06\n" +
 	"\aSession\x12T\n" +
 	"\rCreateSession\x12 .session.v1.CreateSessionRequest\x1a!.session.v1.CreateSessionResponse\x12Q\n" +
 	"\fReportResult\x12\x1f.session.v1.ReportResultRequest\x1a .session.v1.ReportResultResponse\x12H\n" +
@@ -1581,7 +1757,8 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"CloseWorld\x12\x1d.session.v1.CloseWorldRequest\x1a\x1e.session.v1.CloseWorldResponse\x12f\n" +
 	"\x13ListInvadableWorlds\x12&.session.v1.ListInvadableWorldsRequest\x1a'.session.v1.ListInvadableWorldsResponse\x12u\n" +
-	"\x18ReportParticipationEvent\x12+.session.v1.ReportParticipationEventRequest\x1a,.session.v1.ReportParticipationEventResponseBiZggithub.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1;sessionv1b\x06proto3"
+	"\x18ReportParticipationEvent\x12+.session.v1.ReportParticipationEventRequest\x1a,.session.v1.ReportParticipationEventResponse\x12]\n" +
+	"\x10GetSessionConfig\x12#.session.v1.GetSessionConfigRequest\x1a$.session.v1.GetSessionConfigResponseBiZggithub.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1;sessionv1b\x06proto3"
 
 var (
 	file_session_v1_session_proto_rawDescOnce sync.Once
@@ -1595,70 +1772,74 @@ func file_session_v1_session_proto_rawDescGZIP() []byte {
 	return file_session_v1_session_proto_rawDescData
 }
 
-var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_session_v1_session_proto_goTypes = []any{
-	(*OpenWorldRequest)(nil),                 // 0: session.v1.OpenWorldRequest
-	(*OpenWorldResponse)(nil),                // 1: session.v1.OpenWorldResponse
-	(*JoinWorldRequest)(nil),                 // 2: session.v1.JoinWorldRequest
-	(*JoinWorldResponse)(nil),                // 3: session.v1.JoinWorldResponse
-	(*LeaveWorldRequest)(nil),                // 4: session.v1.LeaveWorldRequest
-	(*LeaveWorldResponse)(nil),               // 5: session.v1.LeaveWorldResponse
-	(*CloseWorldRequest)(nil),                // 6: session.v1.CloseWorldRequest
-	(*CloseWorldResponse)(nil),               // 7: session.v1.CloseWorldResponse
-	(*ListInvadableWorldsRequest)(nil),       // 8: session.v1.ListInvadableWorldsRequest
-	(*ListInvadableWorldsResponse)(nil),      // 9: session.v1.ListInvadableWorldsResponse
-	(*InvadableWorld)(nil),                   // 10: session.v1.InvadableWorld
-	(*ReportParticipationEventRequest)(nil),  // 11: session.v1.ReportParticipationEventRequest
-	(*ReportParticipationEventResponse)(nil), // 12: session.v1.ReportParticipationEventResponse
-	(*CreateSessionRequest)(nil),             // 13: session.v1.CreateSessionRequest
-	(*Team)(nil),                             // 14: session.v1.Team
-	(*CreateSessionResponse)(nil),            // 15: session.v1.CreateSessionResponse
-	(*ConnectGrant)(nil),                     // 16: session.v1.ConnectGrant
-	(*ReportResultRequest)(nil),              // 17: session.v1.ReportResultRequest
-	(*ReportResultResponse)(nil),             // 18: session.v1.ReportResultResponse
-	(*WinLossDrawResult)(nil),                // 19: session.v1.WinLossDrawResult
-	(*PlayerOutcome)(nil),                    // 20: session.v1.PlayerOutcome
-	(*PlacementResult)(nil),                  // 21: session.v1.PlacementResult
-	(*PlacementEntry)(nil),                   // 22: session.v1.PlacementEntry
-	(*CollectiveResult)(nil),                 // 23: session.v1.CollectiveResult
-	(*CollectivePlayer)(nil),                 // 24: session.v1.CollectivePlayer
-	nil,                                      // 25: session.v1.PlayerOutcome.StatsEntry
-	nil,                                      // 26: session.v1.PlacementEntry.StatsEntry
-	nil,                                      // 27: session.v1.CollectivePlayer.StatsEntry
+	(*GetSessionConfigRequest)(nil),          // 0: session.v1.GetSessionConfigRequest
+	(*GetSessionConfigResponse)(nil),         // 1: session.v1.GetSessionConfigResponse
+	(*OpenWorldRequest)(nil),                 // 2: session.v1.OpenWorldRequest
+	(*OpenWorldResponse)(nil),                // 3: session.v1.OpenWorldResponse
+	(*JoinWorldRequest)(nil),                 // 4: session.v1.JoinWorldRequest
+	(*JoinWorldResponse)(nil),                // 5: session.v1.JoinWorldResponse
+	(*LeaveWorldRequest)(nil),                // 6: session.v1.LeaveWorldRequest
+	(*LeaveWorldResponse)(nil),               // 7: session.v1.LeaveWorldResponse
+	(*CloseWorldRequest)(nil),                // 8: session.v1.CloseWorldRequest
+	(*CloseWorldResponse)(nil),               // 9: session.v1.CloseWorldResponse
+	(*ListInvadableWorldsRequest)(nil),       // 10: session.v1.ListInvadableWorldsRequest
+	(*ListInvadableWorldsResponse)(nil),      // 11: session.v1.ListInvadableWorldsResponse
+	(*InvadableWorld)(nil),                   // 12: session.v1.InvadableWorld
+	(*ReportParticipationEventRequest)(nil),  // 13: session.v1.ReportParticipationEventRequest
+	(*ReportParticipationEventResponse)(nil), // 14: session.v1.ReportParticipationEventResponse
+	(*CreateSessionRequest)(nil),             // 15: session.v1.CreateSessionRequest
+	(*Team)(nil),                             // 16: session.v1.Team
+	(*CreateSessionResponse)(nil),            // 17: session.v1.CreateSessionResponse
+	(*ConnectGrant)(nil),                     // 18: session.v1.ConnectGrant
+	(*ReportResultRequest)(nil),              // 19: session.v1.ReportResultRequest
+	(*ReportResultResponse)(nil),             // 20: session.v1.ReportResultResponse
+	(*WinLossDrawResult)(nil),                // 21: session.v1.WinLossDrawResult
+	(*PlayerOutcome)(nil),                    // 22: session.v1.PlayerOutcome
+	(*PlacementResult)(nil),                  // 23: session.v1.PlacementResult
+	(*PlacementEntry)(nil),                   // 24: session.v1.PlacementEntry
+	(*CollectiveResult)(nil),                 // 25: session.v1.CollectiveResult
+	(*CollectivePlayer)(nil),                 // 26: session.v1.CollectivePlayer
+	nil,                                      // 27: session.v1.PlayerOutcome.StatsEntry
+	nil,                                      // 28: session.v1.PlacementEntry.StatsEntry
+	nil,                                      // 29: session.v1.CollectivePlayer.StatsEntry
 }
 var file_session_v1_session_proto_depIdxs = []int32{
-	16, // 0: session.v1.OpenWorldResponse.host_grant:type_name -> session.v1.ConnectGrant
-	16, // 1: session.v1.JoinWorldResponse.grant:type_name -> session.v1.ConnectGrant
-	10, // 2: session.v1.ListInvadableWorldsResponse.worlds:type_name -> session.v1.InvadableWorld
-	14, // 3: session.v1.CreateSessionRequest.teams:type_name -> session.v1.Team
-	16, // 4: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
-	19, // 5: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
-	21, // 6: session.v1.ReportResultRequest.placement:type_name -> session.v1.PlacementResult
-	23, // 7: session.v1.ReportResultRequest.collective:type_name -> session.v1.CollectiveResult
-	20, // 8: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
-	25, // 9: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
-	22, // 10: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
-	26, // 11: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
-	24, // 12: session.v1.CollectiveResult.players:type_name -> session.v1.CollectivePlayer
-	27, // 13: session.v1.CollectivePlayer.stats:type_name -> session.v1.CollectivePlayer.StatsEntry
-	13, // 14: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
-	17, // 15: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
-	0,  // 16: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
-	2,  // 17: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
-	4,  // 18: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
-	6,  // 19: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
-	8,  // 20: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
-	11, // 21: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
-	15, // 22: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
-	18, // 23: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
-	1,  // 24: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
-	3,  // 25: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
-	5,  // 26: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
-	7,  // 27: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
-	9,  // 28: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
-	12, // 29: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
-	22, // [22:30] is the sub-list for method output_type
-	14, // [14:22] is the sub-list for method input_type
+	18, // 0: session.v1.OpenWorldResponse.host_grant:type_name -> session.v1.ConnectGrant
+	18, // 1: session.v1.JoinWorldResponse.grant:type_name -> session.v1.ConnectGrant
+	12, // 2: session.v1.ListInvadableWorldsResponse.worlds:type_name -> session.v1.InvadableWorld
+	16, // 3: session.v1.CreateSessionRequest.teams:type_name -> session.v1.Team
+	18, // 4: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
+	21, // 5: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
+	23, // 6: session.v1.ReportResultRequest.placement:type_name -> session.v1.PlacementResult
+	25, // 7: session.v1.ReportResultRequest.collective:type_name -> session.v1.CollectiveResult
+	22, // 8: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
+	27, // 9: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
+	24, // 10: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
+	28, // 11: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
+	26, // 12: session.v1.CollectiveResult.players:type_name -> session.v1.CollectivePlayer
+	29, // 13: session.v1.CollectivePlayer.stats:type_name -> session.v1.CollectivePlayer.StatsEntry
+	15, // 14: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
+	19, // 15: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
+	2,  // 16: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
+	4,  // 17: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
+	6,  // 18: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
+	8,  // 19: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
+	10, // 20: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
+	13, // 21: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
+	0,  // 22: session.v1.Session.GetSessionConfig:input_type -> session.v1.GetSessionConfigRequest
+	17, // 23: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
+	20, // 24: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
+	3,  // 25: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
+	5,  // 26: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
+	7,  // 27: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
+	9,  // 28: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
+	11, // 29: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
+	14, // 30: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
+	1,  // 31: session.v1.Session.GetSessionConfig:output_type -> session.v1.GetSessionConfigResponse
+	23, // [23:32] is the sub-list for method output_type
+	14, // [14:23] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name
@@ -1669,7 +1850,7 @@ func file_session_v1_session_proto_init() {
 	if File_session_v1_session_proto != nil {
 		return
 	}
-	file_session_v1_session_proto_msgTypes[17].OneofWrappers = []any{
+	file_session_v1_session_proto_msgTypes[19].OneofWrappers = []any{
 		(*ReportResultRequest_WinLossDraw)(nil),
 		(*ReportResultRequest_Placement)(nil),
 		(*ReportResultRequest_Collective)(nil),
@@ -1680,7 +1861,7 @@ func file_session_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_session_v1_session_proto_rawDesc), len(file_session_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

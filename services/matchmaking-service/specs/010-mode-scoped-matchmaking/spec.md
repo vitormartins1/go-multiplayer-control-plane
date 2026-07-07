@@ -1,7 +1,7 @@
 # Spec: 010-mode-scoped-matchmaking
 
 **Serviço:** matchmaking-service
-**Status:** Rascunho — aguardando aprovação
+**Status:** Aprovado (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0024 · **Roadmap:** `multiplayer-modes-roadmap.md` — fatia **M1** (lado matchmaking)
 

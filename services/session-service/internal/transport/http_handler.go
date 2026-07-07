@@ -44,6 +44,7 @@ type sessionDTO struct {
 	SessionID     string     `json:"sessionId"`
 	MatchID       string     `json:"matchId"`
 	GameID        string     `json:"gameId"`
+	ModeID        string     `json:"modeId,omitempty"` // modo do jogo (ADR-0024, aditivo)
 	State         string     `json:"state"`
 	Players       []string   `json:"players"`
 	ServerAddress string     `json:"serverAddress"`
@@ -137,6 +138,7 @@ func toSessionDTO(s domain.Session) sessionDTO {
 		SessionID:     s.ID,
 		MatchID:       s.MatchID,
 		GameID:        s.GameID,
+		ModeID:        s.ModeID,
 		State:         string(s.State),
 		Players:       s.Players,
 		ServerAddress: s.ServerAddress,

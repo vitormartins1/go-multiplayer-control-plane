@@ -96,10 +96,16 @@ type TeamAssignment struct {
 // Session é uma partida em andamento: o match alocado a um game server, ou o
 // mundo persistente de um host (ADR-0023, spec 011). Origin distingue os dois.
 type Session struct {
-	ID            string
-	MatchID       string // vazio em host_world (não há match)
-	GameID        string // jogo da partida (multi-tenant, ADR-0017)
-	Players       []string
+	ID      string
+	MatchID string // vazio em host_world (não há match)
+	GameID  string // jogo da partida (multi-tenant, ADR-0017)
+	// ModeID e Profile são o modo e o SNAPSHOT do perfil congelados na criação
+	// (ADR-0024, spec 017): mudar o perfil no registry não afeta a sessão em voo.
+	// O snapshot alimenta o manifest (GetSessionConfig) e a validação
+	// kind×arquétipo do ReportResult.
+	ModeID  string
+	Profile *ProfileSnapshot
+	Players []string
 	TeamByPlayer  map[string]string // playerID -> teamID; nil/vazio em FFA (ADR-0023)
 	ServerID      string
 	ServerAddress string
@@ -153,6 +159,19 @@ type ConnectGrant struct {
 	PlayerID string
 	Token    string
 }
+
+// Arquétipos do ADR-0023 (vocabulário do game-registry) — usados na validação
+// kind×arquétipo (spec 017) e na derivação de slots do host_world.
+const (
+	ArchetypeQueueArena      = "queue_arena"
+	ArchetypeHostWorldDropIn = "host_world_dropin"
+	ArchetypeBattleRoyale    = "battle_royale"
+	ArchetypeCoopMission     = "coop_mission"
+
+	// DefaultModeID é o modo assumido quando a entrada não declara um
+	// (ADR-0024). A normalização acontece no transport.
+	DefaultModeID = "default"
+)
 
 // Vocabulário do outcome (ADR-0023). win_loss_draw (queue_arena), placement
 // (battle_royale, BR2) e collective (coop_mission, C2) são os kinds existentes.
@@ -236,15 +255,24 @@ type CollectivePlayer struct {
 // SessionService é a Port de entrada: cria sessões a partir de matches e
 // recebe o resultado da partida.
 type SessionService interface {
-	// Create aloca um game server, emite um connect token por jogador (com o
-	// claim team_id) e registra a sessão com a composição de times. FFA = um
-	// único TeamAssignment com TeamID vazio. Devolve ErrNoServer se o pool
-	// esgotar; ErrInvalidTeams se a composição for inconsistente.
-	Create(ctx context.Context, matchID, gameID string, teams []TeamAssignment) (*Session, []ConnectGrant, error)
-	// ReportResult dispara o fan-out do resultado, libera o server e encerra a
-	// sessão. ErrUnsupportedOutcome/ErrInvalidOutcome em outcome inválido;
+	// Create aloca um game server, emite um connect token por jogador (claims
+	// team_id/mode_id), congela o SNAPSHOT do perfil do modo (ADR-0024) e
+	// registra a sessão. FFA = um único TeamAssignment com TeamID vazio.
+	// ErrProfileUnavailable se o perfil do modo não puder ser lido (nada é
+	// alocado); ErrNoServer se o pool esgotar; ErrInvalidTeams se a composição
+	// for inconsistente.
+	Create(ctx context.Context, matchID, gameID, modeID string, teams []TeamAssignment) (*Session, []ConnectGrant, error)
+	// ReportResult valida o outcome (estrutural + kind×arquétipo do snapshot,
+	// spec 017), dispara o fan-out, libera o server e encerra a sessão.
+	// ErrUnsupportedOutcome/ErrInvalidOutcome em outcome inválido;
+	// ErrOutcomeMismatch se o kind não corresponder ao arquétipo do modo;
 	// ErrSessionNotFound se não houver sessão para o match.
 	ReportResult(ctx context.Context, matchID string, outcome MatchOutcome) error
+
+	// GetSessionConfig devolve o session manifest do snapshot (spec 017).
+	// refID = matchID (queue-form) ou sessionID (host_world).
+	// ErrSessionNotFound se a sessão não existir ou estiver fechada.
+	GetSessionConfig(ctx context.Context, refID string) (*SessionManifest, error)
 
 	// OpenWorld abre um mundo persistente para o host (host_world_dropin): lê o
 	// perfil do jogo, aloca um game server, deriva os slots por papel e emite o
@@ -252,7 +280,7 @@ type SessionService interface {
 	// level / weapon tier) para o matchmaking casar depois (spec 012); zeros =
 	// mundo sem faixa. ErrUnsupportedArchetype se o jogo não for host_world_dropin;
 	// ErrNoServer se o pool esgotar. Spec 011/012, ADR-0023.
-	OpenWorld(ctx context.Context, hostPlayerID, gameID string, attrs WorldAttributes) (*Session, ConnectGrant, error)
+	OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs WorldAttributes) (*Session, ConnectGrant, error)
 	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando
 	// um slot, e emite o connect token com o claim role. Devolve o endereço do
 	// game server junto do grant (spec 012): o phantom injetado pelo matchmaking
@@ -279,21 +307,42 @@ type SessionService interface {
 	ReportParticipationEvent(ctx context.Context, sessionID string, evt ParticipationEvent) error
 }
 
-// WorldProfile é o subconjunto do perfil host_world_dropin que o session precisa
-// para abrir um mundo (ADR-0023, spec 011): papéis habilitados e capacidade por
-// papel. Lido do game-registry via ProfileProvider.
-type WorldProfile struct {
-	Archetype    string   // deve ser "host_world_dropin"
+// ProfileSnapshot é o perfil de um MODO congelado na criação da sessão
+// (ADR-0024, spec 017). ParamsJSON é o corpo cru dos params do arquétipo — vira
+// o manifest que o data plane lê (só as chaves que conhece); Hash correlaciona
+// control e data plane em log. Os campos de host_world (EnabledRoles/slots) são
+// derivados na leitura e ficam zero nos demais arquétipos.
+type ProfileSnapshot struct {
+	ModeID     string
+	Archetype  string // Archetype* (vocabulário do ADR-0023)
+	Topology   string // "dedicated"
+	ParamsJSON []byte // params crus do arquétipo (JSON)
+	Hash       string // hash do snapshot (SHA-256 truncado, calculado no adapter)
+
+	// host_world_dropin: capacidade por papel (spec 011).
 	EnabledRoles []string // "coop" e/ou "invader"
 	CoopSlots    int
 	InvaderSlots int
 }
 
-// ProfileProvider é a Port de saída que lê o perfil de multiplayer do jogo no
-// game-registry (ADR-0023). Devolve ErrProfileUnavailable quando o perfil está
-// ausente, o arquétipo é incompatível ou a leitura falha.
+// SessionManifest é a resposta do GetSessionConfig (spec 017): a visão do
+// snapshot que o game server consome no boot da sessão.
+type SessionManifest struct {
+	SessionID   string
+	MatchID     string // vazio em host_world
+	GameID      string
+	ModeID      string
+	Archetype   string
+	Topology    string
+	ParamsJSON  []byte
+	ProfileHash string
+}
+
+// ProfileProvider é a Port de saída que lê o perfil de um modo do jogo no
+// game-registry (ADR-0023/0024). Devolve ErrProfileUnavailable quando o
+// jogo/modo não existe ou a leitura falha.
 type ProfileProvider interface {
-	WorldProfile(ctx context.Context, gameID string) (WorldProfile, error)
+	ModeProfile(ctx context.Context, gameID, modeID string) (ProfileSnapshot, error)
 }
 
 // ServerAllocator é a Port de saída do pool de game servers. O adapter static
@@ -325,6 +374,10 @@ type ServerRegistry interface {
 type ConnectClaims struct {
 	TeamID string // queue_arena: time do jogador na partida NvN
 	Role   string // host_world_dropin: "host" | "coop" | "invader"
+	// ModeID é o modo do jogo (ADR-0024, spec 017). Diferente dos demais, é
+	// SEMPRE emitido (inclusive "default") — o game server sabe o modo no
+	// connection approval sem chamada extra.
+	ModeID string
 }
 
 // ConnectTokenIssuer é a Port de saída que cunha o connect token (JWT EdDSA)
@@ -344,7 +397,8 @@ type ConnectTokenIssuer interface {
 // o fallback de dev. Recebe gameID (multi-tenant, ADR-0017) e matchID (chave de
 // idempotência que viaja no envelope).
 type ResultPublisher interface {
-	Publish(ctx context.Context, gameID, matchID string, outcome MatchOutcome) error
+	// modeID viaja no envelope (ADR-0024, aditivo) — sinks só o usarão no M2.
+	Publish(ctx context.Context, gameID, matchID, modeID string, outcome MatchOutcome) error
 }
 
 // ParticipationPublisher é a Port de saída do fan-out dos eventos de participação
@@ -352,5 +406,5 @@ type ResultPublisher interface {
 // envelope kind=participation_event (decisão #3 do roadmap H2). O mesmo adapter
 // (SNS/Log) satisfaz esta Port e a ResultPublisher.
 type ParticipationPublisher interface {
-	PublishParticipation(ctx context.Context, gameID, sessionID string, evt ParticipationEvent) error
+	PublishParticipation(ctx context.Context, gameID, sessionID, modeID string, evt ParticipationEvent) error
 }
