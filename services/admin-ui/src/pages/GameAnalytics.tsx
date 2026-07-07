@@ -2,6 +2,7 @@ import { Alert, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/c
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
+import { formatDuration } from "../lib/format";
 
 // rótulos amigáveis dos eventos de participação (host_world_dropin).
 const EVENT_LABELS: Record<string, string> = {
@@ -69,6 +70,21 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
               ))}
             </Table.Tbody>
           </Table>
+        </Stack>
+      )}
+
+      {/* battle_royale (BR4): distribuição de colocação. Só aparece quando o jogo
+          reportou resultados por colocação (placement). */}
+      {data?.placement && (
+        <Stack gap="xs">
+          <Title order={5}>Distribuição de colocação</Title>
+          <SimpleGrid cols={{ base: 2, sm: 3 }}>
+            <StatCard label="1º lugar" value={String(data.placement.winners)} />
+            <StatCard label="Top 10" value={String(data.placement.topN)} />
+            <StatCard label="Resto" value={String(data.placement.rest)} />
+            <StatCard label="Participações" value={String(data.placement.entries)} />
+            <StatCard label="Sobrevivência média" value={formatDuration(data.placement.avgSurvivedMs)} />
+          </SimpleGrid>
         </Stack>
       )}
     </Stack>

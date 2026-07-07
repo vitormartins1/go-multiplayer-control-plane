@@ -80,9 +80,20 @@ export interface HostWorldDropInParams {
   invasionEnabled: boolean;
 }
 
+// battle_royale (ADR-0023): lobby grande + squads; colocação ordinal.
+export type RespawnMode = "one_life" | "teammate_revive" | "arena_1v1" | "reboot_timer";
+
+export interface BattleRoyaleParams {
+  lobbySize: number;
+  teamSize: number;
+  respawnMode: RespawnMode;
+  scoringStats: string[];
+}
+
 export type MultiplayerProfile =
   | { archetype: "queue_arena"; topology: "dedicated" | "p2p"; params: QueueArenaParams }
-  | { archetype: "host_world_dropin"; topology: "dedicated" | "p2p"; params: HostWorldDropInParams };
+  | { archetype: "host_world_dropin"; topology: "dedicated" | "p2p"; params: HostWorldDropInParams }
+  | { archetype: "battle_royale"; topology: "dedicated" | "p2p"; params: BattleRoyaleParams };
 
 // Critério por métrica (ADR-0023 A1): statKey preenchido troca o critério de
 // evento para stat; statMode é a agregação.
@@ -230,6 +241,16 @@ export interface GameAnalyticsDetail {
   avgScore: number;
   daily: AnalyticsDaily[];
   roleParticipations: ParticipationStat[];
+  placement?: PlacementDistribution; // battle_royale (BR4); ausente fora do BR
+}
+
+// PlacementDistribution é o histograma de colocação do battle_royale (BR3/BR4).
+export interface PlacementDistribution {
+  winners: number;
+  topN: number;
+  rest: number;
+  entries: number;
+  avgSurvivedMs: number;
 }
 
 // LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.

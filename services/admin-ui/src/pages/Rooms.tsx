@@ -15,7 +15,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { api, type GameSession, type RoleSlot } from "../lib/api";
+import { api, type GameSession, type RoleSlot, type MultiplayerProfile } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
@@ -32,6 +32,8 @@ export function Rooms() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [closing, setClosing] = useState<GameSession | null>(null);
   const [closeLoading, setCloseLoading] = useState(false);
+  // cache de perfis por gameId (battle_royale mostra lobby/modo na sala, BR4).
+  const [profiles, setProfiles] = useState<Record<string, MultiplayerProfile | null>>({});
 
   useEffect(() => {
     const id = setInterval(reload, POLL_MS);
@@ -42,6 +44,43 @@ export function Rooms() {
   useEffect(() => {
     if (data) setLastUpdate(new Date());
   }, [data]);
+
+  // busca o perfil dos jogos presentes (uma vez por gameId; cacheado). Só o
+  // battle_royale usa o rótulo; os demais viram null e não pagam nova busca.
+  useEffect(() => {
+    if (!data) return;
+    const ids = new Set<string>();
+    for (const s of [...data.active, ...data.closed]) if (s.gameId) ids.add(s.gameId);
+    const missing = [...ids].filter((id) => !(id in profiles));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      missing.map((id) =>
+        api
+          .getMultiplayerProfile(id)
+          .then((p) => [id, p] as const)
+          .catch(() => [id, null] as const),
+      ),
+    ).then((pairs) => {
+      if (cancelled) return;
+      setProfiles((prev) => {
+        const next = { ...prev };
+        for (const [id, p] of pairs) next[id] = p;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data, profiles]);
+
+  // brInfo devolve o rótulo de lobby/modo se o jogo da sala é battle_royale.
+  function brInfo(s: GameSession): { lobbySize: number; mode: string } | null {
+    const p = s.gameId ? profiles[s.gameId] : null;
+    if (!p || p.archetype !== "battle_royale") return null;
+    const teamSize = p.params.teamSize;
+    return { lobbySize: p.params.lobbySize, mode: teamSize === 1 ? "Solo/FFA" : `Squads de ${teamSize}` };
+  }
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -122,6 +161,7 @@ export function Rooms() {
               <RoomRow
                 key={s.sessionId}
                 session={s}
+                br={brInfo(s)}
                 expanded={expandedId === s.sessionId}
                 onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
                 onClose={() => setClosing(s)}
@@ -158,11 +198,13 @@ export function Rooms() {
 
 function RoomRow({
   session: s,
+  br,
   expanded,
   onToggle,
   onClose,
 }: {
   session: GameSession;
+  br: { lobbySize: number; mode: string } | null;
   expanded: boolean;
   onToggle: () => void;
   onClose: () => void;
@@ -178,6 +220,11 @@ function RoomRow({
           <Text size="sm" fw={500}>
             {s.gameName || truncate(s.gameId || "—")}
           </Text>
+          {br && (
+            <Badge size="xs" variant="light" color="grape" mt={2}>
+              lobby {s.players.length}/{br.lobbySize} · {br.mode}
+            </Badge>
+          )}
         </Table.Td>
         <Table.Td>
           <Text ff="monospace" size="sm">
