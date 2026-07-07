@@ -90,10 +90,20 @@ export interface BattleRoyaleParams {
   scoringStats: string[];
 }
 
+// coop_mission (ADR-0023): time pequeno vs. ambiente; resultado coletivo.
+export interface CoopMissionParams {
+  teamSize: number;
+  missions: string[];
+  difficulties: string[];
+  botfillEnabled: boolean;
+  scoringStats: string[];
+}
+
 export type MultiplayerProfile =
   | { archetype: "queue_arena"; topology: "dedicated" | "p2p"; params: QueueArenaParams }
   | { archetype: "host_world_dropin"; topology: "dedicated" | "p2p"; params: HostWorldDropInParams }
-  | { archetype: "battle_royale"; topology: "dedicated" | "p2p"; params: BattleRoyaleParams };
+  | { archetype: "battle_royale"; topology: "dedicated" | "p2p"; params: BattleRoyaleParams }
+  | { archetype: "coop_mission"; topology: "dedicated" | "p2p"; params: CoopMissionParams };
 
 // Critério por métrica (ADR-0023 A1): statKey preenchido troca o critério de
 // evento para stat; statMode é a agregação.

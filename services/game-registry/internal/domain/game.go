@@ -37,6 +37,7 @@ const (
 	ArchetypeQueueArena      = "queue_arena"
 	ArchetypeHostWorldDropIn = "host_world_dropin"
 	ArchetypeBattleRoyale    = "battle_royale"
+	ArchetypeCoopMission     = "coop_mission"
 	TopologyDedicated        = "dedicated"
 
 	// Modos de respawn do battle_royale (ADR-0023, ficha 03). Declarados no
@@ -56,11 +57,12 @@ const (
 // exatamente o ponteiro correspondente ao Archetype é não-nil. Novos arquétipos
 // adicionam um campo-ponteiro próprio sem alterar os existentes.
 type MultiplayerProfile struct {
-	Archetype       string // "queue_arena" | "host_world_dropin" | "battle_royale"
+	Archetype       string // "queue_arena" | "host_world_dropin" | "battle_royale" | "coop_mission"
 	Topology        string // "dedicated" (único suportado; "p2p" = slot futuro)
 	QueueArena      *QueueArenaParams
 	HostWorldDropIn *HostWorldDropInParams
 	BattleRoyale    *BattleRoyaleParams
+	CoopMission     *CoopMissionParams
 }
 
 // QueueArenaParams são os parâmetros do arquétipo "queue_arena": sessão
@@ -121,6 +123,32 @@ type BattleRoyaleParams struct {
 	RespawnMode string
 	// ScoringStats são métricas extras que o resultado carregará além da
 	// colocação/sobrevivência (ex.: kills); pode ser vazia.
+	ScoringStats []string
+}
+
+// CoopMissionParams são os parâmetros do arquétipo "coop_mission": time pequeno
+// contra o ambiente/IA que termina por objetivo cumprido ou wipe, com resultado
+// COLETIVO — MISSION_SUCCESS/FAILURE igual para todos (ADR-0023, ficha 04). Ver
+// profile_service.go para as regras de validação. O desfecho coletivo é
+// intrínseco ao outcome (fatia C2, session), não campo aqui; Missions/Difficulties/
+// BotfillEnabled são params declarados que o data plane lê (o control plane não
+// implementa seleção de missão nem bot-fill); ScoringStats cobre métricas por
+// jogador que modulam recompensa, não o desfecho.
+type CoopMissionParams struct {
+	// TeamSize é o nº de jogadores no time co-op (>= 2; ficha usa ~4, bots
+	// preenchem vagas humanas).
+	TeamSize int
+	// Missions é o catálogo de missões que o host pode escolher (identificadores
+	// estáveis, sem duplicata); pode ser vazia (catálogo mora no data plane).
+	Missions []string
+	// Difficulties é o catálogo de dificuldades (Hazard Level etc.; identificadores
+	// estáveis, sem duplicata); pode ser vazia.
+	Difficulties []string
+	// BotfillEnabled: se vagas humanas são preenchidas por bots (comportamento do
+	// data plane; aqui só declarado/armazenado).
+	BotfillEnabled bool
+	// ScoringStats são métricas extras que o resultado carregará (ex.: kills,
+	// revives) e que modulam recompensa, não o desfecho; pode ser vazia.
 	ScoringStats []string
 }
 

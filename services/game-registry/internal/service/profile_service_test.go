@@ -45,7 +45,7 @@ func TestSetMultiplayerProfile_Valido_UpsertEDevolve(t *testing.T) {
 
 func TestSetMultiplayerProfile_ArchetypeNaoSuportado_Erro(t *testing.T) {
 	p := validProfile()
-	p.Archetype = "coop_mission" // ainda não suportado (fatia futura)
+	p.Archetype = "async_turns" // arquétipo fora do conjunto fechado (ADR-0023)
 	_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
 	assert.ErrorIs(t, err, domain.ErrUnsupportedArchetype)
 }
@@ -319,6 +319,99 @@ func TestSetMultiplayerProfile_BattleRoyale_VariantesValidas_Ok(t *testing.T) {
 				Archetype:    domain.ArchetypeBattleRoyale,
 				Topology:     domain.TopologyDedicated,
 				BattleRoyale: &br,
+			}
+			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
+			assert.NoError(t, err, name)
+		})
+	}
+}
+
+// --- coop_mission ---
+
+func validCM() domain.CoopMissionParams {
+	return domain.CoopMissionParams{
+		TeamSize:       4,
+		Missions:       []string{"salvage_op", "escort"},
+		Difficulties:   []string{"hazard_1", "hazard_5"},
+		BotfillEnabled: true,
+		ScoringStats:   []string{"kills", "revives"},
+	}
+}
+
+func validCMProfile() domain.MultiplayerProfile {
+	cm := validCM()
+	return domain.MultiplayerProfile{
+		Archetype:   domain.ArchetypeCoopMission,
+		Topology:    domain.TopologyDedicated,
+		CoopMission: &cm,
+	}
+}
+
+func mutCM(base domain.CoopMissionParams, f func(*domain.CoopMissionParams)) domain.CoopMissionParams {
+	f(&base)
+	return base
+}
+
+func TestSetMultiplayerProfile_CoopMission_Valido_UpsertEDevolve(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+
+	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validCMProfile())
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.Equal(t, domain.ArchetypeCoopMission, p.Archetype)
+	repo.AssertExpectations(t)
+}
+
+func TestSetMultiplayerProfile_CoopMission_ParamsAusentes_Erro(t *testing.T) {
+	p := validCMProfile()
+	p.CoopMission = nil
+	_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+	assert.ErrorIs(t, err, domain.ErrInvalidProfileParams)
+}
+
+func TestSetMultiplayerProfile_CoopMission_ParamsInvalidos_Erro(t *testing.T) {
+	base := validCM()
+	cases := map[string]domain.CoopMissionParams{
+		"teamSize<2":            mutCM(base, func(c *domain.CoopMissionParams) { c.TeamSize = 1 }),
+		"missions invalido":     mutCM(base, func(c *domain.CoopMissionParams) { c.Missions = []string{"Salvage"} }),
+		"missions duplicado":    mutCM(base, func(c *domain.CoopMissionParams) { c.Missions = []string{"escort", "escort"} }),
+		"difficulties invalido": mutCM(base, func(c *domain.CoopMissionParams) { c.Difficulties = []string{"Hazard 5"} }),
+		"difficulties duplicado": mutCM(base, func(c *domain.CoopMissionParams) {
+			c.Difficulties = []string{"hazard_1", "hazard_1"}
+		}),
+		"scoringStats invalido": mutCM(base, func(c *domain.CoopMissionParams) { c.ScoringStats = []string{"Kills"} }),
+	}
+	for name, cm := range cases {
+		t.Run(name, func(t *testing.T) {
+			cm := cm
+			p := domain.MultiplayerProfile{
+				Archetype:   domain.ArchetypeCoopMission,
+				Topology:    domain.TopologyDedicated,
+				CoopMission: &cm,
+			}
+			_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+			assert.ErrorIs(t, err, domain.ErrInvalidProfileParams, name)
+		})
+	}
+}
+
+func TestSetMultiplayerProfile_CoopMission_VariantesValidas_Ok(t *testing.T) {
+	cases := map[string]domain.CoopMissionParams{
+		"mínimo (só teamSize)":  {TeamSize: 2},
+		"catálogos vazios":      {TeamSize: 4, Missions: nil, Difficulties: nil, ScoringStats: nil},
+		"botfill on":            {TeamSize: 4, BotfillEnabled: true, Missions: []string{"escort"}},
+		"scoringStats múltiplo": {TeamSize: 3, ScoringStats: []string{"kills", "revives", "ore_mined"}},
+	}
+	for name, cm := range cases {
+		t.Run(name, func(t *testing.T) {
+			cm := cm
+			repo := new(mockRepo)
+			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			p := domain.MultiplayerProfile{
+				Archetype:   domain.ArchetypeCoopMission,
+				Topology:    domain.TopologyDedicated,
+				CoopMission: &cm,
 			}
 			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
 			assert.NoError(t, err, name)

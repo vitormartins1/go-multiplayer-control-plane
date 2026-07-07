@@ -247,6 +247,55 @@ func TestPostgresGameRepository_UpsertMultiplayerProfile_TrocaArquetipo(t *testi
 	assert.Nil(t, got.MultiplayerProfile.QueueArena, "ponteiro do arquétipo antigo fica nil após a troca")
 }
 
+func TestPostgresGameRepository_UpsertMultiplayerProfile_CoopMission_RoundTrip(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("cm", "Coop Mission")
+	require.NoError(t, repo.Create(ctx, g))
+
+	p := domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeCoopMission, Topology: domain.TopologyDedicated,
+		CoopMission: &domain.CoopMissionParams{
+			TeamSize: 4, Missions: []string{"salvage_op", "escort"},
+			Difficulties: []string{"hazard_1", "hazard_5"}, BotfillEnabled: true,
+			ScoringStats: []string{"kills", "revives"},
+		},
+	}
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, p))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.MultiplayerProfile)
+	assert.Equal(t, domain.ArchetypeCoopMission, got.MultiplayerProfile.Archetype)
+	require.NotNil(t, got.MultiplayerProfile.CoopMission)
+	assert.Equal(t, *p.CoopMission, *got.MultiplayerProfile.CoopMission)
+	assert.Nil(t, got.MultiplayerProfile.BattleRoyale, "só o ponteiro do arquétipo declarado é não-nil")
+}
+
+func TestPostgresGameRepository_UpsertMultiplayerProfile_TrocaParaCoopMission(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("mut2", "Mut2")
+	require.NoError(t, repo.Create(ctx, g))
+	br := domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeBattleRoyale, Topology: domain.TopologyDedicated,
+		BattleRoyale: &domain.BattleRoyaleParams{LobbySize: 100, TeamSize: 1, RespawnMode: domain.RespawnOneLife},
+	}
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, br))
+
+	cm := domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeCoopMission, Topology: domain.TopologyDedicated,
+		CoopMission: &domain.CoopMissionParams{TeamSize: 4, BotfillEnabled: true},
+	}
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, cm))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.MultiplayerProfile.CoopMission)
+	assert.Equal(t, 4, got.MultiplayerProfile.CoopMission.TeamSize)
+	assert.Nil(t, got.MultiplayerProfile.BattleRoyale, "ponteiro do arquétipo antigo fica nil após a troca")
+}
+
 func TestPostgresGameRepository_FindByID_SemPerfil_Nil(t *testing.T) {
 	repo := NewPostgresGameRepository(newTestPool(t))
 	ctx := context.Background()
