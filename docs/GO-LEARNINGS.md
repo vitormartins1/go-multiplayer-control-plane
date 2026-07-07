@@ -940,3 +940,54 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 **Diferença de [[23]]:** [[23]] usa `json.RawMessage` no BFF para *não decodificar* (passthrough puro). Aqui usamos no transport do próprio serviço para *decodificar tardiamente* com base no discriminador — "passthrough adiado para o switch".
 
 **Pegadinha / nuance:** como não há verificação de tipos em runtime do compilador (ao contrário do pattern matching exaustivo de C# 8+), você precisa garantir a invariante "exatamente um ponteiro não-nil" **nos dois lados** da fronteira: ao receber (service valida) e ao persistir/serializar (transport/repo verifica no `switch` + `default: return error`). Se esquecer o `default`, um arquétipo novo silenciosamente não persiste nada.
+
+---
+
+## 27 — Reservar sob o lock, trabalho lento fora, reverter sob o lock na falha
+
+**O que é / por que importa:** numa seção crítica você quer segurar o `sync.Mutex` pelo **menor tempo possível** — mas às vezes a operação "cara" (I/O, cripto) precisa acontecer *depois* de decidir que a ação é válida, e você não quer segurar o mutex durante ela. O padrão: **reserva o estado sob o lock** (torna a ação visível/atômica), **solta o lock**, faz o trabalho lento, e **se falhar, reverte a reserva sob o lock de novo**. É um mini-otimista: assume sucesso, desfaz no erro.
+
+**Onde no projeto:** `session-service/internal/service/session_service.go` → `JoinWorld` (spec 011, host_world_dropin). Ocupar um slot de papel (coop/invasor) é atômico sob o lock; cunhar o connect token Ed25519 (cripto) roda fora do lock; se a emissão falhar, o slot volta.
+
+```mermaid
+sequenceDiagram
+    participant G as goroutine (JoinWorld)
+    participant M as mutex
+    G->>M: Lock
+    Note over G: valida (slot livre? papel ok? já presente?)
+    Note over G: OCUPA o slot (reserva)
+    G->>M: Unlock
+    Note over G: Issue(token) — cripto, LENTO, sem lock
+    alt token ok
+        G-->>G: retorna grant
+    else token falha
+        G->>M: Lock
+        Note over G: REVERTE o slot (removeFromWorld)
+        G->>M: Unlock
+        G-->>G: retorna erro
+    end
+```
+
+```go
+func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role string) (domain.ConnectGrant, error) {
+    s.mu.Lock()
+    // ... validações e ...
+    slot.Occupants = append(slot.Occupants, playerID) // reserva sob o lock
+    sess.Players = append(sess.Players, playerID)
+    serverAddr := sess.ServerAddress
+    s.mu.Unlock()
+
+    tok, err := s.issuer.Issue(playerID, sessionID, serverAddr, domain.ConnectClaims{Role: role}) // lento, fora do lock
+    if err != nil {
+        s.mu.Lock()
+        removeFromWorld(sess, playerID) // reverte a reserva
+        s.mu.Unlock()
+        return domain.ConnectGrant{}, err
+    }
+    return domain.ConnectGrant{PlayerID: playerID, Token: tok}, nil
+}
+```
+
+**Contraste com C#:** em C# você poderia deixar tudo dentro de `lock (…) { … }` e chamar o trabalho lento lá dentro — funciona, mas serializa todo mundo atrás da operação cara. Aqui a escolha é explícita: o lock protege só a transição de estado; o custo (cripto) fica concorrente. O preço é ter que escrever o **rollback** à mão (não há `try/finally` desfazendo automaticamente o append).
+
+**Pegadinha / nuance:** o `sess` é um ponteiro capturado antes de soltar o lock. Entre o unlock e o revert, outra goroutine pode ter fechado o mundo (`CloseWorld` remove a sessão do mapa) — o `removeFromWorld` então mexe num agregado já destacado do mapa, o que é **inofensivo** (ninguém mais o vê). O que *não* é resolvido por este padrão é a janela em que o token é emitido para um mundo que fechou concorrentemente; para o MVP (um cliente de teste) é aceitável, e o connect simplesmente falharia no game server. Se virar problema, a alternativa é emitir o token **dentro** do lock (a assinatura Ed25519 custa ~dezenas de µs) — trade-off consciente, documentado no `plan.md` da spec 011.
