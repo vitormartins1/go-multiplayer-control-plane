@@ -39,15 +39,15 @@
 
 ---
 
-## B2 — Surfacing barato do que o backend já produz  (rápido, alto valor visual)
+## B2 — Surfacing barato do que o backend já produz  ✅ **FEITO** (main)
 
-Divisível em duas fatias pequenas e independentes:
+Duas fatias pequenas e independentes, ambas mergeadas:
 
-**B2a — Analytics: derrotas/empates** (`admin-ui/016`)
-O JSON de analytics já traz `losses`/`draws` (fatia analytics/003, aditivo — passa pelo bff sem mudança). Mostrar nos StatCards da aba Analytics (overview + por jogo): vitórias/derrotas/empates. **Só admin-ui.** **Tamanho:** S.
+**B2a — Analytics: derrotas/empates** ✅ (`admin-ui/016`)
+Mostra vitórias/derrotas/empates na aba Analytics (colunas no overview + StatCards por jogo). **Correção sobre o plano original:** o admin-bff **não** era passthrough cru — o `domain.AnalyticsGameStat` é tipado e **descartava** `losses`/`draws`; a fatia adicionou os dois campos no BFF além do admin-ui.
 
-**B2b — Leaderboard: seletor de board** (`admin-bff/013` + `admin-ui/017`)
-O leaderboard-service já serve `?board` (score + um por stat — fatia leaderboard/003). admin-bff repassa o param `board`; admin-ui ganha um Select de board na aba Leaderboards. Boards disponíveis = `score` + `scoringStats` do perfil do jogo (**lê o perfil — leve dependência de B1/GET**). **Tamanho:** S–M.
+**B2b — Leaderboard: seletor de board** ✅ (`admin-bff/013` + `admin-ui/017`)
+admin-bff threada `?board` pela cadeia (top-N + override de score); admin-ui ganha um `Select` de board na aba Leaderboards, com opções = `score` + `scoringStats` do perfil do jogo (lê o perfil da B1). Coluna e override refletem o board selecionado.
 
 ---
 
@@ -92,8 +92,8 @@ O leaderboard-service já serve `?board` (score + um por stat — fatia leaderbo
 | Fatia | Specs | Tamanho | Depende |
 |---|---|---|---|
 | B1 — perfil no console ✅ | admin-bff/012 + admin-ui/015 | L | — |
-| B2a — analytics loss/draw | admin-ui/016 | S | — |
-| B2b — seletor de board | admin-bff/013 + admin-ui/017 | S–M | B1 (GET perfil) |
+| B2a — analytics loss/draw ✅ | admin-bff (campos) + admin-ui/016 | S | — |
+| B2b — seletor de board ✅ | admin-bff/013 + admin-ui/017 | S–M | B1 (GET perfil) |
 | A1 — conquistas por stats/teamId | achievements/008 (+admin-ui/018) | M–L | — |
 | A2 — leaderboard acumulativo | leaderboard/004 | M | — |
 
