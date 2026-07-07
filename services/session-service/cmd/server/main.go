@@ -94,7 +94,8 @@ func run(log *slog.Logger) error {
 	// registry nil (modo static) => WithServerRegistry no-op; reconciliação só no
 	// modo agones. Grace protege contra falso-positivo por staleness do LIST.
 	svc := service.New(alloc, issuer, pub,
-		service.WithProfileProvider(buildProfileProvider(log)), // host_world_dropin (spec 011)
+		service.WithProfileProvider(buildProfileProvider(log)),   // host_world_dropin (spec 011)
+		service.WithParticipationPublisher(pub),                  // eventos de participação (spec 013)
 		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)),
 		service.WithServerRegistry(registry),
 		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
@@ -120,6 +121,16 @@ func run(log *slog.Logger) error {
 			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
 			ConstLabels: prometheus.Labels{"reason": string(domain.CloseHostLeft)},
 		}, func() float64 { return svc.ClosedTotal(domain.CloseHostLeft) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "sessions_closed_total", Help: "Sessões fechadas, por motivo.",
+			ConstLabels: prometheus.Labels{"reason": string(domain.CloseHostKilled)},
+		}, func() float64 { return svc.ClosedTotal(domain.CloseHostKilled) }),
+		// eventos de participação por tipo (host_world_dropin, spec 013).
+		participationCounter(svc, domain.EventJoined),
+		participationCounter(svc, domain.EventBossDefeated),
+		participationCounter(svc, domain.EventHostKilled),
+		participationCounter(svc, domain.EventDied),
+		participationCounter(svc, domain.EventLeft),
 		// slots ocupados por papel nos mundos host_world_dropin (spec 011).
 		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "world_role_slots", Help: "Slots ocupados em mundos host_world_dropin, por papel.",
@@ -267,6 +278,17 @@ func envOr(key, def string) string {
 }
 
 // intEnv lê um inteiro da env; inválido/ausente cai no default (com log).
+// participationCounter monta o CounterFunc de participation_events_total para um
+// tipo de evento, com o rótulo event fixo (ConstLabels) — o valor vem do contador
+// do service (spec 013).
+func participationCounter(svc *service.Service, event string) prometheus.Collector {
+	return prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name:        "participation_events_total",
+		Help:        "Eventos de participação por tipo (host_world_dropin, spec 013).",
+		ConstLabels: prometheus.Labels{"event": event},
+	}, func() float64 { return svc.ParticipationTotal(event) })
+}
+
 func intEnv(key string, def int, log *slog.Logger) int {
 	raw := os.Getenv(key)
 	if raw == "" {
@@ -310,11 +332,19 @@ func serverPool() []string {
 	return out
 }
 
+// fanoutPublisher junta as duas Ports do fan-out (win_loss_draw e participation);
+// os adapters SNS e Log satisfazem as duas, então um valor só é passado como
+// ResultPublisher (posicional) e ParticipationPublisher (option) no wire-up.
+type fanoutPublisher interface {
+	domain.ResultPublisher
+	domain.ParticipationPublisher
+}
+
 // buildPublisher escolhe o adapter do fan-out: SNS (publica no tópico
 // match-results) se MATCH_RESULTS_TOPIC_ARN estiver setado; senão o fallback de
 // log (dev). O endpoint AWS vem de AWS_ENDPOINT_URL (LocalStack) — ver awsx e
 // ADR-0020. A tradução do resultado em eventos migrou para os consumidores.
-func buildPublisher(ctx context.Context, log *slog.Logger) (domain.ResultPublisher, error) {
+func buildPublisher(ctx context.Context, log *slog.Logger) (fanoutPublisher, error) {
 	arn := os.Getenv("MATCH_RESULTS_TOPIC_ARN")
 	if arn == "" {
 		log.Warn("MATCH_RESULTS_TOPIC_ARN ausente — fan-out só vai logar (fallback dev)")

@@ -23,11 +23,12 @@ var _ domain.SessionService = (*Service)(nil)
 // Service orquestra sessões a partir das Ports de saída (allocator, issuer,
 // publisher, profiles) e mantém as sessões ativas em memória.
 type Service struct {
-	allocator domain.ServerAllocator
-	issuer    domain.ConnectTokenIssuer
-	publisher domain.ResultPublisher
-	profiles  domain.ProfileProvider // lê o perfil do jogo (host_world_dropin); spec 011
-	now       func() time.Time       // injetável: o sweeper de TTL precisa ser testável
+	allocator     domain.ServerAllocator
+	issuer        domain.ConnectTokenIssuer
+	publisher     domain.ResultPublisher
+	participation domain.ParticipationPublisher // fan-out dos eventos de participação (spec 013)
+	profiles      domain.ProfileProvider        // lê o perfil do jogo (host_world_dropin); spec 011
+	now           func() time.Time              // injetável: o sweeper de TTL precisa ser testável
 
 	// reconciliação de órfãs (spec 008): registry nil = sem fonte de verdade de
 	// liveness (modo static) → só o TTL sweeper roda.
@@ -40,6 +41,8 @@ type Service struct {
 	// identidade externa é o matchID. host_world não popula (identidade = sessionID).
 	matchIndex map[string]string
 	closed     map[domain.CloseReason]float64
+	// contador de eventos de participação por tipo (métrica participation_events_total).
+	participationEvents map[string]float64
 
 	// histórico bounded de fechadas (spec 005): ring em memória, best-effort
 	// de dev — some no restart, persistência é evolução.
@@ -68,6 +71,13 @@ func WithHistoryLimit(n int) Option {
 // spec 011): habilita OpenWorld. Sem ele, OpenWorld responde ErrUnsupportedArchetype.
 func WithProfileProvider(p domain.ProfileProvider) Option {
 	return func(s *Service) { s.profiles = p }
+}
+
+// WithParticipationPublisher liga o fan-out dos eventos de participação (spec 013,
+// host_world_dropin). Sem ele, ReportParticipationEvent responde erro (mundo
+// host_world sem fan-out configurado é bug de wire-up).
+func WithParticipationPublisher(p domain.ParticipationPublisher) Option {
+	return func(s *Service) { s.participation = p }
 }
 
 // WithServerRegistry liga a reconciliação de órfãs (spec 008): o sweeper passa a
@@ -99,9 +109,10 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		now:          time.Now,
 		orphanGrace:  time.Minute,
 		sessions:     make(map[string]*domain.Session),
-		matchIndex:   make(map[string]string),
-		closed:       make(map[domain.CloseReason]float64),
-		historyLimit: 200,
+		matchIndex:          make(map[string]string),
+		closed:              make(map[domain.CloseReason]float64),
+		participationEvents: make(map[string]float64),
+		historyLimit:        200,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -582,6 +593,83 @@ func (s *Service) CloseWorld(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("session service: close world: %w", err)
 	}
 	return nil
+}
+
+// ReportParticipationEvent recebe um evento por participante do server do mundo
+// (spec 013): valida o vocabulário, publica no fan-out (participation_event) e,
+// só após o publish, aplica o efeito no slot. Publica ANTES de mutar (ADR-0020):
+// se a publicação falha, o estado não muda e o server refaz o report.
+func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string, evt domain.ParticipationEvent) error {
+	if err := validateParticipation(evt); err != nil {
+		return fmt.Errorf("session service: participation event: %w", err)
+	}
+	if s.participation == nil {
+		return fmt.Errorf("session service: participation event: no participation publisher configured")
+	}
+
+	s.mu.Lock()
+	sess, ok := s.sessions[sessionID]
+	if !ok || sess.Origin != domain.OriginHostWorld {
+		s.mu.Unlock()
+		return fmt.Errorf("session service: participation event: %w", domain.ErrWorldNotFound)
+	}
+	gameID := sess.GameID
+	s.mu.Unlock()
+
+	// publica ANTES de mutar: falha => nada muda, o server refaz o report.
+	if err := s.participation.PublishParticipation(ctx, gameID, sessionID, evt); err != nil {
+		return fmt.Errorf("session service: participation event: publish: %w", err)
+	}
+	s.countParticipation(evt.Event)
+
+	switch evt.Event {
+	case domain.EventDied, domain.EventLeft:
+		// libera o slot do phantom; re-lookup sob o lock (o mundo pode ter fechado
+		// entre o publish e a mutação). No-op idempotente se o jogador não está lá.
+		s.mu.Lock()
+		if cur, ok := s.sessions[sessionID]; ok {
+			removeFromWorld(cur, evt.PlayerID)
+		}
+		s.mu.Unlock()
+	case domain.EventHostKilled:
+		// o host morreu -> encerra o mundo. ErrSessionNotFound = já fechado (ok).
+		if _, err := s.closeSession(ctx, sessionID, domain.CloseHostKilled); err != nil &&
+			!errors.Is(err, domain.ErrSessionNotFound) {
+			return fmt.Errorf("session service: participation event: close: %w", err)
+		}
+	}
+	return nil
+}
+
+// validateParticipation valida o vocabulário do evento (spec 013). Não valida o
+// role: o server do mundo é autoritativo sobre o que aconteceu.
+func validateParticipation(evt domain.ParticipationEvent) error {
+	switch evt.Event {
+	case domain.EventJoined, domain.EventBossDefeated, domain.EventHostKilled, domain.EventDied, domain.EventLeft:
+	default:
+		return domain.ErrInvalidParticipation
+	}
+	switch evt.Outcome {
+	case domain.OutcomeSuccess, domain.OutcomeFail, domain.OutcomeNeutral:
+	default:
+		return domain.ErrInvalidParticipation
+	}
+	return nil
+}
+
+// countParticipation incrementa o contador do evento (participation_events_total).
+func (s *Service) countParticipation(event string) {
+	s.mu.Lock()
+	s.participationEvents[event]++
+	s.mu.Unlock()
+}
+
+// ParticipationTotal devolve o total de eventos de participação do tipo (métrica
+// participation_events_total{event} — CounterFunc no main).
+func (s *Service) ParticipationTotal(event string) float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.participationEvents[event]
 }
 
 // OccupiedSlots devolve o total de slots ocupados de um papel entre os mundos

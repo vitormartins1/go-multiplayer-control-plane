@@ -38,6 +38,12 @@ service Session {
   // livre + atributos do host (spec 012). Fonte de dados pura para o matchmaking
   // (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
   rpc ListInvadableWorlds(ListInvadableWorldsRequest) returns (ListInvadableWorldsResponse);
+
+  // ReportParticipationEvent recebe um evento por participante do server do mundo
+  // (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
+  // slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
+  // NotFound (mundo inexistente/fechado).
+  rpc ReportParticipationEvent(ReportParticipationEventRequest) returns (ReportParticipationEventResponse);
 }
 
 // host_world_dropin (spec 011): o connect token carrega o claim role
@@ -97,6 +103,18 @@ message InvadableWorld {
   int32 weapon_tier = 3;
   int32 free_invader_slots = 4;
 }
+
+// spec 013 — evento de participação (host_world_dropin). O server do mundo o
+// reporta ao longo da vida da sessão; role vem do claim role do connect token.
+message ReportParticipationEventRequest {
+  string session_id = 1;
+  string player_id = 2;
+  string role = 3;    // "host" | "coop" | "invader"
+  string event = 4;   // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
+  string outcome = 5; // "SUCCESS" | "FAIL" | "NEUTRAL"
+}
+
+message ReportParticipationEventResponse {}
 
 message CreateSessionRequest {
   string match_id = 1;

@@ -157,9 +157,26 @@ func worldError(err error, op string) error {
 		return status.Error(codes.NotFound, "world not found")
 	case errors.Is(err, domain.ErrAlreadyJoined):
 		return status.Error(codes.FailedPrecondition, "player already joined")
+	case errors.Is(err, domain.ErrInvalidParticipation):
+		return status.Error(codes.InvalidArgument, "invalid participation event")
 	default:
 		return status.Error(codes.Internal, op)
 	}
+}
+
+// ReportParticipationEvent recebe um evento por participante do server do mundo
+// (spec 013) e o traduz para o domínio.
+func (s *Server) ReportParticipationEvent(ctx context.Context, req *pb.ReportParticipationEventRequest) (*pb.ReportParticipationEventResponse, error) {
+	evt := domain.ParticipationEvent{
+		PlayerID: req.GetPlayerId(),
+		Role:     req.GetRole(),
+		Event:    req.GetEvent(),
+		Outcome:  req.GetOutcome(),
+	}
+	if err := s.svc.ReportParticipationEvent(ctx, req.GetSessionId(), evt); err != nil {
+		return nil, worldError(err, "report participation event")
+	}
+	return &pb.ReportParticipationEventResponse{}, nil
 }
 
 // toMatchOutcome mapeia o oneof do request para o domínio. Kind vazio (nenhum
