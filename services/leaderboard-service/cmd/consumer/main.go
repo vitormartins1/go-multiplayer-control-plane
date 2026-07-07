@@ -104,57 +104,137 @@ func run(log *slog.Logger) error {
 	return nil
 }
 
-// makeHandler desserializa o envelope e aplica dois modos de agregação por
-// jogador: highscore (score + cada stat, ZADD GT — idempotente) e cumulative
-// (vitórias + totais de stat, ZINCRBY — idempotente por matchID via
-// ApplyCumulative). A parte cumulativa é uma única chamada atômica por partida.
+// makeHandler despacha o envelope por kind (ADR-0023): win_loss_draw (queue_arena)
+// e placement (battle_royale, BR3) alimentam boards; kinds sem ranking (ex.:
+// participation_event) e desconhecidos são descartados. Cada modo aplica highscore
+// (ZADD GT — idempotente) + cumulative (ZINCRBY idempotente por matchID via
+// ApplyCumulative, uma chamada atômica por partida).
 func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 	return func(ctx context.Context, body []byte) (bool, error) {
-		var env struct {
-			MatchID string `json:"matchId"`
-			GameID  string `json:"gameId"`
-			Results []struct {
-				PlayerID string           `json:"playerId"`
-				Score    int64            `json:"score"`
-				Outcome  string           `json:"outcome"` // ADR-0023 A2: ranking de vitórias
-				Stats    map[string]int64 `json:"stats"`   // um board highscore + um _total por métrica
-			} `json:"results"`
+		kind, matchID := peekKind(body)
+		switch {
+		case kind == "placement":
+			return handlePlacement(ctx, svc, log, body)
+		case kind == "win_loss_draw" || matchID != "":
+			// win_loss_draw explícito, ou envelope v1 legado (sem kind, com matchId).
+			return handleWinLossDraw(ctx, svc, log, body)
+		default:
+			// kind sem ranking (participation_event) ou desconhecido: não é nosso.
+			log.Debug("envelope ignorado (kind não rankeável)", slog.String("kind", kind))
+			return false, nil
 		}
-		if err := json.Unmarshal(body, &env); err != nil {
-			return false, fmt.Errorf("unmarshal envelope: %w", err)
-		}
-
-		var incrs []domain.Increment // parcelas cumulativas (todas as partes numa chamada)
-		for _, r := range env.Results {
-			// highscore: board "score" (como sempre) + um board por stat presente.
-			if _, err := svc.Submit(ctx, env.GameID, domain.BoardScore, r.PlayerID, r.Score); err != nil {
-				return false, fmt.Errorf("submit %s score: %w", r.PlayerID, err)
-			}
-			for stat, val := range r.Stats {
-				if !domain.ValidBoard(stat) {
-					continue // nome inválido: pula (o game-registry já valida scoringStats)
-				}
-				if _, err := svc.Submit(ctx, env.GameID, stat, r.PlayerID, val); err != nil {
-					return false, fmt.Errorf("submit %s %s: %w", r.PlayerID, stat, err)
-				}
-				// cumulative: soma do stat na temporada ("<stat>_total").
-				incrs = append(incrs, domain.Increment{Board: domain.TotalBoard(stat), PlayerID: r.PlayerID, Delta: val})
-			}
-			// cumulative: ranking de vitórias.
-			if r.Outcome == outcomeWin {
-				incrs = append(incrs, domain.Increment{Board: domain.BoardWins, PlayerID: r.PlayerID, Delta: 1})
-			}
-		}
-
-		dup, err := svc.ApplyCumulative(ctx, env.GameID, env.MatchID, incrs)
-		if err != nil {
-			return false, fmt.Errorf("apply cumulative: %w", err)
-		}
-		if dup {
-			log.Info("cumulativo já aplicado (no-op)", slog.String("match_id", env.MatchID))
-		}
-		return dup, nil
 	}
+}
+
+// peekKind espia kind e matchId sem desserializar o corpo todo (dispatch).
+func peekKind(body []byte) (kind, matchID string) {
+	var head struct {
+		Kind    string `json:"kind"`
+		MatchID string `json:"matchId"`
+	}
+	_ = json.Unmarshal(body, &head) // malformado cai no parse específico (DLQ)
+	return head.Kind, head.MatchID
+}
+
+// handleWinLossDraw aplica o resultado do queue_arena: highscore (board "score" +
+// um por stat) e cumulative (vitórias + "<stat>_total").
+func handleWinLossDraw(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Results []struct {
+			PlayerID string           `json:"playerId"`
+			Score    int64            `json:"score"`
+			Outcome  string           `json:"outcome"` // ADR-0023 A2: ranking de vitórias
+			Stats    map[string]int64 `json:"stats"`   // um board highscore + um _total por métrica
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal envelope: %w", err)
+	}
+
+	var incrs []domain.Increment // parcelas cumulativas (todas as partes numa chamada)
+	for _, r := range env.Results {
+		// highscore: board "score" (como sempre) + um board por stat presente.
+		if _, err := svc.Submit(ctx, env.GameID, domain.BoardScore, r.PlayerID, r.Score); err != nil {
+			return false, fmt.Errorf("submit %s score: %w", r.PlayerID, err)
+		}
+		for stat, val := range r.Stats {
+			if !domain.ValidBoard(stat) {
+				continue // nome inválido: pula (o game-registry já valida scoringStats)
+			}
+			if _, err := svc.Submit(ctx, env.GameID, stat, r.PlayerID, val); err != nil {
+				return false, fmt.Errorf("submit %s %s: %w", r.PlayerID, stat, err)
+			}
+			// cumulative: soma do stat na temporada ("<stat>_total").
+			incrs = append(incrs, domain.Increment{Board: domain.TotalBoard(stat), PlayerID: r.PlayerID, Delta: val})
+		}
+		// cumulative: ranking de vitórias.
+		if r.Outcome == outcomeWin {
+			incrs = append(incrs, domain.Increment{Board: domain.BoardWins, PlayerID: r.PlayerID, Delta: 1})
+		}
+	}
+
+	dup, err := svc.ApplyCumulative(ctx, env.GameID, env.MatchID, incrs)
+	if err != nil {
+		return false, fmt.Errorf("apply cumulative: %w", err)
+	}
+	if dup {
+		log.Info("cumulativo já aplicado (no-op)", slog.String("match_id", env.MatchID))
+	}
+	return dup, nil
+}
+
+// handlePlacement aplica o resultado por colocação (battle_royale, BR3): highscore
+// da sobrevivência (survived_ms) + cada stat; cumulative "wins" (1º lugar),
+// "top_n_finishes" (colocação <= limiar) e "<stat>_total". Idempotente por matchID.
+func handlePlacement(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Entries []struct {
+			PlayerID   string           `json:"playerId"`
+			Placement  int              `json:"placement"`
+			SurvivedMs int64            `json:"survivedMs"`
+			Stats      map[string]int64 `json:"stats"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal placement envelope: %w", err)
+	}
+
+	var incrs []domain.Increment
+	for _, e := range env.Entries {
+		// highscore: melhor sobrevivência de uma partida + um board por stat.
+		if _, err := svc.Submit(ctx, env.GameID, domain.BoardSurvivedMs, e.PlayerID, e.SurvivedMs); err != nil {
+			return false, fmt.Errorf("submit %s survived_ms: %w", e.PlayerID, err)
+		}
+		for stat, val := range e.Stats {
+			if !domain.ValidBoard(stat) {
+				continue
+			}
+			if _, err := svc.Submit(ctx, env.GameID, stat, e.PlayerID, val); err != nil {
+				return false, fmt.Errorf("submit %s %s: %w", e.PlayerID, stat, err)
+			}
+			incrs = append(incrs, domain.Increment{Board: domain.TotalBoard(stat), PlayerID: e.PlayerID, Delta: val})
+		}
+		// cumulative: vitória (1º lugar) e "terminou no top N" (o 1º conta nos dois).
+		if e.Placement == 1 {
+			incrs = append(incrs, domain.Increment{Board: domain.BoardWins, PlayerID: e.PlayerID, Delta: 1})
+		}
+		if e.Placement <= domain.BattleRoyaleTopNThreshold {
+			incrs = append(incrs, domain.Increment{Board: domain.BoardTopNFinishes, PlayerID: e.PlayerID, Delta: 1})
+		}
+	}
+
+	dup, err := svc.ApplyCumulative(ctx, env.GameID, env.MatchID, incrs)
+	if err != nil {
+		return false, fmt.Errorf("apply cumulative (placement): %w", err)
+	}
+	if dup {
+		log.Info("cumulativo (placement) já aplicado (no-op)", slog.String("match_id", env.MatchID))
+	}
+	return dup, nil
 }
 
 // outcomeWin é o valor do outcome que conta como vitória no ranking (ADR-0023).

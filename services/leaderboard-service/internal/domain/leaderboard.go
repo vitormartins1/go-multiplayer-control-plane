@@ -16,7 +16,16 @@ import (
 const (
 	BoardScore = "score"
 	BoardWins  = "wins"
+
+	// battle_royale (BR3, ADR-0023): cumulativo "terminou no top N" e highscore da
+	// sobrevivência (melhor de uma partida). BoardWins é reusado para o 1º lugar.
+	BoardTopNFinishes = "top_n_finishes"
+	BoardSurvivedMs   = "survived_ms"
 )
+
+// BattleRoyaleTopNThreshold é o limiar do "top N" (política do sink, consistente
+// com os demais sinks da BR3): colocação <= 10 conta como top_n_finishes.
+const BattleRoyaleTopNThreshold = 10
 
 // TotalBoard é o board cumulativo de um stat (ex.: "kills" -> "kills_total").
 func TotalBoard(stat string) string { return stat + "_total" }
