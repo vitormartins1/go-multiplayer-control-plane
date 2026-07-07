@@ -116,7 +116,7 @@ O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [R
 | BR0 — declaração do perfil ✅ main | game-registry/007 + admin-bff/admin-ui | M | — |
 | BR1 — lobby grande + squads ✅ main | matchmaking/008 | M (menor: session intacto) | BR0 |
 | BR2 — resultado por colocação ✅ main | session/015 | M | BR1 |
-| BR3 — colher (3 sinks) | achievements/010 + leaderboard/005 + analytics/005 | L | BR2 |
+| BR3 — colher (3 sinks) ✅ main | achievements/010 + leaderboard/005 + analytics/005 | L | BR2 |
 | BR4 — console + contrato | admin-bff + admin-ui + doc | M | BR1, BR3 |
 
 Concluídas BR0–BR4, o `battle_royale` está **completo no control plane** (declarar → encher lobby/squads → reportar colocações → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-battle-royale-data-plane` (Unity) encarnando a zona/eliminação, consumindo o contrato de BR4.
