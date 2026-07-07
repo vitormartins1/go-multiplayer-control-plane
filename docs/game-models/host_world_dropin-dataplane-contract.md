@@ -1,6 +1,6 @@
 # Contrato control ↔ data plane — arquétipo `host_world_dropin`
 
-> **Escopo:** o contrato entre o **control plane** (`go-game-backend`, Go) e o **data plane** (server do mundo, Unity) para o arquétipo **`host_world_dropin`** do ADR-0023 — o mundo persistente de um host onde phantoms **co-op** e **invasor** entram/saem no meio, com **papéis assimétricos** e **resultado por evento/participante** (não um placar terminal).
+> **Escopo:** o contrato entre o **control plane** (`go-multiplayer-control-plane`, Go) e o **data plane** (server do mundo, Unity) para o arquétipo **`host_world_dropin`** do ADR-0023 — o mundo persistente de um host onde phantoms **co-op** e **invasor** entram/saem no meio, com **papéis assimétricos** e **resultado por evento/participante** (não um placar terminal).
 >
 > Este doc é a **fonte de verdade do contrato**. O data plane (`unity-host-world-dropin-data-plane`, Unity) está **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — este documento é o que esse repo vai consumir. O control plane já está pronto e testado isoladamente com server mockado (adapter `static` + cliente de teste).
 >

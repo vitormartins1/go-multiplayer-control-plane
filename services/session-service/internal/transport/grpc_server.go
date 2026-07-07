@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
+	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
 )
 
 // Server implementa o serviço gRPC Session.

@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/vitormartins1/go-game-backend/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
 )
 
 var handleRE = regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)

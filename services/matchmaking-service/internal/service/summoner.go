@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/domain"
 )
 
 var _ domain.Summoner = (*Summoner)(nil)

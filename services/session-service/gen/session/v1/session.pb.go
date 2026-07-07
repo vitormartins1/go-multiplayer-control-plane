@@ -1581,7 +1581,7 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"CloseWorld\x12\x1d.session.v1.CloseWorldRequest\x1a\x1e.session.v1.CloseWorldResponse\x12f\n" +
 	"\x13ListInvadableWorlds\x12&.session.v1.ListInvadableWorldsRequest\x1a'.session.v1.ListInvadableWorldsResponse\x12u\n" +
-	"\x18ReportParticipationEvent\x12+.session.v1.ReportParticipationEventRequest\x1a,.session.v1.ReportParticipationEventResponseB\\ZZgithub.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1;sessionv1b\x06proto3"
+	"\x18ReportParticipationEvent\x12+.session.v1.ReportParticipationEventRequest\x1a,.session.v1.ReportParticipationEventResponseBiZggithub.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1;sessionv1b\x06proto3"
 
 var (
 	file_session_v1_session_proto_rawDescOnce sync.Once

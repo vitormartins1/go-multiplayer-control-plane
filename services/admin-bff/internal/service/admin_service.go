@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 )
 
 // Service agrega as fontes (Prometheus + serviços de jogo) para os painéis do

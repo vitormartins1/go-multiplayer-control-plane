@@ -28,7 +28,7 @@ Em Go, a unidade de dependências é o **módulo** (`go.mod`). A pergunta estrut
 
 ## Decisão
 
-Começamos com **módulo único** (um `go.mod` na raiz, `github.com/vitormartins1/go-game-backend`). Cada serviço é um binário independente sob `services/<nome>/cmd/` e uma imagem Docker própria; `shared/` é um pacote interno importado diretamente.
+Começamos com **módulo único** (um `go.mod` na raiz, `github.com/vitormartins1/go-multiplayer-control-plane` — nasceu `go-game-backend`, renomeado em 2026-07-07 (ver `docs/REPO-TOPOLOGY.md`)). Cada serviço é um binário independente sob `services/<nome>/cmd/` e uma imagem Docker própria; `shared/` é um pacote interno importado diretamente.
 
 A migração para **multi-módulo + `go.work`** fica reservada para quando surgir uma necessidade concreta (ex: versões de dependência divergentes, times separados, ou o repo crescer a ponto de o build único pesar). A direção módulo-único → multi-módulo é a fácil; o caminho inverso é mais custoso. `go.work` é a abordagem oficial e será adotada nesse momento, não antes.
 

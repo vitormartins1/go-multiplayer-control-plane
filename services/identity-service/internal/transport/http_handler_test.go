@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
 )
 
 type mockAuth struct{ mock.Mock }

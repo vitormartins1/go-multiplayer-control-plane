@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 )
 
 // DefaultClient retorna um *http.Client com timeout de 5 s — usar em New()

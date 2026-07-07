@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/vitormartins1/go-game-backend/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
 )
 
 // garante em tempo de compilação que satisfazemos a Port.

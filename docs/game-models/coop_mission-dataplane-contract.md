@@ -1,6 +1,6 @@
 # Contrato control ↔ data plane — arquétipo `coop_mission`
 
-> **Escopo:** o contrato entre o **control plane** (`go-game-backend`, Go) e o **data plane** (server da missão, Unity) para o arquétipo **`coop_mission`** do ADR-0023 — um time pequeno contra o **ambiente/IA**, término por **objetivo cumprido ou wipe**, e **resultado COLETIVO** (`MISSION_SUCCESS`/`MISSION_FAILURE` igual para todos), com stats individuais que modulam recompensa.
+> **Escopo:** o contrato entre o **control plane** (`go-multiplayer-control-plane`, Go) e o **data plane** (server da missão, Unity) para o arquétipo **`coop_mission`** do ADR-0023 — um time pequeno contra o **ambiente/IA**, término por **objetivo cumprido ou wipe**, e **resultado COLETIVO** (`MISSION_SUCCESS`/`MISSION_FAILURE` igual para todos), com stats individuais que modulam recompensa.
 >
 > Este doc é a **fonte de verdade do contrato**. O data plane (`unity-coop-mission-data-plane`, Unity) **não existe nem está planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — este documento é o que esse repo vai consumir quando for criado. O control plane já está pronto e testado isoladamente com server mockado (adapter `static` + cliente de teste simulando o server da missão).
 >

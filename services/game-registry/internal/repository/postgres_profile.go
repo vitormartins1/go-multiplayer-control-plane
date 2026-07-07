@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 )
 
 // Persistência do perfil de multiplayer (ADR-0023, spec 006): coluna JSONB

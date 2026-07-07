@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/analytics-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 )
 
 // fakeRepo conta as agregações de forma thread-safe (o pool chama de N goroutines).

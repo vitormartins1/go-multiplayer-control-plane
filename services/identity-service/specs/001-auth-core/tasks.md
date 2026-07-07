@@ -6,7 +6,7 @@
 > Testes acompanham cada camada (não ficam para o fim). Marcar [x] conforme implementa.
 
 ## Fase 0 — Módulo e base compartilhada
-- [x] Criar `go.mod` (módulo `github.com/vitormartins1/go-game-backend`, Go 1.22)
+- [x] Criar `go.mod` (módulo `github.com/vitormartins1/go-game-backend`, Go 1.22; renomeado p/ `go-multiplayer-control-plane` em 2026-07-07)
 - [x] `shared/logger/logger.go` — logger slog JSON com nome do serviço (ADR-0006)
 - [x] `shared/config/config.go` — leitura de env: PORT, DSN do Postgres, chave Ed25519
 

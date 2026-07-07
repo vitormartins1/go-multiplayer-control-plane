@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/leaderboard-service/internal/domain"
 )
 
 // Handler expõe os endpoints HTTP do leaderboard-service.

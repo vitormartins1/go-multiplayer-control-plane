@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
 )
 
 var _ domain.ProfileProvider = (*Client)(nil)

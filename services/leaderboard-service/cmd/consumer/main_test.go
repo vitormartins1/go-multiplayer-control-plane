@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/services/leaderboard-service/internal/service"
-	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/leaderboard-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/leaderboard-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 )
 
 // submitCall registra um highscore aplicado (board/player/score).

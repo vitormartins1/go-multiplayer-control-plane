@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 )
 
 var _ domain.AnalyticsReader = (*Client)(nil)

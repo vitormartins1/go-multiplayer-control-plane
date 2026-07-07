@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 )
 
 // fakeMetrics responde por query (mapa promQL -> samples) ou erro global.

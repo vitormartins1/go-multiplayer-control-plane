@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
 )
 
 // SessionDirectory é o recorte do service que o admin consome (interface do

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vitormartins1/go-game-backend/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
 )
 
 // Limites de paginação do listing admin (feature 003-admin-list-users).

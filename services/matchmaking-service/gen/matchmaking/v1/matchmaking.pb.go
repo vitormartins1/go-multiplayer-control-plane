@@ -857,7 +857,7 @@ const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\x0ePostSummonSign\x12%.matchmaking.v1.PostSummonSignRequest\x1a\x1c.matchmaking.v1.SummonUpdate0\x01\x12P\n" +
 	"\tListSigns\x12 .matchmaking.v1.ListSignsRequest\x1a!.matchmaking.v1.ListSignsResponse\x12S\n" +
 	"\n" +
-	"SummonSign\x12!.matchmaking.v1.SummonSignRequest\x1a\".matchmaking.v1.SummonSignResponseBhZfgithub.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
+	"SummonSign\x12!.matchmaking.v1.SummonSignRequest\x1a\".matchmaking.v1.SummonSignResponseBuZsgithub.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
 
 var (
 	file_matchmaking_v1_matchmaking_proto_rawDescOnce sync.Once

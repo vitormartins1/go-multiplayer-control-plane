@@ -11,8 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/awsx"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/awsx"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
 )
 
 // publishTotal conta as publicações no tópico por resultado (ADR-0020 / RED).

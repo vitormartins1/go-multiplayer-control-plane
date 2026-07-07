@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 )
 
 // Perfil de multiplayer (ADR-0023, spec 006). A validação é regra de negócio

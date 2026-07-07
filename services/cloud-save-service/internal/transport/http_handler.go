@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/cloud-save-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/cloud-save-service/internal/domain"
 )
 
 // maxSaveBytes limita o tamanho do save (proteção; quota por jogador é backlog).

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 )
 
 type mockService struct{ mock.Mock }

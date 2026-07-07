@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/vitormartins1/go-game-backend/services/analytics-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/domain"
 )
 
 var _ domain.Ingestor = (*Pool)(nil)
