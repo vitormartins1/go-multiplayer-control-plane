@@ -25,7 +25,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
   }
 
   return (
-    <Stack maw={860}>
+    <Stack maw={960}>
       <Title order={4}>Identidade</Title>
       <Fieldset legend="Dados do jogo">
         <Stack gap="sm">

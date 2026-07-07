@@ -53,7 +53,6 @@ const HWD_DEFAULTS: HostWorldDropInParams = {
   invasionEnabled: true,
 };
 
-// FieldLabel renderiza um rótulo com ícone de ajuda e tooltip.
 function FieldLabel({ label, help }: { label: string; help: string }) {
   return (
     <Tooltip label={help} position="right" multiline w={260} withArrow>
@@ -65,7 +64,6 @@ function FieldLabel({ label, help }: { label: string; help: string }) {
   );
 }
 
-// SwitchWithHelp combina Switch com tooltip via label customizado.
 function SwitchWithHelp({
   label,
   help,
@@ -86,7 +84,6 @@ function SwitchWithHelp({
   );
 }
 
-// buildQueueArenaProfile zera campos incoerentes com os discriminadores.
 function buildQueueArenaProfile(topology: "dedicated" | "p2p", p: QueueArenaParams): MultiplayerProfile {
   const params: QueueArenaParams = {
     ...p,
@@ -115,6 +112,10 @@ function buildHWDProfile(topology: "dedicated" | "p2p", p: HostWorldDropInParams
 }
 
 // --- Formulário do Queue Arena ---
+// Layout: dois SimpleGrid externos de 2 colunas (md+).
+//   Row 1: [Composição | Condição de vitória]
+//   Row 2: [Formato    | Métricas           ]
+// Campos dentro de cada Fieldset sempre em Stack (sem grids internos).
 function QueueArenaForm({
   p,
   set,
@@ -126,25 +127,26 @@ function QueueArenaForm({
 
   return (
     <>
-      <Fieldset legend="Composição">
-        <Stack gap="sm">
-          <div>
-            <FieldLabel
-              label="Estrutura"
-              help="FFA: todos competem individualmente. Times: jogadores são divididos em equipes simétricas — o matchmaking atribui os lados."
-            />
-            <SegmentedControl
-              mt={4}
-              value={p.structure}
-              onChange={(v) => set("structure", v as QueueArenaParams["structure"])}
-              data={[
-                { value: "ffa", label: "FFA (todos contra todos)" },
-                { value: "teams", label: "Times" },
-              ]}
-            />
-          </div>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Fieldset legend="Composição">
+          <Stack gap="sm">
+            <div>
+              <FieldLabel
+                label="Estrutura"
+                help="FFA: todos competem individualmente. Times: jogadores são divididos em equipes simétricas — o matchmaking atribui os lados."
+              />
+              <SegmentedControl
+                mt={4}
+                fullWidth
+                value={p.structure}
+                onChange={(v) => set("structure", v as QueueArenaParams["structure"])}
+                data={[
+                  { value: "ffa", label: "FFA (todos vs todos)" },
+                  { value: "teams", label: "Times" },
+                ]}
+              />
+            </div>
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
             {p.structure === "ffa" ? (
               <NumberInput
                 label={
@@ -183,63 +185,63 @@ function QueueArenaForm({
                 />
               </>
             )}
-          </SimpleGrid>
-        </Stack>
-      </Fieldset>
+          </Stack>
+        </Fieldset>
 
-      <Fieldset legend="Condição de vitória">
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          <Select
-            label={
-              <FieldLabel
-                label="Critério"
-                help="Define quando a partida termina e quem vence. O data plane reporta o resultado conforme este critério."
+        <Fieldset legend="Condição de vitória">
+          <Stack gap="sm">
+            <Select
+              label={
+                <FieldLabel
+                  label="Critério"
+                  help="Define quando a partida termina e quem vence. O data plane reporta o resultado conforme este critério."
+                />
+              }
+              value={p.winCondition}
+              onChange={(v) => v && set("winCondition", v as QueueArenaParams["winCondition"])}
+              allowDeselect={false}
+              data={[
+                { value: "first_to_score", label: "Primeiro a atingir a pontuação" },
+                { value: "highest_at_time", label: "Maior pontuação ao fim do tempo" },
+                { value: "objective", label: "Objetivo" },
+                { value: "elimination", label: "Eliminação" },
+              ]}
+            />
+
+            {p.winCondition === "first_to_score" && (
+              <NumberInput
+                label={
+                  <FieldLabel
+                    label="Pontuação-alvo"
+                    help="O primeiro jogador/time a atingir este número de pontos vence a partida."
+                  />
+                }
+                min={1}
+                value={p.scoreTarget}
+                onChange={(v) => set("scoreTarget", typeof v === "number" ? v : 1)}
               />
-            }
-            value={p.winCondition}
-            onChange={(v) => v && set("winCondition", v as QueueArenaParams["winCondition"])}
-            allowDeselect={false}
-            data={[
-              { value: "first_to_score", label: "Primeiro a atingir a pontuação" },
-              { value: "highest_at_time", label: "Maior pontuação ao fim do tempo" },
-              { value: "objective", label: "Objetivo" },
-              { value: "elimination", label: "Eliminação" },
-            ]}
-          />
+            )}
 
-          {p.winCondition === "first_to_score" ? (
-            <NumberInput
-              label={
-                <FieldLabel
-                  label="Pontuação-alvo"
-                  help="O primeiro jogador/time a atingir este número de pontos vence a partida."
-                />
-              }
-              min={1}
-              value={p.scoreTarget}
-              onChange={(v) => set("scoreTarget", typeof v === "number" ? v : 1)}
-            />
-          ) : p.winCondition === "highest_at_time" ? (
-            <NumberInput
-              label={
-                <FieldLabel
-                  label="Duração (segundos)"
-                  help="Tempo total da partida. Ao esgotá-lo, quem tiver mais pontos vence."
-                />
-              }
-              min={1}
-              value={p.durationSeconds}
-              onChange={(v) => set("durationSeconds", typeof v === "number" ? v : 60)}
-            />
-          ) : (
-            <div />
-          )}
-        </SimpleGrid>
-      </Fieldset>
+            {p.winCondition === "highest_at_time" && (
+              <NumberInput
+                label={
+                  <FieldLabel
+                    label="Duração (segundos)"
+                    help="Tempo total da partida. Ao esgotá-lo, quem tiver mais pontos vence."
+                  />
+                }
+                min={1}
+                value={p.durationSeconds}
+                onChange={(v) => set("durationSeconds", typeof v === "number" ? v : 60)}
+              />
+            )}
+          </Stack>
+        </Fieldset>
+      </SimpleGrid>
 
-      <Fieldset legend="Formato">
-        <Stack gap="sm">
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" style={{ alignItems: "end" }}>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Fieldset legend="Formato">
+          <Stack gap="sm">
             <div>
               <FieldLabel
                 label="Estrutura de rounds"
@@ -247,16 +249,17 @@ function QueueArenaForm({
               />
               <SegmentedControl
                 mt={4}
+                fullWidth
                 value={p.matchStructure}
                 onChange={(v) => set("matchStructure", v as QueueArenaParams["matchStructure"])}
                 data={[
                   { value: "single", label: "Partida única" },
-                  { value: "best_of_rounds", label: "Melhor de N rounds" },
+                  { value: "best_of_rounds", label: "Melhor de N" },
                 ]}
               />
             </div>
 
-            {p.matchStructure === "best_of_rounds" ? (
+            {p.matchStructure === "best_of_rounds" && (
               <NumberInput
                 label={
                   <FieldLabel
@@ -268,44 +271,45 @@ function QueueArenaForm({
                 value={p.roundsToWin}
                 onChange={(v) => set("roundsToWin", typeof v === "number" ? v : 1)}
               />
-            ) : (
-              <div />
             )}
-          </SimpleGrid>
 
-          <SwitchWithHelp
-            label="Permitir empate"
-            help="Se habilitado, o resultado pode ser 'draw' além de 'win/loss'. Útil em esportes e modos com tempo fixo."
-            checked={p.allowDraw}
-            onChange={(v) => set("allowDraw", v)}
-          />
-        </Stack>
-      </Fieldset>
-
-      <Fieldset legend="Métricas">
-        <TagsInput
-          label={
-            <FieldLabel
-              label="Stats de pontuação"
-              help="Métricas extras que o data plane reporta no resultado (ex.: kills, assists, flag_caps). Cada stat gera um leaderboard automático. Use identificadores em minúsculas começando com letra."
+            <SwitchWithHelp
+              label="Permitir empate"
+              help="Se habilitado, o resultado pode ser 'draw' além de 'win/loss'. Útil em esportes e modos com tempo fixo."
+              checked={p.allowDraw}
+              onChange={(v) => set("allowDraw", v)}
             />
-          }
-          description="Pressione Enter para adicionar cada stat."
-          value={p.scoringStats}
-          onChange={(v) => set("scoringStats", v)}
-          error={
-            invalidStats.length > 0
-              ? `Stat inválido: ${invalidStats.join(", ")} (só minúsculas, começa com letra)`
-              : undefined
-          }
-          clearable
-        />
-      </Fieldset>
+          </Stack>
+        </Fieldset>
+
+        <Fieldset legend="Métricas">
+          <TagsInput
+            label={
+              <FieldLabel
+                label="Stats de pontuação"
+                help="Métricas extras que o data plane reporta no resultado (ex.: kills, assists, flag_caps). Cada stat gera um leaderboard automático. Use identificadores em minúsculas começando com letra."
+              />
+            }
+            description="Pressione Enter para adicionar cada stat."
+            value={p.scoringStats}
+            onChange={(v) => set("scoringStats", v)}
+            error={
+              invalidStats.length > 0
+                ? `Stat inválido: ${invalidStats.join(", ")} (só minúsculas, começa com letra)`
+                : undefined
+            }
+            clearable
+          />
+        </Fieldset>
+      </SimpleGrid>
     </>
   );
 }
 
 // --- Formulário do Host World Drop-in ---
+// Layout:
+//   [Papéis e capacidade — full width]
+//   SimpleGrid 2-col (md+): [Critérios de matchmaking | Comportamento]
 function HostWorldDropInForm({
   p,
   set,
@@ -351,70 +355,76 @@ function HostWorldDropInForm({
             )}
           </div>
 
-          <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
-            {hasCoop && (
-              <NumberInput
-                label={
-                  <FieldLabel
-                    label="Slots de co-op"
-                    help="Máximo de aliados simultâneos no mundo. Tipicamente 2–3."
-                  />
-                }
-                min={1}
-                max={8}
-                value={p.coopSlots}
-                onChange={(v) => set("coopSlots", typeof v === "number" ? v : 1)}
-              />
-            )}
-            {hasInvader && (
-              <NumberInput
-                label={
-                  <FieldLabel
-                    label="Slots de invasor"
-                    help="Máximo de invasores simultâneos. Tipicamente 1–2."
-                  />
-                }
-                min={1}
-                max={4}
-                value={p.invaderSlots}
-                onChange={(v) => set("invaderSlots", typeof v === "number" ? v : 1)}
-              />
-            )}
-          </SimpleGrid>
+          {(hasCoop || hasInvader) && (
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              {hasCoop && (
+                <NumberInput
+                  label={
+                    <FieldLabel
+                      label="Slots de co-op"
+                      help="Máximo de aliados simultâneos no mundo. Tipicamente 2–3."
+                    />
+                  }
+                  min={1}
+                  max={8}
+                  value={p.coopSlots}
+                  onChange={(v) => set("coopSlots", typeof v === "number" ? v : 1)}
+                />
+              )}
+              {hasInvader && (
+                <NumberInput
+                  label={
+                    <FieldLabel
+                      label="Slots de invasor"
+                      help="Máximo de invasores simultâneos. Tipicamente 1–2."
+                    />
+                  }
+                  min={1}
+                  max={4}
+                  value={p.invaderSlots}
+                  onChange={(v) => set("invaderSlots", typeof v === "number" ? v : 1)}
+                />
+              )}
+            </SimpleGrid>
+          )}
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Critérios de matchmaking">
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-          <SwitchWithHelp
-            label="Faixa de nível"
-            help="Filtra quem pode entrar pelo nível do personagem. Co-ops são limitados a uma faixa próxima do host; invasores têm faixa assimétrica (ligeiramente acima). Desativar permite qualquer nível."
-            checked={p.levelRangeEnabled}
-            onChange={(v) => set("levelRangeEnabled", v)}
-          />
-          <SwitchWithHelp
-            label="Tier de equipamento"
-            help="Adiciona filtro pelo nível de arma/equipamento além do nível do personagem. Evita que jogadores com gear muito superior ou inferior entrem."
-            checked={p.weaponTierEnabled}
-            onChange={(v) => set("weaponTierEnabled", v)}
-          />
-          <SwitchWithHelp
-            label="Senha de sessão"
-            help="Permite que host e phantoms usem uma senha compartilhada que ignora as faixas de nível e gear. Útil para jogar com amigos independente de progressão."
-            checked={p.passwordEnabled}
-            onChange={(v) => set("passwordEnabled", v)}
-          />
-        </SimpleGrid>
-      </Fieldset>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Fieldset legend="Critérios de matchmaking">
+          <Stack gap="sm">
+            <SwitchWithHelp
+              label="Faixa de nível"
+              help="Filtra quem pode entrar pelo nível do personagem. Co-ops são limitados a uma faixa próxima do host; invasores têm faixa assimétrica (ligeiramente acima). Desativar permite qualquer nível."
+              checked={p.levelRangeEnabled}
+              onChange={(v) => set("levelRangeEnabled", v)}
+            />
+            <SwitchWithHelp
+              label="Tier de equipamento"
+              help="Adiciona filtro pelo nível de arma/equipamento além do nível do personagem. Evita que jogadores com gear muito superior ou inferior entrem."
+              checked={p.weaponTierEnabled}
+              onChange={(v) => set("weaponTierEnabled", v)}
+            />
+            <SwitchWithHelp
+              label="Senha de sessão"
+              help="Permite que host e phantoms usem uma senha compartilhada que ignora as faixas de nível e gear. Útil para jogar com amigos independente de progressão."
+              checked={p.passwordEnabled}
+              onChange={(v) => set("passwordEnabled", v)}
+            />
+          </Stack>
+        </Fieldset>
 
-      <Fieldset legend="Comportamento">
-        <SwitchWithHelp
-          label="Invasão automática"
-          help="Se habilitado, o mundo do host fica elegível para invasores sem convite — invasores procuram mundos disponíveis e entram ativamente. Se desabilitado, o mundo aceita apenas co-op (aliados invocados pelo host)."
-          checked={p.invasionEnabled}
-          onChange={(v) => set("invasionEnabled", v)}
-        />
-      </Fieldset>
+        <Fieldset legend="Comportamento">
+          <Stack gap="sm">
+            <SwitchWithHelp
+              label="Invasão automática"
+              help="Se habilitado, o mundo do host fica elegível para invasores sem convite — invasores procuram mundos disponíveis e entram ativamente. Se desabilitado, o mundo aceita apenas co-op (aliados invocados pelo host)."
+              checked={p.invasionEnabled}
+              onChange={(v) => set("invasionEnabled", v)}
+            />
+          </Stack>
+        </Fieldset>
+      </SimpleGrid>
     </>
   );
 }
@@ -499,7 +509,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
   if (loading) return <Loader size="sm" />;
 
   return (
-    <Stack maw={860}>
+    <Stack>
       {!configured && (
         <Alert color="blue" variant="light">
           Este jogo ainda não tem um perfil de multiplayer. Defina abaixo e salve para configurá-lo.
