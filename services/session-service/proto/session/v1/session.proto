@@ -14,7 +14,62 @@ service Session {
   // ReportResult dispara o fan-out do resultado, libera o server e encerra a
   // sessão. NotFound se não houver sessão para o match.
   rpc ReportResult(ReportResultRequest) returns (ReportResultResponse);
+
+  // Arquétipo host_world_dropin (ADR-0023, spec 011): mundo persistente de um
+  // host com phantoms co-op/invasor por slot de papel.
+
+  // OpenWorld abre um mundo persistente para o host: aloca um server, deriva os
+  // slots por papel do perfil e emite o connect token do host. FailedPrecondition
+  // se o jogo não for host_world_dropin; ResourceExhausted se o pool esgotar.
+  rpc OpenWorld(OpenWorldRequest) returns (OpenWorldResponse);
+  // JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando um
+  // slot, e emite o connect token com o claim role. InvalidArgument (papel não
+  // habilitado), ResourceExhausted (slots cheios), NotFound (mundo inexistente),
+  // FailedPrecondition (já presente).
+  rpc JoinWorld(JoinWorldRequest) returns (JoinWorldResponse);
+  // LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
+  // se ausente. Se o jogador for o host, encerra o mundo.
+  rpc LeaveWorld(LeaveWorldRequest) returns (LeaveWorldResponse);
+  // CloseWorld encerra o mundo (host saiu), libera o server. NotFound se não
+  // houver mundo aberto.
+  rpc CloseWorld(CloseWorldRequest) returns (CloseWorldResponse);
 }
+
+// host_world_dropin (spec 011): o connect token carrega o claim role
+// (host|coop|invader), lido pelo game server no connection approval.
+message OpenWorldRequest {
+  string host_player_id = 1; // dono do mundo
+  string game_id = 2;        // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+}
+
+message OpenWorldResponse {
+  string session_id = 1;       // identidade do mundo (não há match)
+  string server_address = 2;   // endereço do game server alocado
+  ConnectGrant host_grant = 3; // connect token do host (claim role=host)
+}
+
+message JoinWorldRequest {
+  string session_id = 1;
+  string player_id = 2;
+  string role = 3; // "coop" | "invader"
+}
+
+message JoinWorldResponse {
+  ConnectGrant grant = 1; // connect token do phantom (claim role)
+}
+
+message LeaveWorldRequest {
+  string session_id = 1;
+  string player_id = 2;
+}
+
+message LeaveWorldResponse {}
+
+message CloseWorldRequest {
+  string session_id = 1;
+}
+
+message CloseWorldResponse {}
 
 message CreateSessionRequest {
   string match_id = 1;

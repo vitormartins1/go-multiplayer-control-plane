@@ -83,6 +83,64 @@ func (s *Server) ReportResult(ctx context.Context, req *pb.ReportResultRequest) 
 	return &pb.ReportResultResponse{}, nil
 }
 
+// OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011).
+func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.OpenWorldResponse, error) {
+	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId())
+	if err != nil {
+		return nil, worldError(err, "open world")
+	}
+	return &pb.OpenWorldResponse{
+		SessionId:     sess.ID,
+		ServerAddress: sess.ServerAddress,
+		HostGrant:     &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+	}, nil
+}
+
+// JoinWorld injeta um phantom no mundo com um papel e devolve o connect token.
+func (s *Server) JoinWorld(ctx context.Context, req *pb.JoinWorldRequest) (*pb.JoinWorldResponse, error) {
+	grant, err := s.svc.JoinWorld(ctx, req.GetSessionId(), req.GetPlayerId(), req.GetRole())
+	if err != nil {
+		return nil, worldError(err, "join world")
+	}
+	return &pb.JoinWorldResponse{
+		Grant: &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+	}, nil
+}
+
+// LeaveWorld libera o slot do jogador (no-op idempotente; host encerra o mundo).
+func (s *Server) LeaveWorld(ctx context.Context, req *pb.LeaveWorldRequest) (*pb.LeaveWorldResponse, error) {
+	if err := s.svc.LeaveWorld(ctx, req.GetSessionId(), req.GetPlayerId()); err != nil {
+		return nil, worldError(err, "leave world")
+	}
+	return &pb.LeaveWorldResponse{}, nil
+}
+
+// CloseWorld encerra o mundo (host saiu) e libera o server.
+func (s *Server) CloseWorld(ctx context.Context, req *pb.CloseWorldRequest) (*pb.CloseWorldResponse, error) {
+	if err := s.svc.CloseWorld(ctx, req.GetSessionId()); err != nil {
+		return nil, worldError(err, "close world")
+	}
+	return &pb.CloseWorldResponse{}, nil
+}
+
+// worldError mapeia os erros de domínio do host_world_dropin para gRPC codes.
+func worldError(err error, op string) error {
+	switch {
+	case errors.Is(err, domain.ErrUnsupportedArchetype):
+		return status.Error(codes.FailedPrecondition, "game is not host_world_dropin")
+	case errors.Is(err, domain.ErrRoleNotEnabled):
+		return status.Error(codes.InvalidArgument, "role not enabled")
+	case errors.Is(err, domain.ErrRoleFull), errors.Is(err, domain.ErrNoServer):
+		return status.Error(codes.ResourceExhausted, "no capacity")
+	case errors.Is(err, domain.ErrWorldNotFound):
+		return status.Error(codes.NotFound, "world not found")
+	case errors.Is(err, domain.ErrAlreadyJoined):
+		return status.Error(codes.FailedPrecondition, "player already joined")
+	default:
+		return status.Error(codes.Internal, op)
+	}
+}
+
 // toMatchOutcome mapeia o oneof do request para o domínio. Kind vazio (nenhum
 // campo do oneof setado) cai como outcome não suportado na validação do service.
 func toMatchOutcome(req *pb.ReportResultRequest) domain.MatchOutcome {
