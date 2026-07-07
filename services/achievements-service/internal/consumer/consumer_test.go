@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 )
 
 type fakeSQS struct {

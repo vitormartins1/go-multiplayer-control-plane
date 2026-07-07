@@ -13,7 +13,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
 )
 
 // newFakeDynamic cria o fake do dynamic client com um reactor que responde ao

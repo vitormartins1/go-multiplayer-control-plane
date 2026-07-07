@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/shared/auth"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
 )
 
 // serverReturning cria um httptest.Server que devolve status+body para o

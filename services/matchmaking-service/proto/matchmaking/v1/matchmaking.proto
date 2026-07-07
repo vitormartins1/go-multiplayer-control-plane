@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package matchmaking.v1;
 
-option go_package = "github.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1";
+option go_package = "github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1";
 
 // Matchmaking forma partidas a partir de uma fila de tickets (≈ GameLift
 // FlexMatch). Ver ADR-0003 (gRPC com streaming).

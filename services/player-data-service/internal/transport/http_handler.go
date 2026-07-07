@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/vitormartins1/go-game-backend/services/player-data-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/player-data-service/internal/domain"
 )
 
 // Handler expõe os endpoints HTTP do player-data-service.

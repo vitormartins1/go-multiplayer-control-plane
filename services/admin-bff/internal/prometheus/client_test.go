@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 )
 
 func TestQuery_ParseVetor_LabelsEValor(t *testing.T) {

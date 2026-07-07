@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/domain"
 )
 
 // fakeProvider simula o domain.ProfileProvider: devolve uma formação por gameID

@@ -1,6 +1,6 @@
 # Contrato control ↔ data plane — arquétipo `queue_arena`
 
-> **Escopo:** o contrato entre o **control plane** (`go-game-backend`, Go) e o **data plane** (Dedicated Server Unity) para o arquétipo **`queue_arena`** do ADR-0023 (FFA **e** por times). É o primeiro arquétipo implementado ponta a ponta; o repo `go-game-dataplane` serve de **exemplo de referência** deste arquétipo (repos de data plane separados virão por tipo de jogo — cada arquétipo valida seu próprio data plane).
+> **Escopo:** o contrato entre o **control plane** (`go-multiplayer-control-plane`, Go) e o **data plane** (Dedicated Server Unity) para o arquétipo **`queue_arena`** do ADR-0023 (FFA **e** por times). É o primeiro arquétipo implementado ponta a ponta; o repo `go-game-dataplane` serve de **exemplo de referência** deste arquétipo (repos de data plane separados virão por tipo de jogo — cada arquétipo valida seu próprio data plane).
 >
 > Este doc é a **fonte de verdade do contrato**. Mudanças de design genérico (perfil → formação → resultado) que exigem trabalho no data plane são registradas aqui e referenciadas pelas specs dos serviços e pelo `go-game-dataplane`.
 >

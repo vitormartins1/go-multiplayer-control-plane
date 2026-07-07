@@ -14,8 +14,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
-	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/upstream"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/upstream"
 )
 
 var _ domain.AchievementsReader = (*Client)(nil)

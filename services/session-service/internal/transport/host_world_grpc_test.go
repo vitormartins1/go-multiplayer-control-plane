@@ -14,12 +14,12 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	pb "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/allocator"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/publisher"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/service"
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/token"
+	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/allocator"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/publisher"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/token"
 )
 
 // stubProfile é um ProfileProvider fixo para os testes de host_world: só o jogo

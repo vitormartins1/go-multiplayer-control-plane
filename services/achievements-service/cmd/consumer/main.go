@@ -23,13 +23,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/awsx"
-	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/consumer"
-	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/repository"
-	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/service"
-	"github.com/vitormartins1/go-game-backend/shared/config"
-	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/awsx"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/consumer"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/repository"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/config"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 )
 
 const serviceName = "achievements-consumer"

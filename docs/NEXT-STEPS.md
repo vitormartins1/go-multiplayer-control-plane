@@ -52,8 +52,8 @@ ADRs recentes: 0018 (service auth), 0019 (presença por jogo), 0020 (fan-out dur
 
 ## ⚠️ Pendente de você (ações fora do código)
 
-1. **Push pro GitHub** — o repo ainda é **local**. Criar `github.com/vitormartins1/go-game-backend`, `git remote add origin …`, `git push -u origin main`. **Só então o CI (GitHub Actions) roda de verdade.** Reproduzi os 4 jobs verdes localmente, mas o ambiente do Actions nunca rodou (testcontainers às vezes pede ajuste no runner).
-2. **Rename de repos (decidido, não executado):** control plane `go-game-backend` → **`go-multiplayer-control-plane`**; data planes por arquétipo **`unity-<archetype>-data-plane`** (ver `REPO-TOPOLOGY.md` com o checklist de rename — module path Go + refs). Executar numa janela dedicada. O module path atual é `github.com/vitormartins1/go-game-backend`.
+1. **Push pro GitHub — adiado por decisão (2026-07-07):** o repo fica **local** por ora. Quando for publicar, criar já como `github.com/vitormartins1/go-multiplayer-control-plane` (o module path já é esse), `git remote add origin …`, `git push -u origin main`. Só então o CI (GitHub Actions) roda de verdade.
+2. **Rename do control plane — ✅ executado (2026-07-07):** module path Go + protos (`buf`) + docs já usam `go-multiplayer-control-plane`. **Falta só o `mv` da pasta local** (fazer com a sessão fechada): `cd ~/projects && mv go-game-backend go-multiplayer-control-plane` — e copiar a memória do assistente (`~/.claude/projects/-Users-vitormartins-projects-go-game-backend` → `...-go-multiplayer-control-plane`). Data planes: `unity-<archetype>-data-plane` ao criar cada um; `go-game-dataplane` renomeia quando for tocado (`REPO-TOPOLOGY.md`).
 
 ## Painel jogo-cêntrico (✅ completo)
 

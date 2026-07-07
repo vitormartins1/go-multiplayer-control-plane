@@ -16,9 +16,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	pb "github.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/service"
+	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/gen/matchmaking/v1"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/service"
 )
 
 // fakeVerifier devolve o próprio token como playerID (cada cliente usa um token

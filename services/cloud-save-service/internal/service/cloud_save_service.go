@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vitormartins1/go-game-backend/services/cloud-save-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/cloud-save-service/internal/domain"
 )
 
 // garante em tempo de compilação que satisfazemos a Port de entrada.

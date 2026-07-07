@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vitormartins1/go-game-backend/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
 )
 
 // Handler expõe os endpoints HTTP do identity-service.

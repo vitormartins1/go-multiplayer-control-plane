@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
-	"github.com/vitormartins1/go-game-backend/shared/logger"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 )
 
 type fakeSNS struct {

@@ -23,17 +23,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
-	pb "github.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/profilecache"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/registryclient"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/service"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/sessionclient"
-	"github.com/vitormartins1/go-game-backend/services/matchmaking-service/internal/transport"
-	sessionv1 "github.com/vitormartins1/go-game-backend/services/session-service/gen/session/v1"
-	"github.com/vitormartins1/go-game-backend/shared/auth"
-	"github.com/vitormartins1/go-game-backend/shared/config"
-	"github.com/vitormartins1/go-game-backend/shared/logger"
-	"github.com/vitormartins1/go-game-backend/shared/telemetry"
+	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/gen/matchmaking/v1"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/profilecache"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/registryclient"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/sessionclient"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/transport"
+	sessionv1 "github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/config"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/telemetry"
 )
 
 const (

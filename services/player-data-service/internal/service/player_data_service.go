@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/vitormartins1/go-game-backend/services/player-data-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/player-data-service/internal/domain"
 )
 
 var (

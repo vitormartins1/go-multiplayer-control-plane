@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/vitormartins1/go-game-backend/services/achievements-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/domain"
 )
 
 // sandbox: jogo default do backfill da migração 003 (os seeds ficam sob ele).

@@ -1,6 +1,6 @@
 # Contrato control ↔ data plane — arquétipo `battle_royale`
 
-> **Escopo:** o contrato entre o **control plane** (`go-game-backend`, Go) e o **data plane** (server do BR, Unity) para o arquétipo **`battle_royale`** do ADR-0023 — lobby grande, **squads** (solo/duo/quad), eliminação progressiva e **resultado por colocação ordinal** (1º..Nº) com sobrevivência/kills.
+> **Escopo:** o contrato entre o **control plane** (`go-multiplayer-control-plane`, Go) e o **data plane** (server do BR, Unity) para o arquétipo **`battle_royale`** do ADR-0023 — lobby grande, **squads** (solo/duo/quad), eliminação progressiva e **resultado por colocação ordinal** (1º..Nº) com sobrevivência/kills.
 >
 > Este doc é a **fonte de verdade do contrato**. O data plane (`unity-battle-royale-data-plane`, Unity) **não existe nem está planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — este documento é o que esse repo vai consumir quando for criado. O control plane já está pronto e testado isoladamente com server mockado (adapter `static` + cliente de teste simulando o server do BR).
 >

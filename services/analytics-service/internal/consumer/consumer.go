@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
-	"github.com/vitormartins1/go-game-backend/services/analytics-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/domain"
 )
 
 // sqsAPI é a fração da API do SQS que usamos (permite fake em teste).

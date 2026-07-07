@@ -1,4 +1,4 @@
-module github.com/vitormartins1/go-game-backend
+module github.com/vitormartins1/go-multiplayer-control-plane
 
 go 1.26.0
 

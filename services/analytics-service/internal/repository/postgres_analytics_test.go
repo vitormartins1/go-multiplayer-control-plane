@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/vitormartins1/go-game-backend/services/analytics-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/domain"
 )
 
 func newTestRepo(t *testing.T) *PostgresRepository {

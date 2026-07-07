@@ -1,4 +1,4 @@
-# go-game-backend
+# go-multiplayer-control-plane
 
 Monorepo de microsserviços em **Go** para o **control plane** de jogos multiplayer.
 
