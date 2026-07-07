@@ -63,30 +63,48 @@ flowchart LR
 
 > Nuance: o host realtime ser Unity vale para jogos com física/ação (o server precisa rodar a MESMA simulação do client). Para jogos turn-based/baixa frequência (cartas, tabuleiro), um serviço Go poderia hospedar a lógica da partida diretamente, sem Unity Dedicated Server — matchmaking e session continuam iguais; só muda o "host da partida".
 
-### Repos: 2 no total
+### Repos: 1 control plane + N data planes (por arquétipo)
 
-Client e Dedicated Server são **o mesmo projeto Unity** (dois build targets: client com gráficos, server headless) — compartilham o código de jogo (NetworkBehaviours, mundo, regras). Logo: **2 repos** — `go-game-backend` (este) e `game-unity` (projeto Unity), com contrato via `.proto`. A infra de deploy do Dedicated Server na AWS e um **template reutilizável** para outros jogos são trabalho de backlog. (ADR-0011)
+Client e Dedicated Server de um jogo são **o mesmo projeto Unity** (dois build targets: client gráfico, server headless) — compartilham o código de jogo. Como o backend virou agnóstico de arquétipo (ADR-0023), a topologia é **um control plane, N data planes**: cada arquétipo tem um data plane Unity de referência, em repo próprio, para validar aquele tipo de jogo isoladamente. Contrato via `.proto` + docs de contrato por arquétipo. Nomenclatura decidida (`go-multiplayer-control-plane` + `unity-<archetype>-data-plane`, rename pendente) e mapa de repos em **`docs/REPO-TOPOLOGY.md`**. (ADR-0010, ADR-0011)
 
 ---
 
-## 3. Mapa de serviços (control plane)
+## 3. Mapa de serviços (control plane) — **canônico**
 
-Cada serviço é a reimplementação de um equivalente AWS e forma um **par de comparação**. Trilha em ordem de complexidade crescente. (ADR-0008, ADR-0009)
+Cada serviço é a reimplementação de um equivalente AWS e forma um **par de comparação**. Trilha em ordem de complexidade crescente. Este é o **mapa canônico** (README e ROADMAP apontam para cá; não repetir a tabela em outros docs). (ADR-0008, ADR-0009)
 
-| # | Serviço | Equivalente AWS | Papel |
-|---|---|---|---|
-| 1 | identity-service | GameKit Identity & Auth | auth/JWT próprio; **fundação** dos demais |
-| 2 | achievements-service | GameKit Achievements | desbloqueio por evento, progresso |
-| 3 | player-data-service | GameKit User Gameplay Data | inventário, stats, cross-play |
-| 4 | cloud-save-service | GameKit Game State Saving | save versionado na nuvem |
-| 5 | leaderboard-service | ref. arch DynamoDB/Redis | ranking em tempo real |
-| 6 | analytics-service | Game Analytics Pipeline | telemetria, worker pool (prio. menor) |
-| 7 | matchmaking-service | GameLift FlexMatch | fila/tickets, gRPC streaming |
-| 8 | session-service | GameLift (orquestração) | ciclo de sessão, registry, connect token, resultado |
+| # | Serviço | Equivalente AWS | Papel | Estado |
+|---|---|---|---|---|
+| 1 | identity-service | GameKit Identity & Auth | auth/JWT próprio; **fundação** dos demais | ✅ |
+| 2 | achievements-service | GameKit Achievements | desbloqueio por evento/stat, progresso; consumer SQS | ✅ |
+| 3 | player-data-service | GameKit User Gameplay Data | inventário, stats, cross-play | ✅ |
+| 4 | cloud-save-service | GameKit Game State Saving | save versionado na nuvem | ✅ |
+| 5 | leaderboard-service | ref. arch DynamoDB/Redis | ranking em tempo real; consumer SQS | ✅ |
+| 6 | analytics-service | Game Analytics Pipeline | telemetria via worker pool; consumer SQS | ✅ |
+| 7 | matchmaking-service | GameLift FlexMatch | fila/tickets + injeção por arquétipo, gRPC streaming | ✅ |
+| 8 | session-service | GameLift (orquestração) | ciclo de sessão, registry, connect token, resultado | ✅ |
+| — | admin-bff + admin-ui | painel de operação (ADR-0016) | agrega os serviços + Prometheus; React | ✅ |
 
-Os quatro do GameKit (1–4) são **serviços separados, com a identity como fundação de auth** — espelhando o deploy per-feature do GameKit. O compute de cada um é decidido no `plan.md` (ADR-0005), não pré-fixado. (ADR-0009)
+Os quatro do GameKit (1–4) são **serviços separados, com a identity como fundação de auth** — espelhando o deploy per-feature do GameKit. O compute de cada um é decidido no `plan.md` (ADR-0005), não pré-fixado. (ADR-0009) O fan-out durável do resultado (ADR-0020) liga session → achievements/leaderboard/analytics por **SNS→SQS** idempotente.
 
 Fora de escopo por ora: economy (≈ GameSparks). Lobby entra como serviço próprio se/quando um jogo precisar.
+
+---
+
+## 3a. Multiplayer por arquétipo (ADR-0023) — o control plane é agnóstico de tipo de jogo
+
+A decisão de generalização mais importante depois da topologia: **o control plane não assume um tipo de jogo**. Cada jogo declara no game-registry um **perfil de multiplayer** = um **arquétipo** (a *forma* da sessão/matchmaking/resultado) + parâmetros; matchmaking, session e fan-out **leem o perfil e se pré-configuram**. Um jogo novo de um arquétipo já suportado **não** exige código novo.
+
+A generalização é dirigida por **engenharia reversa de jogos reais** (não por especulação): `docs/game-models/` disseca jogos, extrai o que o backend precisa modelar, e cada gap maduro vira ADR + specs. **Gênero ≠ arquétipo** (ficha 05): vários gêneros (shooter, MOBA, esporte, fighting) colapsam no mesmo arquétipo com parâmetros diferentes; câmera/arte/economia são conteúdo do data plane.
+
+| Arquétipo | Forma | Resultado | Estado |
+|---|---|---|---|
+| `queue_arena` | partida simétrica formada por fila (FFA / NvN) | win/loss/draw por jogador/time + stats | ✅ completo |
+| `host_world_dropin` | mundo persistente de um host; phantoms co-op/invasor entram/saem por papel | por **evento/participante** (não placar terminal) | ✅ completo (H0–H3) |
+| `battle_royale` | lobby grande, eliminação progressiva | colocação ordinal (1º..Nº) | ⬜ planejado |
+| `coop_mission` | co-op puro vs. ambiente | coletivo (sucesso/falha por sessão) | ⬜ planejado |
+
+Como o perfil orienta cada serviço, o estado por fatia e os roadmaps por arquétipo vivem em **`docs/game-models/README.md`** (fonte única do estado de implementação). Contratos control↔data plane por arquétipo: `docs/game-models/<archetype>-dataplane-contract.md`.
 
 ---
 
@@ -127,7 +145,9 @@ services/<nome>-service/
 
 ---
 
-## 6. Fluxo de uma partida
+## 6. Fluxo de uma partida (arquétipo `queue_arena`)
+
+Este é o fluxo do `queue_arena` (partida formada por fila). Cada arquétipo tem o seu — o `host_world_dropin`, por exemplo, não forma partida: o host **abre um mundo** e phantoms são **injetados por papel** ao longo da vida da sessão, reportando **eventos** em vez de um resultado terminal (ver `docs/game-models/host_world_dropin-dataplane-contract.md`).
 
 ```mermaid
 sequenceDiagram
@@ -140,14 +160,14 @@ sequenceDiagram
     C->>ID: login
     ID-->>C: JWT
     C->>MM: Find Match (ticket)
-    MM->>SS: sala fechada
+    MM->>SS: sala fechada (com composição de times)
     SS->>GS: aloca / escolhe game server
-    SS-->>C: endpoint + connect token
+    SS-->>C: endpoint + connect token (claim team_id)
     C->>GS: conecta (token)
-    GS->>ID: valida connect token
+    GS->>ID: valida connect token (offline, JWKS)
     Note over GS: partida roda (realtime)
-    GS->>BE: resultado da partida
-    Note over BE: atualiza leaderboard, achievements,<br/>analytics, cloud-save
+    GS->>SS: ReportResult (win_loss_draw)
+    SS->>BE: fan-out (SNS→SQS): leaderboard, achievements, analytics
 ```
 
 ---
@@ -223,6 +243,8 @@ Claims (JWT):
 ```
 
 Assinatura **assimétrica (Ed25519)**: o backend assina com a **chave privada** (nunca sai dele); o game server verifica com a **chave pública**, **localmente, sem round-trip ao backend** a cada conexão. No Netcode for GameObjects, o token viaja no payload de *connection approval*, validado no callback de aprovação do server. Implementação em `GO-LEARNINGS.md` §02.
+
+> **Claims por arquétipo (ADR-0023):** além dos claims base, o token carrega um claim que o data plane lê no *connection approval* para o gameplay — `team_id` no `queue_arena` (lado do jogador na partida NvN) ou `role` no `host_world_dropin` (`host`/`coop`/`invader`). Detalhe em cada `docs/game-models/<archetype>-dataplane-contract.md`.
 
 Não confundir com o **JWT de identidade** (emitido pela identity-service, prova "sou o jogador X" para o backend, vida longa): o connect token é de **uma entrada só**, curtíssimo, e prova autorização para uma partida específica ao *game server*.
 

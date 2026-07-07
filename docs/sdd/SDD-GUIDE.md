@@ -17,6 +17,17 @@ Princípio central: cada fase produz um artefato markdown que alimenta a próxim
 Quando o requisito muda: edite a spec primeiro, depois regenere em cascata.
 Nunca mude o código diretamente e atualize a spec depois. A spec sempre lidera.
 
+### Dois níveis por tamanho da fatia (economia sem perder rigor)
+
+O núcleo é inegociável: **a spec é a fonte de verdade, nunca invente comportamento, pare e pergunte em ambiguidade.** Mas o **peso dos artefatos escala com a fatia** — três documentos para um campo novo é burocracia que só gasta contexto.
+
+- **Fatia substancial ou nova** — comportamento novo, decisões técnicas (escolha de Port/store/algoritmo), cruza serviços, ou toca contrato (proto/envelope). → fluxo **completo** `spec → plan → tasks → código`. O `plan.md` é onde as decisões técnicas (D1, D2, …) e trade-offs ficam registrados; o `tasks.md` guia a implementação incremental.
+- **Fatia pequena/aditiva** — passthrough (BFF), serialização/DTO, um campo novo exposto, um handler que só traduz, sem decisão técnica. → basta uma **spec curta** (contexto de uma linha + comportamento + critérios de aceite). Plan/tasks são opcionais; se ajudarem, um `tasks.md` de 2–3 itens basta.
+
+Na dúvida sobre o nível, trate como **substancial**. Se uma fatia que parecia pequena revelar uma decisão técnica (ex.: "onde guardar isso?"), **promova** para o fluxo completo — escreva o plan antes de seguir. O objetivo é gastar cerimônia onde há risco de design, não onde o caminho é óbvio.
+
+**Antes de implementar:** se não há spec, **redija-a e apresente para aprovação** — não peça permissão só para escrevê-la, mas também não comece a implementar antes do aval. É o checkpoint que mantém o alinhamento sem virar ping-pong.
+
 ### Escopo: o que NÃO é SDD
 
 SDD aplica-se a **features de comportamento** (os serviços Go). **Infra e deploy** (Terraform, provisionamento de banco, LocalStack, k8s/Agones) **não** usam o ciclo spec→plan→tasks: são tratados como **tasks da própria feature** (o que o serviço possui — ex: schema/migrations) ou como **itens de backlog** (provisionamento cloud, deploy), documentados de forma leve (ex: README junto do Terraform). Não criar specs SDD para infra.

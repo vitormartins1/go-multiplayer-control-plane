@@ -51,9 +51,11 @@ Toda ficha classifica o jogo por estes eixos. São a "linguagem" que torna jogos
 | **Ciclo de vida do jogador** | fixo até o fim · reconnect · entra/sai no meio (join-in-progress) · espectador | Robustez da sessão a desconexão/abandono |
 | **Efeito do abandono** | derrota do faltante · substituição por bot · anula a partida · sem efeito | Como o resultado lida com quem saiu |
 
-## Estado atual do backend (baseline)
+## Baseline histórico do backend (ponto de partida, pré-ADR-0023)
 
-O que os serviços modelam **hoje** — o ponto de partida a ser generalizado. (Refs: `session-service/specs/001,002`, `matchmaking-service/specs/001,003`, `game-registry/specs/001`.)
+> **Nota:** esta seção descreve o **arquétipo implícito único** de onde partimos — antes do perfil por arquétipo (ADR-0023). Já foi generalizado: hoje há `queue_arena` e `host_world_dropin` completos (ver "Estado da implementação" abaixo). Mantido como registro do gap original.
+
+O que os serviços modelavam no baseline — o ponto de partida a ser generalizado. (Refs: `session-service/specs/001,002`, `matchmaking-service/specs/001,003`, `game-registry/specs/001`.)
 
 - **game-registry:** jogo = `id / slug / name` + capa + presença. **Não** descreve a *forma* do multiplayer (tipo, modo, times, término, regras de resultado).
 - **matchmaking:** fila **FIFO** por `matchSize` fixo, escopada por `game_id`. Sem times, sem skill/MMR, sem modo/fila, sem party, sem região. `FindMatchRequest{ game_id }`.
@@ -86,7 +88,7 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 
 | Gap | Origem (jogo/ficha) | Serviço(s) | Ideia de direção | Estado |
 |---|---|---|---|---|
-| Modelo de resultado além de `Won bool`/`Score` | baseline, fichas 01-04 | session, achievements, leaderboard | resultado como **outcome** rico: WIN/LOSS/DRAW (02), **colocação ordinal** (03), **coletivo por sessão** (04), **por evento/papel** (01) — por jogador, time **ou sessão** | 🟡 **win_loss_draw feito** (session `009`, achievements `007`); placement/coletivo/papel pendentes |
+| Modelo de resultado além de `Won bool`/`Score` | baseline, fichas 01-04 | session, achievements, leaderboard | resultado como **outcome** rico: WIN/LOSS/DRAW (02), **colocação ordinal** (03), **coletivo por sessão** (04), **por evento/papel** (01) — por jogador, time **ou sessão** | 🟡 **win_loss_draw** (session `009`) **+ por evento/papel** (host_world_dropin H2: `session/013` + sinks) **feitos**; placement (03) e coletivo (04) pendentes |
 | Jogo descreve sua **forma** de multiplayer (**perfil/arquétipo**) | baseline, ficha 01 | game-registry | jogo declara um **arquétipo de multiplayer** (`queue_arena`, `host_world_dropin`, …) + parâmetros; demais serviços leem e se pré-configuram | ✅ **ADR-0023** (Accepted) |
 | Matchmaking com **times** e composição | baseline, fichas 02/03 | matchmaking | formar lados (NvN), squads e **lobby grande** (BR), não só N tickets FIFO | 🟡 **NvN na main** (specs `matchmaking/005`+`session/010`, atribuição posicional); squads/lobby grande (BR) e skill/MMR seguem abertos |
 | Condição de vitória **declarada no perfil** (não hardcoded) | ficha 02 | game-registry, session | `first_to_score` / `highest_at_time` / `objective` / `elimination` no cadastro; hoje é `first-to-5` no código | 🔎 aberto |
@@ -97,11 +99,11 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 | **Modo de respawn** como parâmetro de perfil | ficha 03 | game-registry, session | `one_life`/`teammate_revive`/`arena_1v1`/`reboot_timer`; muda quando a colocação é final | 🔎 aberto |
 | **Resultado coletivo** (por sessão, não por jogador) | ficha 04 | session, achievements, leaderboard | `MISSION_SUCCESS/FAILURE` igual p/ todos; stats individuais só modulam recompensa | 🔎 aberto |
 | **Parâmetros de missão/dificuldade** na sessão + **bot-fill** | ficha 04 | game-registry, matchmaking, session | host escolhe missão+dificuldade (matchmaking filtra, sessão carrega); slots de humano com bot-fill | 🔎 aberto |
-| **Matchmaking por lobby/browser + join-in-progress** | fichas 01/04 | matchmaking, session | descobrir e **entrar numa sessão existente** (filtrada), não só formar partida nova | 🔎 aberto |
-| Modo de matchmaking **sinal/injeção** (não só queue-form) | ficha 01 | matchmaking | descobrir host elegível por faixa/senha/pool/papel e **injetar** um participante numa sessão existente | 🔎 aberto |
-| Sessão **host-cêntrica persistente** com **slots por papel** | ficha 01 | session | sessão nasce sem match (host abre mundo); join/leave no meio; capacidade dinâmica por papel (host/co-op/invasor) | 🔎 aberto |
-| **Papel** do participante na sessão | ficha 01 | session | participante tem papel (host/aliado/adversário/neutro), não só "player" | 🔎 aberto |
-| **Quando alocar o dedicated server** (Agones) | ficha 01 | session | original é P2P (mundo = grátis, sempre existe); nós usamos dedicated server → alocar **sob demanda** quando o mundo abre p/ multiplayer e liberar ao esvaziar (economia) | 🔎 aberto |
+| **Matchmaking por lobby/browser + join-in-progress** | fichas 01/04 | matchmaking, session | descobrir e **entrar numa sessão existente** (filtrada), não só formar partida nova | 🟡 **join-in-progress + injeção feitos** (host_world_dropin H1a/H1b); lobby/browser do queue-form segue aberto |
+| Modo de matchmaking **sinal/injeção** (não só queue-form) | ficha 01 | matchmaking | descobrir host elegível por faixa/senha/pool/papel e **injetar** um participante numa sessão existente | ✅ **host_world_dropin** (H1a invasão `matchmaking/006` + H1b co-op por sinais `matchmaking/007`); senha/pool = follow-up |
+| Sessão **host-cêntrica persistente** com **slots por papel** | ficha 01 | session | sessão nasce sem match (host abre mundo); join/leave no meio; capacidade dinâmica por papel (host/co-op/invasor) | ✅ **host_world_dropin H0** (`session/011`) |
+| **Papel** do participante na sessão | ficha 01 | session | participante tem papel (host/aliado/adversário/neutro), não só "player" | ✅ **host_world_dropin H0** (claim `role` no connect token) |
+| **Quando alocar o dedicated server** (Agones) | ficha 01 | session | original é P2P (mundo = grátis, sempre existe); nós usamos dedicated server → alocar **sob demanda** quando o mundo abre p/ multiplayer e liberar ao esvaziar (economia) | 🟡 aloca no `OpenWorld` (H0); **sob demanda = follow-up** (`host_world_dropin-follow-ups.md` #10) |
 | **Topologia por jogo** (`dedicated` vs `p2p`) + control plane **agnóstico de transporte** | ficha 01 | game-registry, session | perfil declara a topologia; `SessionProvisioner` Port com 2 adapters (Agones / P2P listen-server+relay). Dedicated 1º; P2P = slot no modelo, implementação depois (provável repo Unity à parte) | ✅ campo do **ADR-0023**; implementação P2P = ADR futuro |
 
 ## Estado da implementação (fatias do ADR-0023)

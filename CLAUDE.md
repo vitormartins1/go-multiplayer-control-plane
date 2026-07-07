@@ -67,15 +67,14 @@ specs/
 - Goroutines SEMPRE com context para cancelamento e `sync.WaitGroup` para lifecycle
 - Logging com `slog` em JSON: `slog.Info("event", slog.String("key", val))`
 
-## Fluxo SDD (obrigatório)
+## Fluxo SDD (obrigatório) — dois níveis por tamanho da fatia
 
-Cada feature segue três fases com artefatos separados. Nunca pule fases sem confirmação.
+Núcleo inegociável: **a spec é a fonte de verdade**; nunca invente comportamento; em ambiguidade não coberta pela spec, **pare e pergunte** (não chute). O peso dos artefatos escala com a fatia:
 
-1. **spec.md** — verifique se existe antes de qualquer implementação. Se não existir, pergunte ao usuário. Nunca invente comportamento.
-2. **plan.md** — se spec existe mas plan não, ofereça gerar antes de implementar
-3. **tasks.md** — se plan existe mas tasks não, ofereça gerar antes de implementar
-4. **Implementação** — execute task por task, marcando `[x]` conforme conclui
-5. Se encontrar ambiguidade não coberta pela spec → pare e pergunte, não chute
+- **Fatia substancial ou nova** (comportamento novo, decisões técnicas, cruza serviços): fluxo completo `spec.md → plan.md → tasks.md → código`, implementando task por task e marcando `[x]`.
+- **Fatia pequena/aditiva** (passthrough, serialização, campo novo, sem decisão técnica): basta uma **spec curta** (comportamento + critérios de aceite); pode dispensar plan/tasks. Na dúvida sobre o nível, trate como substancial; se um item "pequeno" revelar decisões técnicas, promova para o fluxo completo.
+
+**Antes de implementar:** se não existe spec, **redija-a e apresente para aprovação** (não peça permissão só para escrevê-la; não comece a implementar sem a spec aprovada). Se a spec existe mas falta plan/tasks numa fatia substancial, gere-os antes.
 
 Guia completo: `docs/sdd/SDD-GUIDE.md`
 

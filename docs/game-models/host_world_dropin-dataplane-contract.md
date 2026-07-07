@@ -2,7 +2,7 @@
 
 > **Escopo:** o contrato entre o **control plane** (`go-game-backend`, Go) e o **data plane** (server do mundo, Unity) para o arquétipo **`host_world_dropin`** do ADR-0023 — o mundo persistente de um host onde phantoms **co-op** e **invasor** entram/saem no meio, com **papéis assimétricos** e **resultado por evento/participante** (não um placar terminal).
 >
-> Este doc é a **fonte de verdade do contrato**. O data plane (`go-game-host-world-dropin-dataplane`, Unity) está **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — este documento é o que esse repo vai consumir. O control plane já está pronto e testado isoladamente com server mockado (adapter `static` + cliente de teste).
+> Este doc é a **fonte de verdade do contrato**. O data plane (`unity-host-world-dropin-data-plane`, Unity) está **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — este documento é o que esse repo vai consumir. O control plane já está pronto e testado isoladamente com server mockado (adapter `static` + cliente de teste).
 >
 > **Refs:** ADR-0023 (perfil de multiplayer), ADR-0010 (control/data plane), ADR-0011/0012 (Agones/Unity), ADR-0020 (fan-out). Specs: `session/011` (mundo host-cêntrico), `session/012` (diretório de invadíveis), `session/013` (eventos de participação), `matchmaking/006` (invasão), `matchmaking/007` (co-op por sinais), `achievements/009` + `analytics/004` (sinks). Roadmap: [`host_world_dropin-roadmap.md`](./host_world_dropin-roadmap.md). Follow-ups: [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md).
 
@@ -156,7 +156,7 @@ stateDiagram-v2
 - **Capacidade por papel** vem do perfil (`EnabledRoles`, `CoopSlots`, `InvaderSlots`). O host **não** ocupa slot (é o dono).
 - **Host sai/morre encerra tudo:** `HOST_KILLED` (evento do server) ou `LeaveWorld(host)`/`CloseWorld` (voluntário) fecham o mundo; os phantoms voltam aos seus mundos.
 
-## Mudanças necessárias no `go-game-host-world-dropin-dataplane` (a construir)
+## Mudanças necessárias no `unity-host-world-dropin-data-plane` (a construir)
 
 O repo Unity ainda não existe. Ao criá-lo, o contrato acima define o que ele precisa implementar. Trabalho cross-repo (não bloqueia o control plane):
 
