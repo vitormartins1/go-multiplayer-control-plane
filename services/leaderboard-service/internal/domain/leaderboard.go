@@ -21,6 +21,10 @@ const (
 	// sobrevivência (melhor de uma partida). BoardWins é reusado para o 1º lugar.
 	BoardTopNFinishes = "top_n_finishes"
 	BoardSurvivedMs   = "survived_ms"
+
+	// coop_mission (C3, ADR-0023): cumulativo "missões cumpridas" (+1 por
+	// MISSION_SUCCESS, igual para todo o time — o desfecho é coletivo).
+	BoardMissionsCompleted = "missions_completed"
 )
 
 // BattleRoyaleTopNThreshold é o limiar do "top N" (política do sink, consistente

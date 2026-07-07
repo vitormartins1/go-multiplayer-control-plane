@@ -115,6 +115,8 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 		switch {
 		case kind == "placement":
 			return handlePlacement(ctx, svc, log, body)
+		case kind == "collective":
+			return handleCollective(ctx, svc, log, body)
 		case kind == "win_loss_draw" || matchID != "":
 			// win_loss_draw explícito, ou envelope v1 legado (sem kind, com matchId).
 			return handleWinLossDraw(ctx, svc, log, body)
@@ -237,8 +239,57 @@ func handlePlacement(ctx context.Context, svc *service.Service, log *slog.Logger
 	return dup, nil
 }
 
+// handleCollective aplica o desfecho coletivo da missão (coop_mission, C3):
+// highscore por stat + cumulative "<stat>_total" por jogador; e cumulative
+// "missions_completed" (+1) para todos quando a missão foi cumprida (o desfecho
+// é da sessão). Idempotente por matchID.
+func handleCollective(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Outcome string `json:"outcome"`
+		Players []struct {
+			PlayerID string           `json:"playerId"`
+			Stats    map[string]int64 `json:"stats"`
+		} `json:"players"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal collective envelope: %w", err)
+	}
+
+	success := env.Outcome == outcomeMissionSuccess
+	var incrs []domain.Increment
+	for _, p := range env.Players {
+		for stat, val := range p.Stats {
+			if !domain.ValidBoard(stat) {
+				continue
+			}
+			if _, err := svc.Submit(ctx, env.GameID, stat, p.PlayerID, val); err != nil {
+				return false, fmt.Errorf("submit %s %s: %w", p.PlayerID, stat, err)
+			}
+			incrs = append(incrs, domain.Increment{Board: domain.TotalBoard(stat), PlayerID: p.PlayerID, Delta: val})
+		}
+		// cumulative: missão cumprida conta para todo o time (desfecho coletivo).
+		if success {
+			incrs = append(incrs, domain.Increment{Board: domain.BoardMissionsCompleted, PlayerID: p.PlayerID, Delta: 1})
+		}
+	}
+
+	dup, err := svc.ApplyCumulative(ctx, env.GameID, env.MatchID, incrs)
+	if err != nil {
+		return false, fmt.Errorf("apply cumulative (collective): %w", err)
+	}
+	if dup {
+		log.Info("cumulativo (collective) já aplicado (no-op)", slog.String("match_id", env.MatchID))
+	}
+	return dup, nil
+}
+
 // outcomeWin é o valor do outcome que conta como vitória no ranking (ADR-0023).
 const outcomeWin = "win"
+
+// outcomeMissionSuccess é o desfecho coletivo que conta como missão cumprida.
+const outcomeMissionSuccess = "MISSION_SUCCESS"
 
 func pingWithRetry(ctx context.Context, store *storage.RedisStore, log *slog.Logger) error {
 	var lastErr error
