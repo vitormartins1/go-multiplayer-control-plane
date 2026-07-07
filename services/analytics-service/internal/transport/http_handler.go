@@ -81,6 +81,16 @@ type gameAnalyticsDTO struct {
 	gameStatDTO
 	Daily              []dailyDTO             `json:"daily"`
 	RoleParticipations []participationStatDTO `json:"roleParticipations"`
+	Placement          *placementDTO          `json:"placement,omitempty"` // battle_royale (spec 005); ausente fora do BR
+}
+
+// placementDTO é a distribuição de colocação do battle_royale (spec 005).
+type placementDTO struct {
+	Winners       int64   `json:"winners"`
+	TopN          int64   `json:"topN"`
+	Rest          int64   `json:"rest"`
+	Entries       int64   `json:"entries"`
+	AvgSurvivedMs float64 `json:"avgSurvivedMs"`
 }
 
 type dailyDTO struct {
@@ -115,6 +125,11 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, p := range ga.RoleParticipations {
 		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{Role: p.Role, Event: p.Event, Count: p.Count})
+	}
+	if pd := ga.Placement; pd != nil {
+		dto.Placement = &placementDTO{
+			Winners: pd.Winners, TopN: pd.TopN, Rest: pd.Rest, Entries: pd.Entries, AvgSurvivedMs: pd.AvgSurvivedMs,
+		}
 	}
 	writeJSON(w, http.StatusOK, dto)
 }

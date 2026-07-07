@@ -119,6 +119,56 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 	return false, tx.Commit(ctx)
 }
 
+// ApplyPlacement agrega a distribuição de colocação de uma partida do
+// battle_royale (spec 005) por jogo, idempotente por matchID (processed_matches),
+// na mesma tx (mesma garantia do ApplyMatch). Os baldes são exclusivos: winners
+// (colocação 1), top_n (2..threshold), rest (>threshold). Reprocessar é no-op.
+func (r *PostgresRepository) ApplyPlacement(ctx context.Context, pr domain.PlacementResult) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply placement: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO processed_matches (match_id, game_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		pr.MatchID, pr.GameID)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply placement: mark: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processada: no-op idempotente
+	}
+
+	var winners, topN, rest, entries, sumSurvived int64
+	for _, e := range pr.Entries {
+		entries++
+		sumSurvived += e.SurvivedMs
+		switch {
+		case e.Placement == 1:
+			winners++
+		case e.Placement <= domain.BattleRoyaleTopNThreshold:
+			topN++
+		default:
+			rest++
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_placement_rollup (game_id, winners, top_n, rest, entries, sum_survived_ms)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (game_id) DO UPDATE SET
+			winners         = game_placement_rollup.winners + $2,
+			top_n           = game_placement_rollup.top_n + $3,
+			rest            = game_placement_rollup.rest + $4,
+			entries         = game_placement_rollup.entries + $5,
+			sum_survived_ms = game_placement_rollup.sum_survived_ms + $6`,
+		pr.GameID, winners, topN, rest, entries, sumSurvived); err != nil {
+		return false, fmt.Errorf("analytics repository: apply placement: rollup: %w", err)
+	}
+	return false, tx.Commit(ctx)
+}
+
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -227,7 +277,28 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		}
 		out.RoleParticipations = append(out.RoleParticipations, p)
 	}
-	return out, prows.Err()
+	if err := prows.Err(); err != nil {
+		return domain.GameAnalytics{}, err
+	}
+
+	// distribuição de colocação (battle_royale, spec 005). Aditivo: sem linha ->
+	// Placement nil (jogo não-BR não regride).
+	var pd domain.PlacementDistribution
+	var sumSurvived int64
+	err = r.pool.QueryRow(ctx, `
+		SELECT winners, top_n, rest, entries, sum_survived_ms
+		FROM game_placement_rollup WHERE game_id = $1`, gameID).
+		Scan(&pd.Winners, &pd.TopN, &pd.Rest, &pd.Entries, &sumSurvived)
+	switch {
+	case err == pgx.ErrNoRows:
+		// sem colocação neste jogo: Placement fica nil.
+	case err != nil:
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: placement: %w", err)
+	default:
+		pd.AvgSurvivedMs = avg(sumSurvived, pd.Entries)
+		out.Placement = &pd
+	}
+	return out, nil
 }
 
 func avg(sum, n int64) float64 {

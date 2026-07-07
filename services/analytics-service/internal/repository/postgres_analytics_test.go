@@ -30,6 +30,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/001_create_analytics.sql",
 			"../../migrations/002_outcome_counts.sql",
 			"../../migrations/003_participation_rollup.sql",
+			"../../migrations/004_placement_rollup.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -69,6 +70,66 @@ func TestApplyParticipation_AgregaPorPapelEEvento(t *testing.T) {
 	// ordenado por role, event: coop/BOSS_DEFEATED, invader/HOST_KILLED.
 	assert.Equal(t, domain.ParticipationStat{Role: "coop", Event: "BOSS_DEFEATED", Count: 1}, ga.RoleParticipations[0])
 	assert.Equal(t, domain.ParticipationStat{Role: "invader", Event: "HOST_KILLED", Count: 2}, ga.RoleParticipations[1])
+}
+
+// placement monta um PlacementResult a partir de pares (placement, survivedMs).
+func placement(matchID, gameID string, entries ...domain.PlacementEntry) domain.PlacementResult {
+	return domain.PlacementResult{MatchID: matchID, GameID: gameID, Entries: entries}
+}
+
+func TestApplyPlacement_AgregaHistogramaESobrevivencia(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	// 12 participantes: 1º (winner), 2..10 (top_n = 9), 11 e 12 (rest = 2).
+	entries := make([]domain.PlacementEntry, 0, 12)
+	for p := 1; p <= 12; p++ {
+		entries = append(entries, domain.PlacementEntry{Placement: p, SurvivedMs: int64(p) * 1000})
+	}
+	_, err := repo.ApplyPlacement(ctx, placement("m1", "g1", entries...))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.NotNil(t, ga.Placement)
+	assert.Equal(t, int64(1), ga.Placement.Winners)
+	assert.Equal(t, int64(9), ga.Placement.TopN)
+	assert.Equal(t, int64(2), ga.Placement.Rest)
+	assert.Equal(t, int64(12), ga.Placement.Entries, "partição fecha: 1+9+2 == 12")
+	// avg = (1000+2000+...+12000)/12 = 78000/12 = 6500.
+	assert.InDelta(t, 6500.0, ga.Placement.AvgSurvivedMs, 0.001)
+}
+
+func TestApplyPlacement_Reprocessado_NaoDobra(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	pr := placement("m1", "g1", domain.PlacementEntry{Placement: 1, SurvivedMs: 500}, domain.PlacementEntry{Placement: 5, SurvivedMs: 300})
+
+	dup, err := repo.ApplyPlacement(ctx, pr)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	dup, err = repo.ApplyPlacement(ctx, pr) // reentrega at-least-once
+	require.NoError(t, err)
+	assert.True(t, dup)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.NotNil(t, ga.Placement)
+	assert.Equal(t, int64(2), ga.Placement.Entries, "reentrega não dobra")
+	assert.Equal(t, int64(1), ga.Placement.Winners)
+	assert.Equal(t, int64(1), ga.Placement.TopN)
+}
+
+// Jogo sem placement (só queue_arena) não tem distribuição — Placement nil.
+func TestGameAnalytics_SemPlacement_PlacementNil(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	_, err := repo.ApplyMatch(ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 10}))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	assert.Nil(t, ga.Placement, "jogo não-BR não regride")
 }
 
 func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {

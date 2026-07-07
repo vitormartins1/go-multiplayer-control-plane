@@ -18,6 +18,7 @@ import (
 type fakeRepo struct {
 	applied      atomic.Int64
 	participated atomic.Int64
+	placed       atomic.Int64
 	mu           sync.Mutex
 	byGame       map[string]int64
 	err          error
@@ -45,6 +46,16 @@ func (f *fakeRepo) ApplyParticipation(_ context.Context, evt domain.Participatio
 	f.mu.Unlock()
 	return false, nil
 }
+func (f *fakeRepo) ApplyPlacement(_ context.Context, pr domain.PlacementResult) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	f.placed.Add(1)
+	f.mu.Lock()
+	f.byGame[pr.GameID]++
+	f.mu.Unlock()
+	return false, nil
+}
 func (f *fakeRepo) Overview(context.Context) (domain.Overview, error) { return domain.Overview{}, nil }
 func (f *fakeRepo) GameAnalytics(context.Context, string, int) (domain.GameAnalytics, error) {
 	return domain.GameAnalytics{}, nil
@@ -64,6 +75,23 @@ func TestPool_SubmitParticipation_RoteiaParaApplyParticipation(t *testing.T) {
 
 	assert.Equal(t, int64(1), repo.participated.Load())
 	assert.Equal(t, int64(0), repo.applied.Load(), "não passou pelo caminho de match")
+}
+
+// SubmitPlacement roteia para ApplyPlacement (não para match/participation).
+func TestPool_SubmitPlacement_RoteiaParaApplyPlacement(t *testing.T) {
+	repo := newFakeRepo()
+	pool := NewPool(repo, 2, 4, logger.New("test"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	done := pool.SubmitPlacement(ctx, domain.PlacementResult{GameID: "g1", MatchID: "m1", Entries: []domain.PlacementEntry{{Placement: 1, SurvivedMs: 900000}}})
+	require.NoError(t, <-done)
+	pool.Stop()
+
+	assert.Equal(t, int64(1), repo.placed.Load())
+	assert.Equal(t, int64(0), repo.applied.Load(), "não passou pelo caminho de match")
+	assert.Equal(t, int64(0), repo.participated.Load())
 }
 
 // N partidas submetidas concorrentemente são todas agregadas, sem corrida.
