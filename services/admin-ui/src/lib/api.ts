@@ -54,8 +54,8 @@ export interface Game {
   generatedImageStyle?: string;
 }
 
-// Perfil de multiplayer do jogo (ADR-0023, espelha game-registry/006). No MVP só
-// o arquétipo queue_arena; params cresce por arquétipo no futuro.
+// Perfis de multiplayer do jogo (ADR-0023). Union discriminada por `archetype`.
+
 export interface QueueArenaParams {
   structure: "ffa" | "teams";
   playerCount: number;
@@ -70,11 +70,19 @@ export interface QueueArenaParams {
   scoringStats: string[];
 }
 
-export interface MultiplayerProfile {
-  archetype: "queue_arena";
-  topology: "dedicated" | "p2p";
-  params: QueueArenaParams;
+export interface HostWorldDropInParams {
+  enabledRoles: Array<"coop" | "invader">;
+  coopSlots: number;
+  invaderSlots: number;
+  levelRangeEnabled: boolean;
+  weaponTierEnabled: boolean;
+  passwordEnabled: boolean;
+  invasionEnabled: boolean;
 }
+
+export type MultiplayerProfile =
+  | { archetype: "queue_arena"; topology: "dedicated" | "p2p"; params: QueueArenaParams }
+  | { archetype: "host_world_dropin"; topology: "dedicated" | "p2p"; params: HostWorldDropInParams };
 
 // Critério por métrica (ADR-0023 A1): statKey preenchido troca o critério de
 // evento para stat; statMode é a agregação.

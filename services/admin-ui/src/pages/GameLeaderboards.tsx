@@ -13,12 +13,12 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
   //   highscore (melhor de uma partida): score + cada stat;
   //   cumulative (soma na temporada): vitórias + <stat>_total.
   const { data: profile } = useAsync((s) => api.getMultiplayerProfile(gameId, s), [gameId]);
-  const stats = profile?.params.scoringStats ?? [];
+  const stats = profile?.archetype === "queue_arena" ? (profile.params.scoringStats ?? []) : [];
   const boardOptions = [
     { value: SCORE_BOARD, label: "Score" },
-    ...stats.map((s) => ({ value: s, label: `${s} (recorde)` })),
+    ...stats.map((s: string) => ({ value: s, label: `${s} (recorde)` })),
     { value: "wins", label: "Vitórias (total)" },
-    ...stats.map((s) => ({ value: `${s}_total`, label: `${s} (total)` })),
+    ...stats.map((s: string) => ({ value: `${s}_total`, label: `${s} (total)` })),
   ];
   const boardLabel = boardOptions.find((o) => o.value === board)?.label ?? board;
 

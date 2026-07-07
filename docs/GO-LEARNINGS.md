@@ -873,3 +873,70 @@ res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gam
 ```
 
 **Pegadinha / nuance:** é o **mesmo problema de idempotência, três respostas conforme o storage** — vale internalizar o eixo: (1) `ZADD GT` do highscore é idempotente **por natureza** (só sobe se maior → reaplicar não muda nada, fatia 003); (2) o achievements ([[24]]) resolve com uma **transação Postgres** que marca `processed_matches` e incrementa juntos; (3) aqui, sem transação multi-key trivial no Redis, o **script Lua** é o análogo — a atomicidade vem do engine, não de locks meus. Detalhe cross-storage: passei as keys de board no **ARGV** (não como `KEYS`), o que quebra em Redis Cluster (keys de um script devem casar o mesmo slot, via hash-tag); num nó único (o setup local) é seguro. E `redis.NewScript` usa `EVALSHA` com fallback para `EVAL` sozinho — não preciso gerenciar o cache do script à mão, diferente de chamar `EVAL` cru.
+
+---
+
+## 26 — Tagged union por ponteiro: como Go representa tipos-soma (sum types)
+
+**O que é / por que importa:** Go não tem `sealed class` (C#) nem union discriminada nativa. O padrão idiomático para representar "um de N tipos possíveis" é a **tagged union por ponteiro** — uma struct com um campo discriminador (`string`/`int`) e um ponteiro por variante; exatamente **um** ponteiro é não-nil. Ao adicionar o arquétipo `host_world_dropin` ao perfil de multiplayer, usamos exatamente esse padrão: a invariante é documentada no comentário e aplicada no service (que valida) e no repository (que persiste). É incomum em C#, onde você usaria `sealed class` ou `OneOf<T1,T2>` de biblioteca.
+
+**Onde no projeto:** `game-registry/internal/domain/game.go` (`MultiplayerProfile`) + `service/profile_service.go` (validação do discriminador).
+
+```go
+// Tagged union por ponteiro: exatamente um ponteiro não-nil por Archetype.
+type MultiplayerProfile struct {
+    Archetype       string // discriminador: "queue_arena" | "host_world_dropin"
+    Topology        string
+    QueueArena      *QueueArenaParams      // não-nil ↔ Archetype == "queue_arena"
+    HostWorldDropIn *HostWorldDropInParams // não-nil ↔ Archetype == "host_world_dropin"
+}
+
+// No service: switch no discriminador mantém o código por caso isolado.
+switch p.Archetype {
+case domain.ArchetypeQueueArena:
+    if p.QueueArena == nil { return nil, domain.ErrInvalidProfileParams }
+    if err := validateQueueArena(*p.QueueArena); err != nil { return nil, err }
+case domain.ArchetypeHostWorldDropIn:
+    if p.HostWorldDropIn == nil { return nil, domain.ErrInvalidProfileParams }
+    if err := validateHostWorldDropIn(*p.HostWorldDropIn); err != nil { return nil, err }
+}
+```
+
+```mermaid
+classDiagram
+    class MultiplayerProfile {
+        +Archetype string
+        +Topology string
+        +QueueArena *QueueArenaParams
+        +HostWorldDropIn *HostWorldDropInParams
+    }
+    MultiplayerProfile --> QueueArenaParams : não-nil se "queue_arena"
+    MultiplayerProfile --> HostWorldDropInParams : não-nil se "host_world_dropin"
+```
+
+**Corolário — `json.RawMessage` como decode diferido:** o mesmo padrão aparece no `http_handler.go`. O envelope JSON `{ archetype, topology, params }` chega com `Params json.RawMessage` — apenas os bytes crus. Só depois de ler o discriminador `archetype` é que o handler sabe *qual* struct desserializar. Isso é "decode-then-dispatch" e é o análogo Go do pattern matching de C# (`switch (x) { case MyType y: ... }`).
+
+```go
+// profileDTO: envelope com Params como bytes crus (decode adiado).
+type profileDTO struct {
+    Archetype string          `json:"archetype"`
+    Topology  string          `json:"topology"`
+    Params    json.RawMessage `json:"params"` // diferido
+}
+
+func profileToDomain(d profileDTO) domain.MultiplayerProfile {
+    switch d.Archetype {
+    case domain.ArchetypeQueueArena:
+        var qa queueArenaParamsDTO
+        _ = json.Unmarshal(d.Params, &qa) // decodifica o tipo certo
+        // ...
+    case domain.ArchetypeHostWorldDropIn:
+        var hw hostWorldDropInParamsDTO
+        _ = json.Unmarshal(d.Params, &hw) // outro tipo, mesmo campo Params
+    }
+}
+```
+
+**Diferença de [[23]]:** [[23]] usa `json.RawMessage` no BFF para *não decodificar* (passthrough puro). Aqui usamos no transport do próprio serviço para *decodificar tardiamente* com base no discriminador — "passthrough adiado para o switch".
+
+**Pegadinha / nuance:** como não há verificação de tipos em runtime do compilador (ao contrário do pattern matching exaustivo de C# 8+), você precisa garantir a invariante "exatamente um ponteiro não-nil" **nos dois lados** da fronteira: ao receber (service valida) e ao persistir/serializar (transport/repo verifica no `switch` + `default: return error`). Se esquecer o `default`, um arquétipo novo silenciosamente não persiste nada.

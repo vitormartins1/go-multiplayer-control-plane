@@ -124,7 +124,8 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | **Conquistas por `teamId`** | achievements | conquistas por time / "vencer como time X" (o outcome já carrega `teamId`) | ⬜ planejado |
 | **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
 | Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
-| **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective), `host_world_dropin` (role_event + topologia p2p) | ⬜ futuro |
+| **Arquétipo `host_world_dropin` — declaração** | game-registry + admin-ui | `HostWorldDropInParams` (roles, slots, matchmaking criteria, invasion); form no painel com Fieldsets + tooltips; select de arquétipo agora real; refactor completo de `MultiplayerSettings` | 🔵 **branch** |
+| **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective) | ⬜ futuro |
 
 > Convenção de status: ✅ **main** = mergeado · 🔵 **branch** = implementado e verde, aguardando merge · ⬜ planejado = fatia identificada, não iniciada · 🟡 = parcial (ver Log acima).
 

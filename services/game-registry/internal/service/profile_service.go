@@ -13,17 +13,23 @@ import (
 // suportado é queue_arena e a única topologia é dedicated.
 
 // Conjuntos suportados. O de arquétipos/topologias é fechado e cresce por
-// evidência (ADR-0023). Os demais são o vocabulário do queue_arena (spec 006).
+// evidência (ADR-0023). Os demais são os vocabulários por arquétipo.
 var (
-	supportedArchetypes = map[string]bool{domain.ArchetypeQueueArena: true}
+	supportedArchetypes = map[string]bool{
+		domain.ArchetypeQueueArena:      true,
+		domain.ArchetypeHostWorldDropIn: true,
+	}
 	supportedTopologies = map[string]bool{domain.TopologyDedicated: true}
 
+	// queue_arena
 	qaStructures    = map[string]bool{"ffa": true, "teams": true}
 	qaWinConditions = map[string]bool{"first_to_score": true, "highest_at_time": true, "objective": true, "elimination": true}
 	qaMatchStructs  = map[string]bool{"single": true, "best_of_rounds": true}
-
 	// scoringStatRE: identificador estável de métrica (ex.: "kills", "flag_caps").
 	scoringStatRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+	// host_world_dropin
+	hwdRoles = map[string]bool{"coop": true, "invader": true}
 )
 
 func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) (*domain.MultiplayerProfile, error) {
@@ -33,13 +39,21 @@ func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p do
 	if !supportedTopologies[p.Topology] {
 		return nil, domain.ErrUnsupportedTopology
 	}
-	// Arquétipo suportado no MVP == queue_arena: os params correspondentes têm de
-	// estar presentes e válidos.
-	if p.QueueArena == nil {
-		return nil, domain.ErrInvalidProfileParams
-	}
-	if err := validateQueueArena(*p.QueueArena); err != nil {
-		return nil, err
+	switch p.Archetype {
+	case domain.ArchetypeQueueArena:
+		if p.QueueArena == nil {
+			return nil, domain.ErrInvalidProfileParams
+		}
+		if err := validateQueueArena(*p.QueueArena); err != nil {
+			return nil, err
+		}
+	case domain.ArchetypeHostWorldDropIn:
+		if p.HostWorldDropIn == nil {
+			return nil, domain.ErrInvalidProfileParams
+		}
+		if err := validateHostWorldDropIn(*p.HostWorldDropIn); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.repo.UpsertMultiplayerProfile(ctx, gameID, p); err != nil {
 		return nil, fmt.Errorf("game-registry service: set profile: %w", err)
@@ -108,6 +122,43 @@ func validateQueueArena(p domain.QueueArenaParams) error {
 		if !scoringStatRE.MatchString(stat) {
 			return domain.ErrInvalidProfileParams
 		}
+	}
+	return nil
+}
+
+// validateHostWorldDropIn aplica as regras do arquétipo host_world_dropin
+// (ADR-0023, ficha 01). Exige pelo menos um papel habilitado; coopSlots e
+// invaderSlots são obrigatórios (>= 1) apenas quando o papel correspondente
+// está em EnabledRoles e devem ser zero quando o papel está ausente.
+func validateHostWorldDropIn(p domain.HostWorldDropInParams) error {
+	if len(p.EnabledRoles) == 0 {
+		return domain.ErrInvalidProfileParams
+	}
+	seen := make(map[string]bool, len(p.EnabledRoles))
+	hasCoop, hasInvader := false, false
+	for _, r := range p.EnabledRoles {
+		if !hwdRoles[r] || seen[r] {
+			return domain.ErrInvalidProfileParams
+		}
+		seen[r] = true
+		if r == "coop" {
+			hasCoop = true
+		}
+		if r == "invader" {
+			hasInvader = true
+		}
+	}
+	if hasCoop && p.CoopSlots < 1 {
+		return domain.ErrInvalidProfileParams
+	}
+	if !hasCoop && p.CoopSlots != 0 {
+		return domain.ErrInvalidProfileParams
+	}
+	if hasInvader && p.InvaderSlots < 1 {
+		return domain.ErrInvalidProfileParams
+	}
+	if !hasInvader && p.InvaderSlots != 0 {
+		return domain.ErrInvalidProfileParams
 	}
 	return nil
 }

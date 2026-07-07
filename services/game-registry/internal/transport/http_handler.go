@@ -61,26 +61,38 @@ func toDTO(g *domain.Game) gameDTO {
 	}
 }
 
-// --- perfil de multiplayer (ADR-0023, spec 006) ---
+// --- perfil de multiplayer (ADR-0023) ---
 
+// profileDTO é o envelope de serialização HTTP. Params é raw para suportar
+// vários arquétipos sem ter que deserializar e re-serializar o corpo.
 type profileDTO struct {
-	Archetype string              `json:"archetype"`
-	Topology  string              `json:"topology"`
-	Params    queueArenaParamsDTO `json:"params"`
+	Archetype string          `json:"archetype"`
+	Topology  string          `json:"topology"`
+	Params    json.RawMessage `json:"params"`
 }
 
 type queueArenaParamsDTO struct {
 	Structure       string   `json:"structure"`
-	PlayerCount     int      `json:"playerCount"`
-	TeamCount       int      `json:"teamCount"`
-	TeamSize        int      `json:"teamSize"`
+	PlayerCount     int      `json:"playerCount,omitempty"`
+	TeamCount       int      `json:"teamCount,omitempty"`
+	TeamSize        int      `json:"teamSize,omitempty"`
 	WinCondition    string   `json:"winCondition"`
-	ScoreTarget     int      `json:"scoreTarget"`
-	DurationSeconds int      `json:"durationSeconds"`
+	ScoreTarget     int      `json:"scoreTarget,omitempty"`
+	DurationSeconds int      `json:"durationSeconds,omitempty"`
 	MatchStructure  string   `json:"matchStructure"`
-	RoundsToWin     int      `json:"roundsToWin"`
+	RoundsToWin     int      `json:"roundsToWin,omitempty"`
 	AllowDraw       bool     `json:"allowDraw"`
-	ScoringStats    []string `json:"scoringStats"`
+	ScoringStats    []string `json:"scoringStats,omitempty"`
+}
+
+type hostWorldDropInParamsDTO struct {
+	EnabledRoles      []string `json:"enabledRoles"`
+	CoopSlots         int      `json:"coopSlots,omitempty"`
+	InvaderSlots      int      `json:"invaderSlots,omitempty"`
+	LevelRangeEnabled bool     `json:"levelRangeEnabled"`
+	WeaponTierEnabled bool     `json:"weaponTierEnabled"`
+	PasswordEnabled   bool     `json:"passwordEnabled"`
+	InvasionEnabled   bool     `json:"invasionEnabled"`
 }
 
 // gameWithProfileDTO estende o jogo com o perfil no GET /games/{id}. O perfil
@@ -92,13 +104,27 @@ type gameWithProfileDTO struct {
 
 func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 	p := domain.MultiplayerProfile{Archetype: d.Archetype, Topology: d.Topology}
-	if d.Archetype == domain.ArchetypeQueueArena {
-		qa := d.Params
+	switch d.Archetype {
+	case domain.ArchetypeQueueArena:
+		var qa queueArenaParamsDTO
+		_ = json.Unmarshal(d.Params, &qa)
 		p.QueueArena = &domain.QueueArenaParams{
 			Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
 			TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
 			DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
 			RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+		}
+	case domain.ArchetypeHostWorldDropIn:
+		var hw hostWorldDropInParamsDTO
+		_ = json.Unmarshal(d.Params, &hw)
+		p.HostWorldDropIn = &domain.HostWorldDropInParams{
+			EnabledRoles:      hw.EnabledRoles,
+			CoopSlots:         hw.CoopSlots,
+			InvaderSlots:      hw.InvaderSlots,
+			LevelRangeEnabled: hw.LevelRangeEnabled,
+			WeaponTierEnabled: hw.WeaponTierEnabled,
+			PasswordEnabled:   hw.PasswordEnabled,
+			InvasionEnabled:   hw.InvasionEnabled,
 		}
 	}
 	return p
@@ -109,13 +135,31 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 		return nil
 	}
 	d := &profileDTO{Archetype: p.Archetype, Topology: p.Topology}
-	if p.QueueArena != nil {
-		qa := p.QueueArena
-		d.Params = queueArenaParamsDTO{
-			Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
-			TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
-			DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
-			RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+	switch p.Archetype {
+	case domain.ArchetypeQueueArena:
+		if p.QueueArena != nil {
+			qa := p.QueueArena
+			raw, _ := json.Marshal(queueArenaParamsDTO{
+				Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
+				TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
+				DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
+				RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+			})
+			d.Params = raw
+		}
+	case domain.ArchetypeHostWorldDropIn:
+		if p.HostWorldDropIn != nil {
+			hw := p.HostWorldDropIn
+			raw, _ := json.Marshal(hostWorldDropInParamsDTO{
+				EnabledRoles:      hw.EnabledRoles,
+				CoopSlots:         hw.CoopSlots,
+				InvaderSlots:      hw.InvaderSlots,
+				LevelRangeEnabled: hw.LevelRangeEnabled,
+				WeaponTierEnabled: hw.WeaponTierEnabled,
+				PasswordEnabled:   hw.PasswordEnabled,
+				InvasionEnabled:   hw.InvasionEnabled,
+			})
+			d.Params = raw
 		}
 	}
 	return d

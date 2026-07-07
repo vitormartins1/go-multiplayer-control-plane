@@ -31,30 +31,31 @@ type Game struct {
 	MultiplayerProfile *MultiplayerProfile
 }
 
-// Valores de vocabulário do perfil suportados no MVP (ADR-0023). O conjunto de
+// Valores de vocabulário do perfil suportados (ADR-0023). O conjunto de
 // arquétipos/topologias é fechado e expansível por evidência (sem DSL).
 const (
-	ArchetypeQueueArena = "queue_arena"
-	TopologyDedicated   = "dedicated"
+	ArchetypeQueueArena      = "queue_arena"
+	ArchetypeHostWorldDropIn = "host_world_dropin"
+	TopologyDedicated        = "dedicated"
 )
 
 // MultiplayerProfile declara a *forma* do multiplayer de um jogo (ADR-0023): o
 // arquétipo, a topologia e os parâmetros do arquétipo. É lido por matchmaking/
-// session (fatias futuras) para se configurarem por jogo.
+// session para se configurarem por jogo.
 //
-// Os parâmetros são polimórficos por arquétipo, modelados como tagged union por
-// ponteiro: exatamente o ponteiro correspondente ao Archetype é não-nil (os
-// demais nil). No MVP existe só QueueArena (arquétipo "queue_arena"); novos
-// arquétipos adicionam um campo-ponteiro próprio.
+// Os parâmetros são polimórficos por arquétipo (tagged union por ponteiro):
+// exatamente o ponteiro correspondente ao Archetype é não-nil. Novos arquétipos
+// adicionam um campo-ponteiro próprio sem alterar os existentes.
 type MultiplayerProfile struct {
-	Archetype  string // "queue_arena" (único suportado no MVP)
-	Topology   string // "dedicated" (único suportado no MVP)
-	QueueArena *QueueArenaParams
+	Archetype       string // "queue_arena" | "host_world_dropin"
+	Topology        string // "dedicated" (único suportado; "p2p" = slot futuro)
+	QueueArena      *QueueArenaParams
+	HostWorldDropIn *HostWorldDropInParams
 }
 
 // QueueArenaParams são os parâmetros do arquétipo "queue_arena": sessão
-// simétrica de N jogadores (FFA ou por times) que termina com um desfecho e,
-// opcionalmente, stats. Ver spec 006 para as regras de validação.
+// simétrica de N jogadores (FFA ou por times) que termina com um desfecho
+// e, opcionalmente, stats. Ver spec 006 para as regras de validação.
 type QueueArenaParams struct {
 	Structure       string   // "ffa" | "teams"
 	PlayerCount     int      // se ffa: total de jogadores (>= 2)
@@ -67,6 +68,32 @@ type QueueArenaParams struct {
 	RoundsToWin     int      // se best_of_rounds: rounds para vencer (> 0)
 	AllowDraw       bool     // empate permitido no desfecho
 	ScoringStats    []string // métricas que o resultado carregará (pode ser vazia)
+}
+
+// HostWorldDropInParams são os parâmetros do arquétipo "host_world_dropin":
+// mundo persistente de um host onde phantoms entram/saem com papéis assimétricos
+// (co-op aliado e/ou invasor adversário). Inspirado nos Soulslike (ADR-0023,
+// ficha 01). Ver profile_service.go para as regras de validação.
+type HostWorldDropInParams struct {
+	// EnabledRoles lista os papéis externos habilitados. Pelo menos um valor.
+	// Valores: "coop" (aliado) e/ou "invader" (adversário).
+	EnabledRoles []string
+	// CoopSlots é o máximo de co-ops simultâneos. Obrigatório (>= 1) se "coop"
+	// estiver em EnabledRoles; 0 caso contrário.
+	CoopSlots int
+	// InvaderSlots é o máximo de invasores simultâneos. Obrigatório (>= 1) se
+	// "invader" estiver em EnabledRoles; 0 caso contrário.
+	InvaderSlots int
+	// LevelRangeEnabled: filtro de faixa de nível no matchmaking.
+	LevelRangeEnabled bool
+	// WeaponTierEnabled: filtro adicional de tier de arma/equipamento.
+	WeaponTierEnabled bool
+	// PasswordEnabled: senha de sessão que ignora as faixas e permite jogar
+	// com qualquer nível.
+	PasswordEnabled bool
+	// InvasionEnabled: invasores podem entrar sem convite (mundo aparece como
+	// alvo elegível). Se falso, só co-op (aliados convidados pelo host).
+	InvasionEnabled bool
 }
 
 // GameService é a Port de entrada do game-registry.

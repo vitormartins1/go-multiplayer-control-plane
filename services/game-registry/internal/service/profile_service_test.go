@@ -140,3 +140,96 @@ func TestGetMultiplayerProfile_JogoInexistente_ErrGameNotFound(t *testing.T) {
 	_, err := New(repo).GetMultiplayerProfile(context.Background(), "nao")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
+
+// --- host_world_dropin ---
+
+func validHWD() domain.HostWorldDropInParams {
+	return domain.HostWorldDropInParams{
+		EnabledRoles:      []string{"coop", "invader"},
+		CoopSlots:         2,
+		InvaderSlots:      1,
+		LevelRangeEnabled: true,
+		PasswordEnabled:   true,
+		InvasionEnabled:   true,
+	}
+}
+
+func validHWDProfile() domain.MultiplayerProfile {
+	hw := validHWD()
+	return domain.MultiplayerProfile{
+		Archetype:       domain.ArchetypeHostWorldDropIn,
+		Topology:        domain.TopologyDedicated,
+		HostWorldDropIn: &hw,
+	}
+}
+
+func mutHWD(base domain.HostWorldDropInParams, f func(*domain.HostWorldDropInParams)) domain.HostWorldDropInParams {
+	f(&base)
+	return base
+}
+
+func TestSetMultiplayerProfile_HostWorldDropIn_Valido_UpsertEDevolve(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+
+	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validHWDProfile())
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.Equal(t, domain.ArchetypeHostWorldDropIn, p.Archetype)
+	repo.AssertExpectations(t)
+}
+
+func TestSetMultiplayerProfile_HostWorldDropIn_ParamsAusentes_Erro(t *testing.T) {
+	p := validHWDProfile()
+	p.HostWorldDropIn = nil
+	_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+	assert.ErrorIs(t, err, domain.ErrInvalidProfileParams)
+}
+
+func TestSetMultiplayerProfile_HostWorldDropIn_ParamsInvalidos_Erro(t *testing.T) {
+	base := validHWD()
+	cases := map[string]domain.HostWorldDropInParams{
+		"roles vazio":                   mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = nil }),
+		"role desconhecido":             mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = []string{"host"} }),
+		"role duplicado":                mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = []string{"coop", "coop"} }),
+		"coop sem coopSlots":            mutHWD(base, func(h *domain.HostWorldDropInParams) { h.CoopSlots = 0 }),
+		"coopSlots sem papel coop":      {EnabledRoles: []string{"invader"}, InvaderSlots: 1, CoopSlots: 2},
+		"invader sem invaderSlots":      mutHWD(base, func(h *domain.HostWorldDropInParams) { h.InvaderSlots = 0 }),
+		"invaderSlots sem papel invader":{EnabledRoles: []string{"coop"}, CoopSlots: 2, InvaderSlots: 1},
+	}
+	for name, hw := range cases {
+		t.Run(name, func(t *testing.T) {
+			hw := hw
+			p := domain.MultiplayerProfile{
+				Archetype:       domain.ArchetypeHostWorldDropIn,
+				Topology:        domain.TopologyDedicated,
+				HostWorldDropIn: &hw,
+			}
+			_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+			assert.ErrorIs(t, err, domain.ErrInvalidProfileParams, name)
+		})
+	}
+}
+
+func TestSetMultiplayerProfile_HostWorldDropIn_VariantesValidas_Ok(t *testing.T) {
+	cases := map[string]domain.HostWorldDropInParams{
+		"só co-op":          {EnabledRoles: []string{"coop"}, CoopSlots: 3},
+		"só invasão":        {EnabledRoles: []string{"invader"}, InvaderSlots: 2, InvasionEnabled: true},
+		"coop+invader":      {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1},
+		"todos os filtros":  {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1, LevelRangeEnabled: true, WeaponTierEnabled: true, PasswordEnabled: true, InvasionEnabled: true},
+	}
+	for name, hw := range cases {
+		t.Run(name, func(t *testing.T) {
+			hw := hw
+			repo := new(mockRepo)
+			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			p := domain.MultiplayerProfile{
+				Archetype:       domain.ArchetypeHostWorldDropIn,
+				Topology:        domain.TopologyDedicated,
+				HostWorldDropIn: &hw,
+			}
+			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
+			assert.NoError(t, err, name)
+		})
+	}
+}

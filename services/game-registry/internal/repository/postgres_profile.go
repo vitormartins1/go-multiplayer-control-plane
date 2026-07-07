@@ -36,6 +36,17 @@ type storedQueueArena struct {
 	ScoringStats    []string `json:"scoringStats,omitempty"`
 }
 
+// storedHostWorldDropIn é o shape persistido dos params do arquétipo host_world_dropin.
+type storedHostWorldDropIn struct {
+	EnabledRoles      []string `json:"enabledRoles"`
+	CoopSlots         int      `json:"coopSlots,omitempty"`
+	InvaderSlots      int      `json:"invaderSlots,omitempty"`
+	LevelRangeEnabled bool     `json:"levelRangeEnabled"`
+	WeaponTierEnabled bool     `json:"weaponTierEnabled"`
+	PasswordEnabled   bool     `json:"passwordEnabled"`
+	InvasionEnabled   bool     `json:"invasionEnabled"`
+}
+
 func (r *PostgresGameRepository) UpsertMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) error {
 	raw, err := encodeProfile(&p)
 	if err != nil {
@@ -72,6 +83,24 @@ func encodeProfile(p *domain.MultiplayerProfile) ([]byte, error) {
 			RoundsToWin:     qa.RoundsToWin,
 			AllowDraw:       qa.AllowDraw,
 			ScoringStats:    qa.ScoringStats,
+		})
+		if err != nil {
+			return nil, err
+		}
+		sp.Params = params
+	case domain.ArchetypeHostWorldDropIn:
+		if p.HostWorldDropIn == nil {
+			return nil, fmt.Errorf("perfil %q sem params", p.Archetype)
+		}
+		hw := p.HostWorldDropIn
+		params, err := json.Marshal(storedHostWorldDropIn{
+			EnabledRoles:      hw.EnabledRoles,
+			CoopSlots:         hw.CoopSlots,
+			InvaderSlots:      hw.InvaderSlots,
+			LevelRangeEnabled: hw.LevelRangeEnabled,
+			WeaponTierEnabled: hw.WeaponTierEnabled,
+			PasswordEnabled:   hw.PasswordEnabled,
+			InvasionEnabled:   hw.InvasionEnabled,
 		})
 		if err != nil {
 			return nil, err
@@ -114,6 +143,22 @@ func decodeProfile(raw []byte) (*domain.MultiplayerProfile, error) {
 			RoundsToWin:     sq.RoundsToWin,
 			AllowDraw:       sq.AllowDraw,
 			ScoringStats:    sq.ScoringStats,
+		}
+	case domain.ArchetypeHostWorldDropIn:
+		var sh storedHostWorldDropIn
+		if len(sp.Params) > 0 {
+			if err := json.Unmarshal(sp.Params, &sh); err != nil {
+				return nil, err
+			}
+		}
+		p.HostWorldDropIn = &domain.HostWorldDropInParams{
+			EnabledRoles:      sh.EnabledRoles,
+			CoopSlots:         sh.CoopSlots,
+			InvaderSlots:      sh.InvaderSlots,
+			LevelRangeEnabled: sh.LevelRangeEnabled,
+			WeaponTierEnabled: sh.WeaponTierEnabled,
+			PasswordEnabled:   sh.PasswordEnabled,
+			InvasionEnabled:   sh.InvasionEnabled,
 		}
 	}
 	return p, nil
