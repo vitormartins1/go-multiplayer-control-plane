@@ -37,6 +37,27 @@ func TestSessionsByGame_ParseiaEConverte(t *testing.T) {
 	require.NotNil(t, got.Closed[0].ClosedAt)
 }
 
+func TestSessionsByGame_HostWorld_RepassaOriginESlots(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"active": [{"sessionId":"w1","state":"open","players":["host-1","coop-1"],"origin":"host_world","hostPlayerId":"host-1",
+				"roleSlots":[{"role":"coop","capacity":2,"occupied":1},{"role":"invader","capacity":1,"occupied":0}]}],
+			"closed": []
+		}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).SessionsByGame(context.Background(), "hw", "")
+	require.NoError(t, err)
+	require.Len(t, got.Active, 1)
+	s := got.Active[0]
+	assert.Equal(t, "host_world", s.Origin)
+	assert.Equal(t, "host-1", s.HostPlayerID)
+	require.Len(t, s.RoleSlots, 2)
+	assert.Equal(t, domain.RoleSlot{Role: "coop", Capacity: 2, Occupied: 1}, s.RoleSlots[0])
+}
+
 func TestSessionsByGame_UpstreamFora_ErrSessionsUnavailable(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

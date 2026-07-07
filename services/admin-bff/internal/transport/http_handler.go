@@ -42,6 +42,7 @@ type AdminService interface {
 	CloseRoom(ctx context.Context, matchID string) (domain.GameSession, error)
 	FanoutHealth(ctx context.Context) (domain.FanoutHealth, error)
 	AnalyticsOverview(ctx context.Context) (domain.AnalyticsOverview, error)
+	GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalyticsDetail, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -82,6 +83,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/rooms/{matchId}/close", h.closeRoom)
 	mux.HandleFunc("GET /api/health/fanout", h.fanoutHealth)
 	mux.HandleFunc("GET /api/analytics/overview", h.analyticsOverview)
+	mux.HandleFunc("GET /api/analytics/games/{gameId}", h.gameAnalytics)
 }
 
 // topology nunca falha por causa do Prometheus: o service degrada (nós unknown).
@@ -419,6 +421,33 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 		ov.Daily = []domain.AnalyticsDaily{}
 	}
 	writeJSON(w, http.StatusOK, ov)
+}
+
+// gameAnalytics expõe o detalhe de analytics de um jogo (resumo + série diária +
+// participações por papel, host_world_dropin — spec 014). Analytics fora -> 502.
+func (h *Handler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
+	days := 30
+	if q := r.URL.Query().Get("days"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n > 0 && n <= 365 {
+			days = n
+		}
+	}
+	d, err := h.svc.GameAnalytics(r.Context(), r.PathValue("gameId"), days)
+	if err != nil {
+		if errors.Is(err, domain.ErrAnalyticsUnavailable) {
+			writeError(w, http.StatusBadGateway, "analytics_unavailable")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	if d.Daily == nil {
+		d.Daily = []domain.AnalyticsDaily{}
+	}
+	if d.RoleParticipations == nil {
+		d.RoleParticipations = []domain.ParticipationStat{}
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 // fanoutHealth expõe os sinais do fan-out durável (ADR-0020). Prometheus fora -> 503.

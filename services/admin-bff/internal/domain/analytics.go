@@ -41,7 +41,33 @@ type AnalyticsOverview struct {
 	Daily  []AnalyticsDaily    `json:"daily"`
 }
 
+// ParticipationStat é a contagem de um (papel, evento) no detalhe de um jogo
+// host_world_dropin (spec 014/004). Vazio no queue_arena.
+type ParticipationStat struct {
+	Role  string `json:"role"`
+	Event string `json:"event"`
+	Count int64  `json:"count"`
+}
+
+// GameAnalyticsDetail é o detalhe de analytics de um jogo (resumo + série diária
+// + participações por papel). gameName é injetado pelo BFF (spec 014).
+type GameAnalyticsDetail struct {
+	GameID             string              `json:"gameId"`
+	GameName           string              `json:"gameName"`
+	Matches            int64               `json:"matches"`
+	UniquePlayers      int64               `json:"uniquePlayers"`
+	Wins               int64               `json:"wins"`
+	Losses             int64               `json:"losses"`
+	Draws              int64               `json:"draws"`
+	AvgScore           float64             `json:"avgScore"`
+	Daily              []AnalyticsDaily    `json:"daily"`
+	RoleParticipations []ParticipationStat `json:"roleParticipations"`
+}
+
 // AnalyticsReader é a Port de saída para a read API do analytics-service.
 type AnalyticsReader interface {
 	Overview(ctx context.Context) (AnalyticsOverview, error)
+	// GameAnalytics lê o detalhe por jogo (GET /admin/games/{id}/analytics),
+	// incluindo roleParticipations (host_world_dropin). Fora -> ErrAnalyticsUnavailable.
+	GameAnalytics(ctx context.Context, gameID string, days int) (GameAnalyticsDetail, error)
 }

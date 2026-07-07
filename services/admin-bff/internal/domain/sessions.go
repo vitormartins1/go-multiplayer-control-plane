@@ -31,6 +31,19 @@ type GameSession struct {
 	OpenedAt      time.Time       `json:"openedAt"`
 	ClosedAt      *time.Time      `json:"closedAt,omitempty"`
 	CloseReason   string          `json:"closeReason,omitempty"`
+
+	// host_world_dropin (spec 014): origem, host e slots por papel (co-op X/2,
+	// invasor Y/1). origin sempre presente; os demais só em mundos host_world.
+	Origin       string     `json:"origin,omitempty"`
+	HostPlayerID string     `json:"hostPlayerId,omitempty"`
+	RoleSlots    []RoleSlot `json:"roleSlots,omitempty"`
+}
+
+// RoleSlot é a ocupação de um papel num mundo host_world (spec 014).
+type RoleSlot struct {
+	Role     string `json:"role"`
+	Capacity int    `json:"capacity"`
+	Occupied int    `json:"occupied"`
 }
 
 // GameSessions agrupa as sessões do jogo como o painel consome.

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/vitormartins1/go-game-backend/services/admin-bff/internal/domain"
@@ -49,4 +51,31 @@ func (c *Client) Overview(ctx context.Context) (domain.AnalyticsOverview, error)
 		return domain.AnalyticsOverview{}, fmt.Errorf("analytics: decode: %w", err)
 	}
 	return ov, nil
+}
+
+// GameAnalytics lê GET /admin/games/{id}/analytics (detalhe por jogo, com
+// roleParticipations). Indisponibilidade -> ErrAnalyticsUnavailable.
+func (c *Client) GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalyticsDetail, error) {
+	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/analytics"
+	if days > 0 {
+		u += "?days=" + strconv.Itoa(days)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return domain.GameAnalyticsDetail{}, fmt.Errorf("analytics: build request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return domain.GameAnalyticsDetail{}, fmt.Errorf("%w: %v", domain.ErrAnalyticsUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return domain.GameAnalyticsDetail{}, fmt.Errorf("%w: status %d", domain.ErrAnalyticsUnavailable, resp.StatusCode)
+	}
+
+	var d domain.GameAnalyticsDetail
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return domain.GameAnalyticsDetail{}, fmt.Errorf("analytics: decode: %w", err)
+	}
+	return d, nil
 }
