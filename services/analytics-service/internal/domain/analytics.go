@@ -58,6 +58,30 @@ type PlacementDistribution struct {
 	AvgSurvivedMs float64
 }
 
+// Vocabulário do desfecho coletivo (espelha o session, ADR-0023/C2).
+const (
+	MissionSuccess = "MISSION_SUCCESS"
+	MissionFailure = "MISSION_FAILURE"
+)
+
+// CollectiveResult é o desfecho coletivo da missão (coop_mission, C3) ingerido do
+// fan-out (kind=collective, session/016). O analytics só agrega o desfecho da
+// SESSÃO (ignora players/stats). Unidade do caminho collective do pool.
+type CollectiveResult struct {
+	MatchID string
+	GameID  string
+	Outcome string // MISSION_SUCCESS | MISSION_FAILURE
+}
+
+// MissionDistribution é a distribuição de desfecho da missão de um jogo (read
+// model, C3): sucessos/falhas + taxa de sucesso derivada. Aditivo ao
+// GameAnalytics; nil fora do coop_mission.
+type MissionDistribution struct {
+	Successes   int64
+	Failures    int64
+	SuccessRate float64 // successes / (successes+failures); 0 se nenhuma missão
+}
+
 // GameStat é o rollup de um jogo (avgScore derivado no read).
 type GameStat struct {
 	GameID         string
@@ -103,6 +127,9 @@ type GameAnalytics struct {
 	// Placement é a distribuição de colocação do battle_royale (BR3, spec 005).
 	// nil fora do battle_royale. Aditivo.
 	Placement *PlacementDistribution
+	// Mission é a distribuição de desfecho da missão do coop_mission (C3, spec 006).
+	// nil fora do coop_mission. Aditivo.
+	Mission *MissionDistribution
 }
 
 // ParticipationEvent é um evento de participação ingerido do fan-out
@@ -137,6 +164,10 @@ type MatchRepository interface {
 	// (battle_royale, BR3) numa tx, idempotente por matchID (processed_matches).
 	// dup=true se a partida já havia sido processada (no-op). Spec 005.
 	ApplyPlacement(ctx context.Context, pr PlacementResult) (dup bool, err error)
+	// ApplyCollective agrega o desfecho da missão (coop_mission, C3) numa tx,
+	// idempotente por matchID (processed_matches). dup=true se a partida já havia
+	// sido processada (no-op). Spec 006.
+	ApplyCollective(ctx context.Context, cr CollectiveResult) (dup bool, err error)
 	// Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 	Overview(ctx context.Context) (Overview, error)
 	// GameAnalytics devolve o resumo do jogo + a série diária dos últimos `days`.
@@ -154,4 +185,7 @@ type Ingestor interface {
 	// SubmitPlacement entrega um resultado por colocação ao pool (spec 005), pelo
 	// mesmo mecanismo de fan-in do Submit.
 	SubmitPlacement(ctx context.Context, pr PlacementResult) <-chan error
+	// SubmitCollective entrega um desfecho de missão ao pool (spec 006), pelo
+	// mesmo mecanismo de fan-in do Submit.
+	SubmitCollective(ctx context.Context, cr CollectiveResult) <-chan error
 }

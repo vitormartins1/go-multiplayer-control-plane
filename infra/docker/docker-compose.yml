@@ -517,6 +517,10 @@ services:
       - "5436:5432"
     volumes:
       - ../../services/analytics-service/migrations/001_create_analytics.sql:/docker-entrypoint-initdb.d/001_create_analytics.sql:ro
+      - ../../services/analytics-service/migrations/002_outcome_counts.sql:/docker-entrypoint-initdb.d/002_outcome_counts.sql:ro
+      - ../../services/analytics-service/migrations/003_participation_rollup.sql:/docker-entrypoint-initdb.d/003_participation_rollup.sql:ro
+      - ../../services/analytics-service/migrations/004_placement_rollup.sql:/docker-entrypoint-initdb.d/004_placement_rollup.sql:ro
+      - ../../services/analytics-service/migrations/005_mission_rollup.sql:/docker-entrypoint-initdb.d/005_mission_rollup.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d analytics"]
       interval: 5s

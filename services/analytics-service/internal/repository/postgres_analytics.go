@@ -169,6 +169,47 @@ func (r *PostgresRepository) ApplyPlacement(ctx context.Context, pr domain.Place
 	return false, tx.Commit(ctx)
 }
 
+// ApplyCollective agrega o desfecho da missão de uma partida do coop_mission
+// (spec 006) por jogo, idempotente por matchID (processed_matches), na mesma tx
+// (mesma garantia do ApplyMatch). Uma missão = um ReportResult: +1 em successes
+// ou failures conforme o desfecho da SESSÃO. Reprocessar é no-op.
+func (r *PostgresRepository) ApplyCollective(ctx context.Context, cr domain.CollectiveResult) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply collective: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO processed_matches (match_id, game_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		cr.MatchID, cr.GameID)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply collective: mark: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processada: no-op idempotente
+	}
+
+	var successDelta, failureDelta int64
+	switch cr.Outcome {
+	case domain.MissionSuccess:
+		successDelta = 1
+	case domain.MissionFailure:
+		failureDelta = 1
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_mission_rollup (game_id, successes, failures)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (game_id) DO UPDATE SET
+			successes = game_mission_rollup.successes + $2,
+			failures  = game_mission_rollup.failures + $3`,
+		cr.GameID, successDelta, failureDelta); err != nil {
+		return false, fmt.Errorf("analytics repository: apply collective: rollup: %w", err)
+	}
+	return false, tx.Commit(ctx)
+}
+
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -298,7 +339,32 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		pd.AvgSurvivedMs = avg(sumSurvived, pd.Entries)
 		out.Placement = &pd
 	}
+
+	// distribuição de desfecho da missão (coop_mission, spec 006). Aditivo: sem
+	// linha -> Mission nil (jogo não-coop não regride).
+	var md domain.MissionDistribution
+	err = r.pool.QueryRow(ctx, `
+		SELECT successes, failures
+		FROM game_mission_rollup WHERE game_id = $1`, gameID).
+		Scan(&md.Successes, &md.Failures)
+	switch {
+	case err == pgx.ErrNoRows:
+		// sem missões neste jogo: Mission fica nil.
+	case err != nil:
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: mission: %w", err)
+	default:
+		md.SuccessRate = ratio(md.Successes, md.Successes+md.Failures)
+		out.Mission = &md
+	}
 	return out, nil
+}
+
+// ratio devolve num/den (0 se den==0) — taxa de sucesso da missão no read.
+func ratio(num, den int64) float64 {
+	if den == 0 {
+		return 0
+	}
+	return float64(num) / float64(den)
 }
 
 func avg(sum, n int64) float64 {

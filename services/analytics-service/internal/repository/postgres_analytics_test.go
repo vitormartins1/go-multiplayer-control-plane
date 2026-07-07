@@ -31,6 +31,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/002_outcome_counts.sql",
 			"../../migrations/003_participation_rollup.sql",
 			"../../migrations/004_placement_rollup.sql",
+			"../../migrations/005_mission_rollup.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -130,6 +131,45 @@ func TestGameAnalytics_SemPlacement_PlacementNil(t *testing.T) {
 	ga, err := repo.GameAnalytics(ctx, "g1", 30)
 	require.NoError(t, err)
 	assert.Nil(t, ga.Placement, "jogo não-BR não regride")
+	assert.Nil(t, ga.Mission, "jogo não-coop não regride")
+}
+
+// coop_mission (C3): sucessos/falhas agregam por jogo; successRate derivado.
+func TestApplyCollective_AgregaSucessosEFalhas(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	_, err := repo.ApplyCollective(ctx, domain.CollectiveResult{MatchID: "m1", GameID: "g1", Outcome: domain.MissionSuccess})
+	require.NoError(t, err)
+	_, err = repo.ApplyCollective(ctx, domain.CollectiveResult{MatchID: "m2", GameID: "g1", Outcome: domain.MissionSuccess})
+	require.NoError(t, err)
+	_, err = repo.ApplyCollective(ctx, domain.CollectiveResult{MatchID: "m3", GameID: "g1", Outcome: domain.MissionFailure})
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.NotNil(t, ga.Mission)
+	assert.Equal(t, int64(2), ga.Mission.Successes)
+	assert.Equal(t, int64(1), ga.Mission.Failures)
+	assert.InDelta(t, 2.0/3.0, ga.Mission.SuccessRate, 0.001)
+}
+
+func TestApplyCollective_Reprocessado_NaoDobra(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	cr := domain.CollectiveResult{MatchID: "m1", GameID: "g1", Outcome: domain.MissionSuccess}
+
+	dup, err := repo.ApplyCollective(ctx, cr)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	dup, err = repo.ApplyCollective(ctx, cr) // reentrega at-least-once
+	require.NoError(t, err)
+	assert.True(t, dup)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.NotNil(t, ga.Mission)
+	assert.Equal(t, int64(1), ga.Mission.Successes, "reentrega não dobra")
 }
 
 func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {

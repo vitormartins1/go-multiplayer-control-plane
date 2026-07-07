@@ -91,6 +91,14 @@ func (c *Consumer) handleBatch(ctx context.Context, msgs []types.Message) {
 				continue
 			}
 			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitPlacement(ctx, pr)})
+		case kind == "collective":
+			// coop_mission (session/016): desfecho coletivo; tem matchId.
+			cr, err := parseCollective(body)
+			if err != nil {
+				c.log.Error("collective inválido (vai à DLQ)", slog.String("err", err.Error()))
+				continue
+			}
+			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitCollective(ctx, cr)})
 		case kind == "win_loss_draw" || matchID != "":
 			match, err := parse(body)
 			if err != nil {
@@ -174,6 +182,20 @@ func parsePlacement(body []byte) (domain.PlacementResult, error) {
 		pr.Entries = append(pr.Entries, domain.PlacementEntry{Placement: e.Placement, SurvivedMs: e.SurvivedMs})
 	}
 	return pr, nil
+}
+
+// parseCollective desserializa o envelope collective (coop_mission, session/016).
+// O analytics só agrega o desfecho da SESSÃO (ignora players/stats).
+func parseCollective(body []byte) (domain.CollectiveResult, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Outcome string `json:"outcome"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return domain.CollectiveResult{}, fmt.Errorf("unmarshal collective: %w", err)
+	}
+	return domain.CollectiveResult{MatchID: env.MatchID, GameID: env.GameID, Outcome: env.Outcome}, nil
 }
 
 // parse desserializa o envelope do fan-out (struct próprio, desacoplado).
