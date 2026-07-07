@@ -1124,3 +1124,26 @@ func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p do
 ```
 
 **Pegadinha / nuance:** não confundir com o typed-nil da entrada #19 (interface embrulhando ponteiro nil). Aqui o ponteiro é usado **de propósito** como tri-estado (`nil` / `""` / valor). Alternativas quando o tri-estado cresce: um struct de "patch" com campos `*T` (estilo JSON merge patch) ou functional options — para **um** campo, o ponteiro simples é o mais direto. Em C# o equivalente moderno seria `string?` + um `bool` separado ou `Optional<T>` — o ponteiro do Go junta os dois.
+
+## 32 — Struct comparável como chave de map: chave composta sem cerimônia
+
+**O que é / por que importa:** quando a identidade de algo passa a ter **duas dimensões** (no M1 do ADR-0024: jogo E modo), o idiomático em Go é um struct pequeno como chave de map — structs cujos campos são todos comparáveis suportam `==` de graça, e portanto servem de chave. Nada de concatenar strings com separador (`gameID+"\x00"+modeID`, frágil) nem implementar igualdade à mão.
+
+**Onde no projeto:** `matchmaking/internal/service/matchmaker.go` (`queueKey{gameID, modeID}` no agrupamento da fila) e os dois `profilecache` (matchmaking e session), todos nascidos na fatia M1.
+
+```go
+// a chave é um valor — comparável, sem alocação extra, sem hash manual.
+type queueKey struct {
+	gameID string
+	modeID string
+}
+
+byGame := map[queueKey][]*ticket{}
+for _, t := range m.queue {
+	byGame[queueKey{t.gameID, t.modeID}] = append(byGame[queueKey{t.gameID, t.modeID}], t)
+}
+```
+
+**Contraste com C#:** um `Dictionary<TKey,…>` com chave customizada exige `Equals`/`GetHashCode` corretos (ou um `record`, que os gera). Em Go a igualdade estrutural de structs comparáveis é da linguagem — o compilador também **recusa** usar como chave um struct com campo não-comparável (slice/map/func), transformando um bug de runtime do C# antigo em erro de compilação.
+
+**Pegadinha / nuance:** cuidado ao "evoluir" a chave: adicionar um campo `[]string` ao struct quebra a compilação de todos os maps que o usam como chave — o que é bom (o compilador te força a decidir), mas surpreende. Para chaves grandes, prefira campos que identifiquem (ids), não os dados inteiros.
