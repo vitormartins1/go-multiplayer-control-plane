@@ -138,7 +138,9 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | **`host_world_dropin` — analytics por participação (H2, sink)** | analytics (`004`) | consumer despacha por `kind`; `participation_event` → agrega `(game, role, event)` (`game_participation_rollup`), idempotência `(sessionID, playerID, event)`; `GameAnalytics.roleParticipations` aditivo no JSON; `win_loss_draw` intacto | ✅ **main** |
 | **`host_world_dropin` — contrato do data plane** | doc | [`host_world_dropin-dataplane-contract.md`](./host_world_dropin-dataplane-contract.md): fonte de verdade control↔data plane (RPCs, claim `role`, `ReportParticipationEvent`, envelope, mudanças p/ o repo Unity) | ✅ **main** |
 | **`host_world_dropin` — H3 (surfacing no console)** | session (`014`) + admin-bff (`014`) + admin-ui (`020`) | board admin expõe `origin`/`host`/`roleSlots`; BFF repassa + endpoint per-game analytics; Rooms mostra slots por papel (co-op X/2, invasor Y/1) e host; GameAnalytics mostra participações por papel. Quadro de sinais adiado (follow-up) | ✅ **main** |
-| **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective) | ⬜ futuro |
+| **Arquétipo `battle_royale` — declaração (BR0)** | game-registry (`007`) | `BattleRoyaleParams` (`LobbySize`, `TeamSize`, `RespawnMode`, `ScoringStats`); ponteiro `BattleRoyale` no `MultiplayerProfile`; validação (`lobbySize ≥ 2×teamSize`, vocabulário de respawn); persistência JSONB sem migration. Aditivo puro, `queue_arena`/`host_world_dropin` sem regressão | 🔵 **branch** |
+| **`battle_royale` — BR1..BR4** | matchmaking/session/sinks/console | lobby+squads, resultado por colocação ordinal (`placement`), colher, console+contrato — ver [`battle_royale-roadmap.md`](./battle_royale-roadmap.md) | ⬜ planejado |
+| **Outros arquétipos** | todos | `coop_mission` (collective) | ⬜ futuro |
 
 > Convenção de status: ✅ **main** = mergeado · 🔵 **branch** = implementado e verde, aguardando merge · ⬜ planejado = fatia identificada, não iniciada · 🟡 = parcial (ver Log acima).
 
@@ -159,3 +161,5 @@ Preenchido pelo Vitor. Começamos por 1–2 jogos que ele tem em mente e expandi
 - `NN-<slug>.md` — uma ficha por jogo analisado
 - [`queue_arena-dataplane-contract.md`](./queue_arena-dataplane-contract.md) — contrato control↔data plane do arquétipo `queue_arena` (perfil → formação → token c/ `team_id` → resultado `win_loss_draw`); fonte de verdade das mudanças cross-repo no `go-game-dataplane`
 - [`queue_arena-roadmap.md`](./queue_arena-roadmap.md) — specs **restantes** do `queue_arena` (B1 perfil no console, B2 surfacing, A1/A2 enriquecimento); plano em lote p/ não re-derivar contexto
+- [`host_world_dropin-roadmap.md`](./host_world_dropin-roadmap.md) — decomposição do `host_world_dropin` (H0–H3 + contrato); ✅ completo no control plane
+- [`battle_royale-roadmap.md`](./battle_royale-roadmap.md) — decomposição do `battle_royale` (BR0 declaração → BR1 lobby/squads → BR2 colocação ordinal → BR3 colher → BR4 console+contrato); plano em lote p/ não re-derivar contexto

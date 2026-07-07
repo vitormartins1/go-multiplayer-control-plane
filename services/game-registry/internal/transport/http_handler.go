@@ -95,6 +95,13 @@ type hostWorldDropInParamsDTO struct {
 	InvasionEnabled   bool     `json:"invasionEnabled"`
 }
 
+type battleRoyaleParamsDTO struct {
+	LobbySize    int      `json:"lobbySize,omitempty"`
+	TeamSize     int      `json:"teamSize,omitempty"`
+	RespawnMode  string   `json:"respawnMode"`
+	ScoringStats []string `json:"scoringStats,omitempty"`
+}
+
 // gameWithProfileDTO estende o jogo com o perfil no GET /games/{id}. O perfil
 // serializa como objeto ou null (sem omitempty); a lista usa gameDTO puro.
 type gameWithProfileDTO struct {
@@ -125,6 +132,15 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			WeaponTierEnabled: hw.WeaponTierEnabled,
 			PasswordEnabled:   hw.PasswordEnabled,
 			InvasionEnabled:   hw.InvasionEnabled,
+		}
+	case domain.ArchetypeBattleRoyale:
+		var br battleRoyaleParamsDTO
+		_ = json.Unmarshal(d.Params, &br)
+		p.BattleRoyale = &domain.BattleRoyaleParams{
+			LobbySize:    br.LobbySize,
+			TeamSize:     br.TeamSize,
+			RespawnMode:  br.RespawnMode,
+			ScoringStats: br.ScoringStats,
 		}
 	}
 	return p
@@ -158,6 +174,17 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 				WeaponTierEnabled: hw.WeaponTierEnabled,
 				PasswordEnabled:   hw.PasswordEnabled,
 				InvasionEnabled:   hw.InvasionEnabled,
+			})
+			d.Params = raw
+		}
+	case domain.ArchetypeBattleRoyale:
+		if p.BattleRoyale != nil {
+			br := p.BattleRoyale
+			raw, _ := json.Marshal(battleRoyaleParamsDTO{
+				LobbySize:    br.LobbySize,
+				TeamSize:     br.TeamSize,
+				RespawnMode:  br.RespawnMode,
+				ScoringStats: br.ScoringStats,
 			})
 			d.Params = raw
 		}

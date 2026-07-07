@@ -36,7 +36,16 @@ type Game struct {
 const (
 	ArchetypeQueueArena      = "queue_arena"
 	ArchetypeHostWorldDropIn = "host_world_dropin"
+	ArchetypeBattleRoyale    = "battle_royale"
 	TopologyDedicated        = "dedicated"
+
+	// Modos de respawn do battle_royale (ADR-0023, ficha 03). Declarados no
+	// perfil e lidos pelo data plane, que decide quando a colocação é fixada;
+	// o control plane não implementa lógica de respawn.
+	RespawnOneLife        = "one_life"
+	RespawnTeammateRevive = "teammate_revive"
+	RespawnArena1v1       = "arena_1v1"
+	RespawnRebootTimer    = "reboot_timer"
 )
 
 // MultiplayerProfile declara a *forma* do multiplayer de um jogo (ADR-0023): o
@@ -47,10 +56,11 @@ const (
 // exatamente o ponteiro correspondente ao Archetype é não-nil. Novos arquétipos
 // adicionam um campo-ponteiro próprio sem alterar os existentes.
 type MultiplayerProfile struct {
-	Archetype       string // "queue_arena" | "host_world_dropin"
+	Archetype       string // "queue_arena" | "host_world_dropin" | "battle_royale"
 	Topology        string // "dedicated" (único suportado; "p2p" = slot futuro)
 	QueueArena      *QueueArenaParams
 	HostWorldDropIn *HostWorldDropInParams
+	BattleRoyale    *BattleRoyaleParams
 }
 
 // QueueArenaParams são os parâmetros do arquétipo "queue_arena": sessão
@@ -94,6 +104,24 @@ type HostWorldDropInParams struct {
 	// InvasionEnabled: invasores podem entrar sem convite (mundo aparece como
 	// alvo elegível). Se falso, só co-op (aliados convidados pelo host).
 	InvasionEnabled bool
+}
+
+// BattleRoyaleParams são os parâmetros do arquétipo "battle_royale": lobby
+// grande, eliminação progressiva e resultado por colocação ordinal (ADR-0023,
+// ficha 03). Ver profile_service.go para as regras de validação. A colocação e
+// o tempo de sobrevivência são intrínsecos ao resultado (fatia BR2), não campos
+// aqui; ScoringStats cobre só métricas extras opcionais (ex.: kills).
+type BattleRoyaleParams struct {
+	// LobbySize é o alvo de jogadores no lobby (>= 2 e >= 2*TeamSize).
+	LobbySize int
+	// TeamSize é o nº de jogadores por squad (>= 1; 1 = solo/FFA, 2 = duo, 4 = squad).
+	TeamSize int
+	// RespawnMode é o modo de respawn declarado (Respawn*); comportamento é do
+	// data plane, não do control plane.
+	RespawnMode string
+	// ScoringStats são métricas extras que o resultado carregará além da
+	// colocação/sobrevivência (ex.: kills); pode ser vazia.
+	ScoringStats []string
 }
 
 // GameService é a Port de entrada do game-registry.

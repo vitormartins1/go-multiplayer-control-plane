@@ -18,6 +18,7 @@ var (
 	supportedArchetypes = map[string]bool{
 		domain.ArchetypeQueueArena:      true,
 		domain.ArchetypeHostWorldDropIn: true,
+		domain.ArchetypeBattleRoyale:    true,
 	}
 	supportedTopologies = map[string]bool{domain.TopologyDedicated: true}
 
@@ -30,6 +31,14 @@ var (
 
 	// host_world_dropin
 	hwdRoles = map[string]bool{"coop": true, "invader": true}
+
+	// battle_royale
+	brRespawnModes = map[string]bool{
+		domain.RespawnOneLife:        true,
+		domain.RespawnTeammateRevive: true,
+		domain.RespawnArena1v1:       true,
+		domain.RespawnRebootTimer:    true,
+	}
 )
 
 func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) (*domain.MultiplayerProfile, error) {
@@ -52,6 +61,13 @@ func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p do
 			return nil, domain.ErrInvalidProfileParams
 		}
 		if err := validateHostWorldDropIn(*p.HostWorldDropIn); err != nil {
+			return nil, err
+		}
+	case domain.ArchetypeBattleRoyale:
+		if p.BattleRoyale == nil {
+			return nil, domain.ErrInvalidProfileParams
+		}
+		if err := validateBattleRoyale(*p.BattleRoyale); err != nil {
 			return nil, err
 		}
 	}
@@ -159,6 +175,29 @@ func validateHostWorldDropIn(p domain.HostWorldDropInParams) error {
 	}
 	if !hasInvader && p.InvaderSlots != 0 {
 		return domain.ErrInvalidProfileParams
+	}
+	return nil
+}
+
+// validateBattleRoyale aplica as regras do arquétipo battle_royale (ADR-0023,
+// ficha 03). Exige um squad válido (TeamSize >= 1), um lobby que comporte ao
+// menos dois lados (LobbySize >= 2 e >= 2*TeamSize, para haver "último de pé"),
+// um respawnMode do vocabulário e scoringStats bem-formados. Não exige LobbySize
+// múltiplo de TeamSize: squads incompletos são completados no matchmaking (BR1).
+func validateBattleRoyale(p domain.BattleRoyaleParams) error {
+	if p.TeamSize < 1 {
+		return domain.ErrInvalidProfileParams
+	}
+	if p.LobbySize < 2 || p.LobbySize < 2*p.TeamSize {
+		return domain.ErrInvalidProfileParams
+	}
+	if !brRespawnModes[p.RespawnMode] {
+		return domain.ErrInvalidProfileParams
+	}
+	for _, stat := range p.ScoringStats {
+		if !scoringStatRE.MatchString(stat) {
+			return domain.ErrInvalidProfileParams
+		}
 	}
 	return nil
 }
