@@ -19,12 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Session_CreateSession_FullMethodName = "/session.v1.Session/CreateSession"
-	Session_ReportResult_FullMethodName  = "/session.v1.Session/ReportResult"
-	Session_OpenWorld_FullMethodName     = "/session.v1.Session/OpenWorld"
-	Session_JoinWorld_FullMethodName     = "/session.v1.Session/JoinWorld"
-	Session_LeaveWorld_FullMethodName    = "/session.v1.Session/LeaveWorld"
-	Session_CloseWorld_FullMethodName    = "/session.v1.Session/CloseWorld"
+	Session_CreateSession_FullMethodName       = "/session.v1.Session/CreateSession"
+	Session_ReportResult_FullMethodName        = "/session.v1.Session/ReportResult"
+	Session_OpenWorld_FullMethodName           = "/session.v1.Session/OpenWorld"
+	Session_JoinWorld_FullMethodName           = "/session.v1.Session/JoinWorld"
+	Session_LeaveWorld_FullMethodName          = "/session.v1.Session/LeaveWorld"
+	Session_CloseWorld_FullMethodName          = "/session.v1.Session/CloseWorld"
+	Session_ListInvadableWorlds_FullMethodName = "/session.v1.Session/ListInvadableWorlds"
 )
 
 // SessionClient is the client API for Session service.
@@ -56,6 +57,10 @@ type SessionClient interface {
 	// CloseWorld encerra o mundo (host saiu), libera o server. NotFound se não
 	// houver mundo aberto.
 	CloseWorld(ctx context.Context, in *CloseWorldRequest, opts ...grpc.CallOption) (*CloseWorldResponse, error)
+	// ListInvadableWorlds devolve os mundos abertos do jogo com slot de invasor
+	// livre + atributos do host (spec 012). Fonte de dados pura para o matchmaking
+	// (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
+	ListInvadableWorlds(ctx context.Context, in *ListInvadableWorldsRequest, opts ...grpc.CallOption) (*ListInvadableWorldsResponse, error)
 }
 
 type sessionClient struct {
@@ -126,6 +131,16 @@ func (c *sessionClient) CloseWorld(ctx context.Context, in *CloseWorldRequest, o
 	return out, nil
 }
 
+func (c *sessionClient) ListInvadableWorlds(ctx context.Context, in *ListInvadableWorldsRequest, opts ...grpc.CallOption) (*ListInvadableWorldsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInvadableWorldsResponse)
+	err := c.cc.Invoke(ctx, Session_ListInvadableWorlds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionServer is the server API for Session service.
 // All implementations must embed UnimplementedSessionServer
 // for forward compatibility.
@@ -155,6 +170,10 @@ type SessionServer interface {
 	// CloseWorld encerra o mundo (host saiu), libera o server. NotFound se não
 	// houver mundo aberto.
 	CloseWorld(context.Context, *CloseWorldRequest) (*CloseWorldResponse, error)
+	// ListInvadableWorlds devolve os mundos abertos do jogo com slot de invasor
+	// livre + atributos do host (spec 012). Fonte de dados pura para o matchmaking
+	// (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
+	ListInvadableWorlds(context.Context, *ListInvadableWorldsRequest) (*ListInvadableWorldsResponse, error)
 	mustEmbedUnimplementedSessionServer()
 }
 
@@ -182,6 +201,9 @@ func (UnimplementedSessionServer) LeaveWorld(context.Context, *LeaveWorldRequest
 }
 func (UnimplementedSessionServer) CloseWorld(context.Context, *CloseWorldRequest) (*CloseWorldResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CloseWorld not implemented")
+}
+func (UnimplementedSessionServer) ListInvadableWorlds(context.Context, *ListInvadableWorldsRequest) (*ListInvadableWorldsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListInvadableWorlds not implemented")
 }
 func (UnimplementedSessionServer) mustEmbedUnimplementedSessionServer() {}
 func (UnimplementedSessionServer) testEmbeddedByValue()                 {}
@@ -312,6 +334,24 @@ func _Session_CloseWorld_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Session_ListInvadableWorlds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInvadableWorldsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).ListInvadableWorlds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_ListInvadableWorlds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).ListInvadableWorlds(ctx, req.(*ListInvadableWorldsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Session_ServiceDesc is the grpc.ServiceDesc for Session service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -342,6 +382,10 @@ var Session_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CloseWorld",
 			Handler:    _Session_CloseWorld_Handler,
+		},
+		{
+			MethodName: "ListInvadableWorlds",
+			Handler:    _Session_ListInvadableWorlds_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

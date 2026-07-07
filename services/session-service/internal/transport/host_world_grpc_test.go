@@ -117,3 +117,40 @@ func TestJoinWorld_MundoInexistente_NotFound(t *testing.T) {
 	_, err := client.JoinWorld(context.Background(), &pb.JoinWorldRequest{SessionId: "nope", PlayerId: "p", Role: "coop"})
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
+
+// Diretório de invadíveis (spec 012): abrir mundo com atributos → aparece na
+// lista com a faixa e a vaga; encher o slot de invasor → some da lista. O join
+// devolve o endereço do server (furo de contrato herdado da H0).
+func TestListInvadableWorlds_RefleteAberturaEEsgotamento(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777", "10.0.0.2:7777"})
+	ctx := context.Background()
+
+	open, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw", HostSoulLevel: 90, WeaponTier: 4})
+	require.NoError(t, err)
+	sid := open.GetSessionId()
+
+	list, err := client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	require.Len(t, list.GetWorlds(), 1)
+	w := list.GetWorlds()[0]
+	assert.Equal(t, sid, w.GetSessionId())
+	assert.Equal(t, int32(90), w.GetHostSoulLevel())
+	assert.Equal(t, int32(4), w.GetWeaponTier())
+	assert.Equal(t, int32(1), w.GetFreeInvaderSlots())
+
+	// injeta um invasor (InvaderSlots=1) → slot esgota; o join devolve o addr.
+	join, err := client.JoinWorld(ctx, &pb.JoinWorldRequest{SessionId: sid, PlayerId: "inv-1", Role: "invader"})
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.1:7777", join.GetServerAddress())
+
+	list, err = client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	assert.Empty(t, list.GetWorlds(), "mundo com invasor cheio sai do diretório")
+}
+
+func TestListInvadableWorlds_SemMundos_ListaVazia(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	list, err := client.ListInvadableWorlds(context.Background(), &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	assert.Empty(t, list.GetWorlds())
+}
