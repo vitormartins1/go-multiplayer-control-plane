@@ -201,6 +201,128 @@ func (x *TicketUpdate) GetReason() string {
 	return ""
 }
 
+// host_world_dropin (spec 006): a invasão traz a faixa do invasor; o mundo é
+// descoberto e a injeção resolve na hora. O playerID vem do JWT (interceptor).
+type InvadeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`              // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+	SoulLevel     int32                  `protobuf:"varint,2,opt,name=soul_level,json=soulLevel,proto3" json:"soul_level,omitempty"`    // nível do invasor (faixa assimétrica); 0 = sem faixa
+	WeaponTier    int32                  `protobuf:"varint,3,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"` // tier de arma do invasor (se o perfil exigir)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvadeRequest) Reset() {
+	*x = InvadeRequest{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvadeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvadeRequest) ProtoMessage() {}
+
+func (x *InvadeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvadeRequest.ProtoReflect.Descriptor instead.
+func (*InvadeRequest) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *InvadeRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+func (x *InvadeRequest) GetSoulLevel() int32 {
+	if x != nil {
+		return x.SoulLevel
+	}
+	return 0
+}
+
+func (x *InvadeRequest) GetWeaponTier() int32 {
+	if x != nil {
+		return x.WeaponTier
+	}
+	return 0
+}
+
+type InvadeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`             // mundo em que o invasor entrou
+	ServerAddress string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server do mundo
+	ConnectToken  string                 `protobuf:"bytes,3,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`    // connect token EdDSA do invasor (claim role=invader)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvadeResponse) Reset() {
+	*x = InvadeResponse{}
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvadeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvadeResponse) ProtoMessage() {}
+
+func (x *InvadeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_matchmaking_v1_matchmaking_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvadeResponse.ProtoReflect.Descriptor instead.
+func (*InvadeResponse) Descriptor() ([]byte, []int) {
+	return file_matchmaking_v1_matchmaking_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *InvadeResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *InvadeResponse) GetServerAddress() string {
+	if x != nil {
+		return x.ServerAddress
+	}
+	return ""
+}
+
+func (x *InvadeResponse) GetConnectToken() string {
+	if x != nil {
+		return x.ConnectToken
+	}
+	return ""
+}
+
 var File_matchmaking_v1_matchmaking_proto protoreflect.FileDescriptor
 
 const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
@@ -214,14 +336,26 @@ const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\aplayers\x18\x03 \x03(\tR\aplayers\x12%\n" +
 	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12#\n" +
 	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\x12\x16\n" +
-	"\x06reason\x18\x06 \x01(\tR\x06reason*]\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\"h\n" +
+	"\rInvadeRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1d\n" +
+	"\n" +
+	"soul_level\x18\x02 \x01(\x05R\tsoulLevel\x12\x1f\n" +
+	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
+	"weaponTier\"{\n" +
+	"\x0eInvadeResponse\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
+	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x12#\n" +
+	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken*]\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_SEARCHING\x10\x01\x12\x12\n" +
 	"\x0eSTATUS_MATCHED\x10\x02\x12\x11\n" +
-	"\rSTATUS_FAILED\x10\x032\\\n" +
+	"\rSTATUS_FAILED\x10\x032\xa5\x01\n" +
 	"\vMatchmaking\x12M\n" +
-	"\tFindMatch\x12 .matchmaking.v1.FindMatchRequest\x1a\x1c.matchmaking.v1.TicketUpdate0\x01BhZfgithub.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
+	"\tFindMatch\x12 .matchmaking.v1.FindMatchRequest\x1a\x1c.matchmaking.v1.TicketUpdate0\x01\x12G\n" +
+	"\x06Invade\x12\x1d.matchmaking.v1.InvadeRequest\x1a\x1e.matchmaking.v1.InvadeResponseBhZfgithub.com/vitormartins1/go-game-backend/services/matchmaking-service/gen/matchmaking/v1;matchmakingv1b\x06proto3"
 
 var (
 	file_matchmaking_v1_matchmaking_proto_rawDescOnce sync.Once
@@ -236,18 +370,22 @@ func file_matchmaking_v1_matchmaking_proto_rawDescGZIP() []byte {
 }
 
 var file_matchmaking_v1_matchmaking_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_matchmaking_v1_matchmaking_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_matchmaking_v1_matchmaking_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_matchmaking_v1_matchmaking_proto_goTypes = []any{
 	(Status)(0),              // 0: matchmaking.v1.Status
 	(*FindMatchRequest)(nil), // 1: matchmaking.v1.FindMatchRequest
 	(*TicketUpdate)(nil),     // 2: matchmaking.v1.TicketUpdate
+	(*InvadeRequest)(nil),    // 3: matchmaking.v1.InvadeRequest
+	(*InvadeResponse)(nil),   // 4: matchmaking.v1.InvadeResponse
 }
 var file_matchmaking_v1_matchmaking_proto_depIdxs = []int32{
 	0, // 0: matchmaking.v1.TicketUpdate.status:type_name -> matchmaking.v1.Status
 	1, // 1: matchmaking.v1.Matchmaking.FindMatch:input_type -> matchmaking.v1.FindMatchRequest
-	2, // 2: matchmaking.v1.Matchmaking.FindMatch:output_type -> matchmaking.v1.TicketUpdate
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	3, // 2: matchmaking.v1.Matchmaking.Invade:input_type -> matchmaking.v1.InvadeRequest
+	2, // 3: matchmaking.v1.Matchmaking.FindMatch:output_type -> matchmaking.v1.TicketUpdate
+	4, // 4: matchmaking.v1.Matchmaking.Invade:output_type -> matchmaking.v1.InvadeResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -264,7 +402,7 @@ func file_matchmaking_v1_matchmaking_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_matchmaking_v1_matchmaking_proto_rawDesc), len(file_matchmaking_v1_matchmaking_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

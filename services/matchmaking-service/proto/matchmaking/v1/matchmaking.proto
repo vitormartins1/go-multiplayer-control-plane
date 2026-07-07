@@ -10,6 +10,12 @@ service Matchmaking {
   // FindMatch enfileira o jogador e transmite o status do ticket até o match
   // (server-streaming). Cancelar a chamada remove o ticket da fila.
   rpc FindMatch(FindMatchRequest) returns (stream TicketUpdate);
+
+  // Invade é o segundo modo (host_world_dropin, spec 006): o invasor descobre um
+  // mundo aberto elegível e é injetado nele (unary — resolve na hora ou falha).
+  // FailedPrecondition (jogo não aceita invasão), NotFound (nenhum mundo na
+  // faixa). O playerID do invasor vem do JWT, não do request.
+  rpc Invade(InvadeRequest) returns (InvadeResponse);
 }
 
 message FindMatchRequest {
@@ -30,4 +36,18 @@ message TicketUpdate {
   string server_address = 4;    // endereço do game server alocado (MATCHED)
   string connect_token = 5;     // connect token EdDSA do próprio jogador (MATCHED)
   string reason = 6;            // motivo quando FAILED
+}
+
+// host_world_dropin (spec 006): a invasão traz a faixa do invasor; o mundo é
+// descoberto e a injeção resolve na hora. O playerID vem do JWT (interceptor).
+message InvadeRequest {
+  string game_id = 1;      // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+  int32 soul_level = 2;    // nível do invasor (faixa assimétrica); 0 = sem faixa
+  int32 weapon_tier = 3;   // tier de arma do invasor (se o perfil exigir)
+}
+
+message InvadeResponse {
+  string session_id = 1;     // mundo em que o invasor entrou
+  string server_address = 2; // endereço do game server do mundo
+  string connect_token = 3;  // connect token EdDSA do invasor (claim role=invader)
 }

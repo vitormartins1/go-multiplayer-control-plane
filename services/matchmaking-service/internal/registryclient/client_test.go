@@ -66,6 +66,33 @@ func TestMatchSize_TamanhoZero_ErrProfileUnavailable(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
+func TestInvasionPolicy_LeFlagsDoPerfil(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"host_world_dropin","params":{"invasionEnabled":true,"levelRangeEnabled":true,"weaponTierEnabled":false}}`, nil)
+	policy, err := New(srv.URL, srv.Client()).InvasionPolicy(t.Context(), "g1")
+	require.NoError(t, err)
+	assert.Equal(t, "host_world_dropin", policy.Archetype)
+	assert.True(t, policy.InvasionEnabled)
+	assert.True(t, policy.LevelRangeEnabled)
+	assert.False(t, policy.WeaponTierEnabled)
+	assert.True(t, policy.SupportsInvasion())
+}
+
+func TestInvasionPolicy_ArchetypeQueueArena_NaoSuporta(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"queue_arena","params":{"structure":"ffa","playerCount":8}}`, nil)
+	policy, err := New(srv.URL, srv.Client()).InvasionPolicy(t.Context(), "g1")
+	require.NoError(t, err) // não é erro de leitura; o service decide ErrInvasionNotSupported
+	assert.Equal(t, "queue_arena", policy.Archetype)
+	assert.False(t, policy.SupportsInvasion())
+}
+
+func TestInvasionPolicy_404_ErrProfileUnavailable(t *testing.T) {
+	srv := serverReturning(t, http.StatusNotFound, `{"error":"profile_not_found"}`, nil)
+	_, err := New(srv.URL, srv.Client()).InvasionPolicy(t.Context(), "g1")
+	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+}
+
 func TestMatchSize_InjetaInternalKey(t *testing.T) {
 	var gotKey string
 	srv := serverReturning(t, http.StatusOK,

@@ -991,3 +991,41 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 **Contraste com C#:** em C# você poderia deixar tudo dentro de `lock (…) { … }` e chamar o trabalho lento lá dentro — funciona, mas serializa todo mundo atrás da operação cara. Aqui a escolha é explícita: o lock protege só a transição de estado; o custo (cripto) fica concorrente. O preço é ter que escrever o **rollback** à mão (não há `try/finally` desfazendo automaticamente o append).
 
 **Pegadinha / nuance:** o `sess` é um ponteiro capturado antes de soltar o lock. Entre o unlock e o revert, outra goroutine pode ter fechado o mundo (`CloseWorld` remove a sessão do mapa) — o `removeFromWorld` então mexe num agregado já destacado do mapa, o que é **inofensivo** (ninguém mais o vê). O que *não* é resolvido por este padrão é a janela em que o token é emitido para um mundo que fechou concorrentemente; para o MVP (um cliente de teste) é aceitável, e o connect simplesmente falharia no game server. Se virar problema, a alternativa é emitir o token **dentro** do lock (a assinatura Ed25519 custa ~dezenas de µs) — trade-off consciente, documentado no `plan.md` da spec 011.
+
+---
+
+## 28 — Um adapter, várias Ports: interface implícita (structural typing)
+
+**O que é / por que importa:** em Go, um tipo satisfaz uma interface **só por ter os métodos** — não se declara `implements`. Consequência prática: um mesmo struct concreto pode satisfazer **várias Ports** sem cerimônia, e cada consumidor recebe **só a interface estreita que usa** (Interface Segregation de graça). Na H1a o `sessionclient.Client` já falava `SessionProvisioner` (queue-form); ganhou dois métodos novos (`ListInvadableWorlds`, `Inject`) e passou a satisfazer também `WorldDirectory` e `WorldInjector` — o `Invader` recebe as duas Ports, sem saber que por trás é o mesmo objeto e a mesma conexão gRPC.
+
+**Onde no projeto:** `matchmaking-service/internal/sessionclient/grpc_client.go` (um struct, três Ports) e `internal/service/invader.go` (o serviço depende só das interfaces estreitas). Mesmo padrão no `registryclient.Client` (satisfaz `ProfileProvider` **e** `InvasionPolicyProvider`).
+
+```go
+// O adapter declara à vista quais Ports satisfaz — asserção em tempo de compilação.
+var (
+    _ domain.SessionProvisioner = (*Client)(nil)
+    _ domain.WorldDirectory     = (*Client)(nil)
+    _ domain.WorldInjector      = (*Client)(nil)
+)
+
+// O wire-up passa o MESMO objeto onde cada Port é esperada:
+sessionClient := sessionclient.New(sessionv1.NewSessionClient(sessionConn))
+mm  := service.New(formInterval, provider, sessionClient)      // usa SessionProvisioner
+inv := service.NewInvader(registry, sessionClient, sessionClient) // usa Directory + Injector
+```
+
+```mermaid
+flowchart LR
+    subgraph Ports["domain (interfaces estreitas)"]
+        P1[SessionProvisioner]
+        P2[WorldDirectory]
+        P3[WorldInjector]
+    end
+    C[sessionclient.Client<br/>1 struct, 1 conn gRPC] -.satisfaz.-> P1 & P2 & P3
+    MM[Matchmaker] --> P1
+    INV[Invader] --> P2 & P3
+```
+
+**Contraste com C#:** em C# a classe precisa *declarar* `class SessionClient : ISessionProvisioner, IWorldDirectory, IWorldInjector` — o acoplamento nome↔tipo é explícito e a interface normalmente vive perto de quem a implementa. Em Go a interface é **definida do lado de quem consome** (o `domain` do matchmaking declara `WorldDirectory` do jeito que *ele* precisa) e qualquer tipo com a forma certa serve. Isso inverte a dependência sem o consumidor jamais importar o adapter.
+
+**Pegadinha / nuance:** a asserção `var _ Interface = (*T)(nil)` não é decoração — é o que transforma "esqueci de atualizar um método" num **erro de compilação no arquivo do adapter**, e não num erro obscuro lá no wire-up. Segundo achado da mesma fatia, pela mesma razão de "método a mais, sem herança": o `Invade` é **unary** e o interceptor de auth existente era **stream-only** (`grpc.StreamServerInterceptor`); foi preciso um `UnaryAuthInterceptor` irmão (`grpc.UnaryServerInterceptor`) — o gRPC-Go trata os dois mundos por assinaturas distintas, registradas separadamente (`StreamInterceptor` vs `ChainUnaryInterceptor`). Reusei a mesma `bearerFromMetadata`/`playerIDKey`; só a moldura muda.
