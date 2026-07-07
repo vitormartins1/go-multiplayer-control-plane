@@ -221,7 +221,8 @@ func TestReportResult_ComTimesEStats_Publica(t *testing.T) {
 
 func TestReportResult_KindNaoSuportado_ErrUnsupportedOutcome(t *testing.T) {
 	svc, _, _ := reportSetup(t)
-	err := svc.ReportResult(context.Background(), "match-1", domain.MatchOutcome{Kind: "collective"})
+	// kind fora do conjunto conhecido (ex.: role_event ainda não implementado).
+	err := svc.ReportResult(context.Background(), "match-1", domain.MatchOutcome{Kind: "role_event"})
 	assert.ErrorIs(t, err, domain.ErrUnsupportedOutcome)
 	assert.Equal(t, float64(1), svc.ActiveSessions(), "outcome inválido não encerra a sessão")
 }
@@ -716,5 +717,100 @@ func TestReportResult_Placement_MatchInexistente_ErrSessionNotFound(t *testing.T
 	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
 	err := svc.ReportResult(context.Background(), "nao-existe",
 		placementOutcome(domain.PlacementEntry{PlayerID: "p1", Placement: 1}))
+	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+}
+
+// --- coop_mission (C2): resultado coletivo ---
+
+func collectiveOutcome(result string, players ...domain.CollectivePlayer) domain.MatchOutcome {
+	return domain.MatchOutcome{Kind: domain.OutcomeCollective, Collective: &domain.CollectiveResult{Outcome: result, Players: players}}
+}
+
+// Caminho feliz do C2: collective válido (SUCCESS) → publica (kind=collective),
+// libera o server e encerra a sessão — mesmo fluxo terminal do win_loss_draw.
+func TestReportResult_Collective_PublicaLiberaEncerra(t *testing.T) {
+	svc, pub, alloc := reportSetup(t) // FFA p1/p2
+	outcome := collectiveOutcome(domain.MissionSuccess,
+		domain.CollectivePlayer{PlayerID: "p1", Stats: map[string]int64{"kills": 12}},
+		domain.CollectivePlayer{PlayerID: "p2", Stats: map[string]int64{"revives": 3}},
+	)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.MatchedBy(func(o domain.MatchOutcome) bool {
+		return o.Kind == domain.OutcomeCollective && o.Collective != nil &&
+			o.Collective.Outcome == domain.MissionSuccess && len(o.Collective.Players) == 2
+	})).Return(nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
+	assert.Equal(t, float64(0), svc.ActiveSessions(), "sessão encerrada")
+	assert.Equal(t, float64(1), svc.ClosedTotal(domain.CloseResult))
+	pub.AssertExpectations(t)
+	alloc.AssertExpectations(t)
+}
+
+// FAILURE também é aceito (é um desfecho válido da sessão).
+func TestReportResult_Collective_Failure_Aceito(t *testing.T) {
+	svc, pub, alloc := reportSetup(t)
+	outcome := collectiveOutcome(domain.MissionFailure,
+		domain.CollectivePlayer{PlayerID: "p1"},
+		domain.CollectivePlayer{PlayerID: "p2"},
+	)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
+	pub.AssertExpectations(t)
+}
+
+// Validação estrutural: players vazio e outcome fora do vocabulário → ErrInvalidOutcome.
+func TestReportResult_Collective_Invalido_ErrInvalidOutcome(t *testing.T) {
+	svc, _, _ := reportSetup(t)
+	errVazio := svc.ReportResult(context.Background(), "match-1", collectiveOutcome(domain.MissionSuccess))
+	assert.ErrorIs(t, errVazio, domain.ErrInvalidOutcome, "players vazio")
+
+	errOutcome := svc.ReportResult(context.Background(), "match-1",
+		collectiveOutcome("MISSION_ABORTED", domain.CollectivePlayer{PlayerID: "p1"}))
+	assert.ErrorIs(t, errOutcome, domain.ErrInvalidOutcome, "outcome fora do vocabulário")
+
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "outcome inválido não encerra a sessão")
+}
+
+// Carimbo de time (C1): a entrada do jogador recebe o team-1 registrado na
+// formação, sobrescrevendo o que o server ecoou.
+func TestReportResult_Collective_CarimbaTimeDaFormacao(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	pub := &mockPublisher{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	svc := New(alloc, iss, pub)
+	// formação co-op: p1/p2/p3 num único time team-1.
+	teams := []domain.TeamAssignment{{TeamID: "team-1", Players: []string{"p1", "p2", "p3"}}}
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", teams)
+	require.NoError(t, err)
+
+	reported := collectiveOutcome(domain.MissionSuccess,
+		domain.CollectivePlayer{PlayerID: "p1", TeamID: "garbage"},
+		domain.CollectivePlayer{PlayerID: "p2", TeamID: "garbage"},
+		domain.CollectivePlayer{PlayerID: "p3", TeamID: "garbage"},
+	)
+	var captured domain.MatchOutcome
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).
+		Run(func(args mock.Arguments) { captured = args.Get(3).(domain.MatchOutcome) }).Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", reported))
+	require.NotNil(t, captured.Collective)
+	for _, p := range captured.Collective.Players {
+		assert.Equal(t, "team-1", p.TeamID, "recarimbado a partir da formação")
+	}
+	pub.AssertExpectations(t)
+}
+
+// collective para matchId inexistente → ErrSessionNotFound (inalterado).
+func TestReportResult_Collective_MatchInexistente_ErrSessionNotFound(t *testing.T) {
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	err := svc.ReportResult(context.Background(), "nao-existe",
+		collectiveOutcome(domain.MissionSuccess, domain.CollectivePlayer{PlayerID: "p1"}))
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
 }

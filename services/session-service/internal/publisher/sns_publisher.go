@@ -34,6 +34,10 @@ const kindParticipationEvent = "participation_event"
 // mesmo tópico match-results, kind distinto do win_loss_draw.
 const kindPlacement = "placement"
 
+// kindCollective é o discriminador do envelope de resultado coletivo
+// (coop_mission, C2): mesmo tópico match-results, kind distinto dos demais.
+const kindCollective = "collective"
+
 // envelopeVersion é a versão do schema da mensagem publicada no tópico. Os
 // consumidores ignoram campos desconhecidos; bumps de major viram um novo campo.
 //
@@ -95,6 +99,24 @@ type placementEntryDTO struct {
 	Stats      map[string]int64 `json:"stats,omitempty"`
 }
 
+// collectiveEnvelope é o envelope do coop_mission (C2) no mesmo tópico
+// match-results. Discriminado por kind=collective; o `outcome` é da SESSÃO
+// inteira (não por jogador) e cada `players[]` carrega só o time e os stats.
+type collectiveEnvelope struct {
+	SchemaVersion int                   `json:"schemaVersion"`
+	Kind          string                `json:"kind"`
+	MatchID       string                `json:"matchId"`
+	GameID        string                `json:"gameId"`
+	Outcome       string                `json:"outcome"` // MISSION_SUCCESS | MISSION_FAILURE (da sessão)
+	Players       []collectivePlayerDTO `json:"players"`
+}
+
+type collectivePlayerDTO struct {
+	PlayerID string           `json:"playerId"`
+	TeamID   string           `json:"teamId,omitempty"`
+	Stats    map[string]int64 `json:"stats,omitempty"`
+}
+
 // snsClient é a fração da API do SNS que usamos (permite fake em teste).
 type snsClient interface {
 	Publish(ctx context.Context, in *sns.PublishInput, optFns ...func(*sns.Options)) (*sns.PublishOutput, error)
@@ -127,6 +149,8 @@ func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domai
 	switch outcome.Kind {
 	case domain.OutcomePlacement:
 		return s.publishPlacement(ctx, gameID, matchID, outcome.Placement)
+	case domain.OutcomeCollective:
+		return s.publishCollective(ctx, gameID, matchID, outcome.Collective)
 	default:
 		return s.publishWinLossDraw(ctx, gameID, matchID, outcome)
 	}
@@ -200,6 +224,41 @@ func (s *SNS) publishPlacement(ctx context.Context, gameID, matchID string, resu
 		slog.String("game_id", gameID),
 		slog.String("match_id", matchID),
 		slog.Int("entries", len(result.Entries)),
+	)
+	return nil
+}
+
+// publishCollective publica o envelope do coop_mission (kind=collective, C2).
+func (s *SNS) publishCollective(ctx context.Context, gameID, matchID string, result *domain.CollectiveResult) error {
+	env := collectiveEnvelope{
+		SchemaVersion: envelopeVersion,
+		Kind:          kindCollective,
+		MatchID:       matchID,
+		GameID:        gameID,
+		Outcome:       result.Outcome,
+		Players:       make([]collectivePlayerDTO, 0, len(result.Players)),
+	}
+	for _, p := range result.Players {
+		env.Players = append(env.Players, collectivePlayerDTO{
+			PlayerID: p.PlayerID,
+			TeamID:   p.TeamID,
+			Stats:    p.Stats,
+		})
+	}
+
+	body, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("session publisher: marshal collective envelope: %w", err)
+	}
+
+	if err := s.publish(ctx, body); err != nil {
+		return err
+	}
+	s.log.Info("collective publicado no tópico",
+		slog.String("game_id", gameID),
+		slog.String("match_id", matchID),
+		slog.String("outcome", result.Outcome),
+		slog.Int("players", len(result.Players)),
 	)
 	return nil
 }

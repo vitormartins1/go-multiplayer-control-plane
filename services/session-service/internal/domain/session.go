@@ -154,25 +154,31 @@ type ConnectGrant struct {
 	Token    string
 }
 
-// Vocabulário do outcome (ADR-0023). win_loss_draw (queue_arena) e placement
-// (battle_royale, BR2) são os kinds existentes.
+// Vocabulário do outcome (ADR-0023). win_loss_draw (queue_arena), placement
+// (battle_royale, BR2) e collective (coop_mission, C2) são os kinds existentes.
 const (
 	OutcomeWinLossDraw = "win_loss_draw"
-	OutcomePlacement   = "placement" // battle_royale (ADR-0023/BR2)
+	OutcomePlacement   = "placement"  // battle_royale (ADR-0023/BR2)
+	OutcomeCollective  = "collective" // coop_mission (ADR-0023/C2)
 
 	ResultWin  = "win"
 	ResultLoss = "loss"
 	ResultDraw = "draw"
+
+	// Desfecho coletivo do coop_mission (C2): da SESSÃO inteira, não por jogador.
+	MissionSuccess = "MISSION_SUCCESS"
+	MissionFailure = "MISSION_FAILURE"
 )
 
 // MatchOutcome é o resultado da partida, polimórfico por arquétipo (ADR-0023),
 // modelado como tagged union por ponteiro: exatamente o ponteiro do Kind
-// declarado é não-nil. WinLossDraw (queue_arena) e Placement (battle_royale);
-// novos arquétipos adicionam um campo-ponteiro próprio (collective, ...).
+// declarado é não-nil. WinLossDraw (queue_arena), Placement (battle_royale) e
+// Collective (coop_mission); novos arquétipos adicionam um campo-ponteiro próprio.
 type MatchOutcome struct {
-	Kind        string // "win_loss_draw" | "placement"
+	Kind        string // "win_loss_draw" | "placement" | "collective"
 	WinLossDraw *WinLossDrawResult
 	Placement   *PlacementResult
+	Collective  *CollectiveResult
 }
 
 // WinLossDrawResult é o outcome do queue_arena: vitória/derrota/empate por
@@ -206,6 +212,25 @@ type PlacementEntry struct {
 	Placement  int              // colocação ordinal (1 = vencedor)
 	SurvivedMs int64            // tempo de sobrevivência (ms)
 	Stats      map[string]int64 // métricas extras opcionais (ex.: kills); pode ser nil
+}
+
+// CollectiveResult é o outcome do coop_mission (ADR-0023/C2): um desfecho
+// COLETIVO da sessão inteira (MISSION_SUCCESS/FAILURE igual para todos),
+// terminal. Outcome vive no nível da sessão (não por jogador) — a diferença
+// estrutural do arquétipo; os stats individuais modulam recompensa, não o
+// desfecho.
+type CollectiveResult struct {
+	Outcome string // "MISSION_SUCCESS" | "MISSION_FAILURE" (da sessão)
+	Players []CollectivePlayer
+}
+
+// CollectivePlayer é a participação de um jogador na missão: só o time e as
+// métricas (sem outcome/won/score — o desfecho é coletivo). O TeamID é carimbado
+// pelo session a partir da formação (não confiado no que o server ecoa).
+type CollectivePlayer struct {
+	PlayerID string
+	TeamID   string           // time co-op (team-1)
+	Stats    map[string]int64 // métricas individuais opcionais; pode ser nil
 }
 
 // SessionService é a Port de entrada: cria sessões a partir de matches e

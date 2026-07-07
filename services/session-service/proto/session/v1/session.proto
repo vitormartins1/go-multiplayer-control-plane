@@ -151,6 +151,7 @@ message ReportResultRequest {
   oneof outcome {
     WinLossDrawResult win_loss_draw = 2; // arquétipo queue_arena
     PlacementResult placement = 3;       // arquétipo battle_royale (ADR-0023/BR2)
+    CollectiveResult collective = 4;     // arquétipo coop_mission (ADR-0023/C2)
   }
 }
 
@@ -188,4 +189,22 @@ message PlacementEntry {
   int32 placement = 3;            // colocação ordinal (1 = vencedor)
   int64 survived_ms = 4;          // tempo de sobrevivência (ms); intrínseco ao BR
   map<string, int64> stats = 5;   // métricas extras opcionais (ex.: kills)
+}
+
+// CollectiveResult é o outcome do arquétipo coop_mission (ADR-0023/C2): um
+// desfecho COLETIVO da sessão inteira (MISSION_SUCCESS/FAILURE igual para todos),
+// terminal. O outcome vive no nível da sessão, não do jogador — a diferença
+// estrutural do arquétipo. Stats individuais modulam recompensa, não o desfecho.
+message CollectiveResult {
+  string outcome = 1;                    // "MISSION_SUCCESS" | "MISSION_FAILURE" (da sessão)
+  repeated CollectivePlayer players = 2;
+}
+
+// CollectivePlayer é a participação de um jogador na missão: só o time e as
+// métricas (sem outcome/won/score por jogador — o desfecho é coletivo). O
+// session carimba o team_id canônico a partir da formação.
+message CollectivePlayer {
+  string player_id = 1;
+  string team_id = 2;             // time co-op (team-1); carimbado pelo session
+  map<string, int64> stats = 3;   // métricas individuais opcionais (kills, revives, ...)
 }

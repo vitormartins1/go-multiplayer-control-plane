@@ -55,7 +55,7 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C1 — Formação do time co-op (matchmaking) ✅ branch
+## C1 — Formação do time co-op (matchmaking) ✅ main
 
 **Objetivo:** o matchmaking forma **um único time** de `teamSize` (do perfil) e abre a sessão. Caso degenerado da composição NvN do `queue_arena` — um lado só.
 
@@ -72,9 +72,11 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C2 — Resultado coletivo (session + fan-out) — o núcleo
+## C2 — Resultado coletivo (session + fan-out) — o núcleo ✅ branch
 
 **Objetivo:** o server reporta **um desfecho coletivo** (`MISSION_SUCCESS`/`MISSION_FAILURE`) + stats por jogador no fim; o outcome vira o kind `collective`; o fan-out o distribui. Fecha o **último eixo** do "gap central" (resultado coletivo) e completa os quatro modelos do ADR-0023.
+
+> **Status:** implementado na branch `feat/session/016-collective-result` (spec `session/016`). Kind `collective` no `MatchOutcome` (4º ponteiro `Collective`), proto regenerado com `buf` (`CollectiveResult{outcome, players[]}`/`CollectivePlayer{playerId, teamId, stats}` no `oneof`). O **ponto novo** confirmado no código: `Outcome` vive no nível da sessão (campo do `CollectiveResult`), não por jogador. Dispatch por kind em `validateOutcome`/`stampTeams`/`toMatchOutcome`/`SNS.Publish`/`Log.Publish`; envelope `kind=collective` no mesmo tópico `match-results`. Validação estrutural: `players` não-vazio + `outcome ∈ {MISSION_SUCCESS, MISSION_FAILURE}`; valores de `stats` **não** checados (server autoritativo, como o `placement`). Terminal, reusa `stampTeams`→publish→closeSession. Verde: 126 testes `-race`, service 94.4%, lint 0. **Nada novo de Go** (tagged-union + dispatch por kind já documentados). Sem ADR novo.
 
 **Specs:** `session/016-collective-result`.
 
@@ -128,8 +130,8 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 | Fatia | Specs | Tamanho | Depende |
 |---|---|---|---|
 | C0 — declaração do perfil ✅ main | game-registry/008 + admin-ui | M | — |
-| C1 — formação do time co-op ✅ branch | matchmaking/009 | S (session intacto — confirmado) | C0 |
-| C2 — resultado coletivo **(núcleo)** | session/016 | M | C1 |
+| C1 — formação do time co-op ✅ main | matchmaking/009 | S (session intacto — confirmado) | C0 |
+| C2 — resultado coletivo **(núcleo)** ✅ branch | session/016 | M | C1 |
 | C3 — colher (3 sinks) | achievements/011 + leaderboard/006 + analytics/006 | L | C2 |
 | C4 — console + contrato | admin-bff + admin-ui + doc | M | C1, C3 |
 

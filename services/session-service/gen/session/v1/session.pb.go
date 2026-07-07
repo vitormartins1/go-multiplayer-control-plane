@@ -952,6 +952,7 @@ type ReportResultRequest struct {
 	//
 	//	*ReportResultRequest_WinLossDraw
 	//	*ReportResultRequest_Placement
+	//	*ReportResultRequest_Collective
 	Outcome       isReportResultRequest_Outcome `protobuf_oneof:"outcome"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1019,6 +1020,15 @@ func (x *ReportResultRequest) GetPlacement() *PlacementResult {
 	return nil
 }
 
+func (x *ReportResultRequest) GetCollective() *CollectiveResult {
+	if x != nil {
+		if x, ok := x.Outcome.(*ReportResultRequest_Collective); ok {
+			return x.Collective
+		}
+	}
+	return nil
+}
+
 type isReportResultRequest_Outcome interface {
 	isReportResultRequest_Outcome()
 }
@@ -1031,9 +1041,15 @@ type ReportResultRequest_Placement struct {
 	Placement *PlacementResult `protobuf:"bytes,3,opt,name=placement,proto3,oneof"` // arquétipo battle_royale (ADR-0023/BR2)
 }
 
+type ReportResultRequest_Collective struct {
+	Collective *CollectiveResult `protobuf:"bytes,4,opt,name=collective,proto3,oneof"` // arquétipo coop_mission (ADR-0023/C2)
+}
+
 func (*ReportResultRequest_WinLossDraw) isReportResultRequest_Outcome() {}
 
 func (*ReportResultRequest_Placement) isReportResultRequest_Outcome() {}
+
+func (*ReportResultRequest_Collective) isReportResultRequest_Outcome() {}
 
 type ReportResultResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1321,6 +1337,125 @@ func (x *PlacementEntry) GetStats() map[string]int64 {
 	return nil
 }
 
+// CollectiveResult é o outcome do arquétipo coop_mission (ADR-0023/C2): um
+// desfecho COLETIVO da sessão inteira (MISSION_SUCCESS/FAILURE igual para todos),
+// terminal. O outcome vive no nível da sessão, não do jogador — a diferença
+// estrutural do arquétipo. Stats individuais modulam recompensa, não o desfecho.
+type CollectiveResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Outcome       string                 `protobuf:"bytes,1,opt,name=outcome,proto3" json:"outcome,omitempty"` // "MISSION_SUCCESS" | "MISSION_FAILURE" (da sessão)
+	Players       []*CollectivePlayer    `protobuf:"bytes,2,rep,name=players,proto3" json:"players,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CollectiveResult) Reset() {
+	*x = CollectiveResult{}
+	mi := &file_session_v1_session_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CollectiveResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CollectiveResult) ProtoMessage() {}
+
+func (x *CollectiveResult) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CollectiveResult.ProtoReflect.Descriptor instead.
+func (*CollectiveResult) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CollectiveResult) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *CollectiveResult) GetPlayers() []*CollectivePlayer {
+	if x != nil {
+		return x.Players
+	}
+	return nil
+}
+
+// CollectivePlayer é a participação de um jogador na missão: só o time e as
+// métricas (sem outcome/won/score por jogador — o desfecho é coletivo). O
+// session carimba o team_id canônico a partir da formação.
+type CollectivePlayer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	TeamId        string                 `protobuf:"bytes,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`                                                            // time co-op (team-1); carimbado pelo session
+	Stats         map[string]int64       `protobuf:"bytes,3,rep,name=stats,proto3" json:"stats,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // métricas individuais opcionais (kills, revives, ...)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CollectivePlayer) Reset() {
+	*x = CollectivePlayer{}
+	mi := &file_session_v1_session_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CollectivePlayer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CollectivePlayer) ProtoMessage() {}
+
+func (x *CollectivePlayer) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CollectivePlayer.ProtoReflect.Descriptor instead.
+func (*CollectivePlayer) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *CollectivePlayer) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *CollectivePlayer) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *CollectivePlayer) GetStats() map[string]int64 {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
 var File_session_v1_session_proto protoreflect.FileDescriptor
 
 const file_session_v1_session_proto_rawDesc = "" +
@@ -1390,11 +1525,14 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x06grants\x18\x03 \x03(\v2\x18.session.v1.ConnectGrantR\x06grants\"P\n" +
 	"\fConnectGrant\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12#\n" +
-	"\rconnect_token\x18\x02 \x01(\tR\fconnectToken\"\xbd\x01\n" +
+	"\rconnect_token\x18\x02 \x01(\tR\fconnectToken\"\xfd\x01\n" +
 	"\x13ReportResultRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12C\n" +
 	"\rwin_loss_draw\x18\x02 \x01(\v2\x1d.session.v1.WinLossDrawResultH\x00R\vwinLossDraw\x12;\n" +
-	"\tplacement\x18\x03 \x01(\v2\x1b.session.v1.PlacementResultH\x00R\tplacementB\t\n" +
+	"\tplacement\x18\x03 \x01(\v2\x1b.session.v1.PlacementResultH\x00R\tplacement\x12>\n" +
+	"\n" +
+	"collective\x18\x04 \x01(\v2\x1c.session.v1.CollectiveResultH\x00R\n" +
+	"collectiveB\t\n" +
 	"\aoutcome\"\x16\n" +
 	"\x14ReportResultResponse\"H\n" +
 	"\x11WinLossDrawResult\x123\n" +
@@ -1418,6 +1556,17 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\vsurvived_ms\x18\x04 \x01(\x03R\n" +
 	"survivedMs\x12;\n" +
 	"\x05stats\x18\x05 \x03(\v2%.session.v1.PlacementEntry.StatsEntryR\x05stats\x1a8\n" +
+	"\n" +
+	"StatsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"d\n" +
+	"\x10CollectiveResult\x12\x18\n" +
+	"\aoutcome\x18\x01 \x01(\tR\aoutcome\x126\n" +
+	"\aplayers\x18\x02 \x03(\v2\x1c.session.v1.CollectivePlayerR\aplayers\"\xc1\x01\n" +
+	"\x10CollectivePlayer\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x17\n" +
+	"\ateam_id\x18\x02 \x01(\tR\x06teamId\x12=\n" +
+	"\x05stats\x18\x03 \x03(\v2'.session.v1.CollectivePlayer.StatsEntryR\x05stats\x1a8\n" +
 	"\n" +
 	"StatsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1446,7 +1595,7 @@ func file_session_v1_session_proto_rawDescGZIP() []byte {
 	return file_session_v1_session_proto_rawDescData
 }
 
-var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_session_v1_session_proto_goTypes = []any{
 	(*OpenWorldRequest)(nil),                 // 0: session.v1.OpenWorldRequest
 	(*OpenWorldResponse)(nil),                // 1: session.v1.OpenWorldResponse
@@ -1471,8 +1620,11 @@ var file_session_v1_session_proto_goTypes = []any{
 	(*PlayerOutcome)(nil),                    // 20: session.v1.PlayerOutcome
 	(*PlacementResult)(nil),                  // 21: session.v1.PlacementResult
 	(*PlacementEntry)(nil),                   // 22: session.v1.PlacementEntry
-	nil,                                      // 23: session.v1.PlayerOutcome.StatsEntry
-	nil,                                      // 24: session.v1.PlacementEntry.StatsEntry
+	(*CollectiveResult)(nil),                 // 23: session.v1.CollectiveResult
+	(*CollectivePlayer)(nil),                 // 24: session.v1.CollectivePlayer
+	nil,                                      // 25: session.v1.PlayerOutcome.StatsEntry
+	nil,                                      // 26: session.v1.PlacementEntry.StatsEntry
+	nil,                                      // 27: session.v1.CollectivePlayer.StatsEntry
 }
 var file_session_v1_session_proto_depIdxs = []int32{
 	16, // 0: session.v1.OpenWorldResponse.host_grant:type_name -> session.v1.ConnectGrant
@@ -1482,31 +1634,34 @@ var file_session_v1_session_proto_depIdxs = []int32{
 	16, // 4: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
 	19, // 5: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
 	21, // 6: session.v1.ReportResultRequest.placement:type_name -> session.v1.PlacementResult
-	20, // 7: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
-	23, // 8: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
-	22, // 9: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
-	24, // 10: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
-	13, // 11: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
-	17, // 12: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
-	0,  // 13: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
-	2,  // 14: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
-	4,  // 15: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
-	6,  // 16: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
-	8,  // 17: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
-	11, // 18: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
-	15, // 19: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
-	18, // 20: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
-	1,  // 21: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
-	3,  // 22: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
-	5,  // 23: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
-	7,  // 24: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
-	9,  // 25: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
-	12, // 26: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
-	19, // [19:27] is the sub-list for method output_type
-	11, // [11:19] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	23, // 7: session.v1.ReportResultRequest.collective:type_name -> session.v1.CollectiveResult
+	20, // 8: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
+	25, // 9: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
+	22, // 10: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
+	26, // 11: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
+	24, // 12: session.v1.CollectiveResult.players:type_name -> session.v1.CollectivePlayer
+	27, // 13: session.v1.CollectivePlayer.stats:type_name -> session.v1.CollectivePlayer.StatsEntry
+	13, // 14: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
+	17, // 15: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
+	0,  // 16: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
+	2,  // 17: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
+	4,  // 18: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
+	6,  // 19: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
+	8,  // 20: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
+	11, // 21: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
+	15, // 22: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
+	18, // 23: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
+	1,  // 24: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
+	3,  // 25: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
+	5,  // 26: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
+	7,  // 27: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
+	9,  // 28: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
+	12, // 29: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
+	22, // [22:30] is the sub-list for method output_type
+	14, // [14:22] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_session_v1_session_proto_init() }
@@ -1517,6 +1672,7 @@ func file_session_v1_session_proto_init() {
 	file_session_v1_session_proto_msgTypes[17].OneofWrappers = []any{
 		(*ReportResultRequest_WinLossDraw)(nil),
 		(*ReportResultRequest_Placement)(nil),
+		(*ReportResultRequest_Collective)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1524,7 +1680,7 @@ func file_session_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_session_v1_session_proto_rawDesc), len(file_session_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
