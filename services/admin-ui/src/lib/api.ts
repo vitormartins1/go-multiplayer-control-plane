@@ -76,11 +76,17 @@ export interface MultiplayerProfile {
   params: QueueArenaParams;
 }
 
+// Critério por métrica (ADR-0023 A1): statKey preenchido troca o critério de
+// evento para stat; statMode é a agregação.
+export type StatMode = "cumulative" | "per_match";
+
 export interface CatalogAchievement {
   id: string;
   name: string;
   description: string;
   eventType: string;
+  statKey?: string;
+  statMode?: StatMode;
   target: number;
 }
 
@@ -89,6 +95,8 @@ export interface NewAchievement {
   name: string;
   description: string;
   eventType: string;
+  statKey?: string;
+  statMode?: StatMode;
   target: number;
 }
 

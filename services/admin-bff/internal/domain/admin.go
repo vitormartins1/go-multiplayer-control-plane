@@ -80,13 +80,16 @@ type Game struct {
 	GeneratedImageStyle string    `json:"generatedImageStyle"`
 }
 
-// Achievement é uma entrada do catálogo de conquistas de um jogo. EventType é
-// usado só na criação (o catálogo lido não o expõe) — daí o omitempty.
+// Achievement é uma entrada do catálogo de conquistas de um jogo. O critério é
+// por evento (EventType) OU por stat (StatKey+StatMode, ADR-0023 A1) — omitempty
+// mantém o JSON enxuto quando o campo não se aplica.
 type Achievement struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	EventType   string `json:"eventType,omitempty"`
+	StatKey     string `json:"statKey,omitempty"`
+	StatMode    string `json:"statMode,omitempty"`
 	Target      int    `json:"target"`
 }
 

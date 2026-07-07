@@ -21,6 +21,10 @@ var _ domain.AchievementService = (*Service)(nil)
 // (ex.: "first_win", "ten_wins").
 var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,38}[a-z0-9]$`)
 
+// statKeyRE valida o stat_key de um critério por métrica (mesma forma dos
+// scoringStats do perfil de multiplayer — ADR-0023).
+var statKeyRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
 const maxAchievementNameLen = 100
 
 // Eventos de gameplay derivados do resultado da partida (fan-out durável,
@@ -121,7 +125,7 @@ func (s *Service) RecordEvent(ctx context.Context, gameID, playerID string, even
 // idempotente por matchID. Consumido pelo fan-out durável (SQS, ADR-0020).
 // dup=true quando a partida já havia sido processada (no-op).
 func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, results []domain.MatchResult) (bool, error) {
-	players := make([]domain.PlayerEvents, 0, len(results))
+	players := make([]domain.PlayerMatchInput, 0, len(results))
 	for _, r := range results {
 		events := []string{eventMatchPlayed}
 		switch r.Outcome {
@@ -139,7 +143,7 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 		default:
 			// valor desconhecido: só match_played (não falha o processamento).
 		}
-		players = append(players, domain.PlayerEvents{PlayerID: r.PlayerID, EventTypes: events})
+		players = append(players, domain.PlayerMatchInput{PlayerID: r.PlayerID, EventTypes: events, Stats: r.Stats})
 	}
 	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
 	if err != nil {
@@ -157,20 +161,41 @@ func (s *Service) ProgressForAchievement(ctx context.Context, gameID, achievemen
 	return entries, nil
 }
 
+// validateCriterion normaliza e valida name/target e o critério (evento OU stat,
+// mutuamente exclusivos — ADR-0023 A1). Opera sobre *a in-place (default de
+// target). ErrInvalidAchievement em entrada inválida.
+func validateCriterion(a *domain.Achievement) error {
+	a.Name = strings.TrimSpace(a.Name)
+	if a.Name == "" || len(a.Name) > maxAchievementNameLen {
+		return domain.ErrInvalidAchievement
+	}
+	if a.Target < 1 {
+		a.Target = 1
+	}
+	if a.StatKey != "" {
+		// critério por stat: stat_key/stat_mode válidos, event_type ausente.
+		if a.EventType != "" || !statKeyRE.MatchString(a.StatKey) {
+			return domain.ErrInvalidAchievement
+		}
+		if a.StatMode != domain.StatModeCumulative && a.StatMode != domain.StatModePerMatch {
+			return domain.ErrInvalidAchievement
+		}
+		return nil
+	}
+	// critério por evento: event_type obrigatório; stat_mode não se aplica.
+	if a.EventType == "" || a.StatMode != "" {
+		return domain.ErrInvalidAchievement
+	}
+	return nil
+}
+
 // CreateAchievement valida e adiciona uma conquista ao catálogo do jogo (admin).
 func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) (*domain.Achievement, error) {
 	if !slugRE.MatchString(a.ID) {
 		return nil, domain.ErrInvalidAchievement
 	}
-	a.Name = strings.TrimSpace(a.Name)
-	if a.Name == "" || len(a.Name) > maxAchievementNameLen {
-		return nil, domain.ErrInvalidAchievement
-	}
-	if a.EventType == "" {
-		return nil, domain.ErrInvalidAchievement
-	}
-	if a.Target < 1 {
-		a.Target = 1
+	if err := validateCriterion(&a); err != nil {
+		return nil, err
 	}
 	a.GameID = gameID
 
@@ -181,18 +206,11 @@ func (s *Service) CreateAchievement(ctx context.Context, gameID string, a domain
 }
 
 // UpdateAchievement edita os campos mutáveis da conquista (id/gameID são a
-// chave). Valida name/eventType/target como na criação; o slug não é revalidado
+// chave). Valida name/critério como na criação; o slug não é revalidado
 // (vem do path, já existente).
 func (s *Service) UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) (*domain.Achievement, error) {
-	a.Name = strings.TrimSpace(a.Name)
-	if a.Name == "" || len(a.Name) > maxAchievementNameLen {
-		return nil, domain.ErrInvalidAchievement
-	}
-	if a.EventType == "" {
-		return nil, domain.ErrInvalidAchievement
-	}
-	if a.Target < 1 {
-		a.Target = 1
+	if err := validateCriterion(&a); err != nil {
+		return nil, err
 	}
 	a.GameID = gameID
 	a.ID = id

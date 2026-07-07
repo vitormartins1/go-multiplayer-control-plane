@@ -14,9 +14,20 @@ type Achievement struct {
 	ID          string // slug estável, ex. "first_win" — único por jogo
 	Name        string
 	Description string
-	EventType   string // tipo de evento que dispara o progresso (critério)
-	Target      int    // ocorrências necessárias para desbloquear (>= 1; 1 = direto)
+	EventType   string // critério por evento: dispara o progresso (vazio se por stat)
+	// Critério por métrica (ADR-0023, A1). StatKey != "" torna a conquista
+	// "por stat": Target vira o threshold e StatMode define a agregação. Nesse
+	// caso EventType é vazio (critérios mutuamente exclusivos).
+	StatKey  string // ex.: "kills"; vazio = critério por evento
+	StatMode string // "cumulative" | "per_match" (só com StatKey)
+	Target   int    // evento: nº de ocorrências; stat: threshold (>= 1)
 }
+
+// Modos de agregação de um critério por stat (ADR-0023 A1).
+const (
+	StatModeCumulative = "cumulative" // soma o stat entre partidas
+	StatModePerMatch   = "per_match"  // melhor stat de uma única partida
+)
 
 // PlayerProgress é o progresso de um jogador numa conquista.
 type PlayerProgress struct {
@@ -52,16 +63,19 @@ type Event struct {
 // durável (consumidor SQS, ADR-0020). O service traduz em eventos de gameplay.
 type MatchResult struct {
 	PlayerID string
-	Won      bool   // mantido para o fallback (envelope v1 / Outcome ausente)
-	Outcome  string // "win" | "loss" | "draw" | "" (ausente) — ADR-0023
+	Won      bool             // mantido para o fallback (envelope v1 / Outcome ausente)
+	Outcome  string           // "win" | "loss" | "draw" | "" (ausente) — ADR-0023
+	Stats    map[string]int64 // métricas da partida (kills, assists, ...); ADR-0023
 }
 
-// PlayerEvents são os eventos de gameplay de um jogador já traduzidos pelo
-// service (ex.: match_played, match_won). O repo aplica todos numa transação
-// idempotente por matchID.
-type PlayerEvents struct {
+// PlayerMatchInput é o resultado de um jogador já traduzido pelo service: os
+// eventos de gameplay (ex.: match_played, match_won) e os stats crus da partida.
+// O repo aplica ambos numa transação idempotente por matchID (eventos por
+// contagem; stats por métrica — ADR-0023 A1).
+type PlayerMatchInput struct {
 	PlayerID   string
 	EventTypes []string
+	Stats      map[string]int64
 }
 
 // AchievementService é a Port de entrada do achievements-service. Tudo é
@@ -95,6 +109,9 @@ type AchievementRepository interface {
 	ListCatalog(ctx context.Context, gameID string) ([]Achievement, error)
 	// FindByEventType retorna as conquistas do jogo disparadas por um event_type.
 	FindByEventType(ctx context.Context, gameID, eventType string) ([]Achievement, error)
+	// FindByStatKey retorna as conquistas por stat do jogo cujo stat_key casa
+	// (critério por métrica, ADR-0023 A1).
+	FindByStatKey(ctx context.Context, gameID, statKey string) ([]Achievement, error)
 	ListPlayerProgress(ctx context.Context, gameID, playerID string) ([]PlayerProgress, error)
 	// ProgressForAchievement devolve o progresso de todos os jogadores na
 	// conquista {achievementID} do jogo, ordenado por progresso desc.
@@ -103,10 +120,10 @@ type AchievementRepository interface {
 	// atômica e desbloqueia ao atingir target; é no-op se já desbloqueada.
 	// justUnlocked indica se foi desbloqueada nesta chamada.
 	RecordProgress(ctx context.Context, gameID, playerID, achievementID string, target int, at time.Time) (justUnlocked bool, err error)
-	// ApplyMatchResult aplica os eventos da partida numa única transação e de
-	// forma idempotente por matchID (SQS entrega at-least-once, ADR-0020).
+	// ApplyMatchResult aplica os eventos e stats da partida numa única transação
+	// e de forma idempotente por matchID (SQS entrega at-least-once, ADR-0020).
 	// dup=true se a partida já havia sido processada (no-op).
-	ApplyMatchResult(ctx context.Context, gameID, matchID string, players []PlayerEvents, at time.Time) (dup bool, err error)
+	ApplyMatchResult(ctx context.Context, gameID, matchID string, players []PlayerMatchInput, at time.Time) (dup bool, err error)
 	// CreateAchievement persiste uma conquista no catálogo do jogo;
 	// ErrAchievementExists em violação de unicidade (game_id, id).
 	CreateAchievement(ctx context.Context, a *Achievement) error

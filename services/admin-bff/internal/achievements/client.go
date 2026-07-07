@@ -45,6 +45,8 @@ type catalogResponse struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		EventType   string `json:"eventType"`
+		StatKey     string `json:"statKey"`
+		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
 	} `json:"achievements"`
 }
@@ -64,7 +66,7 @@ func (c *Client) CatalogForGame(ctx context.Context, gameID string) ([]domain.Ac
 	}
 	out := make([]domain.Achievement, 0, len(body.Achievements))
 	for _, a := range body.Achievements {
-		out = append(out, domain.Achievement{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
+		out = append(out, domain.Achievement{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, StatKey: a.StatKey, StatMode: a.StatMode, Target: a.Target})
 	}
 	return out, nil
 }
@@ -74,7 +76,7 @@ func (c *Client) CatalogForGame(ctx context.Context, gameID string) ([]domain.Ac
 func (c *Client) CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error {
 	body, _ := json.Marshal(map[string]any{
 		"id": a.ID, "name": a.Name, "description": a.Description,
-		"eventType": a.EventType, "target": a.Target,
+		"eventType": a.EventType, "statKey": a.StatKey, "statMode": a.StatMode, "target": a.Target,
 	})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.gamePath(gameID, "/achievements"), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -89,7 +91,8 @@ func (c *Client) CreateAchievement(ctx context.Context, gameID string, a domain.
 // UpdateAchievement edita uma conquista do jogo (PUT). 400/404 -> UpstreamError.
 func (c *Client) UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error {
 	body, _ := json.Marshal(map[string]any{
-		"name": a.Name, "description": a.Description, "eventType": a.EventType, "target": a.Target,
+		"name": a.Name, "description": a.Description,
+		"eventType": a.EventType, "statKey": a.StatKey, "statMode": a.StatMode, "target": a.Target,
 	})
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(id))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))

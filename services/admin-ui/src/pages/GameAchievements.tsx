@@ -8,6 +8,8 @@ import {
   Loader,
   Modal,
   NumberInput,
+  SegmentedControl,
+  Select,
   Stack,
   Table,
   Text,
@@ -15,16 +17,87 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { useForm } from "@mantine/form";
+import { useForm, type UseFormReturnType } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconChartBar, IconDownload, IconPencil, IconPlus, IconRefresh, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useRef, useState, type ChangeEvent } from "react";
-import { api, HttpError, type AchievementProgressEntry, type CatalogAchievement, type ImportResponse } from "../lib/api";
+import {
+  api,
+  HttpError,
+  type AchievementProgressEntry,
+  type CatalogAchievement,
+  type ImportResponse,
+  type NewAchievement,
+  type StatMode,
+} from "../lib/api";
 import { CSV_TEMPLATE, parseCSV, type ParseError } from "../lib/csv";
 import { useAsync } from "../lib/useAsync";
 import { AchievementIcon } from "../components/AchievementIcon";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
+const STAT_RE = /^[a-z][a-z0-9_]*$/;
+
+// Campos comuns do form de conquista: o critério é por evento OU por métrica.
+type CriterionValues = {
+  criterion: "event" | "stat";
+  eventType: string;
+  statKey: string;
+  statMode: StatMode;
+  target: number | string;
+};
+
+// validators/onSubmit compartilhados entre criar e editar (o critério depende do
+// toggle; o servidor é a verdade da validação).
+const criterionValidators = {
+  eventType: (v: string, values: CriterionValues) =>
+    values.criterion === "event" && !v.trim() ? "obrigatório" : null,
+  statKey: (v: string, values: CriterionValues) =>
+    values.criterion === "stat" && !STAT_RE.test(v.trim()) ? "minúsculo, começa com letra (ex.: kills)" : null,
+};
+
+// buildCriterion monta os campos de critério do payload conforme o toggle,
+// zerando o lado que não se aplica (o backend rejeita evento+stat juntos).
+function buildCriterion(v: CriterionValues): Pick<NewAchievement, "eventType" | "statKey" | "statMode" | "target"> {
+  const target = Number(v.target) || 1;
+  return v.criterion === "stat"
+    ? { eventType: "", statKey: v.statKey.trim(), statMode: v.statMode, target }
+    : { eventType: v.eventType.trim(), statKey: "", statMode: undefined, target };
+}
+
+// CriterionFields renderiza o seletor de critério + os campos condicionais.
+// Reutilizado nos forms de criar e editar (ambos incluem CriterionValues).
+function CriterionFields<T extends CriterionValues>({ form }: { form: UseFormReturnType<T> }) {
+  const isStat = form.values.criterion === "stat";
+  return (
+    <>
+      <SegmentedControl
+        fullWidth
+        data={[
+          { value: "event", label: "Por evento" },
+          { value: "stat", label: "Por métrica" },
+        ]}
+        {...form.getInputProps("criterion")}
+      />
+      {isStat ? (
+        <>
+          <TextInput label="Stat" placeholder="kills" {...form.getInputProps("statKey")} />
+          <Select
+            label="Agregação"
+            allowDeselect={false}
+            data={[
+              { value: "cumulative", label: "Acumulado (soma entre partidas)" },
+              { value: "per_match", label: "Por partida (melhor de uma partida)" },
+            ]}
+            {...form.getInputProps("statMode")}
+          />
+        </>
+      ) : (
+        <TextInput label="Event type" placeholder="match_won" {...form.getInputProps("eventType")} />
+      )}
+      <NumberInput label={isStat ? "Meta (valor-alvo)" : "Meta (ocorrências)"} min={1} {...form.getInputProps("target")} />
+    </>
+  );
+}
 
 export function GameAchievements({ gameId }: { gameId: string }) {
   const { data: catalog, loading, error, reload } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
@@ -58,26 +131,48 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   }
 
   const form = useForm({
-    initialValues: { id: "", name: "", description: "", eventType: "", target: 1 },
+    initialValues: {
+      id: "",
+      name: "",
+      description: "",
+      criterion: "event" as "event" | "stat",
+      eventType: "",
+      statKey: "",
+      statMode: "cumulative" as StatMode,
+      target: 1 as number | string,
+    },
     validate: {
       id: (v) => (ID_RE.test(v.trim()) ? null : "id minúsculo (ex.: first_win)"),
       name: (v) => (v.trim() ? null : "obrigatório"),
-      eventType: (v) => (v.trim() ? null : "obrigatório"),
+      ...criterionValidators,
     },
   });
 
   // form de edição: sem id (a chave não muda).
   const editForm = useForm({
-    initialValues: { name: "", description: "", eventType: "", target: 1 },
+    initialValues: {
+      name: "",
+      description: "",
+      criterion: "event" as "event" | "stat",
+      eventType: "",
+      statKey: "",
+      statMode: "cumulative" as StatMode,
+      target: 1 as number | string,
+    },
     validate: {
       name: (v) => (v.trim() ? null : "obrigatório"),
-      eventType: (v) => (v.trim() ? null : "obrigatório"),
+      ...criterionValidators,
     },
   });
 
   async function submit(values: typeof form.values) {
     try {
-      await api.createAchievement(gameId, { ...values, target: Number(values.target) || 1 });
+      await api.createAchievement(gameId, {
+        id: values.id,
+        name: values.name,
+        description: values.description,
+        ...buildCriterion(values),
+      });
       notifications.show({ color: "green", message: "Conquista adicionada." });
       close();
       form.reset();
@@ -94,14 +189,26 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   }
 
   function openEdit(a: CatalogAchievement) {
-    editForm.setValues({ name: a.name, description: a.description, eventType: a.eventType, target: a.target });
+    editForm.setValues({
+      name: a.name,
+      description: a.description,
+      criterion: a.statKey ? "stat" : "event",
+      eventType: a.eventType ?? "",
+      statKey: a.statKey ?? "",
+      statMode: a.statMode ?? "cumulative",
+      target: a.target,
+    });
     setEditing(a);
   }
 
   async function submitEdit(values: typeof editForm.values) {
     if (!editing) return;
     try {
-      await api.updateAchievement(gameId, editing.id, { ...values, target: Number(values.target) || 1 });
+      await api.updateAchievement(gameId, editing.id, {
+        name: values.name,
+        description: values.description,
+        ...buildCriterion(values),
+      });
       notifications.show({ color: "green", message: "Conquista atualizada." });
       setEditing(null);
       reload();
@@ -224,7 +331,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
               <Table.Th>Id</Table.Th>
               <Table.Th>Nome</Table.Th>
               <Table.Th>Descrição</Table.Th>
-              <Table.Th>Evento</Table.Th>
+              <Table.Th>Critério</Table.Th>
               <Table.Th>Meta</Table.Th>
               <Table.Th w={90}></Table.Th>
             </Table.Tr>
@@ -238,7 +345,17 @@ export function GameAchievements({ gameId }: { gameId: string }) {
                 <Table.Td c="dimmed">{a.id}</Table.Td>
                 <Table.Td>{a.name}</Table.Td>
                 <Table.Td c="dimmed">{a.description}</Table.Td>
-                <Table.Td c="dimmed">{a.eventType}</Table.Td>
+                <Table.Td>
+                  {a.statKey ? (
+                    <Badge variant="light" color="grape">
+                      {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
+                    </Badge>
+                  ) : (
+                    <Text c="dimmed" size="sm">
+                      {a.eventType}
+                    </Text>
+                  )}
+                </Table.Td>
                 <Table.Td>{a.target}</Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">
@@ -266,8 +383,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             <TextInput label="Id (slug)" placeholder="first_win" {...form.getInputProps("id")} />
             <TextInput label="Nome" placeholder="Primeira Vitória" {...form.getInputProps("name")} />
             <Textarea label="Descrição" autosize minRows={2} {...form.getInputProps("description")} />
-            <TextInput label="Event type" placeholder="match_won" {...form.getInputProps("eventType")} />
-            <NumberInput label="Meta (target)" min={1} {...form.getInputProps("target")} />
+            <CriterionFields form={form} />
             <Group justify="flex-end">
               <Button type="submit">Adicionar</Button>
             </Group>
@@ -281,8 +397,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
           <Stack>
             <TextInput label="Nome" {...editForm.getInputProps("name")} />
             <Textarea label="Descrição" autosize minRows={2} {...editForm.getInputProps("description")} />
-            <TextInput label="Event type" {...editForm.getInputProps("eventType")} />
-            <NumberInput label="Meta (target)" min={1} {...editForm.getInputProps("target")} />
+            <CriterionFields form={editForm} />
             <Group justify="flex-end">
               <Button type="submit">Salvar</Button>
             </Group>
