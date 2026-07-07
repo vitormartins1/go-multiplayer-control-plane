@@ -131,6 +131,9 @@ func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 		case head.Kind == "placement":
 			// battle_royale (session/015): tem matchId, então precede o ramo abaixo.
 			return handlePlacement(ctx, svc, log, body)
+		case head.Kind == "collective":
+			// coop_mission (session/016): desfecho coletivo; tem matchId.
+			return handleCollective(ctx, svc, log, body)
 		case head.Kind == "win_loss_draw" || head.MatchID != "":
 			// win_loss_draw explícito, ou envelope v1 legado (sem kind, com matchId).
 			return handleMatchResult(ctx, svc, log, body)
@@ -200,6 +203,36 @@ func handlePlacement(ctx context.Context, svc *service.Service, log *slog.Logger
 	}
 	if dup {
 		log.Info("partida (placement) já processada (no-op)", slog.String("match_id", env.MatchID))
+	}
+	return dup, nil
+}
+
+// handleCollective aplica o desfecho coletivo da missão (coop_mission,
+// session/016), idempotente por matchId. O outcome é da sessão (igual para todos);
+// os stats seguem por jogador.
+func handleCollective(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Outcome string `json:"outcome"`
+		Players []struct {
+			PlayerID string           `json:"playerId"`
+			Stats    map[string]int64 `json:"stats"`
+		} `json:"players"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal collective envelope: %w", err)
+	}
+	players := make([]domain.CollectivePlayer, 0, len(env.Players))
+	for _, p := range env.Players {
+		players = append(players, domain.CollectivePlayer{PlayerID: p.PlayerID, Stats: p.Stats})
+	}
+	dup, err := svc.ApplyCollectiveResult(ctx, env.GameID, env.MatchID, env.Outcome, players)
+	if err != nil {
+		return false, err
+	}
+	if dup {
+		log.Info("missão (collective) já processada (no-op)", slog.String("match_id", env.MatchID))
 	}
 	return dup, nil
 }
