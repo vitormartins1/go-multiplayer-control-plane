@@ -45,7 +45,7 @@ func TestSetMultiplayerProfile_Valido_UpsertEDevolve(t *testing.T) {
 
 func TestSetMultiplayerProfile_ArchetypeNaoSuportado_Erro(t *testing.T) {
 	p := validProfile()
-	p.Archetype = "battle_royale"
+	p.Archetype = "coop_mission" // ainda não suportado (fatia futura)
 	_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
 	assert.ErrorIs(t, err, domain.ErrUnsupportedArchetype)
 }
@@ -189,13 +189,13 @@ func TestSetMultiplayerProfile_HostWorldDropIn_ParamsAusentes_Erro(t *testing.T)
 func TestSetMultiplayerProfile_HostWorldDropIn_ParamsInvalidos_Erro(t *testing.T) {
 	base := validHWD()
 	cases := map[string]domain.HostWorldDropInParams{
-		"roles vazio":                   mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = nil }),
-		"role desconhecido":             mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = []string{"host"} }),
-		"role duplicado":                mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = []string{"coop", "coop"} }),
-		"coop sem coopSlots":            mutHWD(base, func(h *domain.HostWorldDropInParams) { h.CoopSlots = 0 }),
-		"coopSlots sem papel coop":      {EnabledRoles: []string{"invader"}, InvaderSlots: 1, CoopSlots: 2},
-		"invader sem invaderSlots":      mutHWD(base, func(h *domain.HostWorldDropInParams) { h.InvaderSlots = 0 }),
-		"invaderSlots sem papel invader":{EnabledRoles: []string{"coop"}, CoopSlots: 2, InvaderSlots: 1},
+		"roles vazio":                    mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = nil }),
+		"role desconhecido":              mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = []string{"host"} }),
+		"role duplicado":                 mutHWD(base, func(h *domain.HostWorldDropInParams) { h.EnabledRoles = []string{"coop", "coop"} }),
+		"coop sem coopSlots":             mutHWD(base, func(h *domain.HostWorldDropInParams) { h.CoopSlots = 0 }),
+		"coopSlots sem papel coop":       {EnabledRoles: []string{"invader"}, InvaderSlots: 1, CoopSlots: 2},
+		"invader sem invaderSlots":       mutHWD(base, func(h *domain.HostWorldDropInParams) { h.InvaderSlots = 0 }),
+		"invaderSlots sem papel invader": {EnabledRoles: []string{"coop"}, CoopSlots: 2, InvaderSlots: 1},
 	}
 	for name, hw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -213,10 +213,10 @@ func TestSetMultiplayerProfile_HostWorldDropIn_ParamsInvalidos_Erro(t *testing.T
 
 func TestSetMultiplayerProfile_HostWorldDropIn_VariantesValidas_Ok(t *testing.T) {
 	cases := map[string]domain.HostWorldDropInParams{
-		"só co-op":          {EnabledRoles: []string{"coop"}, CoopSlots: 3},
-		"só invasão":        {EnabledRoles: []string{"invader"}, InvaderSlots: 2, InvasionEnabled: true},
-		"coop+invader":      {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1},
-		"todos os filtros":  {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1, LevelRangeEnabled: true, WeaponTierEnabled: true, PasswordEnabled: true, InvasionEnabled: true},
+		"só co-op":         {EnabledRoles: []string{"coop"}, CoopSlots: 3},
+		"só invasão":       {EnabledRoles: []string{"invader"}, InvaderSlots: 2, InvasionEnabled: true},
+		"coop+invader":     {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1},
+		"todos os filtros": {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1, LevelRangeEnabled: true, WeaponTierEnabled: true, PasswordEnabled: true, InvasionEnabled: true},
 	}
 	for name, hw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -227,6 +227,98 @@ func TestSetMultiplayerProfile_HostWorldDropIn_VariantesValidas_Ok(t *testing.T)
 				Archetype:       domain.ArchetypeHostWorldDropIn,
 				Topology:        domain.TopologyDedicated,
 				HostWorldDropIn: &hw,
+			}
+			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
+			assert.NoError(t, err, name)
+		})
+	}
+}
+
+// --- battle_royale ---
+
+func validBR() domain.BattleRoyaleParams {
+	return domain.BattleRoyaleParams{
+		LobbySize:    60,
+		TeamSize:     4,
+		RespawnMode:  domain.RespawnOneLife,
+		ScoringStats: []string{"kills"},
+	}
+}
+
+func validBRProfile() domain.MultiplayerProfile {
+	br := validBR()
+	return domain.MultiplayerProfile{
+		Archetype:    domain.ArchetypeBattleRoyale,
+		Topology:     domain.TopologyDedicated,
+		BattleRoyale: &br,
+	}
+}
+
+func mutBR(base domain.BattleRoyaleParams, f func(*domain.BattleRoyaleParams)) domain.BattleRoyaleParams {
+	f(&base)
+	return base
+}
+
+func TestSetMultiplayerProfile_BattleRoyale_Valido_UpsertEDevolve(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+
+	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validBRProfile())
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.Equal(t, domain.ArchetypeBattleRoyale, p.Archetype)
+	repo.AssertExpectations(t)
+}
+
+func TestSetMultiplayerProfile_BattleRoyale_ParamsAusentes_Erro(t *testing.T) {
+	p := validBRProfile()
+	p.BattleRoyale = nil
+	_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+	assert.ErrorIs(t, err, domain.ErrInvalidProfileParams)
+}
+
+func TestSetMultiplayerProfile_BattleRoyale_ParamsInvalidos_Erro(t *testing.T) {
+	base := validBR()
+	cases := map[string]domain.BattleRoyaleParams{
+		"teamSize<1":               mutBR(base, func(b *domain.BattleRoyaleParams) { b.TeamSize = 0 }),
+		"lobbySize<2":              mutBR(base, func(b *domain.BattleRoyaleParams) { b.LobbySize = 1; b.TeamSize = 1 }),
+		"lobbySize<2*teamSize":     mutBR(base, func(b *domain.BattleRoyaleParams) { b.LobbySize = 6; b.TeamSize = 4 }),
+		"respawnMode desconhecido": mutBR(base, func(b *domain.BattleRoyaleParams) { b.RespawnMode = "phoenix" }),
+		"respawnMode vazio":        mutBR(base, func(b *domain.BattleRoyaleParams) { b.RespawnMode = "" }),
+		"scoringStats invalido":    mutBR(base, func(b *domain.BattleRoyaleParams) { b.ScoringStats = []string{"Kills"} }),
+	}
+	for name, br := range cases {
+		t.Run(name, func(t *testing.T) {
+			br := br
+			p := domain.MultiplayerProfile{
+				Archetype:    domain.ArchetypeBattleRoyale,
+				Topology:     domain.TopologyDedicated,
+				BattleRoyale: &br,
+			}
+			_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+			assert.ErrorIs(t, err, domain.ErrInvalidProfileParams, name)
+		})
+	}
+}
+
+func TestSetMultiplayerProfile_BattleRoyale_VariantesValidas_Ok(t *testing.T) {
+	cases := map[string]domain.BattleRoyaleParams{
+		"solo one_life":         {LobbySize: 100, TeamSize: 1, RespawnMode: domain.RespawnOneLife},
+		"duo teammate_revive":   {LobbySize: 50, TeamSize: 2, RespawnMode: domain.RespawnTeammateRevive, ScoringStats: []string{"kills", "revives"}},
+		"squad arena_1v1":       {LobbySize: 60, TeamSize: 4, RespawnMode: domain.RespawnArena1v1},
+		"squad reboot_timer":    {LobbySize: 8, TeamSize: 4, RespawnMode: domain.RespawnRebootTimer},
+		"lobby não múltiplo ok": {LobbySize: 30, TeamSize: 4, RespawnMode: domain.RespawnOneLife},
+		"scoringStats vazio":    {LobbySize: 20, TeamSize: 1, RespawnMode: domain.RespawnOneLife, ScoringStats: nil},
+	}
+	for name, br := range cases {
+		t.Run(name, func(t *testing.T) {
+			br := br
+			repo := new(mockRepo)
+			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			p := domain.MultiplayerProfile{
+				Archetype:    domain.ArchetypeBattleRoyale,
+				Topology:     domain.TopologyDedicated,
+				BattleRoyale: &br,
 			}
 			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
 			assert.NoError(t, err, name)

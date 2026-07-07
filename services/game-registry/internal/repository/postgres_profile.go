@@ -36,6 +36,14 @@ type storedQueueArena struct {
 	ScoringStats    []string `json:"scoringStats,omitempty"`
 }
 
+// storedBattleRoyale é o shape persistido dos params do arquétipo battle_royale.
+type storedBattleRoyale struct {
+	LobbySize    int      `json:"lobbySize,omitempty"`
+	TeamSize     int      `json:"teamSize,omitempty"`
+	RespawnMode  string   `json:"respawnMode"`
+	ScoringStats []string `json:"scoringStats,omitempty"`
+}
+
 // storedHostWorldDropIn é o shape persistido dos params do arquétipo host_world_dropin.
 type storedHostWorldDropIn struct {
 	EnabledRoles      []string `json:"enabledRoles"`
@@ -106,6 +114,21 @@ func encodeProfile(p *domain.MultiplayerProfile) ([]byte, error) {
 			return nil, err
 		}
 		sp.Params = params
+	case domain.ArchetypeBattleRoyale:
+		if p.BattleRoyale == nil {
+			return nil, fmt.Errorf("perfil %q sem params", p.Archetype)
+		}
+		br := p.BattleRoyale
+		params, err := json.Marshal(storedBattleRoyale{
+			LobbySize:    br.LobbySize,
+			TeamSize:     br.TeamSize,
+			RespawnMode:  br.RespawnMode,
+			ScoringStats: br.ScoringStats,
+		})
+		if err != nil {
+			return nil, err
+		}
+		sp.Params = params
 	default:
 		return nil, fmt.Errorf("arquétipo não persistível: %q", p.Archetype)
 	}
@@ -159,6 +182,19 @@ func decodeProfile(raw []byte) (*domain.MultiplayerProfile, error) {
 			WeaponTierEnabled: sh.WeaponTierEnabled,
 			PasswordEnabled:   sh.PasswordEnabled,
 			InvasionEnabled:   sh.InvasionEnabled,
+		}
+	case domain.ArchetypeBattleRoyale:
+		var sb storedBattleRoyale
+		if len(sp.Params) > 0 {
+			if err := json.Unmarshal(sp.Params, &sb); err != nil {
+				return nil, err
+			}
+		}
+		p.BattleRoyale = &domain.BattleRoyaleParams{
+			LobbySize:    sb.LobbySize,
+			TeamSize:     sb.TeamSize,
+			RespawnMode:  sb.RespawnMode,
+			ScoringStats: sb.ScoringStats,
 		}
 	}
 	return p, nil

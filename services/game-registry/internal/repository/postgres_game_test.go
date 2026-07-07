@@ -203,6 +203,50 @@ func TestPostgresGameRepository_UpsertMultiplayerProfile_Substitui(t *testing.T)
 	assert.Zero(t, got.MultiplayerProfile.QueueArena.TeamCount, "params antigos substituídos, não mesclados")
 }
 
+func TestPostgresGameRepository_UpsertMultiplayerProfile_BattleRoyale_RoundTrip(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("br", "Battle Royale")
+	require.NoError(t, repo.Create(ctx, g))
+
+	p := domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeBattleRoyale, Topology: domain.TopologyDedicated,
+		BattleRoyale: &domain.BattleRoyaleParams{
+			LobbySize: 60, TeamSize: 4, RespawnMode: domain.RespawnArena1v1,
+			ScoringStats: []string{"kills"},
+		},
+	}
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, p))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.MultiplayerProfile)
+	assert.Equal(t, domain.ArchetypeBattleRoyale, got.MultiplayerProfile.Archetype)
+	require.NotNil(t, got.MultiplayerProfile.BattleRoyale)
+	assert.Equal(t, *p.BattleRoyale, *got.MultiplayerProfile.BattleRoyale)
+	assert.Nil(t, got.MultiplayerProfile.QueueArena, "só o ponteiro do arquétipo declarado é não-nil")
+}
+
+func TestPostgresGameRepository_UpsertMultiplayerProfile_TrocaArquetipo(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("mut", "Mut")
+	require.NoError(t, repo.Create(ctx, g))
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, teamsProfile()))
+
+	br := domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeBattleRoyale, Topology: domain.TopologyDedicated,
+		BattleRoyale: &domain.BattleRoyaleParams{LobbySize: 100, TeamSize: 1, RespawnMode: domain.RespawnOneLife},
+	}
+	require.NoError(t, repo.UpsertMultiplayerProfile(ctx, g.ID, br))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.MultiplayerProfile.BattleRoyale)
+	assert.Equal(t, 100, got.MultiplayerProfile.BattleRoyale.LobbySize)
+	assert.Nil(t, got.MultiplayerProfile.QueueArena, "ponteiro do arquétipo antigo fica nil após a troca")
+}
+
 func TestPostgresGameRepository_FindByID_SemPerfil_Nil(t *testing.T) {
 	repo := NewPostgresGameRepository(newTestPool(t))
 	ctx := context.Background()
