@@ -33,13 +33,20 @@ service Session {
   // CloseWorld encerra o mundo (host saiu), libera o server. NotFound se não
   // houver mundo aberto.
   rpc CloseWorld(CloseWorldRequest) returns (CloseWorldResponse);
+
+  // ListInvadableWorlds devolve os mundos abertos do jogo com slot de invasor
+  // livre + atributos do host (spec 012). Fonte de dados pura para o matchmaking
+  // (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
+  rpc ListInvadableWorlds(ListInvadableWorldsRequest) returns (ListInvadableWorldsResponse);
 }
 
 // host_world_dropin (spec 011): o connect token carrega o claim role
 // (host|coop|invader), lido pelo game server no connection approval.
 message OpenWorldRequest {
-  string host_player_id = 1; // dono do mundo
-  string game_id = 2;        // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+  string host_player_id = 1;  // dono do mundo
+  string game_id = 2;         // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+  int32 host_soul_level = 3;  // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
+  int32 weapon_tier = 4;      // tier de arma do host (spec 012); 0 = sem faixa
 }
 
 message OpenWorldResponse {
@@ -55,7 +62,8 @@ message JoinWorldRequest {
 }
 
 message JoinWorldResponse {
-  ConnectGrant grant = 1; // connect token do phantom (claim role)
+  ConnectGrant grant = 1;    // connect token do phantom (claim role)
+  string server_address = 2; // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar
 }
 
 message LeaveWorldRequest {
@@ -70,6 +78,25 @@ message CloseWorldRequest {
 }
 
 message CloseWorldResponse {}
+
+// spec 012 — diretório de mundos invadíveis. O matchmaking (006) consulta por
+// jogo; a política de faixa é aplicada lá, não aqui.
+message ListInvadableWorldsRequest {
+  string game_id = 1; // jogo (multi-tenant, ADR-0017)
+}
+
+message ListInvadableWorldsResponse {
+  repeated InvadableWorld worlds = 1; // vazio se nenhum mundo tem vaga de invasor
+}
+
+// InvadableWorld é a fotografia de um mundo aberto com vaga de invasor: os
+// atributos do host (para o matchmaking casar por faixa) e as vagas livres.
+message InvadableWorld {
+  string session_id = 1;
+  int32 host_soul_level = 2;
+  int32 weapon_tier = 3;
+  int32 free_invader_slots = 4;
+}
 
 message CreateSessionRequest {
   string match_id = 1;

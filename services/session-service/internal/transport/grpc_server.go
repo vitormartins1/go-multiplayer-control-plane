@@ -85,7 +85,8 @@ func (s *Server) ReportResult(ctx context.Context, req *pb.ReportResultRequest) 
 
 // OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011).
 func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.OpenWorldResponse, error) {
-	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId())
+	attrs := domain.WorldAttributes{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
+	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId(), attrs)
 	if err != nil {
 		return nil, worldError(err, "open world")
 	}
@@ -98,13 +99,33 @@ func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.O
 
 // JoinWorld injeta um phantom no mundo com um papel e devolve o connect token.
 func (s *Server) JoinWorld(ctx context.Context, req *pb.JoinWorldRequest) (*pb.JoinWorldResponse, error) {
-	grant, err := s.svc.JoinWorld(ctx, req.GetSessionId(), req.GetPlayerId(), req.GetRole())
+	grant, serverAddr, err := s.svc.JoinWorld(ctx, req.GetSessionId(), req.GetPlayerId(), req.GetRole())
 	if err != nil {
 		return nil, worldError(err, "join world")
 	}
 	return &pb.JoinWorldResponse{
-		Grant: &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+		Grant:         &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+		ServerAddress: serverAddr,
 	}, nil
+}
+
+// ListInvadableWorlds devolve o diretório de mundos com vaga de invasor (spec
+// 012). Tradução pura; sem erro de domínio novo (vazio = lista vazia).
+func (s *Server) ListInvadableWorlds(ctx context.Context, req *pb.ListInvadableWorldsRequest) (*pb.ListInvadableWorldsResponse, error) {
+	worlds, err := s.svc.ListInvadableWorlds(ctx, req.GetGameId())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "list invadable worlds")
+	}
+	pbWorlds := make([]*pb.InvadableWorld, len(worlds))
+	for i, w := range worlds {
+		pbWorlds[i] = &pb.InvadableWorld{
+			SessionId:        w.SessionID,
+			HostSoulLevel:    int32(w.HostSoulLevel),
+			WeaponTier:       int32(w.WeaponTier),
+			FreeInvaderSlots: int32(w.FreeInvaderSlots),
+		}
+	}
+	return &pb.ListInvadableWorldsResponse{Worlds: pbWorlds}, nil
 }
 
 // LeaveWorld libera o slot do jogador (no-op idempotente; host encerra o mundo).

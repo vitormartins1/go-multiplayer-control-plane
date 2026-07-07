@@ -425,7 +425,7 @@ func (s *Service) CloseByAdmin(ctx context.Context, matchID string) (*domain.Ses
 // lê o perfil, aloca um server, deriva os slots por papel e emite o connect
 // token do host. Qualquer problema com o perfil (ausente, arquétipo != host_world
 // _dropin, rede) vira ErrUnsupportedArchetype — só esse arquétipo abre mundo.
-func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string) (*domain.Session, domain.ConnectGrant, error) {
+func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string, attrs domain.WorldAttributes) (*domain.Session, domain.ConnectGrant, error) {
 	if s.profiles == nil {
 		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %w", domain.ErrUnsupportedArchetype)
 	}
@@ -456,6 +456,8 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID string) (*
 		Origin:        domain.OriginHostWorld,
 		HostPlayerID:  hostPlayerID,
 		RoleSlots:     roleSlotsFromProfile(profile),
+		HostSoulLevel: attrs.SoulLevel,
+		WeaponTier:    attrs.WeaponTier,
 		State:         domain.SessionOpen,
 		OpenedAt:      s.now(),
 	}
@@ -485,25 +487,25 @@ func roleSlotsFromProfile(p domain.WorldProfile) map[string]*domain.RoleSlot {
 // JoinWorld injeta um phantom no mundo ocupando um slot do papel e emite o
 // connect token com o claim role. O slot é reservado sob o lock; o token é
 // cunhado fora (cripto) e o slot é revertido se a emissão falhar.
-func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role string) (domain.ConnectGrant, error) {
+func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role string) (domain.ConnectGrant, string, error) {
 	s.mu.Lock()
 	sess, ok := s.sessions[sessionID]
 	if !ok || sess.Origin != domain.OriginHostWorld {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrWorldNotFound)
+		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrWorldNotFound)
 	}
 	slot, ok := sess.RoleSlots[role]
 	if !ok {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrRoleNotEnabled)
+		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrRoleNotEnabled)
 	}
 	if sess.HostPlayerID == playerID || playerInWorld(sess, playerID) {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrAlreadyJoined)
+		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrAlreadyJoined)
 	}
 	if len(slot.Occupants) >= slot.Capacity {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: %w", domain.ErrRoleFull)
+		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrRoleFull)
 	}
 	slot.Occupants = append(slot.Occupants, playerID)
 	sess.Players = append(sess.Players, playerID)
@@ -515,9 +517,41 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 		s.mu.Lock()
 		removeFromWorld(sess, playerID) // reverte a reserva do slot
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, fmt.Errorf("session service: join world: issue token: %w", err)
+		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: issue token: %w", err)
 	}
-	return domain.ConnectGrant{PlayerID: playerID, Token: tok}, nil
+	return domain.ConnectGrant{PlayerID: playerID, Token: tok}, serverAddr, nil
+}
+
+// ListInvadableWorlds devolve os mundos abertos do jogo com slot de invasor livre
+// (spec 012), varrendo o mapa de ativas sob o lock — irmão de SessionsByGame. O
+// mapa só contém sessões OPEN (closeSession as remove), então não checa State.
+// Fonte de dados pura: nenhum filtro de faixa/weapon/senha (política é do
+// matchmaking, 006). Vazio → lista vazia, sem erro.
+func (s *Service) ListInvadableWorlds(_ context.Context, gameID string) ([]domain.InvadableWorld, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []domain.InvadableWorld
+	for _, sess := range s.sessions {
+		if sess.Origin != domain.OriginHostWorld || sess.GameID != gameID {
+			continue
+		}
+		slot, ok := sess.RoleSlots[domain.RoleInvader]
+		if !ok {
+			continue // papel invasor não habilitado neste mundo
+		}
+		free := slot.Capacity - len(slot.Occupants)
+		if free <= 0 {
+			continue // slot de invasor cheio
+		}
+		out = append(out, domain.InvadableWorld{
+			SessionID:        sess.ID,
+			HostSoulLevel:    sess.HostSoulLevel,
+			WeaponTier:       sess.WeaponTier,
+			FreeInvaderSlots: free,
+		})
+	}
+	return out, nil
 }
 
 // LeaveWorld libera o slot do phantom; o mundo segue aberto. No-op idempotente se

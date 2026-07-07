@@ -83,10 +83,35 @@ type Session struct {
 	HostPlayerID string
 	RoleSlots    map[string]*RoleSlot
 
+	// Atributos de matchmaking do host (spec 012): a faixa do mundo para o
+	// matchmaking casar um invasor (soul level / weapon tier). Zero em
+	// queue_arena e em mundos abertos sem atributos.
+	HostSoulLevel int
+	WeaponTier    int
+
 	State       SessionState
 	OpenedAt    time.Time
 	ClosedAt    time.Time // zero enquanto OPEN
 	CloseReason CloseReason
+}
+
+// WorldAttributes são os atributos de matchmaking que o host informa ao abrir o
+// mundo (spec 012): a faixa que o matchmaking usa para casar um invasor. Um
+// struct (não ints posicionais) para o OpenWorld não crescer a assinatura a cada
+// evolução (senha/região virão). Zeros = mundo sem faixa (não-casável).
+type WorldAttributes struct {
+	SoulLevel  int
+	WeaponTier int
+}
+
+// InvadableWorld é a fotografia de um mundo aberto com vaga de invasor (spec
+// 012): o que o matchmaking (006) precisa para filtrar por faixa e injetar. Fonte
+// de dados pura — sem política de elegibilidade (isso mora no matchmaking).
+type InvadableWorld struct {
+	SessionID        string
+	HostSoulLevel    int
+	WeaponTier       int
+	FreeInvaderSlots int
 }
 
 // Server é um game server do pool (mock no MVP; Agones no deploy — ADR-0011).
@@ -149,13 +174,22 @@ type SessionService interface {
 
 	// OpenWorld abre um mundo persistente para o host (host_world_dropin): lê o
 	// perfil do jogo, aloca um game server, deriva os slots por papel e emite o
-	// connect token do host (papel host). ErrUnsupportedArchetype se o jogo não
-	// for host_world_dropin; ErrNoServer se o pool esgotar. Spec 011, ADR-0023.
-	OpenWorld(ctx context.Context, hostPlayerID, gameID string) (*Session, ConnectGrant, error)
+	// connect token do host (papel host). attrs carrega a faixa do host (soul
+	// level / weapon tier) para o matchmaking casar depois (spec 012); zeros =
+	// mundo sem faixa. ErrUnsupportedArchetype se o jogo não for host_world_dropin;
+	// ErrNoServer se o pool esgotar. Spec 011/012, ADR-0023.
+	OpenWorld(ctx context.Context, hostPlayerID, gameID string, attrs WorldAttributes) (*Session, ConnectGrant, error)
 	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando
-	// um slot, e emite o connect token com o claim role. ErrWorldNotFound,
-	// ErrRoleNotEnabled, ErrRoleFull, ErrAlreadyJoined.
-	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, error)
+	// um slot, e emite o connect token com o claim role. Devolve o endereço do
+	// game server junto do grant (spec 012): o phantom injetado pelo matchmaking
+	// precisa dele para conectar. ErrWorldNotFound, ErrRoleNotEnabled, ErrRoleFull,
+	// ErrAlreadyJoined.
+	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, string, error)
+	// ListInvadableWorlds devolve os mundos abertos do jogo (Origin=host_world)
+	// com slot de invasor livre, cada um com seus atributos e vagas (spec 012).
+	// Fonte de dados pura: sem filtro de faixa/senha (política é do matchmaking).
+	// Lista vazia (não erro) quando nada é elegível.
+	ListInvadableWorlds(ctx context.Context, gameID string) ([]InvadableWorld, error)
 	// LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
 	// se o jogador não estiver no mundo. Se o jogador for o host, encerra o mundo.
 	LeaveWorld(ctx context.Context, sessionID, playerID string) error
