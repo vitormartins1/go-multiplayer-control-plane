@@ -29,6 +29,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 		tcpostgres.WithInitScripts(
 			"../../migrations/001_create_analytics.sql",
 			"../../migrations/002_outcome_counts.sql",
+			"../../migrations/003_participation_rollup.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -45,6 +46,58 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 
 func match(matchID, gameID string, players ...domain.PlayerResult) domain.MatchResult {
 	return domain.MatchResult{MatchID: matchID, GameID: gameID, Results: players}
+}
+
+func pevt(gameID, sessionID, playerID, role, event string) domain.ParticipationEvent {
+	return domain.ParticipationEvent{GameID: gameID, SessionID: sessionID, PlayerID: playerID, Role: role, Event: event, Outcome: "NEUTRAL"}
+}
+
+func TestApplyParticipation_AgregaPorPapelEEvento(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	_, err := repo.ApplyParticipation(ctx, pevt("g1", "w1", "inv-1", "invader", "HOST_KILLED"))
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, pevt("g1", "w2", "inv-2", "invader", "HOST_KILLED"))
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, pevt("g1", "w1", "coop-1", "coop", "BOSS_DEFEATED"))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.RoleParticipations, 2)
+	// ordenado por role, event: coop/BOSS_DEFEATED, invader/HOST_KILLED.
+	assert.Equal(t, domain.ParticipationStat{Role: "coop", Event: "BOSS_DEFEATED", Count: 1}, ga.RoleParticipations[0])
+	assert.Equal(t, domain.ParticipationStat{Role: "invader", Event: "HOST_KILLED", Count: 2}, ga.RoleParticipations[1])
+}
+
+func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	evt := pevt("g1", "w1", "inv-1", "invader", "HOST_KILLED")
+
+	dup, err := repo.ApplyParticipation(ctx, evt)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	dup, err = repo.ApplyParticipation(ctx, evt) // reentrega at-least-once
+	require.NoError(t, err)
+	assert.True(t, dup)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.RoleParticipations, 1)
+	assert.Equal(t, int64(1), ga.RoleParticipations[0].Count, "reentrega não dobra")
+}
+
+func TestGameAnalytics_QueueArena_SemParticipacoes(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	_, err := repo.ApplyMatch(ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Outcome: "win"}))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	assert.Empty(t, ga.RoleParticipations, "jogo sem host_world não tem participações")
 }
 
 func TestApplyMatch_AgregaRollupEDaily(t *testing.T) {

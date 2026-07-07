@@ -32,6 +32,35 @@ func TestParse_EnvelopeV2_LeOutcome(t *testing.T) {
 	assert.Equal(t, domain.OutcomeLoss, m.Results[2].Outcome)
 }
 
+func TestPeekKind_Dispatch(t *testing.T) {
+	cases := map[string]struct {
+		body      string
+		wantKind  string
+		wantMatch string
+	}{
+		"participation":     {`{"kind":"participation_event","sessionId":"w1"}`, "participation_event", ""},
+		"win_loss_draw":     {`{"kind":"win_loss_draw","matchId":"m1"}`, "win_loss_draw", "m1"},
+		"v1 legado sem kind": {`{"matchId":"m1","results":[]}`, "", "m1"},
+		"desconhecido":       {`{"kind":"summon_posted"}`, "summon_posted", ""},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			kind, matchID := peekKind([]byte(c.body))
+			assert.Equal(t, c.wantKind, kind)
+			assert.Equal(t, c.wantMatch, matchID)
+		})
+	}
+}
+
+func TestParseParticipation_LeCampos(t *testing.T) {
+	body := []byte(`{"kind":"participation_event","gameId":"g1","sessionId":"w1","playerId":"inv-1","role":"invader","event":"HOST_KILLED","outcome":"SUCCESS"}`)
+	evt, err := parseParticipation(body)
+	require.NoError(t, err)
+	assert.Equal(t, domain.ParticipationEvent{
+		GameID: "g1", SessionID: "w1", PlayerID: "inv-1", Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS",
+	}, evt)
+}
+
 // Envelope v1 legado (sem outcome): deriva de won (win/loss), sem empate.
 func TestParse_EnvelopeV1_FallbackPorWon(t *testing.T) {
 	body := []byte(`{

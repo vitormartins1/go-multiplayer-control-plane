@@ -60,8 +60,9 @@ func TestOverview_200_SerializaTotaisEJogos(t *testing.T) {
 
 func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {
 	r := &fakeReader{ga: domain.GameAnalytics{
-		GameStat: domain.GameStat{GameID: "g1", Matches: 2},
-		Daily:    []domain.DailyPoint{{Day: "2026-07-04", Matches: 2}},
+		GameStat:           domain.GameStat{GameID: "g1", Matches: 2},
+		Daily:              []domain.DailyPoint{{Day: "2026-07-04", Matches: 2}},
+		RoleParticipations: []domain.ParticipationStat{{Role: "invader", Event: "HOST_KILLED", Count: 3}},
 	}}
 	rec := httptest.NewRecorder()
 	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics?days=7", nil))
@@ -75,9 +76,26 @@ func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {
 			Day     string `json:"day"`
 			Matches int64  `json:"matches"`
 		} `json:"daily"`
+		RoleParticipations []struct {
+			Role  string `json:"role"`
+			Event string `json:"event"`
+			Count int64  `json:"count"`
+		} `json:"roleParticipations"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, int64(2), body.Matches)
 	require.Len(t, body.Daily, 1)
 	assert.Equal(t, "2026-07-04", body.Daily[0].Day)
+	require.Len(t, body.RoleParticipations, 1)
+	assert.Equal(t, "invader", body.RoleParticipations[0].Role)
+	assert.Equal(t, int64(3), body.RoleParticipations[0].Count)
+}
+
+func TestGameAnalytics_QueueArena_RoleParticipationsVazio(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1", Matches: 5}}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"roleParticipations":[]`, "campo aditivo, vazio no queue_arena")
 }

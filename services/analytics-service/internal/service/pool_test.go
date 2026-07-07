@@ -16,10 +16,11 @@ import (
 
 // fakeRepo conta as agregações de forma thread-safe (o pool chama de N goroutines).
 type fakeRepo struct {
-	applied atomic.Int64
-	mu      sync.Mutex
-	byGame  map[string]int64
-	err     error
+	applied      atomic.Int64
+	participated atomic.Int64
+	mu           sync.Mutex
+	byGame       map[string]int64
+	err          error
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{byGame: map[string]int64{}} }
@@ -34,9 +35,35 @@ func (f *fakeRepo) ApplyMatch(_ context.Context, m domain.MatchResult) (bool, er
 	f.mu.Unlock()
 	return false, nil
 }
+func (f *fakeRepo) ApplyParticipation(_ context.Context, evt domain.ParticipationEvent) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	f.participated.Add(1)
+	f.mu.Lock()
+	f.byGame[evt.GameID]++
+	f.mu.Unlock()
+	return false, nil
+}
 func (f *fakeRepo) Overview(context.Context) (domain.Overview, error) { return domain.Overview{}, nil }
 func (f *fakeRepo) GameAnalytics(context.Context, string, int) (domain.GameAnalytics, error) {
 	return domain.GameAnalytics{}, nil
+}
+
+// SubmitParticipation roteia para ApplyParticipation (não para ApplyMatch).
+func TestPool_SubmitParticipation_RoteiaParaApplyParticipation(t *testing.T) {
+	repo := newFakeRepo()
+	pool := NewPool(repo, 2, 4, logger.New("test"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	done := pool.SubmitParticipation(ctx, domain.ParticipationEvent{GameID: "g1", SessionID: "w1", PlayerID: "inv-1", Role: "invader", Event: "HOST_KILLED"})
+	require.NoError(t, <-done)
+	pool.Stop()
+
+	assert.Equal(t, int64(1), repo.participated.Load())
+	assert.Equal(t, int64(0), repo.applied.Load(), "não passou pelo caminho de match")
 }
 
 // N partidas submetidas concorrentemente são todas agregadas, sem corrida.

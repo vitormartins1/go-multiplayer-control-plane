@@ -106,6 +106,8 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 
 ## Estado da implementação (fatias do ADR-0023)
 
+> **`host_world_dropin`:** as evoluções adiadas (senha, pools, Redis, `eventId`, `outcome` no analytics, alocação sob demanda, …) estão consolidadas em [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md) — o backlog para retomar após validar no data plane.
+
 O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar → formar → produzir resultado → colher). Feito e planejado:
 
 | Fatia | Serviço (spec) | O que faz | Status |
@@ -131,7 +133,7 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | **`host_world_dropin` — co-op por sinais (H1b)** | matchmaking (`007`) | quadro de sinais de dois passos: `PostSummonSign` (stream — aliado anuncia e aguarda), `ListSigns` (host vê compatíveis por faixa **simétrica** `CoopEligible`), `SummonSign` (injeta `coop` via `JoinWorld`, consumo idempotente); store efêmero em memória + TTL sweeper; métricas `summons_total{result}`/`summon_signs_active`; senha/pools follow-up | ✅ **main** |
 | **`host_world_dropin` — eventos de participação (H2, lado session)** | session (`013`) | `ReportParticipationEvent` (JOINED/BOSS_DEFEATED/HOST_KILLED/DIED/LEFT × SUCCESS/FAIL/NEUTRAL); DIED/LEFT liberam slot, HOST_KILLED encerra (`CloseHostKilled`); publica no `match-results` com envelope `kind=participation_event` (decisão #3, publica-antes-de-mutar); métrica `participation_events_total{event}`; aditivo, queue_arena/H0/H1a sem regressão | ✅ **main** |
 | **`host_world_dropin` — conquistas por papel (H2, sink)** | achievements (`009`) | consumer despacha por `kind` (retrocompat); `participation_event` → event types por papel (`invasion_won`/`coop_boss_helped`/`world_joined`, `ParticipationEventTypes` pura), idempotência `(sessionID, playerID, event)` em `processed_participations`; `win_loss_draw` intacto | ✅ **main** |
-| **`host_world_dropin` — analytics por participação (H2, sink)** | analytics (`004`) | dispatch por `kind`, agrega participações por papel/evento por jogo | ⬜ próximo |
+| **`host_world_dropin` — analytics por participação (H2, sink)** | analytics (`004`) | consumer despacha por `kind`; `participation_event` → agrega `(game, role, event)` (`game_participation_rollup`), idempotência `(sessionID, playerID, event)`; `GameAnalytics.roleParticipations` aditivo no JSON; `win_loss_draw` intacto | ✅ **main** |
 | **`host_world_dropin` — contrato do data plane + H3** | doc + console | `host_world_dropin-dataplane-contract.md`; surfacing (Rooms por papel, participações); planejado no [host_world_dropin-roadmap.md](./host_world_dropin-roadmap.md) | ⬜ planejado |
 | **Outros arquétipos** | todos | `battle_royale` (placement+respawn), `coop_mission` (collective) | ⬜ futuro |
 

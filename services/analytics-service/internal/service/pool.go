@@ -15,10 +15,13 @@ import (
 
 var _ domain.Ingestor = (*Pool)(nil)
 
-// job é uma partida a agregar + o channel de retorno do resultado.
+// job é uma unidade a agregar + o channel de retorno do resultado. É polimórfica
+// (spec 004): participation não-nil => caminho de participação (host_world_dropin);
+// senão => o match (queue_arena).
 type job struct {
-	match domain.MatchResult
-	done  chan error
+	match         domain.MatchResult
+	participation *domain.ParticipationEvent
+	done          chan error
 }
 
 // Pool é o worker pool de agregação (o core de concorrência do serviço).
@@ -75,7 +78,15 @@ func (p *Pool) process(ctx context.Context, j job) {
 		p.metrics.workersActive.Inc()
 		defer p.metrics.workersActive.Dec()
 	}
-	dup, err := p.repo.ApplyMatch(ctx, j.match)
+	var (
+		dup bool
+		err error
+	)
+	if j.participation != nil {
+		dup, err = p.repo.ApplyParticipation(ctx, *j.participation)
+	} else {
+		dup, err = p.repo.ApplyMatch(ctx, j.match)
+	}
 	p.observe(dup, err)
 	j.done <- err
 }
@@ -92,6 +103,21 @@ func (p *Pool) Submit(ctx context.Context, m domain.MatchResult) <-chan error {
 	case <-ctx.Done():
 		done <- ctx.Err()
 	case p.jobs <- job{match: m, done: done}:
+	}
+	return done
+}
+
+// SubmitParticipation entrega um evento de participação ao pool (spec 004), pelo
+// mesmo mecanismo de fan-in (channel de retorno) do Submit.
+func (p *Pool) SubmitParticipation(ctx context.Context, evt domain.ParticipationEvent) <-chan error {
+	done := make(chan error, 1)
+	if p.metrics != nil {
+		p.metrics.received.Inc()
+	}
+	select {
+	case <-ctx.Done():
+		done <- ctx.Err()
+	case p.jobs <- job{participation: &evt, done: done}:
 	}
 	return done
 }
