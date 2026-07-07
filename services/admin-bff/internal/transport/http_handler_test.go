@@ -28,6 +28,7 @@ type fakeService struct {
 	profile          json.RawMessage
 	profileErr       error
 	gotProfile       json.RawMessage
+	gotModeID        string
 	catalog          []domain.Achievement
 	catErr           error
 	ach              []domain.PlayerAchievement
@@ -96,6 +97,25 @@ func (f *fakeService) SetMultiplayerProfile(_ context.Context, gameID string, pr
 		return nil, f.profileErr
 	}
 	return profile, nil
+}
+func (f *fakeService) ListMultiplayerModes(_ context.Context, gameID string) (json.RawMessage, error) {
+	f.gotGameID = gameID
+	return f.profile, f.profileErr
+}
+func (f *fakeService) GetMultiplayerMode(_ context.Context, gameID, modeID string) (json.RawMessage, error) {
+	f.gotGameID, f.gotModeID = gameID, modeID
+	return f.profile, f.profileErr
+}
+func (f *fakeService) SetMultiplayerMode(_ context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error) {
+	f.gotGameID, f.gotModeID, f.gotProfile = gameID, modeID, mode
+	if f.profileErr != nil {
+		return nil, f.profileErr
+	}
+	return mode, nil
+}
+func (f *fakeService) DeleteMultiplayerMode(_ context.Context, gameID, modeID string) error {
+	f.gotGameID, f.gotModeID = gameID, modeID
+	return f.profileErr
 }
 func (f *fakeService) GameCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
 	f.gotGameID = gameID
@@ -936,4 +956,74 @@ func TestImportAchievements_Parcial_200(t *testing.T) {
 	assert.Equal(t, 1, result.Failed)
 	assert.Equal(t, domain.ImportStatusDuplicate, result.Results[1].Status)
 	assert.Equal(t, "achievement_exists", result.Results[1].Error)
+}
+
+// --- modos nomeados (ADR-0024, spec 017) ---
+
+func TestListMultiplayerModes_200(t *testing.T) {
+	svc := &fakeService{profile: []byte(`[{"modeId":"default","archetype":"queue_arena"}]`)}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/multiplayer-profiles")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.JSONEq(t, `[{"modeId":"default","archetype":"queue_arena"}]`, readBody(t, resp))
+}
+
+func TestSetMultiplayerMode_200_RepassaCorpoEModeID(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	body := `{"displayName":"TDM","archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":4}}`
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/multiplayer-profiles/tdm", strings.NewReader(body))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Equal(t, "tdm", svc.gotModeID)
+	assert.JSONEq(t, body, string(svc.gotProfile))
+}
+
+func TestGetMultiplayerMode_404_Propaga(t *testing.T) {
+	svc := &fakeService{profileErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "mode_not_found"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/multiplayer-profiles/nao")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "mode_not_found")
+}
+
+func TestDeleteMultiplayerMode_204(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/g1/multiplayer-profiles/tdm", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "tdm", svc.gotModeID)
+}
+
+func TestDeleteMultiplayerMode_Default_409Propaga(t *testing.T) {
+	svc := &fakeService{profileErr: &domain.UpstreamError{Status: http.StatusConflict, Code: "default_mode_protected"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/g1/multiplayer-profiles/default", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "default_mode_protected")
 }

@@ -113,6 +113,24 @@ func (s *Service) SetMultiplayerProfile(ctx context.Context, gameID string, prof
 	return s.registry.SetMultiplayerProfile(ctx, gameID, profile)
 }
 
+// Modos nomeados (ADR-0024, spec 017): passthrough cru da coleção de modos.
+
+func (s *Service) ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error) {
+	return s.registry.ListMultiplayerModes(ctx, gameID)
+}
+
+func (s *Service) GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error) {
+	return s.registry.GetMultiplayerMode(ctx, gameID, modeID)
+}
+
+func (s *Service) SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error) {
+	return s.registry.SetMultiplayerMode(ctx, gameID, modeID, mode)
+}
+
+func (s *Service) DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error {
+	return s.registry.DeleteMultiplayerMode(ctx, gameID, modeID)
+}
+
 // GameCatalog lê o catálogo de conquistas do jogo (achievements).
 func (s *Service) GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error) {
 	return s.reader.CatalogForGame(ctx, gameID)

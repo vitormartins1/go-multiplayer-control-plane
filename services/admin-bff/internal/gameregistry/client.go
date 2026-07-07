@@ -115,6 +115,62 @@ func (c *Client) SetMultiplayerProfile(ctx context.Context, gameID string, profi
 	return raw, nil
 }
 
+// --- modos nomeados (ADR-0024, spec 017) — passthrough cru como o perfil ---
+
+// doRaw executa a request e devolve o corpo cru (o BFF não interpreta a forma
+// do modo, que cresce por arquétipo).
+func (c *Client) doRaw(req *http.Request) (json.RawMessage, error) {
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gameregistry: read: %w", err)
+	}
+	return raw, nil
+}
+
+func (c *Client) modeURL(gameID, modeID string) string {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profiles"
+	if modeID != "" {
+		u += "/" + url.PathEscape(modeID)
+	}
+	return u
+}
+
+// ListMultiplayerModes lê a coleção de modos do jogo (cru).
+func (c *Client) ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.modeURL(gameID, ""), nil)
+	return c.doRaw(req)
+}
+
+// GetMultiplayerMode lê um modo (cru). UpstreamError(404) se jogo/modo ausente.
+func (c *Client) GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.modeURL(gameID, modeID), nil)
+	return c.doRaw(req)
+}
+
+// SetMultiplayerMode faz upsert de um modo repassando o corpo cru do painel.
+func (c *Client) SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, c.modeURL(gameID, modeID), bytes.NewReader(mode))
+	req.Header.Set("Content-Type", "application/json")
+	return c.doRaw(req)
+}
+
+// DeleteMultiplayerMode remove um modo. UpstreamError(409) no default
+// (default_mode_protected); 404 se jogo/modo ausente.
+func (c *Client) DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, c.modeURL(gameID, modeID), nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
 // PlayersOf lê a player base do jogo (presença, ADR-0019).
 func (c *Client) PlayersOf(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/players"

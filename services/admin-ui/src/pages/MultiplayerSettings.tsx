@@ -1,27 +1,36 @@
 import { useEffect, useState } from "react";
 import {
+  ActionIcon,
   Alert,
+  Badge,
   Button,
   Checkbox,
+  Code,
   Divider,
   Fieldset,
   Group,
   Loader,
+  Modal,
   NumberInput,
   Select,
   SegmentedControl,
   SimpleGrid,
   Stack,
   Switch,
+  Table,
   TagsInput,
   Text,
+  TextInput,
   Tooltip,
 } from "@mantine/core";
-import { IconInfoCircle } from "@tabler/icons-react";
+import { IconInfoCircle, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   api,
+  DEFAULT_MODE_ID,
   HttpError,
+  MODE_ID_RE,
+  type MultiplayerMode,
   type MultiplayerProfile,
   type QueueArenaParams,
   type HostWorldDropInParams,
@@ -645,85 +654,86 @@ function CoopMissionForm({
   );
 }
 
-// --- Componente principal ---
-export function MultiplayerSettings({ gameId }: { gameId: string }) {
-  const [loading, setLoading] = useState(true);
-  const [configured, setConfigured] = useState(false);
-  const [topology, setTopology] = useState<"dedicated" | "p2p">("dedicated");
-  const [archetype, setArchetype] = useState<
-    "queue_arena" | "host_world_dropin" | "battle_royale" | "coop_mission"
-  >("queue_arena");
-  const [qa, setQA] = useState<QueueArenaParams>(QA_DEFAULTS);
-  const [hwd, setHWD] = useState<HostWorldDropInParams>(HWD_DEFAULTS);
-  const [br, setBR] = useState<BattleRoyaleParams>(BR_DEFAULTS);
-  const [cm, setCM] = useState<CoopMissionParams>(CM_DEFAULTS);
-  const [saving, setSaving] = useState(false);
+// --- Rótulos por arquétipo (lista de modos) ---
+const ARCHETYPE_META: Record<
+  MultiplayerProfile["archetype"],
+  { label: string; color: string }
+> = {
+  queue_arena: { label: "Queue Arena", color: "blue" },
+  host_world_dropin: { label: "Host World Drop-in", color: "grape" },
+  battle_royale: { label: "Battle Royale", color: "orange" },
+  coop_mission: { label: "Co-op Mission", color: "teal" },
+};
 
-  useEffect(() => {
-    const ctrl = new AbortController();
-    setLoading(true);
-    api
-      .getMultiplayerProfile(gameId, ctrl.signal)
-      .then((profile) => {
-        if (profile) {
-          setConfigured(true);
-          setTopology(profile.topology);
-          setArchetype(profile.archetype);
-          if (profile.archetype === "queue_arena") {
-            setQA({ ...QA_DEFAULTS, ...profile.params });
-          } else if (profile.archetype === "host_world_dropin") {
-            setHWD({ ...HWD_DEFAULTS, ...profile.params });
-          } else if (profile.archetype === "battle_royale") {
-            setBR({ ...BR_DEFAULTS, ...profile.params });
-          } else {
-            setCM({ ...CM_DEFAULTS, ...profile.params });
-          }
-        } else {
-          setConfigured(false);
-          setTopology("dedicated");
-          setArchetype("queue_arena");
-          setQA(QA_DEFAULTS);
-          setHWD(HWD_DEFAULTS);
-          setBR(BR_DEFAULTS);
-          setCM(CM_DEFAULTS);
-        }
-      })
-      .catch((err) => {
-        if (ctrl.signal.aborted) return;
-        notifications.show({ color: "red", message: "Falha ao carregar o perfil de multiplayer." });
-        console.error(err);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setLoading(false);
-      });
-    return () => ctrl.abort();
-  }, [gameId]);
+// --- Editor de um modo (ADR-0024, spec 023) ---
+// Reusa o form por arquétipo como corpo; a moldura adiciona a identidade do
+// modo (modeId estável + displayName). modeId trava na edição (rename de
+// exibição = displayName) e no primeiro cadastro (CTA cria o "default").
+function ModeEditor({
+  gameId,
+  mode,
+  lockDefault,
+  existingModeIds,
+  onSaved,
+  onCancel,
+}: {
+  gameId: string;
+  mode: MultiplayerMode | null; // null = criar
+  lockDefault: boolean; // primeiro cadastro: modeId = "default" travado
+  existingModeIds: string[];
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const isEdit = mode !== null;
+  const [modeId, setModeId] = useState(mode?.modeId ?? (lockDefault ? DEFAULT_MODE_ID : ""));
+  const [displayName, setDisplayName] = useState(mode?.displayName ?? "");
+  const [topology, setTopology] = useState<"dedicated" | "p2p">(mode?.topology ?? "dedicated");
+  const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(
+    mode?.archetype ?? "queue_arena",
+  );
+  const [qa, setQA] = useState<QueueArenaParams>(
+    mode?.archetype === "queue_arena" ? { ...QA_DEFAULTS, ...mode.params } : QA_DEFAULTS,
+  );
+  const [hwd, setHWD] = useState<HostWorldDropInParams>(
+    mode?.archetype === "host_world_dropin" ? { ...HWD_DEFAULTS, ...mode.params } : HWD_DEFAULTS,
+  );
+  const [br, setBR] = useState<BattleRoyaleParams>(
+    mode?.archetype === "battle_royale" ? { ...BR_DEFAULTS, ...mode.params } : BR_DEFAULTS,
+  );
+  const [cm, setCM] = useState<CoopMissionParams>(
+    mode?.archetype === "coop_mission" ? { ...CM_DEFAULTS, ...mode.params } : CM_DEFAULTS,
+  );
+  const [saving, setSaving] = useState(false);
 
   function setQAField<K extends keyof QueueArenaParams>(key: K, value: QueueArenaParams[K]) {
     setQA((prev) => ({ ...prev, [key]: value }));
   }
-
   function setHWDField<K extends keyof HostWorldDropInParams>(key: K, value: HostWorldDropInParams[K]) {
     setHWD((prev) => ({ ...prev, [key]: value }));
   }
-
   function setBRField<K extends keyof BattleRoyaleParams>(key: K, value: BattleRoyaleParams[K]) {
     setBR((prev) => ({ ...prev, [key]: value }));
   }
-
   function setCMField<K extends keyof CoopMissionParams>(key: K, value: CoopMissionParams[K]) {
     setCM((prev) => ({ ...prev, [key]: value }));
   }
 
-  const invalidQAStats = qa.scoringStats.filter((s) => !STAT_RE.test(s));
+  const modeIdLocked = isEdit || lockDefault;
+  const modeIdInvalid = !MODE_ID_RE.test(modeId);
+  const modeIdTaken = !modeIdLocked && existingModeIds.includes(modeId);
+  const displayNameTooLong = displayName.trim().length > 60;
+  const invalidQAStats = qa.scoringStats.filter((st) => !STAT_RE.test(st));
   const hwdRolesEmpty = archetype === "host_world_dropin" && hwd.enabledRoles.length === 0;
-  const invalidBRStats = br.scoringStats.filter((s) => !STAT_RE.test(s));
+  const invalidBRStats = br.scoringStats.filter((st) => !STAT_RE.test(st));
   const brLobbyInvalid = archetype === "battle_royale" && br.lobbySize < 2 * br.teamSize;
   const cmFieldsInvalid =
     archetype === "coop_mission" &&
     (cm.teamSize < 2 ||
-      [...cm.scoringStats, ...cm.missions, ...cm.difficulties].some((s) => !STAT_RE.test(s)));
+      [...cm.scoringStats, ...cm.missions, ...cm.difficulties].some((st) => !STAT_RE.test(st)));
   const canSave =
+    !modeIdInvalid &&
+    !modeIdTaken &&
+    !displayNameTooLong &&
     invalidQAStats.length === 0 &&
     !hwdRolesEmpty &&
     invalidBRStats.length === 0 &&
@@ -742,29 +752,63 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             : archetype === "battle_royale"
               ? buildBattleRoyaleProfile(topology, br)
               : buildCoopMissionProfile(topology, cm);
-      await api.setMultiplayerProfile(gameId, profile);
-      setConfigured(true);
-      notifications.show({ color: "green", message: "Perfil de multiplayer salvo." });
+      const name = displayName.trim();
+      await api.setMultiplayerMode(gameId, modeId, {
+        ...profile,
+        ...(name ? { displayName: name } : {}),
+      });
+      notifications.show({ color: "green", message: `Modo "${name || modeId}" salvo.` });
+      onSaved();
     } catch (err) {
       const code = err instanceof HttpError ? err.code : undefined;
       notifications.show({
         color: "red",
-        message: code ? `Falha ao salvar (${code}).` : "Falha ao salvar (parâmetros inválidos ou serviço fora?).",
+        message: code
+          ? `Falha ao salvar (${code}).`
+          : "Falha ao salvar (parâmetros inválidos ou serviço fora?).",
       });
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <Loader size="sm" />;
-
   return (
     <Stack>
-      {!configured && (
-        <Alert color="blue" variant="light">
-          Este jogo ainda não tem um perfil de multiplayer. Defina abaixo e salve para configurá-lo.
-        </Alert>
-      )}
+      <Fieldset legend="Identidade do modo">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          <TextInput
+            label={
+              <FieldLabel
+                label="ID do modo"
+                help="Identificador estável do modo (vai para matchmaking/token/eventos no M1). Minúsculas, dígitos e hífen, começando com letra; máx. 32. Imutável após criado — para renomear a exibição use o nome abaixo."
+              />
+            }
+            placeholder="ex.: tdm, ranked, warzone"
+            value={modeId}
+            onChange={(e) => setModeId(e.currentTarget.value)}
+            disabled={modeIdLocked}
+            error={
+              !modeIdLocked && modeId.length > 0 && modeIdInvalid
+                ? "Formato: ^[a-z][a-z0-9-]{0,31}$"
+                : modeIdTaken
+                  ? "Já existe um modo com este id."
+                  : undefined
+            }
+          />
+          <TextInput
+            label={
+              <FieldLabel
+                label="Nome de exibição"
+                help="Nome amigável do modo mostrado no console (opcional, até 60 caracteres). Pode mudar a qualquer momento."
+              />
+            }
+            placeholder="ex.: Team Deathmatch"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.currentTarget.value)}
+            error={displayNameTooLong ? "Máximo de 60 caracteres." : undefined}
+          />
+        </SimpleGrid>
+      </Fieldset>
 
       <Fieldset legend="Arquétipo e topologia">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
@@ -772,7 +816,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             label={
               <FieldLabel
                 label="Arquétipo"
-                help="Define o modelo de multiplayer do jogo. Queue Arena: partida simétrica formada por fila (FFA ou NvN). Host World Drop-in: mundo persistente de um host onde phantoms entram com papéis assimétricos (estilo Soulslike). Battle Royale: lobby grande, colocação ordinal. Co-op Mission: time pequeno vs. ambiente, resultado coletivo (L4D/Deep Rock)."
+                help="Define o modelo de multiplayer do modo. Queue Arena: partida simétrica formada por fila (FFA ou NvN). Host World Drop-in: mundo persistente de um host onde phantoms entram com papéis assimétricos (estilo Soulslike). Battle Royale: lobby grande, colocação ordinal. Co-op Mission: time pequeno vs. ambiente, resultado coletivo (L4D/Deep Rock)."
               />
             }
             value={archetype}
@@ -820,9 +864,195 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
 
       <Group>
         <Button onClick={save} disabled={!canSave} loading={saving}>
-          {configured ? "Salvar" : "Configurar multiplayer"}
+          Salvar modo
+        </Button>
+        <Button variant="default" onClick={onCancel} disabled={saving}>
+          Cancelar
         </Button>
       </Group>
+    </Stack>
+  );
+}
+
+// --- Componente principal: coleção de modos do jogo (ADR-0024) ---
+type View =
+  | { kind: "list" }
+  | { kind: "create"; lockDefault: boolean }
+  | { kind: "edit"; mode: MultiplayerMode };
+
+export function MultiplayerSettings({ gameId }: { gameId: string }) {
+  const [loading, setLoading] = useState(true);
+  const [modes, setModes] = useState<MultiplayerMode[]>([]);
+  const [view, setView] = useState<View>({ kind: "list" });
+  const [deleting, setDeleting] = useState<MultiplayerMode | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setLoading(true);
+    api
+      .listMultiplayerModes(gameId, ctrl.signal)
+      .then((list) => setModes(list))
+      .catch((err) => {
+        if (ctrl.signal.aborted) return;
+        notifications.show({ color: "red", message: "Falha ao carregar os modos de multiplayer." });
+        console.error(err);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [gameId, reloadKey]);
+
+  function backToList() {
+    setView({ kind: "list" });
+    setReloadKey((k) => k + 1);
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setRemoving(true);
+    try {
+      await api.deleteMultiplayerMode(gameId, deleting.modeId);
+      notifications.show({
+        color: "green",
+        message: `Modo "${deleting.displayName || deleting.modeId}" removido.`,
+      });
+      setDeleting(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      const code = err instanceof HttpError ? err.code : undefined;
+      notifications.show({
+        color: "red",
+        message: code ? `Falha ao remover (${code}).` : "Falha ao remover o modo.",
+      });
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  if (loading) return <Loader size="sm" />;
+
+  if (view.kind !== "list") {
+    return (
+      <ModeEditor
+        key={view.kind === "edit" ? view.mode.modeId : "new"}
+        gameId={gameId}
+        mode={view.kind === "edit" ? view.mode : null}
+        lockDefault={view.kind === "create" && view.lockDefault}
+        existingModeIds={modes.map((m) => m.modeId)}
+        onSaved={backToList}
+        onCancel={() => setView({ kind: "list" })}
+      />
+    );
+  }
+
+  if (modes.length === 0) {
+    return (
+      <Stack>
+        <Alert color="blue" variant="light">
+          Este jogo ainda não tem um modo de multiplayer. Configure o primeiro modo (ele será o
+          modo <Code>default</Code> — o usado pelo matchmaking).
+        </Alert>
+        <Group>
+          <Button onClick={() => setView({ kind: "create", lockDefault: true })}>
+            Configurar multiplayer
+          </Button>
+        </Group>
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack>
+      <Group justify="space-between">
+        <Text size="sm" c="dimmed">
+          Modos de multiplayer do jogo — cada modo é um perfil nomeado (arquétipo + parâmetros).
+        </Text>
+        <Button
+          size="xs"
+          leftSection={<IconPlus size={14} />}
+          onClick={() => setView({ kind: "create", lockDefault: false })}
+        >
+          Novo modo
+        </Button>
+      </Group>
+
+      <Table verticalSpacing="sm" highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Modo</Table.Th>
+            <Table.Th>ID</Table.Th>
+            <Table.Th>Arquétipo</Table.Th>
+            <Table.Th w={90} />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {modes.map((m) => {
+            const meta = ARCHETYPE_META[m.archetype];
+            return (
+              <Table.Tr key={m.modeId}>
+                <Table.Td>
+                  <Text size="sm" fw={500}>
+                    {m.displayName || m.modeId}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Code>{m.modeId}</Code>
+                </Table.Td>
+                <Table.Td>
+                  <Badge variant="light" color={meta.color}>
+                    {meta.label}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap={4} justify="flex-end" wrap="nowrap">
+                    <ActionIcon
+                      variant="subtle"
+                      aria-label="Editar"
+                      onClick={() => setView({ kind: "edit", mode: m })}
+                    >
+                      <IconPencil size={16} />
+                    </ActionIcon>
+                    {m.modeId !== DEFAULT_MODE_ID && (
+                      <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        aria-label="Remover"
+                        onClick={() => setDeleting(m)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    )}
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+
+      <Modal
+        opened={!!deleting}
+        onClose={() => setDeleting(null)}
+        title={`Remover o modo "${deleting ? deleting.displayName || deleting.modeId : ""}"?`}
+      >
+        <Stack>
+          <Text size="sm">
+            O modo <Code>{deleting?.modeId}</Code> será removido do cadastro do jogo. A ação é
+            irreversível (histórico de partidas não é afetado).
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleting(null)} disabled={removing}>
+              Cancelar
+            </Button>
+            <Button color="red" onClick={confirmDelete} loading={removing}>
+              Remover
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }
