@@ -72,7 +72,7 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C2 — Resultado coletivo (session + fan-out) — o núcleo ✅ branch
+## C2 — Resultado coletivo (session + fan-out) — o núcleo ✅ main
 
 **Objetivo:** o server reporta **um desfecho coletivo** (`MISSION_SUCCESS`/`MISSION_FAILURE`) + stats por jogador no fim; o outcome vira o kind `collective`; o fan-out o distribui. Fecha o **último eixo** do "gap central" (resultado coletivo) e completa os quatro modelos do ADR-0023.
 
@@ -95,9 +95,11 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 
 ---
 
-## C3 — Colher: conquistas + leaderboard + analytics (sinks)
+## C3 — Colher: conquistas + leaderboard + analytics (sinks) ✅ main
 
 **Objetivo:** os sinks reagem ao desfecho coletivo. Reusa os consumers já discriminados por `kind` (ADR-0020) — o padrão exato da BR3.
+
+> **Status:** implementado e mergeado (3 branches, especs `achievements/011` + `leaderboard/006` + `analytics/006`). achievements: `CollectiveEventTypes` → `coop_mission_played`/`_success`/`_failed` (desfecho da sessão, igual para todos), reusa `ApplyMatchResult`/`processed_matches`. leaderboard: board cumulativo `missions_completed` (+1 p/ todos em SUCCESS) + `<stat>_total`/highscore por stat. analytics: migration `005_mission_rollup` (`game_mission_rollup`), `ApplyCollective` (successes/failures idempotente por matchId), `successRate` no read; **corrigiu o gap** de mounts do `analytics-postgres` no compose (002–005). Verde nos três: build, testes `-race` (analytics integração testcontainers), lint 0. Nada novo de Go (dispatch por kind + idempotência por matchId já documentados).
 
 **Specs:** `achievements/011` + `leaderboard/006` + `analytics/006`.
 
@@ -131,8 +133,8 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 |---|---|---|---|
 | C0 — declaração do perfil ✅ main | game-registry/008 + admin-ui | M | — |
 | C1 — formação do time co-op ✅ main | matchmaking/009 | S (session intacto — confirmado) | C0 |
-| C2 — resultado coletivo **(núcleo)** ✅ branch | session/016 | M | C1 |
-| C3 — colher (3 sinks) | achievements/011 + leaderboard/006 + analytics/006 | L | C2 |
+| C2 — resultado coletivo **(núcleo)** ✅ main | session/016 | M | C1 |
+| C3 — colher (3 sinks) ✅ main | achievements/011 + leaderboard/006 + analytics/006 | L | C2 |
 | C4 — console + contrato | admin-bff + admin-ui + doc | M | C1, C3 |
 
 Ao fim de C0–C4 o `coop_mission` estará **completo no control plane** (declarar → formar time → reportar desfecho coletivo → colher → console), validado com server mockado — e os **quatro modelos de resultado** do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos. Próxima etapa (cross-repo): o `unity-coop-mission-data-plane` (Unity) com AI Director/objetivo/wipe, consumindo o contrato de C4.
