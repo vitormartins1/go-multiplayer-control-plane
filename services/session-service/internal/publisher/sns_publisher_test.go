@@ -61,6 +61,44 @@ func TestSNSPublish_EnvelopeV2_RetrocompatEComOutcome(t *testing.T) {
 	assert.Equal(t, "draw", got.Results[1].Outcome)
 }
 
+func TestSNSPublishParticipation_EnvelopeDiscriminadoPorKind(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	evt := domain.ParticipationEvent{PlayerID: "inv-1", Role: domain.RoleInvader, Event: domain.EventHostKilled, Outcome: domain.OutcomeSuccess}
+	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", evt))
+
+	require.NotNil(t, fake.in)
+	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico do win_loss_draw")
+
+	var got participationEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, envelopeVersion, got.SchemaVersion)
+	assert.Equal(t, "participation_event", got.Kind)
+	assert.Equal(t, "game-1", got.GameID)
+	assert.Equal(t, "world-7", got.SessionID)
+	assert.Equal(t, "inv-1", got.PlayerID)
+	assert.Equal(t, domain.RoleInvader, got.Role)
+	assert.Equal(t, domain.EventHostKilled, got.Event)
+	assert.Equal(t, domain.OutcomeSuccess, got.Outcome)
+
+	// não carrega os campos do win_loss_draw.
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &raw))
+	assert.NotContains(t, raw, "results")
+	assert.NotContains(t, raw, "matchId")
+}
+
+func TestSNSPublishParticipation_ErroDoSNS_Propaga(t *testing.T) {
+	fake := &fakeSNS{err: errors.New("topic indisponível")}
+	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}
+
+	err := p.PublishParticipation(context.Background(), "game-1", "world-1",
+		domain.ParticipationEvent{PlayerID: "p1", Role: domain.RoleCoop, Event: domain.EventLeft, Outcome: domain.OutcomeNeutral})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sns publish participation")
+}
+
 func TestSNSPublish_ErroDoSNS_Propaga(t *testing.T) {
 	fake := &fakeSNS{err: errors.New("topic indisponível")}
 	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}

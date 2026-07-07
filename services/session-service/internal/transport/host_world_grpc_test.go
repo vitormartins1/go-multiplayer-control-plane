@@ -43,7 +43,10 @@ func setupWorld(t *testing.T, addresses []string) (pb.SessionClient, *token.Conn
 		Archetype: "host_world_dropin", EnabledRoles: []string{domain.RoleCoop, domain.RoleInvader},
 		CoopSlots: 2, InvaderSlots: 1,
 	}}
-	svc := service.New(allocator.New(addresses), iss, publisher.New(slogDiscard()), service.WithProfileProvider(prof))
+	pub := publisher.New(slogDiscard())
+	svc := service.New(allocator.New(addresses), iss, pub,
+		service.WithProfileProvider(prof),
+		service.WithParticipationPublisher(pub)) // Log satisfaz as duas Ports (spec 013)
 
 	srv := grpc.NewServer()
 	pb.RegisterSessionServer(srv, NewServer(svc))
@@ -153,4 +156,50 @@ func TestListInvadableWorlds_SemMundos_ListaVazia(t *testing.T) {
 	list, err := client.ListInvadableWorlds(context.Background(), &pb.ListInvadableWorldsRequest{GameId: "hw"})
 	require.NoError(t, err)
 	assert.Empty(t, list.GetWorlds())
+}
+
+// Eventos de participação (spec 013): LEFT libera o slot de invasor (o mundo
+// reaparece no diretório); HOST_KILLED encerra o mundo; evento inválido → 400.
+func TestReportParticipationEvent_FluxoDeSlotEEncerramento(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	ctx := context.Background()
+
+	open, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
+	require.NoError(t, err)
+	sid := open.GetSessionId()
+
+	// invasor entra -> slot de invasor (cap 1) esgota -> some do diretório.
+	_, err = client.JoinWorld(ctx, &pb.JoinWorldRequest{SessionId: sid, PlayerId: "inv-1", Role: "invader"})
+	require.NoError(t, err)
+	list, err := client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	require.Empty(t, list.GetWorlds())
+
+	// LEFT do invasor libera o slot -> o mundo volta ao diretório.
+	_, err = client.ReportParticipationEvent(ctx, &pb.ReportParticipationEventRequest{
+		SessionId: sid, PlayerId: "inv-1", Role: "invader", Event: "LEFT", Outcome: "NEUTRAL",
+	})
+	require.NoError(t, err)
+	list, err = client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	assert.Len(t, list.GetWorlds(), 1, "LEFT liberou a vaga de invasor")
+
+	// HOST_KILLED encerra o mundo.
+	_, err = client.ReportParticipationEvent(ctx, &pb.ReportParticipationEventRequest{
+		SessionId: sid, PlayerId: "inv-2", Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS",
+	})
+	require.NoError(t, err)
+	_, err = client.JoinWorld(ctx, &pb.JoinWorldRequest{SessionId: sid, PlayerId: "x", Role: "coop"})
+	assert.Equal(t, codes.NotFound, status.Code(err), "mundo encerrado")
+}
+
+func TestReportParticipationEvent_EventoInvalido_InvalidArgument(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	open, err := client.OpenWorld(context.Background(), &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
+	require.NoError(t, err)
+
+	_, err = client.ReportParticipationEvent(context.Background(), &pb.ReportParticipationEventRequest{
+		SessionId: open.GetSessionId(), PlayerId: "p", Role: "coop", Event: "FLEW_AWAY", Outcome: "NEUTRAL",
+	})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }

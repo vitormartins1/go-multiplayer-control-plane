@@ -29,6 +29,9 @@ const (
 	// CloseHostLeft: mundo host_world encerrado limpo porque o host saiu
 	// (spec 011, ADR-0023). Distinto de abandoned (crash) — encerramento voluntário.
 	CloseHostLeft CloseReason = "host_left"
+	// CloseHostKilled: mundo host_world encerrado porque o host foi morto (evento
+	// HOST_KILLED, spec 013). Distinto de host_left (saída voluntária).
+	CloseHostKilled CloseReason = "host_killed"
 )
 
 // SessionOrigin distingue como a sessão nasceu (ADR-0023, spec 011).
@@ -55,6 +58,31 @@ const (
 type RoleSlot struct {
 	Capacity  int
 	Occupants []string
+}
+
+// Vocabulário dos eventos de participação (spec 013, ficha 01 §5). O server do
+// mundo reporta cada evento ao longo da vida da sessão host_world_dropin.
+const (
+	EventJoined       = "JOINED"        // phantom entrou (confirmação; o slot já foi ocupado no JoinWorld)
+	EventBossDefeated = "BOSS_DEFEATED" // boss da área morto (co-op ajudou)
+	EventHostKilled   = "HOST_KILLED"   // o host morreu — encerra o mundo
+	EventDied         = "DIED"          // phantom morto — libera o slot
+	EventLeft         = "LEFT"          // phantom saiu — libera o slot
+
+	OutcomeSuccess = "SUCCESS"
+	OutcomeFail    = "FAIL"
+	OutcomeNeutral = "NEUTRAL"
+)
+
+// ParticipationEvent é um desfecho por participante reportado pelo server do
+// mundo (spec 013). Role vem do claim role do connect token (H0). O session
+// valida só o vocabulário (Event/Outcome) — a interpretação de "quem venceu" é
+// dos sinks (achievements/analytics).
+type ParticipationEvent struct {
+	PlayerID string
+	Role     string
+	Event    string // um de Event*
+	Outcome  string // um de Outcome*
 }
 
 // TeamAssignment é um lado da partida NvN: um rótulo estável no match e seus
@@ -196,6 +224,13 @@ type SessionService interface {
 	// CloseWorld encerra o mundo (CloseHostLeft), libera o server e encerra a
 	// participação de todos. ErrWorldNotFound se não houver mundo aberto.
 	CloseWorld(ctx context.Context, sessionID string) error
+
+	// ReportParticipationEvent recebe um evento por participante do server do
+	// mundo (spec 013): publica no fan-out (kind=participation_event) e aplica o
+	// efeito no slot (DIED/LEFT liberam; HOST_KILLED encerra o mundo). Publica
+	// ANTES de mutar (ADR-0020). ErrInvalidParticipation (vocabulário),
+	// ErrWorldNotFound (mundo inexistente/fechado).
+	ReportParticipationEvent(ctx context.Context, sessionID string, evt ParticipationEvent) error
 }
 
 // WorldProfile é o subconjunto do perfil host_world_dropin que o session precisa
@@ -264,4 +299,12 @@ type ConnectTokenIssuer interface {
 // idempotência que viaja no envelope).
 type ResultPublisher interface {
 	Publish(ctx context.Context, gameID, matchID string, outcome MatchOutcome) error
+}
+
+// ParticipationPublisher é a Port de saída do fan-out dos eventos de participação
+// (spec 013, host_world_dropin). Publica no MESMO tópico match-results, com
+// envelope kind=participation_event (decisão #3 do roadmap H2). O mesmo adapter
+// (SNS/Log) satisfaz esta Port e a ResultPublisher.
+type ParticipationPublisher interface {
+	PublishParticipation(ctx context.Context, gameID, sessionID string, evt ParticipationEvent) error
 }

@@ -60,6 +60,12 @@ func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID string, out
 	return m.Called(ctx, gameID, matchID, outcome).Error(0)
 }
 
+type mockParticipation struct{ mock.Mock }
+
+func (m *mockParticipation) PublishParticipation(ctx context.Context, gameID, sessionID string, evt domain.ParticipationEvent) error {
+	return m.Called(ctx, gameID, sessionID, evt).Error(0)
+}
+
 // wldOutcome monta um MatchOutcome win_loss_draw com os jogadores dados.
 func wldOutcome(players ...domain.PlayerOutcome) domain.MatchOutcome {
 	return domain.MatchOutcome{Kind: domain.OutcomeWinLossDraw, WinLossDraw: &domain.WinLossDrawResult{Players: players}}

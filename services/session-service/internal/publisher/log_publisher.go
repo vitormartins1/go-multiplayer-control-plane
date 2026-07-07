@@ -11,7 +11,10 @@ import (
 	"github.com/vitormartins1/go-game-backend/services/session-service/internal/domain"
 )
 
-var _ domain.ResultPublisher = (*Log)(nil)
+var (
+	_ domain.ResultPublisher        = (*Log)(nil)
+	_ domain.ParticipationPublisher = (*Log)(nil)
+)
 
 // Log é o ResultPublisher de fallback: registra o resultado em vez de publicar
 // no tópico (quando MATCH_RESULTS_TOPIC_ARN não está configurado).
@@ -42,5 +45,18 @@ func (l *Log) Publish(_ context.Context, gameID, matchID string, outcome domain.
 			slog.Any("stats", p.Stats),
 		)
 	}
+	return nil
+}
+
+// PublishParticipation loga o evento de participação (fallback do fan-out real).
+func (l *Log) PublishParticipation(_ context.Context, gameID, sessionID string, evt domain.ParticipationEvent) error {
+	l.log.Info("participation fan-out (log fallback)",
+		slog.String("game_id", gameID),
+		slog.String("session_id", sessionID),
+		slog.String("player_id", evt.PlayerID),
+		slog.String("role", evt.Role),
+		slog.String("event", evt.Event),
+		slog.String("outcome", evt.Outcome),
+	)
 	return nil
 }

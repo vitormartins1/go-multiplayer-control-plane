@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Session_CreateSession_FullMethodName       = "/session.v1.Session/CreateSession"
-	Session_ReportResult_FullMethodName        = "/session.v1.Session/ReportResult"
-	Session_OpenWorld_FullMethodName           = "/session.v1.Session/OpenWorld"
-	Session_JoinWorld_FullMethodName           = "/session.v1.Session/JoinWorld"
-	Session_LeaveWorld_FullMethodName          = "/session.v1.Session/LeaveWorld"
-	Session_CloseWorld_FullMethodName          = "/session.v1.Session/CloseWorld"
-	Session_ListInvadableWorlds_FullMethodName = "/session.v1.Session/ListInvadableWorlds"
+	Session_CreateSession_FullMethodName            = "/session.v1.Session/CreateSession"
+	Session_ReportResult_FullMethodName             = "/session.v1.Session/ReportResult"
+	Session_OpenWorld_FullMethodName                = "/session.v1.Session/OpenWorld"
+	Session_JoinWorld_FullMethodName                = "/session.v1.Session/JoinWorld"
+	Session_LeaveWorld_FullMethodName               = "/session.v1.Session/LeaveWorld"
+	Session_CloseWorld_FullMethodName               = "/session.v1.Session/CloseWorld"
+	Session_ListInvadableWorlds_FullMethodName      = "/session.v1.Session/ListInvadableWorlds"
+	Session_ReportParticipationEvent_FullMethodName = "/session.v1.Session/ReportParticipationEvent"
 )
 
 // SessionClient is the client API for Session service.
@@ -61,6 +62,11 @@ type SessionClient interface {
 	// livre + atributos do host (spec 012). Fonte de dados pura para o matchmaking
 	// (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
 	ListInvadableWorlds(ctx context.Context, in *ListInvadableWorldsRequest, opts ...grpc.CallOption) (*ListInvadableWorldsResponse, error)
+	// ReportParticipationEvent recebe um evento por participante do server do mundo
+	// (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
+	// slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
+	// NotFound (mundo inexistente/fechado).
+	ReportParticipationEvent(ctx context.Context, in *ReportParticipationEventRequest, opts ...grpc.CallOption) (*ReportParticipationEventResponse, error)
 }
 
 type sessionClient struct {
@@ -141,6 +147,16 @@ func (c *sessionClient) ListInvadableWorlds(ctx context.Context, in *ListInvadab
 	return out, nil
 }
 
+func (c *sessionClient) ReportParticipationEvent(ctx context.Context, in *ReportParticipationEventRequest, opts ...grpc.CallOption) (*ReportParticipationEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportParticipationEventResponse)
+	err := c.cc.Invoke(ctx, Session_ReportParticipationEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionServer is the server API for Session service.
 // All implementations must embed UnimplementedSessionServer
 // for forward compatibility.
@@ -174,6 +190,11 @@ type SessionServer interface {
 	// livre + atributos do host (spec 012). Fonte de dados pura para o matchmaking
 	// (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
 	ListInvadableWorlds(context.Context, *ListInvadableWorldsRequest) (*ListInvadableWorldsResponse, error)
+	// ReportParticipationEvent recebe um evento por participante do server do mundo
+	// (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
+	// slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
+	// NotFound (mundo inexistente/fechado).
+	ReportParticipationEvent(context.Context, *ReportParticipationEventRequest) (*ReportParticipationEventResponse, error)
 	mustEmbedUnimplementedSessionServer()
 }
 
@@ -204,6 +225,9 @@ func (UnimplementedSessionServer) CloseWorld(context.Context, *CloseWorldRequest
 }
 func (UnimplementedSessionServer) ListInvadableWorlds(context.Context, *ListInvadableWorldsRequest) (*ListInvadableWorldsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListInvadableWorlds not implemented")
+}
+func (UnimplementedSessionServer) ReportParticipationEvent(context.Context, *ReportParticipationEventRequest) (*ReportParticipationEventResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportParticipationEvent not implemented")
 }
 func (UnimplementedSessionServer) mustEmbedUnimplementedSessionServer() {}
 func (UnimplementedSessionServer) testEmbeddedByValue()                 {}
@@ -352,6 +376,24 @@ func _Session_ListInvadableWorlds_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Session_ReportParticipationEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportParticipationEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).ReportParticipationEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_ReportParticipationEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).ReportParticipationEvent(ctx, req.(*ReportParticipationEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Session_ServiceDesc is the grpc.ServiceDesc for Session service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -386,6 +428,10 @@ var Session_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListInvadableWorlds",
 			Handler:    _Session_ListInvadableWorlds_Handler,
+		},
+		{
+			MethodName: "ReportParticipationEvent",
+			Handler:    _Session_ReportParticipationEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

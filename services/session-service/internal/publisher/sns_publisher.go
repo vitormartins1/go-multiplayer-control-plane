@@ -21,7 +21,14 @@ var publishTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help: "Resultados publicados no tópico match-results por status (ok/error).",
 }, []string{"result"})
 
-var _ domain.ResultPublisher = (*SNS)(nil)
+var (
+	_ domain.ResultPublisher        = (*SNS)(nil)
+	_ domain.ParticipationPublisher = (*SNS)(nil)
+)
+
+// kindParticipationEvent é o discriminador do envelope de participação (spec 013,
+// decisão #3): mesmo tópico match-results, kind distinto do win_loss_draw.
+const kindParticipationEvent = "participation_event"
 
 // envelopeVersion é a versão do schema da mensagem publicada no tópico. Os
 // consumidores ignoram campos desconhecidos; bumps de major viram um novo campo.
@@ -49,6 +56,20 @@ type playerResult struct {
 	Outcome  string           `json:"outcome"`
 	TeamID   string           `json:"teamId,omitempty"`
 	Stats    map[string]int64 `json:"stats,omitempty"`
+}
+
+// participationEnvelope é o envelope do host_world_dropin (spec 013) no mesmo
+// tópico match-results. Discriminado por kind=participation_event; carrega o
+// evento por participante (sem matchId/results, que são do win_loss_draw).
+type participationEnvelope struct {
+	SchemaVersion int    `json:"schemaVersion"`
+	Kind          string `json:"kind"`
+	GameID        string `json:"gameId"`
+	SessionID     string `json:"sessionId"`
+	PlayerID      string `json:"playerId"`
+	Role          string `json:"role"`
+	Event         string `json:"event"`
+	Outcome       string `json:"outcome"`
 }
 
 // snsClient é a fração da API do SNS que usamos (permite fake em teste).
@@ -115,6 +136,42 @@ func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domai
 		slog.String("game_id", gameID),
 		slog.String("match_id", matchID),
 		slog.Int("players", len(players)),
+	)
+	return nil
+}
+
+// PublishParticipation serializa o envelope participation_event e o publica no
+// mesmo tópico match-results (spec 013). Falha propaga (o server refaz o report).
+func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID string, evt domain.ParticipationEvent) error {
+	env := participationEnvelope{
+		SchemaVersion: envelopeVersion,
+		Kind:          kindParticipationEvent,
+		GameID:        gameID,
+		SessionID:     sessionID,
+		PlayerID:      evt.PlayerID,
+		Role:          evt.Role,
+		Event:         evt.Event,
+		Outcome:       evt.Outcome,
+	}
+	body, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("session publisher: marshal participation envelope: %w", err)
+	}
+	if _, err := s.client.Publish(ctx, &sns.PublishInput{
+		TopicArn: aws.String(s.topicARN),
+		Message:  aws.String(string(body)),
+	}); err != nil {
+		publishTotal.WithLabelValues("error").Inc()
+		return fmt.Errorf("session publisher: sns publish participation: %w", err)
+	}
+	publishTotal.WithLabelValues("ok").Inc()
+	s.log.Info("participation event publicado no tópico",
+		slog.String("game_id", gameID),
+		slog.String("session_id", sessionID),
+		slog.String("player_id", evt.PlayerID),
+		slog.String("role", evt.Role),
+		slog.String("event", evt.Event),
+		slog.String("outcome", evt.Outcome),
 	)
 	return nil
 }

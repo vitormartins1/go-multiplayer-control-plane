@@ -34,4 +34,7 @@ var (
 	// ErrProfileUnavailable indica que o perfil de multiplayer do jogo não pôde ser
 	// lido/usado (ausente, arquétipo incompatível, rede) — origem no ProfileProvider.
 	ErrProfileUnavailable = errors.New("session: multiplayer profile unavailable")
+	// ErrInvalidParticipation indica um evento de participação fora do vocabulário
+	// (Event/Outcome inválido) — spec 013.
+	ErrInvalidParticipation = errors.New("session: invalid participation event")
 )
