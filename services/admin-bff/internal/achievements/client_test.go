@@ -3,6 +3,7 @@ package achievements
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,6 +25,38 @@ func TestCatalogForGame_Mapeia(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, cat, 1)
 	assert.Equal(t, "first_win", cat[0].ID)
+}
+
+func TestCatalogForGame_MapeiaStatCriterio(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"achievements":[{"id":"ace","name":"Ás","description":"x","statKey":"kills","statMode":"per_match","target":5}]}`))
+	}))
+	defer srv.Close()
+
+	cat, err := New(srv.URL, srv.Client()).CatalogForGame(context.Background(), "g1")
+	require.NoError(t, err)
+	require.Len(t, cat, 1)
+	assert.Equal(t, "kills", cat[0].StatKey)
+	assert.Equal(t, "per_match", cat[0].StatMode)
+	assert.Empty(t, cat[0].EventType)
+}
+
+func TestCreateAchievement_EnviaStatCriterio(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"ace","name":"Ás","description":"x","statKey":"kills","statMode":"per_match","target":5}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).CreateAchievement(context.Background(), "g1", domain.Achievement{
+		ID: "ace", Name: "Ás", StatKey: "kills", StatMode: "per_match", Target: 5,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, gotBody, `"statKey":"kills"`)
+	assert.Contains(t, gotBody, `"statMode":"per_match"`)
 }
 
 func TestPlayerAchievements_Mapeia(t *testing.T) {
