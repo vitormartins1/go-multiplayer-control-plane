@@ -17,7 +17,7 @@ type fakePolicies struct {
 	err    error
 }
 
-func (f *fakePolicies) InvasionPolicy(context.Context, string) (domain.InvasionPolicy, error) {
+func (f *fakePolicies) InvasionPolicy(context.Context, string, string) (domain.InvasionPolicy, error) {
 	return f.policy, f.err
 }
 
@@ -57,7 +57,7 @@ func TestInvade_MundoElegivel_InjetaEDevolveServerEToken(t *testing.T) {
 	inj := &fakeInjector{byWorld: map[string]error{}}
 	in := NewInvader(pol, dir, inj)
 
-	got, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	got, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	require.NoError(t, err)
 	assert.Equal(t, "w1", got.SessionID)
 	assert.Equal(t, "addr-w1", got.ServerAddress)
@@ -69,7 +69,7 @@ func TestInvade_ArchetypeErrado_ErrInvasionNotSupported(t *testing.T) {
 	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "queue_arena", InvasionEnabled: true}}
 	in := NewInvader(pol, &fakeDirectory{}, &fakeInjector{})
 
-	_, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{})
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{})
 	assert.ErrorIs(t, err, domain.ErrInvasionNotSupported)
 	assert.Equal(t, float64(1), in.InvasionsTotal(resultNotSupported))
 }
@@ -78,14 +78,14 @@ func TestInvade_InvasaoDesligada_ErrInvasionNotSupported(t *testing.T) {
 	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: false}}
 	in := NewInvader(pol, &fakeDirectory{}, &fakeInjector{})
 
-	_, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{})
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{})
 	assert.ErrorIs(t, err, domain.ErrInvasionNotSupported)
 }
 
 func TestInvade_ListaVazia_ErrNoEligibleWorld(t *testing.T) {
 	in := NewInvader(&fakePolicies{policy: invasionOn()}, &fakeDirectory{worlds: nil}, &fakeInjector{})
 
-	_, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
 	assert.Equal(t, float64(1), in.InvasionsTotal(resultNoWorld))
 }
@@ -97,7 +97,7 @@ func TestInvade_NenhumNaFaixa_ErrNoEligibleWorld(t *testing.T) {
 	inj := &fakeInjector{byWorld: map[string]error{}}
 	in := NewInvader(pol, dir, inj)
 
-	_, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
 	assert.Empty(t, inj.calls, "mundo fora da faixa nem é tentado")
 }
@@ -111,7 +111,7 @@ func TestInvade_PrimeiroEncheNaCorrida_TentaOProximo(t *testing.T) {
 	inj := &fakeInjector{byWorld: map[string]error{"w1": domain.ErrRoleFull}} // w1 encheu; w2 ok
 	in := NewInvader(pol, dir, inj)
 
-	got, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	got, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	require.NoError(t, err)
 	assert.Equal(t, "w2", got.SessionID)
 	assert.Equal(t, []string{"w1", "w2"}, inj.calls, "tentou w1 (cheio) e depois w2")
@@ -126,7 +126,7 @@ func TestInvade_MundoFechadoNaCorrida_TentaOProximo(t *testing.T) {
 	inj := &fakeInjector{byWorld: map[string]error{"w1": domain.ErrWorldNotFound}}
 	in := NewInvader(pol, dir, inj)
 
-	got, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	got, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	require.NoError(t, err)
 	assert.Equal(t, "w2", got.SessionID)
 }
@@ -140,7 +140,7 @@ func TestInvade_TodosCheios_ErrNoEligibleWorld(t *testing.T) {
 	inj := &fakeInjector{byWorld: map[string]error{"w1": domain.ErrRoleFull, "w2": domain.ErrRoleFull}}
 	in := NewInvader(pol, dir, inj)
 
-	_, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
 	assert.Equal(t, []string{"w1", "w2"}, inj.calls, "tentou os dois antes de desistir")
 }
@@ -149,6 +149,6 @@ func TestInvade_PerfilIndisponivel_Propaga(t *testing.T) {
 	pol := &fakePolicies{err: domain.ErrProfileUnavailable}
 	in := NewInvader(pol, &fakeDirectory{}, &fakeInjector{})
 
-	_, err := in.Invade(context.Background(), "game-1", "invader-1", domain.InvaderCriteria{})
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{})
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }

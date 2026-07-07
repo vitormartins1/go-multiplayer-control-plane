@@ -27,10 +27,10 @@ func serverReturning(t *testing.T, status int, body string, gotKey *string) *htt
 	return srv
 }
 
-func TestWorldProfile_HostWorld_LePapeisECapacidade(t *testing.T) {
+func TestModeProfile_HostWorld_LePapeisECapacidade(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"host_world_dropin","topology":"dedicated","params":{"enabledRoles":["coop","invader"],"coopSlots":3,"invaderSlots":2}}`, nil)
-	p, err := New(srv.URL, srv.Client()).WorldProfile(t.Context(), "g1")
+	p, err := New(srv.URL, srv.Client()).ModeProfile(t.Context(), "g1", "default")
 	require.NoError(t, err)
 	assert.Equal(t, "host_world_dropin", p.Archetype)
 	assert.Equal(t, []string{"coop", "invader"}, p.EnabledRoles)
@@ -38,26 +38,33 @@ func TestWorldProfile_HostWorld_LePapeisECapacidade(t *testing.T) {
 	assert.Equal(t, 2, p.InvaderSlots)
 }
 
-func TestWorldProfile_404_ErrProfileUnavailable(t *testing.T) {
+func TestModeProfile_404_ErrProfileUnavailable(t *testing.T) {
 	srv := serverReturning(t, http.StatusNotFound, `{"error":"profile_not_found"}`, nil)
-	_, err := New(srv.URL, srv.Client()).WorldProfile(t.Context(), "g1")
+	_, err := New(srv.URL, srv.Client()).ModeProfile(t.Context(), "g1", "default")
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
-func TestWorldProfile_ArchetypeErrado_ErrProfileUnavailable(t *testing.T) {
+// O client é genérico por modo (ADR-0024): qualquer arquétipo vira snapshot com
+// params crus + hash — a checagem host_world subiu para o service.
+func TestModeProfile_QueueArena_SnapshotComParamsCrusEHash(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":8}}`, nil)
-	_, err := New(srv.URL, srv.Client()).WorldProfile(t.Context(), "g1")
-	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+	p, err := New(srv.URL, srv.Client()).ModeProfile(t.Context(), "g1", "tdm")
+	require.NoError(t, err)
+	assert.Equal(t, "queue_arena", p.Archetype)
+	assert.Equal(t, "tdm", p.ModeID)
+	assert.JSONEq(t, `{"structure":"ffa","playerCount":8}`, string(p.ParamsJSON), "params crus preservados p/ o manifest")
+	assert.Len(t, p.Hash, 16, "hash curto determinístico")
+	assert.Empty(t, p.EnabledRoles, "derivados de host_world ficam zero")
 }
 
-func TestWorldProfile_InjetaInternalKey(t *testing.T) {
+func TestModeProfile_InjetaInternalKey(t *testing.T) {
 	var gotKey string
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"host_world_dropin","topology":"dedicated","params":{"enabledRoles":["coop"],"coopSlots":1}}`, &gotKey)
 
 	httpClient := &http.Client{Transport: auth.InternalKeyTransport("segredo", nil)}
-	_, err := New(srv.URL, httpClient).WorldProfile(t.Context(), "g1")
+	_, err := New(srv.URL, httpClient).ModeProfile(t.Context(), "g1", "default")
 	require.NoError(t, err)
 	assert.Equal(t, "segredo", gotKey, "a internal key viaja no header")
 }

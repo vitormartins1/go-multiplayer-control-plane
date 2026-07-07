@@ -24,6 +24,7 @@ type GameSession struct {
 	SessionID     string          `json:"sessionId"`
 	MatchID       string          `json:"matchId"`
 	GameID        string          `json:"gameId,omitempty"`
+	ModeID        string          `json:"modeId,omitempty"` // modo do jogo (ADR-0024, aditivo)
 	GameName      string          `json:"gameName,omitempty"`
 	State         string          `json:"state"`
 	Players       []SessionPlayer `json:"players"`

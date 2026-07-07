@@ -39,7 +39,7 @@ func TestSNSPublish_EnvelopeV2_RetrocompatEComOutcome(t *testing.T) {
 		domain.PlayerOutcome{PlayerID: "p1", TeamID: "A", Outcome: domain.ResultWin, Score: 5, Stats: map[string]int64{"kills": 7}},
 		domain.PlayerOutcome{PlayerID: "p2", TeamID: "B", Outcome: domain.ResultDraw, Score: 3},
 	)
-	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", outcome))
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", "default", outcome))
 
 	require.NotNil(t, fake.in)
 	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn)
@@ -66,7 +66,7 @@ func TestSNSPublishParticipation_EnvelopeDiscriminadoPorKind(t *testing.T) {
 	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
 
 	evt := domain.ParticipationEvent{PlayerID: "inv-1", Role: domain.RoleInvader, Event: domain.EventHostKilled, Outcome: domain.OutcomeSuccess}
-	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", evt))
+	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", "default", evt))
 
 	require.NotNil(t, fake.in)
 	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico do win_loss_draw")
@@ -93,7 +93,7 @@ func TestSNSPublishParticipation_ErroDoSNS_Propaga(t *testing.T) {
 	fake := &fakeSNS{err: errors.New("topic indisponível")}
 	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}
 
-	err := p.PublishParticipation(context.Background(), "game-1", "world-1",
+	err := p.PublishParticipation(context.Background(), "game-1", "world-1", "default",
 		domain.ParticipationEvent{PlayerID: "p1", Role: domain.RoleCoop, Event: domain.EventLeft, Outcome: domain.OutcomeNeutral})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sns publish participation")
@@ -103,7 +103,7 @@ func TestSNSPublish_ErroDoSNS_Propaga(t *testing.T) {
 	fake := &fakeSNS{err: errors.New("topic indisponível")}
 	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}
 
-	err := p.Publish(context.Background(), "game-1", "match-1",
+	err := p.Publish(context.Background(), "game-1", "match-1", "default",
 		wld(domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin}))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sns publish")
@@ -124,7 +124,7 @@ func TestSNSPublish_Placement_EnvelopeDiscriminadoPorKind(t *testing.T) {
 		domain.PlacementEntry{PlayerID: "p1", TeamID: "squad-1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4}},
 		domain.PlacementEntry{PlayerID: "p3", Placement: 2, SurvivedMs: 500000},
 	)
-	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", outcome))
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", "default", outcome))
 
 	require.NotNil(t, fake.in)
 	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico do win_loss_draw")
@@ -162,7 +162,7 @@ func TestSNSPublish_Collective_EnvelopeDiscriminadoPorKind(t *testing.T) {
 			{PlayerID: "p2", TeamID: "team-1"},
 		},
 	}}
-	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", outcome))
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", "default", outcome))
 
 	require.NotNil(t, fake.in)
 	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico dos demais kinds")
@@ -194,7 +194,7 @@ func TestSNSPublish_WinLossDraw_IntactoAposDispatch(t *testing.T) {
 	fake := &fakeSNS{}
 	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}
 
-	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1",
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", "default",
 		wld(domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin, Score: 5})))
 
 	var got envelope

@@ -51,7 +51,8 @@ func Generate() (*ConnectIssuer, error) {
 
 // Issue emite um connect token EdDSA com sub/match_id/server/iat/exp/kid e os
 // claims opcionais por arquétipo (ADR-0023): team_id (queue_arena) e role
-// (host_world_dropin), incluídos só quando não-vazios. O game server valida
+// (host_world_dropin), incluídos só quando não-vazios, e mode_id (ADR-0024),
+// sempre presente nos fluxos atuais. O game server valida
 // offline (JWKS) que o portador foi autorizado para o ref/servidor indicados e
 // lê os claims no connection approval. refID é o match_id (queue_arena) ou o
 // sessionID do mundo (host_world_dropin).
@@ -69,6 +70,11 @@ func (i *ConnectIssuer) Issue(playerID, refID, serverAddr string, extra domain.C
 	}
 	if extra.Role != "" {
 		claims["role"] = extra.Role // host_world_dropin: host/coop/invader
+	}
+	if extra.ModeID != "" {
+		// mode_id é SEMPRE emitido pelo service (ADR-0024, spec 017) — o guard
+		// vazio existe só para tokens legados/testes sem modo.
+		claims["mode_id"] = extra.ModeID
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	tok.Header["kid"] = i.kid

@@ -28,7 +28,10 @@ func setup(t *testing.T, addresses []string) (pb.SessionClient, *token.ConnectIs
 	lis := bufconn.Listen(1024 * 1024)
 	iss, err := token.Generate()
 	require.NoError(t, err)
-	svc := service.New(allocator.New(addresses), iss, publisher.New(slogDiscard()))
+	// stubProfile (host_world_grpc_test) serve snapshot p/ qualquer jogo != "hw"
+	// — o Create exige snapshot do modo desde o ADR-0024 (spec 017).
+	svc := service.New(allocator.New(addresses), iss, publisher.New(slogDiscard()),
+		service.WithProfileProvider(stubProfile{}))
 
 	srv := grpc.NewServer()
 	pb.RegisterSessionServer(srv, NewServer(svc))
@@ -231,4 +234,66 @@ func TestCreateSession_TimesInconsistentes_InvalidArgument(t *testing.T) {
 	})
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+// --- modos + manifest (ADR-0024, spec 017) ---
+
+func TestCreateSession_ModeIDFluiParaTokenEManifest(t *testing.T) {
+	client, iss := setup(t, []string{"10.0.0.1:7777"})
+
+	resp, err := client.CreateSession(context.Background(), &pb.CreateSessionRequest{
+		MatchId: "match-m1", Players: []string{"p1"}, ModeId: "ranked",
+	})
+	require.NoError(t, err)
+
+	// claim mode_id no connect token
+	parsed, err := jwt.Parse(resp.GetGrants()[0].GetConnectToken(), func(*jwt.Token) (any, error) {
+		return iss.PublicKey(), nil
+	}, jwt.WithValidMethods([]string{"EdDSA"}))
+	require.NoError(t, err)
+	assert.Equal(t, "ranked", parsed.Claims.(jwt.MapClaims)["mode_id"])
+
+	// manifest via GetSessionConfig por match_id
+	cfg, err := client.GetSessionConfig(context.Background(), &pb.GetSessionConfigRequest{RefId: "match-m1"})
+	require.NoError(t, err)
+	assert.Equal(t, "ranked", cfg.GetModeId())
+	assert.Equal(t, "queue_arena", cfg.GetArchetype())
+	assert.NotEmpty(t, cfg.GetParamsJson())
+	assert.NotEmpty(t, cfg.GetProfileHash())
+}
+
+func TestCreateSession_SemModeID_UsaDefault(t *testing.T) {
+	client, _ := setup(t, []string{"10.0.0.1:7777"})
+	_, err := client.CreateSession(context.Background(), &pb.CreateSessionRequest{
+		MatchId: "match-d1", Players: []string{"p1"},
+	})
+	require.NoError(t, err)
+	cfg, err := client.GetSessionConfig(context.Background(), &pb.GetSessionConfigRequest{RefId: "match-d1"})
+	require.NoError(t, err)
+	assert.Equal(t, "default", cfg.GetModeId(), "retrocompat: mode_id ausente = default")
+}
+
+func TestGetSessionConfig_Inexistente_NotFound(t *testing.T) {
+	client, _ := setup(t, []string{"10.0.0.1:7777"})
+	_, err := client.GetSessionConfig(context.Background(), &pb.GetSessionConfigRequest{RefId: "nada"})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestReportResult_KindErrado_FailedPrecondition(t *testing.T) {
+	client, _ := setup(t, []string{"10.0.0.1:7777"})
+	_, err := client.CreateSession(context.Background(), &pb.CreateSessionRequest{
+		MatchId: "match-x1", Players: []string{"p1"},
+	})
+	require.NoError(t, err)
+
+	// sessão queue_arena (stub) recebendo placement → mismatch (spec 017).
+	_, err = client.ReportResult(context.Background(), &pb.ReportResultRequest{
+		MatchId: "match-x1",
+		Outcome: &pb.ReportResultRequest_Placement{Placement: &pb.PlacementResult{
+			Entries: []*pb.PlacementEntry{{PlayerId: "p1", Placement: 1}},
+		}},
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }

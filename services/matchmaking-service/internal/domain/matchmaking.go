@@ -57,12 +57,17 @@ type TeamAssignment struct {
 	Players []string
 }
 
-// Matchmaker é a Port de entrada: enfileira tickets e forma matches. O
-// gameID escopa a fila — só casa jogadores do mesmo jogo (ADR-0017).
+// DefaultModeID é o modo assumido quando a entrada não declara um (ADR-0024).
+// A normalização acontece no transport.
+const DefaultModeID = "default"
+
+// Matchmaker é a Port de entrada: enfileira tickets e forma matches. A fila é
+// escopada por (gameID, modeID) — só casa jogadores do mesmo jogo (ADR-0017) E
+// do mesmo modo (ADR-0024).
 type Matchmaker interface {
-	// Join enfileira o jogador no jogo e devolve um canal por onde o MatchResult
-	// chega quando o match resolve. Cancelar o ctx remove o ticket da fila.
-	Join(ctx context.Context, gameID, playerID string) (<-chan MatchResult, error)
+	// Join enfileira o jogador no (jogo, modo) e devolve um canal por onde o
+	// MatchResult chega quando o match resolve. Cancelar o ctx remove o ticket.
+	Join(ctx context.Context, gameID, modeID, playerID string) (<-chan MatchResult, error)
 	// Run executa o loop de formação (em background) até o ctx ser cancelado.
 	Run(ctx context.Context)
 }
@@ -73,7 +78,8 @@ type Matchmaker interface {
 // TeamAssignment com TeamID vazio. Devolve ErrNoServer quando o session
 // responde ResourceExhausted.
 type SessionProvisioner interface {
-	Provision(ctx context.Context, matchID string, teams []TeamAssignment, gameID string) (Provisioned, error)
+	// modeID segue para o session, que congela o snapshot do perfil (ADR-0024).
+	Provision(ctx context.Context, matchID string, teams []TeamAssignment, gameID, modeID string) (Provisioned, error)
 }
 
 // ProfileProvider é a Port de saída que devolve a formação do match derivada do
@@ -82,7 +88,9 @@ type SessionProvisioner interface {
 // derivação mora no adapter; o domínio recebe o MatchFormat pronto. Devolve
 // ErrProfileUnavailable quando o perfil não está disponível/utilizável.
 type ProfileProvider interface {
-	Format(ctx context.Context, gameID string) (MatchFormat, error)
+	// Format deriva a formação do perfil do MODO (ADR-0024): a fila e o cache
+	// são por (gameID, modeID).
+	Format(ctx context.Context, gameID, modeID string) (MatchFormat, error)
 }
 
 // TokenVerifier valida o JWT do identity e devolve o playerID (sub).

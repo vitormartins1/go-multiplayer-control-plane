@@ -69,8 +69,8 @@ func NewSummoner(policies domain.CoopPolicyProvider, injector domain.WorldInject
 // PostSign publica um sinal do aliado no quadro e devolve o signID e o canal por
 // onde o Summoned chega na invocação (o handler bloqueia nele). ErrCoopNotSupported
 // se o jogo não aceita co-op.
-func (s *Summoner) PostSign(ctx context.Context, gameID, playerID string, crit domain.CoopCriteria) (string, <-chan domain.Summoned, error) {
-	policy, err := s.coopPolicy(ctx, gameID)
+func (s *Summoner) PostSign(ctx context.Context, gameID, modeID, playerID string, crit domain.CoopCriteria) (string, <-chan domain.Summoned, error) {
+	policy, err := s.coopPolicy(ctx, gameID, modeID)
 	if err != nil {
 		return "", nil, err // ErrProfileUnavailable propaga
 	}
@@ -81,7 +81,7 @@ func (s *Summoner) PostSign(ctx context.Context, gameID, playerID string, crit d
 	signID := uuid.NewString()
 	sg := &sign{
 		Sign: domain.Sign{
-			SignID: signID, GameID: gameID, PlayerID: playerID,
+			SignID: signID, GameID: gameID, ModeID: modeID, PlayerID: playerID,
 			SoulLevel: crit.SoulLevel, WeaponTier: crit.WeaponTier, PostedAt: s.now(),
 		},
 		ch: make(chan domain.Summoned, 1), // buffer 1: a entrega nunca bloqueia o Summon
@@ -96,8 +96,8 @@ func (s *Summoner) PostSign(ctx context.Context, gameID, playerID string, crit d
 // ListSigns devolve os sinais ativos do jogo compatíveis com o mundo do host
 // (faixa de co-op). Lista vazia se nada casa; ErrCoopNotSupported se o jogo não
 // aceita co-op.
-func (s *Summoner) ListSigns(ctx context.Context, gameID string, host domain.CoopCriteria) ([]domain.Sign, error) {
-	policy, err := s.coopPolicy(ctx, gameID)
+func (s *Summoner) ListSigns(ctx context.Context, gameID, modeID string, host domain.CoopCriteria) ([]domain.Sign, error) {
+	policy, err := s.coopPolicy(ctx, gameID, modeID)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,8 @@ func (s *Summoner) ListSigns(ctx context.Context, gameID string, host domain.Coo
 	defer s.mu.Unlock()
 	var out []domain.Sign
 	for _, sg := range s.signs {
-		if sg.GameID != gameID || sg.claimed {
+		// filtro por (jogo, modo): sinal de outro modo não aparece (ADR-0024).
+		if sg.GameID != gameID || sg.ModeID != modeID || sg.claimed {
 			continue
 		}
 		ally := domain.CoopCriteria{SoulLevel: sg.SoulLevel, WeaponTier: sg.WeaponTier}
@@ -231,10 +232,10 @@ func (s *Summoner) RunSweeper(ctx context.Context, ttl, interval time.Duration, 
 }
 
 // coopPolicy lê a política de co-op com timeout próprio.
-func (s *Summoner) coopPolicy(ctx context.Context, gameID string) (domain.CoopPolicy, error) {
+func (s *Summoner) coopPolicy(ctx context.Context, gameID, modeID string) (domain.CoopPolicy, error) {
 	ctx, cancel := context.WithTimeout(ctx, summonTimeout)
 	defer cancel()
-	return s.policies.CoopPolicy(ctx, gameID)
+	return s.policies.CoopPolicy(ctx, gameID, modeID)
 }
 
 // inject injeta o aliado no mundo como coop, com timeout próprio.

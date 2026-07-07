@@ -32,6 +32,7 @@ service Matchmaking {
 
 message FindMatchRequest {
   string game_id = 1; // o jogo do cliente (multi-tenant, ADR-0017)
+  string mode_id = 2; // modo do jogo (ADR-0024, spec 010); vazio = "default"
 }
 
 enum Status {
@@ -56,6 +57,7 @@ message InvadeRequest {
   string game_id = 1;      // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
   int32 soul_level = 2;    // nível do invasor (faixa assimétrica); 0 = sem faixa
   int32 weapon_tier = 3;   // tier de arma do invasor (se o perfil exigir)
+  string mode_id = 4;      // modo do jogo (ADR-0024); vazio = "default"
 }
 
 message InvadeResponse {
@@ -70,6 +72,7 @@ message PostSummonSignRequest {
   string game_id = 1;    // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
   int32 soul_level = 2;  // nível do aliado (faixa simétrica de co-op)
   int32 weapon_tier = 3; // tier de arma do aliado (se o perfil exigir)
+  string mode_id = 4;    // modo do jogo (ADR-0024); o sinal só aparece p/ hosts do mesmo modo
 }
 
 // SummonStatus é o ciclo do sinal no stream do aliado (spec 007).
@@ -92,6 +95,7 @@ message ListSignsRequest {
   string game_id = 1;          // jogo (multi-tenant)
   int32 host_soul_level = 2;   // faixa do mundo do host (filtra os sinais compatíveis)
   int32 host_weapon_tier = 3;
+  string mode_id = 4;          // modo do mundo do host (ADR-0024); vazio = "default"
 }
 
 message ListSignsResponse {

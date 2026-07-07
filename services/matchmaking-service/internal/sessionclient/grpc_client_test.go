@@ -66,7 +66,7 @@ func TestProvision_Sucesso_TokenPorJogador(t *testing.T) {
 	fake := &fakeSessionServer{}
 	c := setup(t, fake)
 
-	got, err := c.Provision(context.Background(), "match-1", ffa("p1", "p2"), "game-1")
+	got, err := c.Provision(context.Background(), "match-1", ffa("p1", "p2"), "game-1", "default")
 	require.NoError(t, err)
 
 	assert.Equal(t, "game-1", fake.gotGameID, "game_id repassado ao CreateSession")
@@ -91,7 +91,7 @@ func TestProvision_ComTimes_EnviaPlayersETeams(t *testing.T) {
 		{TeamID: "team-1", Players: []string{"p1", "p2"}},
 		{TeamID: "team-2", Players: []string{"p3", "p4"}},
 	}
-	_, err := c.Provision(context.Background(), "match-1", teams, "game-1")
+	_, err := c.Provision(context.Background(), "match-1", teams, "game-1", "default")
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, []string{"p1", "p2", "p3", "p4"}, fake.gotPlayers, "players = união dos times")
@@ -103,7 +103,7 @@ func TestProvision_ComTimes_EnviaPlayersETeams(t *testing.T) {
 func TestProvision_PoolEsgotado_ErrNoServer(t *testing.T) {
 	c := setup(t, &fakeSessionServer{full: true})
 
-	_, err := c.Provision(context.Background(), "m1", ffa("p1"), "game-1")
+	_, err := c.Provision(context.Background(), "m1", ffa("p1"), "game-1", "default")
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }
 

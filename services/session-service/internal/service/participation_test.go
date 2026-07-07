@@ -21,11 +21,11 @@ func participationSetup(t *testing.T) (*Service, *mockAllocator, *mockParticipat
 	part := &mockParticipation{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	prof.On("WorldProfile", mock.Anything, "game-1").Return(coopInvaderProfile(), nil)
-	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
+	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", domain.WorldAttributes{})
+	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	return svc, alloc, part, sess.ID
 }
@@ -43,7 +43,7 @@ func TestReportParticipation_Joined_PublicaSemMexerNoSlot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, float64(1), svc.OccupiedSlots(domain.RoleCoop), "JOINED não mexe no slot")
 	assert.Equal(t, float64(1), svc.ParticipationTotal(domain.EventJoined))
-	part.AssertCalled(t, "PublishParticipation", mock.Anything, "game-1", sid, mock.Anything)
+	part.AssertCalled(t, "PublishParticipation", mock.Anything, "game-1", sid, mock.Anything, mock.Anything)
 }
 
 func TestReportParticipation_BossDefeated_NaoMexeNoSlot(t *testing.T) {
@@ -101,7 +101,7 @@ func TestReportParticipation_EventoInvalido_ErrInvalidParticipation(t *testing.T
 	svc, _, part, sid := participationSetup(t)
 	err := svc.ReportParticipationEvent(context.Background(), sid, evt("p", domain.RoleCoop, "TELEPORTED", domain.OutcomeNeutral))
 	assert.ErrorIs(t, err, domain.ErrInvalidParticipation)
-	part.AssertNotCalled(t, "PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	part.AssertNotCalled(t, "PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestReportParticipation_OutcomeInvalido_ErrInvalidParticipation(t *testing.T) {
@@ -123,11 +123,11 @@ func TestReportParticipation_PublishFalha_NaoMutaSlot(t *testing.T) {
 	part := &mockParticipation{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "a"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	prof.On("WorldProfile", mock.Anything, "game-1").Return(coopInvaderProfile(), nil)
-	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
+	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", domain.WorldAttributes{})
+	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "inv-1", domain.RoleInvader)
 	require.NoError(t, err)
@@ -145,9 +145,9 @@ func TestReportParticipation_SemPublisher_Erro(t *testing.T) {
 	prof := &mockProfile{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s", Address: "a"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	prof.On("WorldProfile", mock.Anything, "game-1").Return(coopInvaderProfile(), nil)
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", domain.WorldAttributes{})
+	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
 	err = svc.ReportParticipationEvent(context.Background(), sess.ID, evt("p", domain.RoleCoop, domain.EventJoined, domain.OutcomeNeutral))

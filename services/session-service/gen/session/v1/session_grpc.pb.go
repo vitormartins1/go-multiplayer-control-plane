@@ -27,6 +27,7 @@ const (
 	Session_CloseWorld_FullMethodName               = "/session.v1.Session/CloseWorld"
 	Session_ListInvadableWorlds_FullMethodName      = "/session.v1.Session/ListInvadableWorlds"
 	Session_ReportParticipationEvent_FullMethodName = "/session.v1.Session/ReportParticipationEvent"
+	Session_GetSessionConfig_FullMethodName         = "/session.v1.Session/GetSessionConfig"
 )
 
 // SessionClient is the client API for Session service.
@@ -67,6 +68,12 @@ type SessionClient interface {
 	// slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
 	// NotFound (mundo inexistente/fechado).
 	ReportParticipationEvent(ctx context.Context, in *ReportParticipationEventRequest, opts ...grpc.CallOption) (*ReportParticipationEventResponse, error)
+	// GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot
+	// do perfil do modo congelado na criação da sessão. Chamado pelo game server no
+	// boot da sessão — o data plane lê só as chaves de params_json que conhece.
+	// ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
+	// sessão não existir ou já estiver fechada.
+	GetSessionConfig(ctx context.Context, in *GetSessionConfigRequest, opts ...grpc.CallOption) (*GetSessionConfigResponse, error)
 }
 
 type sessionClient struct {
@@ -157,6 +164,16 @@ func (c *sessionClient) ReportParticipationEvent(ctx context.Context, in *Report
 	return out, nil
 }
 
+func (c *sessionClient) GetSessionConfig(ctx context.Context, in *GetSessionConfigRequest, opts ...grpc.CallOption) (*GetSessionConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSessionConfigResponse)
+	err := c.cc.Invoke(ctx, Session_GetSessionConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionServer is the server API for Session service.
 // All implementations must embed UnimplementedSessionServer
 // for forward compatibility.
@@ -195,6 +212,12 @@ type SessionServer interface {
 	// slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
 	// NotFound (mundo inexistente/fechado).
 	ReportParticipationEvent(context.Context, *ReportParticipationEventRequest) (*ReportParticipationEventResponse, error)
+	// GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot
+	// do perfil do modo congelado na criação da sessão. Chamado pelo game server no
+	// boot da sessão — o data plane lê só as chaves de params_json que conhece.
+	// ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
+	// sessão não existir ou já estiver fechada.
+	GetSessionConfig(context.Context, *GetSessionConfigRequest) (*GetSessionConfigResponse, error)
 	mustEmbedUnimplementedSessionServer()
 }
 
@@ -228,6 +251,9 @@ func (UnimplementedSessionServer) ListInvadableWorlds(context.Context, *ListInva
 }
 func (UnimplementedSessionServer) ReportParticipationEvent(context.Context, *ReportParticipationEventRequest) (*ReportParticipationEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportParticipationEvent not implemented")
+}
+func (UnimplementedSessionServer) GetSessionConfig(context.Context, *GetSessionConfigRequest) (*GetSessionConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSessionConfig not implemented")
 }
 func (UnimplementedSessionServer) mustEmbedUnimplementedSessionServer() {}
 func (UnimplementedSessionServer) testEmbeddedByValue()                 {}
@@ -394,6 +420,24 @@ func _Session_ReportParticipationEvent_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Session_GetSessionConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSessionConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).GetSessionConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_GetSessionConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).GetSessionConfig(ctx, req.(*GetSessionConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Session_ServiceDesc is the grpc.ServiceDesc for Session service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -432,6 +476,10 @@ var Session_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportParticipationEvent",
 			Handler:    _Session_ReportParticipationEvent_Handler,
+		},
+		{
+			MethodName: "GetSessionConfig",
+			Handler:    _Session_GetSessionConfig_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -24,15 +24,26 @@ func NewServer(svc domain.SessionService) *Server {
 	return &Server{svc: svc}
 }
 
+// normalizeMode aplica a retrocompat do ADR-0024 na borda: mode_id ausente/
+// vazio = "default". Domain/service sempre recebem um modo não-vazio.
+func normalizeMode(modeID string) string {
+	if modeID == "" {
+		return domain.DefaultModeID
+	}
+	return modeID
+}
+
 // CreateSession aloca um server, emite os connect tokens e registra a sessão.
 func (s *Server) CreateSession(ctx context.Context, req *pb.CreateSessionRequest) (*pb.CreateSessionResponse, error) {
-	sess, grants, err := s.svc.Create(ctx, req.GetMatchId(), req.GetGameId(), toTeamAssignments(req))
+	sess, grants, err := s.svc.Create(ctx, req.GetMatchId(), req.GetGameId(), normalizeMode(req.GetModeId()), toTeamAssignments(req))
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrNoServer):
 			return nil, status.Error(codes.ResourceExhausted, "no server available")
 		case errors.Is(err, domain.ErrInvalidTeams):
 			return nil, status.Error(codes.InvalidArgument, "invalid team composition")
+		case errors.Is(err, domain.ErrProfileUnavailable):
+			return nil, status.Error(codes.FailedPrecondition, "mode profile unavailable")
 		default:
 			return nil, status.Error(codes.Internal, "create session")
 		}
@@ -76,6 +87,9 @@ func (s *Server) ReportResult(ctx context.Context, req *pb.ReportResultRequest) 
 			return nil, status.Error(codes.InvalidArgument, "unsupported outcome kind")
 		case errors.Is(err, domain.ErrInvalidOutcome):
 			return nil, status.Error(codes.InvalidArgument, "invalid outcome")
+		case errors.Is(err, domain.ErrOutcomeMismatch):
+			// spec 017: a FORMA do resultado não bate com o arquétipo do modo.
+			return nil, status.Error(codes.FailedPrecondition, "outcome kind does not match session archetype")
 		default:
 			return nil, status.Error(codes.Internal, "report result")
 		}
@@ -83,10 +97,31 @@ func (s *Server) ReportResult(ctx context.Context, req *pb.ReportResultRequest) 
 	return &pb.ReportResultResponse{}, nil
 }
 
+// GetSessionConfig devolve o session manifest do snapshot (ADR-0024, spec 017).
+func (s *Server) GetSessionConfig(ctx context.Context, req *pb.GetSessionConfigRequest) (*pb.GetSessionConfigResponse, error) {
+	m, err := s.svc.GetSessionConfig(ctx, req.GetRefId())
+	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return nil, status.Error(codes.NotFound, "session not found")
+		}
+		return nil, status.Error(codes.Internal, "get session config")
+	}
+	return &pb.GetSessionConfigResponse{
+		SessionId:   m.SessionID,
+		MatchId:     m.MatchID,
+		GameId:      m.GameID,
+		ModeId:      m.ModeID,
+		Archetype:   m.Archetype,
+		Topology:    m.Topology,
+		ParamsJson:  string(m.ParamsJSON),
+		ProfileHash: m.ProfileHash,
+	}, nil
+}
+
 // OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011).
 func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.OpenWorldResponse, error) {
 	attrs := domain.WorldAttributes{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
-	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId(), attrs)
+	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId(), normalizeMode(req.GetModeId()), attrs)
 	if err != nil {
 		return nil, worldError(err, "open world")
 	}

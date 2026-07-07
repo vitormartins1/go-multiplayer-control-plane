@@ -1,12 +1,14 @@
 // Package registryclient é o adapter de saída que lê o perfil de multiplayer de
-// um jogo no game-registry (ADR-0023) para o arquétipo host_world_dropin.
-// Satisfaz domain.ProfileProvider. A internal key (ADR-0018) é injetada pelo
-// transport do http.Client (auth.InternalKeyTransport), montado no main — como
-// no adapter equivalente do matchmaking.
+// um MODO do jogo no game-registry (ADR-0023/0024). Satisfaz
+// domain.ProfileProvider. A internal key (ADR-0018) é injetada pelo transport do
+// http.Client (auth.InternalKeyTransport), montado no main — como no adapter
+// equivalente do matchmaking.
 package registryclient
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,10 +19,6 @@ import (
 )
 
 var _ domain.ProfileProvider = (*Client)(nil)
-
-// archetypeHostWorldDropIn é o arquétipo que o session sabe abrir como mundo
-// (ADR-0023). Vocabulário do game-registry.
-const archetypeHostWorldDropIn = "host_world_dropin"
 
 // Client chama o game-registry em baseURL (ex.: http://game-registry:8080).
 type Client struct {
@@ -37,49 +35,78 @@ func New(baseURL string, httpClient *http.Client) *Client {
 	return &Client{baseURL: baseURL, http: httpClient}
 }
 
-// profileResponse espelha o subconjunto do perfil que o session precisa para
-// abrir um mundo. Tags conforme o game-registry (hostWorldDropInParamsDTO).
-type profileResponse struct {
-	Archetype string `json:"archetype"`
-	Params    struct {
-		EnabledRoles []string `json:"enabledRoles"`
-		CoopSlots    int      `json:"coopSlots"`
-		InvaderSlots int      `json:"invaderSlots"`
-	} `json:"params"`
+// modeResponse espelha o modo devolvido pela coleção (spec game-registry/009).
+// Params fica cru: vira o ParamsJSON do snapshot (manifest) sem re-serializar;
+// os campos do host_world são decodificados à parte só quando o arquétipo pede.
+type modeResponse struct {
+	Archetype string          `json:"archetype"`
+	Topology  string          `json:"topology"`
+	Params    json.RawMessage `json:"params"`
 }
 
-// WorldProfile lê o perfil do jogo e devolve os papéis/capacidade do mundo.
-// Qualquer falha (jogo/perfil ausente, arquétipo != host_world_dropin, rede)
-// vira ErrProfileUnavailable — o service a traduz para ErrUnsupportedArchetype
-// no contexto do OpenWorld.
-func (c *Client) WorldProfile(ctx context.Context, gameID string) (domain.WorldProfile, error) {
-	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
+// hostWorldParams é o subconjunto que o session decodifica para derivar os
+// slots por papel (spec 011). Tags conforme o game-registry.
+type hostWorldParams struct {
+	EnabledRoles []string `json:"enabledRoles"`
+	CoopSlots    int      `json:"coopSlots"`
+	InvaderSlots int      `json:"invaderSlots"`
+}
+
+// ModeProfile lê o perfil do modo e devolve o snapshot (ADR-0024, spec 017).
+// Qualquer falha (jogo/modo ausente, rede, parse) vira ErrProfileUnavailable.
+// O hash é SHA-256 do corpo do modo como recebido, truncado a 16 hex —
+// correlação/log entre control e data plane, não integridade criptográfica.
+func (c *Client) ModeProfile(ctx context.Context, gameID, modeID string) (domain.ProfileSnapshot, error) {
+	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profiles/" + url.PathEscape(modeID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return domain.WorldProfile{}, fmt.Errorf("registryclient: build request: %w", err)
+		return domain.ProfileSnapshot{}, fmt.Errorf("registryclient: build request: %w", err)
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return domain.WorldProfile{}, fmt.Errorf("registryclient: get profile: %v: %w", err, domain.ErrProfileUnavailable)
+		return domain.ProfileSnapshot{}, fmt.Errorf("registryclient: get mode profile: %v: %w", err, domain.ErrProfileUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return domain.WorldProfile{}, fmt.Errorf("registryclient: get profile: status %d: %w", resp.StatusCode, domain.ErrProfileUnavailable)
+		return domain.ProfileSnapshot{}, fmt.Errorf("registryclient: get mode profile: status %d: %w", resp.StatusCode, domain.ErrProfileUnavailable)
 	}
 
-	var p profileResponse
-	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
-		return domain.WorldProfile{}, fmt.Errorf("registryclient: decode profile: %v: %w", err, domain.ErrProfileUnavailable)
-	}
-	if p.Archetype != archetypeHostWorldDropIn {
-		return domain.WorldProfile{}, fmt.Errorf("registryclient: archetype %q não é host_world_dropin: %w", p.Archetype, domain.ErrProfileUnavailable)
+	// Decodifica preservando o corpo cru para o hash (json.RawMessage no topo
+	// não existe aqui: relemos o corpo em duas passadas via TeeReader seria
+	// overkill — o hash cobre o subconjunto estável {archetype, topology, params}).
+	var m modeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return domain.ProfileSnapshot{}, fmt.Errorf("registryclient: decode mode profile: %v: %w", err, domain.ErrProfileUnavailable)
 	}
 
-	return domain.WorldProfile{
-		Archetype:    p.Archetype,
-		EnabledRoles: p.Params.EnabledRoles,
-		CoopSlots:    p.Params.CoopSlots,
-		InvaderSlots: p.Params.InvaderSlots,
-	}, nil
+	snap := domain.ProfileSnapshot{
+		ModeID:     modeID,
+		Archetype:  m.Archetype,
+		Topology:   m.Topology,
+		ParamsJSON: append([]byte(nil), m.Params...),
+		Hash:       profileHash(m),
+	}
+	if m.Archetype == domain.ArchetypeHostWorldDropIn {
+		var hw hostWorldParams
+		if err := json.Unmarshal(m.Params, &hw); err != nil {
+			return domain.ProfileSnapshot{}, fmt.Errorf("registryclient: decode host_world params: %v: %w", err, domain.ErrProfileUnavailable)
+		}
+		snap.EnabledRoles = hw.EnabledRoles
+		snap.CoopSlots = hw.CoopSlots
+		snap.InvaderSlots = hw.InvaderSlots
+	}
+	return snap, nil
+}
+
+// profileHash é o hash curto do snapshot: SHA-256 de {archetype, topology,
+// params crus}, truncado a 16 hex. Determinístico para o mesmo corpo servido.
+func profileHash(m modeResponse) string {
+	h := sha256.New()
+	h.Write([]byte(m.Archetype))
+	h.Write([]byte{0})
+	h.Write([]byte(m.Topology))
+	h.Write([]byte{0})
+	h.Write(m.Params)
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }

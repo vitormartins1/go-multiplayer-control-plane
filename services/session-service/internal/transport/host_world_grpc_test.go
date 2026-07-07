@@ -23,14 +23,20 @@ import (
 )
 
 // stubProfile é um ProfileProvider fixo para os testes de host_world: só o jogo
-// "hw" tem perfil host_world_dropin; qualquer outro é indisponível.
-type stubProfile struct{ profile domain.WorldProfile }
+// "hw" tem perfil host_world_dropin; qualquer outro devolve um snapshot
+// queue_arena (o Create genérico precisa de snapshot desde o ADR-0024).
+type stubProfile struct{ profile domain.ProfileSnapshot }
 
-func (s stubProfile) WorldProfile(_ context.Context, gameID string) (domain.WorldProfile, error) {
+func (s stubProfile) ModeProfile(_ context.Context, gameID, modeID string) (domain.ProfileSnapshot, error) {
 	if gameID == "hw" {
-		return s.profile, nil
+		p := s.profile
+		p.ModeID = modeID
+		return p, nil
 	}
-	return domain.WorldProfile{}, domain.ErrProfileUnavailable
+	return domain.ProfileSnapshot{
+		ModeID: modeID, Archetype: domain.ArchetypeQueueArena, Topology: "dedicated",
+		ParamsJSON: []byte(`{}`), Hash: "stub",
+	}, nil
 }
 
 // setupWorld sobe o server gRPC com um ProfileProvider host_world_dropin.
@@ -39,8 +45,9 @@ func setupWorld(t *testing.T, addresses []string) (pb.SessionClient, *token.Conn
 	lis := bufconn.Listen(1024 * 1024)
 	iss, err := token.Generate()
 	require.NoError(t, err)
-	prof := stubProfile{profile: domain.WorldProfile{
-		Archetype: "host_world_dropin", EnabledRoles: []string{domain.RoleCoop, domain.RoleInvader},
+	prof := stubProfile{profile: domain.ProfileSnapshot{
+		Archetype: "host_world_dropin", Topology: "dedicated", ParamsJSON: []byte(`{"enabledRoles":["coop","invader"],"coopSlots":2,"invaderSlots":1}`),
+		Hash: "hw-hash", EnabledRoles: []string{domain.RoleCoop, domain.RoleInvader},
 		CoopSlots: 2, InvaderSlots: 1,
 	}}
 	pub := publisher.New(slogDiscard())

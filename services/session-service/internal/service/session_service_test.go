@@ -39,9 +39,25 @@ func (m *mockIssuer) Issue(playerID, refID, serverAddr string, claims domain.Con
 // mockProfile é o ProfileProvider mockado para os testes de OpenWorld (spec 011).
 type mockProfile struct{ mock.Mock }
 
-func (m *mockProfile) WorldProfile(ctx context.Context, gameID string) (domain.WorldProfile, error) {
-	args := m.Called(ctx, gameID)
-	return args.Get(0).(domain.WorldProfile), args.Error(1)
+func (m *mockProfile) ModeProfile(ctx context.Context, gameID, modeID string) (domain.ProfileSnapshot, error) {
+	args := m.Called(ctx, gameID, modeID)
+	return args.Get(0).(domain.ProfileSnapshot), args.Error(1)
+}
+
+// stubProfiles é o ProfileProvider default dos testes que não exercitam o
+// perfil: devolve um snapshot queue_arena para qualquer (game, mode) — o
+// Create exige snapshot desde o ADR-0024 (spec 017).
+type stubProfiles struct{ archetype string }
+
+func (s stubProfiles) ModeProfile(_ context.Context, _, modeID string) (domain.ProfileSnapshot, error) {
+	a := s.archetype
+	if a == "" {
+		a = domain.ArchetypeQueueArena
+	}
+	return domain.ProfileSnapshot{
+		ModeID: modeID, Archetype: a, Topology: "dedicated",
+		ParamsJSON: []byte(`{"structure":"ffa","playerCount":2}`), Hash: "stub",
+	}, nil
 }
 
 // ffaTeams monta uma composição FFA (um lado sem TeamID) a partir dos playerIDs.
@@ -56,14 +72,14 @@ func (m *mockIssuer) JWKS(ctx context.Context) ([]byte, error) {
 
 type mockPublisher struct{ mock.Mock }
 
-func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
-	return m.Called(ctx, gameID, matchID, outcome).Error(0)
+func (m *mockPublisher) Publish(ctx context.Context, gameID, matchID, modeID string, outcome domain.MatchOutcome) error {
+	return m.Called(ctx, gameID, matchID, modeID, outcome).Error(0)
 }
 
 type mockParticipation struct{ mock.Mock }
 
-func (m *mockParticipation) PublishParticipation(ctx context.Context, gameID, sessionID string, evt domain.ParticipationEvent) error {
-	return m.Called(ctx, gameID, sessionID, evt).Error(0)
+func (m *mockParticipation) PublishParticipation(ctx context.Context, gameID, sessionID, modeID string, evt domain.ParticipationEvent) error {
+	return m.Called(ctx, gameID, sessionID, modeID, evt).Error(0)
 }
 
 // wldOutcome monta um MatchOutcome win_loss_draw com os jogadores dados.
@@ -100,11 +116,11 @@ func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
-	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{}).Return("token-p1", nil)
-	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{}).Return("token-p2", nil)
+	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "default"}).Return("token-p1", nil)
+	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "default"}).Return("token-p2", nil)
 
-	svc := New(alloc, iss, pub)
-	sess, grants, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1", "p2"))
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
+	sess, grants, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1", "p2"))
 
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.1:7777", sess.ServerAddress)
@@ -123,8 +139,8 @@ func TestCreate_PoolEsgotado_RetornaErrNoServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrNoServer)
 
-	svc := New(alloc, &mockIssuer{}, &mockPublisher{})
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 	assert.Equal(t, float64(0), svc.ActiveSessions())
@@ -136,12 +152,12 @@ func TestReportResult_PublicaLiberaEncerra(t *testing.T) {
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	svc := New(alloc, iss, pub)
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	outcome := wldOutcome(domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin, Score: 10})
-	pub.On("Publish", mock.Anything, "game-1", "match-1", outcome).Return(nil) // recebe o game_id e o match_id da sessão
+	pub.On("Publish", mock.Anything, "game-1", "match-1", "default", outcome).Return(nil) // recebe o game_id e o match_id da sessão
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
@@ -159,11 +175,11 @@ func TestReportResult_PublishFalha_NaoEncerraSessao(t *testing.T) {
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	svc := New(alloc, iss, pub)
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(errors.New("sns fora"))
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.Anything).Return(errors.New("sns fora"))
 
 	err = svc.ReportResult(context.Background(), "match-1", validOutcome())
 	require.Error(t, err)
@@ -173,22 +189,29 @@ func TestReportResult_PublishFalha_NaoEncerraSessao(t *testing.T) {
 }
 
 func TestReportResult_MatchInexistente_ErrSessionNotFound(t *testing.T) {
-	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
 	err := svc.ReportResult(context.Background(), "nao-existe", validOutcome())
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
 }
 
 // reportSetup cria um service com uma sessão aberta (match-1/game-1) pronta para
-// o ReportResult (server-0, players p1/p2).
+// o ReportResult (server-0, players p1/p2), no arquétipo default (queue_arena).
 func reportSetup(t *testing.T) (*Service, *mockPublisher, *mockAllocator) {
+	return reportSetupArchetype(t, domain.ArchetypeQueueArena)
+}
+
+// reportSetupArchetype é o reportSetup com o arquétipo do snapshot escolhido —
+// a validação kind×arquétipo (spec 017) exige que o kind reportado case com o
+// arquétipo do modo da sessão.
+func reportSetupArchetype(t *testing.T, archetype string) (*Service, *mockPublisher, *mockAllocator) {
 	t.Helper()
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	svc := New(alloc, iss, pub)
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1", "p2"))
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{archetype: archetype}))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1", "p2"))
 	require.NoError(t, err)
 	return svc, pub, alloc
 }
@@ -199,7 +222,7 @@ func TestReportResult_Empate_Aceito(t *testing.T) {
 		domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultDraw, Score: 5},
 		domain.PlayerOutcome{PlayerID: "p2", Outcome: domain.ResultDraw, Score: 5},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", outcome).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", "default", outcome).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome), "draw é aceito (session não valida contra o perfil)")
@@ -212,7 +235,7 @@ func TestReportResult_ComTimesEStats_Publica(t *testing.T) {
 		domain.PlayerOutcome{PlayerID: "p1", TeamID: "A", Outcome: domain.ResultWin, Score: 3, Stats: map[string]int64{"kills": 7}},
 		domain.PlayerOutcome{PlayerID: "p2", TeamID: "B", Outcome: domain.ResultLoss, Score: 1},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", outcome).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", "default", outcome).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
@@ -245,8 +268,8 @@ func TestSweep_SessaoExpirada_FechaComTTLELiberaServer(t *testing.T) {
 
 	// clock injetável: cria a sessão em t0 e varre em t0+31m com TTL de 30m.
 	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{}, WithClock(func() time.Time { return now }))
-	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}), WithClock(func() time.Time { return now }))
+	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 	assert.Equal(t, domain.SessionOpen, sess.State)
 	assert.Equal(t, now, sess.OpenedAt)
@@ -270,8 +293,8 @@ func TestSweep_SessaoDentroDoTTL_NaoFecha(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{}, WithClock(func() time.Time { return now }))
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}), WithClock(func() time.Time { return now }))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	now = now.Add(10 * time.Minute)
@@ -288,10 +311,10 @@ func TestReconcile_ServerSumiuAposGrace_FechaComoAbandoned(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{},
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}),
 		WithClock(func() time.Time { return now }),
 		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
-	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	// passa o grace e o server sumiu da fleet (LIST devolve conjunto vazio).
@@ -315,10 +338,10 @@ func TestReconcile_DentroDoGrace_NaoFecha(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{},
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}),
 		WithClock(func() time.Time { return now }),
 		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	// server já sumiu, mas a sessão tem só 30s de vida — grace protege.
@@ -338,10 +361,10 @@ func TestReconcile_ErroNoList_NaoFechaNada(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{},
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}),
 		WithClock(func() time.Time { return now }),
 		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	now = now.Add(5 * time.Minute)
@@ -360,10 +383,10 @@ func TestReconcile_ServerVivo_NaoFecha(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{},
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}),
 		WithClock(func() time.Time { return now }),
 		WithServerRegistry(reg), WithOrphanGrace(time.Minute))
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	now = now.Add(5 * time.Minute)
@@ -381,8 +404,8 @@ func TestReconcile_SemRegistry_NoOp(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	svc := New(alloc, iss, &mockPublisher{}, WithClock(func() time.Time { return now })) // sem WithServerRegistry
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}), WithClock(func() time.Time { return now })) // sem WithServerRegistry
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	now = now.Add(5 * time.Minute)
@@ -396,11 +419,11 @@ func TestReportResult_MarcaCloseReasonResult(t *testing.T) {
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
-	svc := New(alloc, iss, pub)
-	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
+	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
-	pub.On("Publish", mock.Anything, "game-1", mock.Anything, mock.Anything).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", validOutcome()))
 
@@ -420,8 +443,8 @@ func newSvcComSessoes(t *testing.T, opts ...Option) *Service {
 	alloc.On("Release", mock.Anything, mock.Anything).Return(nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	pub := &mockPublisher{}
-	pub.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	return New(alloc, iss, pub, opts...)
+	pub.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	return New(alloc, iss, pub, append([]Option{WithProfileProvider(stubProfiles{})}, opts...)...)
 }
 
 func TestSessionsByGame_AtivasEFechadasFiltradasEOrdenadas(t *testing.T) {
@@ -429,12 +452,12 @@ func TestSessionsByGame_AtivasEFechadasFiltradasEOrdenadas(t *testing.T) {
 	svc := newSvcComSessoes(t, WithClock(func() time.Time { return now }))
 	ctx := context.Background()
 
-	_, _, err := svc.Create(ctx, "m-old", "g1", ffaTeams("p1"))
+	_, _, err := svc.Create(ctx, "m-old", "g1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 	now = now.Add(time.Minute)
-	_, _, err = svc.Create(ctx, "m-new", "g1", ffaTeams("p2"))
+	_, _, err = svc.Create(ctx, "m-new", "g1", "default", ffaTeams("p2"))
 	require.NoError(t, err)
-	_, _, err = svc.Create(ctx, "m-outro-jogo", "g2", ffaTeams("p3"))
+	_, _, err = svc.Create(ctx, "m-outro-jogo", "g2", "default", ffaTeams("p3"))
 	require.NoError(t, err)
 
 	now = now.Add(time.Minute)
@@ -457,7 +480,7 @@ func TestHistorico_RespeitaLimite_MaisAntigaSai(t *testing.T) {
 	ctx := context.Background()
 
 	for _, m := range []string{"m1", "m2", "m3"} {
-		_, _, err := svc.Create(ctx, m, "g1", ffaTeams("p"))
+		_, _, err := svc.Create(ctx, m, "g1", "default", ffaTeams("p"))
 		require.NoError(t, err)
 		require.NoError(t, svc.ReportResult(ctx, m, validOutcome()))
 	}
@@ -472,11 +495,11 @@ func TestCreate_FalhaAoEmitirToken_LiberaServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
-	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{}).Return("", assert.AnError)
+	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "default"}).Return("", assert.AnError)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
-	svc := New(alloc, iss, &mockPublisher{})
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", ffaTeams("p1"))
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
 
 	require.Error(t, err)
 	assert.Equal(t, float64(0), svc.ActiveSessions())
@@ -489,8 +512,8 @@ func TestCloseByAdmin_Ativa_FechaELiberaServer(t *testing.T) {
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
-	svc := New(alloc, iss, &mockPublisher{})
-	_, _, err := svc.Create(context.Background(), "m1", "g1", ffaTeams("p1"))
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "m1", "g1", "default", ffaTeams("p1"))
 	require.NoError(t, err)
 
 	sess, err := svc.CloseByAdmin(context.Background(), "m1")
@@ -501,7 +524,7 @@ func TestCloseByAdmin_Ativa_FechaELiberaServer(t *testing.T) {
 }
 
 func TestCloseByAdmin_Inexistente_ErrSessionNotFound(t *testing.T) {
-	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
 	_, err := svc.CloseByAdmin(context.Background(), "nao-existe")
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
 }
@@ -511,9 +534,9 @@ func TestAllSessions_JogosDistintos_VemJuntas(t *testing.T) {
 	iss := &mockIssuer{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s", Address: "a"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
-	svc := New(alloc, iss, &mockPublisher{})
-	_, _, _ = svc.Create(context.Background(), "m1", "g1", ffaTeams("p1"))
-	_, _, _ = svc.Create(context.Background(), "m2", "g2", ffaTeams("p2"))
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
+	_, _, _ = svc.Create(context.Background(), "m1", "g1", "default", ffaTeams("p1"))
+	_, _, _ = svc.Create(context.Background(), "m2", "g2", "default", ffaTeams("p2"))
 
 	active, _ := svc.AllSessions()
 	assert.Len(t, active, 2, "board global reúne sessões de jogos diferentes")
@@ -527,15 +550,15 @@ func TestCreate_ComTimes_RegistraTimesEEmiteTokenComTeamID(t *testing.T) {
 	pub := &mockPublisher{}
 	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	// cada jogador recebe o token com o team_id do seu lado.
-	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-1"}).Return("t1", nil)
-	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-2"}).Return("t2", nil)
+	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-1", ModeID: "default"}).Return("t1", nil)
+	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-2", ModeID: "default"}).Return("t2", nil)
 
-	svc := New(alloc, iss, pub)
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
 	teams := []domain.TeamAssignment{
 		{TeamID: "team-1", Players: []string{"p1"}},
 		{TeamID: "team-2", Players: []string{"p2"}},
 	}
-	sess, grants, err := svc.Create(context.Background(), "match-1", "game-1", teams)
+	sess, grants, err := svc.Create(context.Background(), "match-1", "game-1", "default", teams)
 
 	require.NoError(t, err)
 	assert.Equal(t, "team-1", sess.TeamByPlayer["p1"])
@@ -549,12 +572,12 @@ func TestCreate_ComTimes_RegistraTimesEEmiteTokenComTeamID(t *testing.T) {
 // alocar server (o allocator nem é chamado).
 func TestCreate_JogadorEmDoisTimes_ErrInvalidTeams(t *testing.T) {
 	alloc := &mockAllocator{}
-	svc := New(alloc, &mockIssuer{}, &mockPublisher{})
+	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
 	teams := []domain.TeamAssignment{
 		{TeamID: "team-1", Players: []string{"p1"}},
 		{TeamID: "team-2", Players: []string{"p1"}},
 	}
-	_, _, err := svc.Create(context.Background(), "m", "g", teams)
+	_, _, err := svc.Create(context.Background(), "m", "g", "default", teams)
 
 	assert.ErrorIs(t, err, domain.ErrInvalidTeams)
 	alloc.AssertNotCalled(t, "Allocate", mock.Anything, mock.Anything, mock.Anything)
@@ -570,12 +593,12 @@ func TestReportResult_CarimbaTeamIDDaComposicaoRegistrada(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
-	svc := New(alloc, iss, pub)
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
 	teams := []domain.TeamAssignment{
 		{TeamID: "red", Players: []string{"p1"}},
 		{TeamID: "blue", Players: []string{"p2"}},
 	}
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", teams)
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", teams)
 	require.NoError(t, err)
 
 	// o server reporta team_id errado/ausente — deve ser ignorado.
@@ -588,7 +611,7 @@ func TestReportResult_CarimbaTeamIDDaComposicaoRegistrada(t *testing.T) {
 		domain.PlayerOutcome{PlayerID: "p1", TeamID: "red", Outcome: domain.ResultWin, Score: 1},
 		domain.PlayerOutcome{PlayerID: "p2", TeamID: "blue", Outcome: domain.ResultLoss, Score: 0},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", expected).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", "default", expected).Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", reported))
 	pub.AssertExpectations(t)
@@ -602,7 +625,7 @@ func TestReportResult_FFA_TeamIDVazio(t *testing.T) {
 		domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin, Score: 3},
 		domain.PlayerOutcome{PlayerID: "p2", Outcome: domain.ResultLoss, Score: 1},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", reported).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", "default", reported).Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", reported))
 	for _, p := range reported.WinLossDraw.Players {
@@ -621,12 +644,12 @@ func placementOutcome(entries ...domain.PlacementEntry) domain.MatchOutcome {
 // O caminho feliz do BR2: placement válido → publica (kind=placement), libera o
 // server e encerra a sessão (CloseResult) — mesmo fluxo terminal do win_loss_draw.
 func TestReportResult_Placement_PublicaLiberaEncerra(t *testing.T) {
-	svc, pub, alloc := reportSetup(t) // FFA p1/p2
+	svc, pub, alloc := reportSetupArchetype(t, domain.ArchetypeBattleRoyale) // FFA p1/p2
 	outcome := placementOutcome(
 		domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: 900000},
 		domain.PlacementEntry{PlayerID: "p2", Placement: 2, SurvivedMs: 600000},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.MatchedBy(func(o domain.MatchOutcome) bool {
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.MatchedBy(func(o domain.MatchOutcome) bool {
 		return o.Kind == domain.OutcomePlacement && o.Placement != nil && len(o.Placement.Entries) == 2
 	})).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
@@ -640,7 +663,7 @@ func TestReportResult_Placement_PublicaLiberaEncerra(t *testing.T) {
 
 // Validação estrutural: entries vazio, placement < 1 e survivedMs < 0 → ErrInvalidOutcome.
 func TestReportResult_Placement_Invalido_ErrInvalidOutcome(t *testing.T) {
-	svc, _, _ := reportSetup(t)
+	svc, _, _ := reportSetupArchetype(t, domain.ArchetypeBattleRoyale)
 	errVazio := svc.ReportResult(context.Background(), "match-1", placementOutcome())
 	assert.ErrorIs(t, errVazio, domain.ErrInvalidOutcome, "entries vazio")
 
@@ -658,12 +681,12 @@ func TestReportResult_Placement_Invalido_ErrInvalidOutcome(t *testing.T) {
 // Empate de colocação (co-eliminação, ficha §5): dois placement=1 são aceitos —
 // coerência de ranking é do data plane, não do session.
 func TestReportResult_Placement_EmpateAceito(t *testing.T) {
-	svc, pub, alloc := reportSetup(t)
+	svc, pub, alloc := reportSetupArchetype(t, domain.ArchetypeBattleRoyale)
 	outcome := placementOutcome(
 		domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: 800000},
 		domain.PlacementEntry{PlayerID: "p2", Placement: 1, SurvivedMs: 800000},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.Anything).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome),
@@ -681,13 +704,13 @@ func TestReportResult_Placement_CarimbaSquadDaFormacao(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
-	svc := New(alloc, iss, pub)
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{archetype: domain.ArchetypeBattleRoyale}))
 	// formação BR: p1/p2 no squad-1; p3 sem squad (solo).
 	teams := []domain.TeamAssignment{
 		{TeamID: "squad-1", Players: []string{"p1", "p2"}},
 		{Players: []string{"p3"}},
 	}
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", teams)
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", teams)
 	require.NoError(t, err)
 
 	// o server ecoa team_id errado — deve ser ignorado e recarimbado.
@@ -697,8 +720,8 @@ func TestReportResult_Placement_CarimbaSquadDaFormacao(t *testing.T) {
 		domain.PlacementEntry{PlayerID: "p3", TeamID: "garbage", Placement: 2, SurvivedMs: 500000},
 	)
 	var captured domain.MatchOutcome
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).
-		Run(func(args mock.Arguments) { captured = args.Get(3).(domain.MatchOutcome) }).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { captured = args.Get(4).(domain.MatchOutcome) }).Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", reported))
 	require.NotNil(t, captured.Placement)
@@ -714,7 +737,7 @@ func TestReportResult_Placement_CarimbaSquadDaFormacao(t *testing.T) {
 
 // placement para matchId inexistente → ErrSessionNotFound (inalterado).
 func TestReportResult_Placement_MatchInexistente_ErrSessionNotFound(t *testing.T) {
-	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{archetype: domain.ArchetypeBattleRoyale}))
 	err := svc.ReportResult(context.Background(), "nao-existe",
 		placementOutcome(domain.PlacementEntry{PlayerID: "p1", Placement: 1}))
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
@@ -729,12 +752,12 @@ func collectiveOutcome(result string, players ...domain.CollectivePlayer) domain
 // Caminho feliz do C2: collective válido (SUCCESS) → publica (kind=collective),
 // libera o server e encerra a sessão — mesmo fluxo terminal do win_loss_draw.
 func TestReportResult_Collective_PublicaLiberaEncerra(t *testing.T) {
-	svc, pub, alloc := reportSetup(t) // FFA p1/p2
+	svc, pub, alloc := reportSetupArchetype(t, domain.ArchetypeCoopMission) // FFA p1/p2
 	outcome := collectiveOutcome(domain.MissionSuccess,
 		domain.CollectivePlayer{PlayerID: "p1", Stats: map[string]int64{"kills": 12}},
 		domain.CollectivePlayer{PlayerID: "p2", Stats: map[string]int64{"revives": 3}},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.MatchedBy(func(o domain.MatchOutcome) bool {
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.MatchedBy(func(o domain.MatchOutcome) bool {
 		return o.Kind == domain.OutcomeCollective && o.Collective != nil &&
 			o.Collective.Outcome == domain.MissionSuccess && len(o.Collective.Players) == 2
 	})).Return(nil)
@@ -749,12 +772,12 @@ func TestReportResult_Collective_PublicaLiberaEncerra(t *testing.T) {
 
 // FAILURE também é aceito (é um desfecho válido da sessão).
 func TestReportResult_Collective_Failure_Aceito(t *testing.T) {
-	svc, pub, alloc := reportSetup(t)
+	svc, pub, alloc := reportSetupArchetype(t, domain.ArchetypeCoopMission)
 	outcome := collectiveOutcome(domain.MissionFailure,
 		domain.CollectivePlayer{PlayerID: "p1"},
 		domain.CollectivePlayer{PlayerID: "p2"},
 	)
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.Anything).Return(nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
@@ -763,7 +786,7 @@ func TestReportResult_Collective_Failure_Aceito(t *testing.T) {
 
 // Validação estrutural: players vazio e outcome fora do vocabulário → ErrInvalidOutcome.
 func TestReportResult_Collective_Invalido_ErrInvalidOutcome(t *testing.T) {
-	svc, _, _ := reportSetup(t)
+	svc, _, _ := reportSetupArchetype(t, domain.ArchetypeCoopMission)
 	errVazio := svc.ReportResult(context.Background(), "match-1", collectiveOutcome(domain.MissionSuccess))
 	assert.ErrorIs(t, errVazio, domain.ErrInvalidOutcome, "players vazio")
 
@@ -784,10 +807,10 @@ func TestReportResult_Collective_CarimbaTimeDaFormacao(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
-	svc := New(alloc, iss, pub)
+	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{archetype: domain.ArchetypeCoopMission}))
 	// formação co-op: p1/p2/p3 num único time team-1.
 	teams := []domain.TeamAssignment{{TeamID: "team-1", Players: []string{"p1", "p2", "p3"}}}
-	_, _, err := svc.Create(context.Background(), "match-1", "game-1", teams)
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", teams)
 	require.NoError(t, err)
 
 	reported := collectiveOutcome(domain.MissionSuccess,
@@ -796,8 +819,8 @@ func TestReportResult_Collective_CarimbaTimeDaFormacao(t *testing.T) {
 		domain.CollectivePlayer{PlayerID: "p3", TeamID: "garbage"},
 	)
 	var captured domain.MatchOutcome
-	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).
-		Run(func(args mock.Arguments) { captured = args.Get(3).(domain.MatchOutcome) }).Return(nil)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { captured = args.Get(4).(domain.MatchOutcome) }).Return(nil)
 
 	require.NoError(t, svc.ReportResult(context.Background(), "match-1", reported))
 	require.NotNil(t, captured.Collective)
@@ -809,7 +832,7 @@ func TestReportResult_Collective_CarimbaTimeDaFormacao(t *testing.T) {
 
 // collective para matchId inexistente → ErrSessionNotFound (inalterado).
 func TestReportResult_Collective_MatchInexistente_ErrSessionNotFound(t *testing.T) {
-	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{archetype: domain.ArchetypeCoopMission}))
 	err := svc.ReportResult(context.Background(), "nao-existe",
 		collectiveOutcome(domain.MissionSuccess, domain.CollectivePlayer{PlayerID: "p1"}))
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)

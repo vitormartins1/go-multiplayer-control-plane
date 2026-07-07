@@ -37,4 +37,9 @@ var (
 	// ErrInvalidParticipation indica um evento de participação fora do vocabulário
 	// (Event/Outcome inválido) — spec 013.
 	ErrInvalidParticipation = errors.New("session: invalid participation event")
+
+	// ErrOutcomeMismatch indica que o kind do outcome não corresponde ao arquétipo
+	// do snapshot da sessão (ADR-0024, spec 017) — ex.: um server de queue_arena
+	// reportando collective. O resultado NÃO é publicado.
+	ErrOutcomeMismatch = errors.New("session: outcome kind does not match session archetype")
 )

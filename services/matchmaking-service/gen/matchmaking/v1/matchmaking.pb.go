@@ -129,6 +129,7 @@ func (SummonStatus) EnumDescriptor() ([]byte, []int) {
 type FindMatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // o jogo do cliente (multi-tenant, ADR-0017)
+	ModeId        string                 `protobuf:"bytes,2,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"` // modo do jogo (ADR-0024, spec 010); vazio = "default"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -166,6 +167,13 @@ func (*FindMatchRequest) Descriptor() ([]byte, []int) {
 func (x *FindMatchRequest) GetGameId() string {
 	if x != nil {
 		return x.GameId
+	}
+	return ""
+}
+
+func (x *FindMatchRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
 	}
 	return ""
 }
@@ -261,6 +269,7 @@ type InvadeRequest struct {
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`              // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
 	SoulLevel     int32                  `protobuf:"varint,2,opt,name=soul_level,json=soulLevel,proto3" json:"soul_level,omitempty"`    // nível do invasor (faixa assimétrica); 0 = sem faixa
 	WeaponTier    int32                  `protobuf:"varint,3,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"` // tier de arma do invasor (se o perfil exigir)
+	ModeId        string                 `protobuf:"bytes,4,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`              // modo do jogo (ADR-0024); vazio = "default"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -314,6 +323,13 @@ func (x *InvadeRequest) GetWeaponTier() int32 {
 		return x.WeaponTier
 	}
 	return 0
+}
+
+func (x *InvadeRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
+	}
+	return ""
 }
 
 type InvadeResponse struct {
@@ -383,6 +399,7 @@ type PostSummonSignRequest struct {
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`              // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
 	SoulLevel     int32                  `protobuf:"varint,2,opt,name=soul_level,json=soulLevel,proto3" json:"soul_level,omitempty"`    // nível do aliado (faixa simétrica de co-op)
 	WeaponTier    int32                  `protobuf:"varint,3,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"` // tier de arma do aliado (se o perfil exigir)
+	ModeId        string                 `protobuf:"bytes,4,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`              // modo do jogo (ADR-0024); o sinal só aparece p/ hosts do mesmo modo
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -436,6 +453,13 @@ func (x *PostSummonSignRequest) GetWeaponTier() int32 {
 		return x.WeaponTier
 	}
 	return 0
+}
+
+func (x *PostSummonSignRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
+	}
+	return ""
 }
 
 type SummonUpdate struct {
@@ -519,6 +543,7 @@ type ListSignsRequest struct {
 	GameId         string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`                         // jogo (multi-tenant)
 	HostSoulLevel  int32                  `protobuf:"varint,2,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"` // faixa do mundo do host (filtra os sinais compatíveis)
 	HostWeaponTier int32                  `protobuf:"varint,3,opt,name=host_weapon_tier,json=hostWeaponTier,proto3" json:"host_weapon_tier,omitempty"`
+	ModeId         string                 `protobuf:"bytes,4,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"` // modo do mundo do host (ADR-0024); vazio = "default"
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -572,6 +597,13 @@ func (x *ListSignsRequest) GetHostWeaponTier() int32 {
 		return x.HostWeaponTier
 	}
 	return 0
+}
+
+func (x *ListSignsRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
+	}
+	return ""
 }
 
 type ListSignsResponse struct {
@@ -787,44 +819,48 @@ var File_matchmaking_v1_matchmaking_proto protoreflect.FileDescriptor
 
 const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\n" +
-	" matchmaking/v1/matchmaking.proto\x12\x0ematchmaking.v1\"+\n" +
+	" matchmaking/v1/matchmaking.proto\x12\x0ematchmaking.v1\"D\n" +
 	"\x10FindMatchRequest\x12\x17\n" +
-	"\agame_id\x18\x01 \x01(\tR\x06gameId\"\xd7\x01\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x17\n" +
+	"\amode_id\x18\x02 \x01(\tR\x06modeId\"\xd7\x01\n" +
 	"\fTicketUpdate\x12.\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x16.matchmaking.v1.StatusR\x06status\x12\x19\n" +
 	"\bmatch_id\x18\x02 \x01(\tR\amatchId\x12\x18\n" +
 	"\aplayers\x18\x03 \x03(\tR\aplayers\x12%\n" +
 	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12#\n" +
 	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\x12\x16\n" +
-	"\x06reason\x18\x06 \x01(\tR\x06reason\"h\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\"\x81\x01\n" +
 	"\rInvadeRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1d\n" +
 	"\n" +
 	"soul_level\x18\x02 \x01(\x05R\tsoulLevel\x12\x1f\n" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
-	"weaponTier\"{\n" +
+	"weaponTier\x12\x17\n" +
+	"\amode_id\x18\x04 \x01(\tR\x06modeId\"{\n" +
 	"\x0eInvadeResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x12#\n" +
-	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken\"p\n" +
+	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken\"\x89\x01\n" +
 	"\x15PostSummonSignRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1d\n" +
 	"\n" +
 	"soul_level\x18\x02 \x01(\x05R\tsoulLevel\x12\x1f\n" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
-	"weaponTier\"\xc8\x01\n" +
+	"weaponTier\x12\x17\n" +
+	"\amode_id\x18\x04 \x01(\tR\x06modeId\"\xc8\x01\n" +
 	"\fSummonUpdate\x124\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1c.matchmaking.v1.SummonStatusR\x06status\x12\x17\n" +
 	"\asign_id\x18\x02 \x01(\tR\x06signId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12#\n" +
-	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\"}\n" +
+	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\"\x96\x01\n" +
 	"\x10ListSignsRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12&\n" +
 	"\x0fhost_soul_level\x18\x02 \x01(\x05R\rhostSoulLevel\x12(\n" +
-	"\x10host_weapon_tier\x18\x03 \x01(\x05R\x0ehostWeaponTier\"E\n" +
+	"\x10host_weapon_tier\x18\x03 \x01(\x05R\x0ehostWeaponTier\x12\x17\n" +
+	"\amode_id\x18\x04 \x01(\tR\x06modeId\"E\n" +
 	"\x11ListSignsResponse\x120\n" +
 	"\x05signs\x18\x01 \x03(\v2\x1a.matchmaking.v1.SummonSignR\x05signs\"\x82\x01\n" +
 	"\n" +

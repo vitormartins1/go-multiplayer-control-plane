@@ -112,7 +112,7 @@ type Invader interface {
 	// e injeta o invasor no primeiro elegível. ErrInvasionNotSupported (arquétipo
 	// errado / invasão off), ErrNoEligibleWorld (nada casa ou todos cheios),
 	// ErrProfileUnavailable (perfil ilegível). O playerID vem do JWT (context).
-	Invade(ctx context.Context, gameID, playerID string, crit InvaderCriteria) (Invaded, error)
+	Invade(ctx context.Context, gameID, modeID, playerID string, crit InvaderCriteria) (Invaded, error)
 }
 
 // InvasionPolicyProvider é a Port de saída que lê a política de invasão do jogo
@@ -120,7 +120,7 @@ type Invader interface {
 // não tocar o cache do caminho crítico do FindMatch. ErrProfileUnavailable em
 // falha de leitura.
 type InvasionPolicyProvider interface {
-	InvasionPolicy(ctx context.Context, gameID string) (InvasionPolicy, error)
+	InvasionPolicy(ctx context.Context, gameID, modeID string) (InvasionPolicy, error)
 }
 
 // WorldDirectory é a Port de saída que lista os mundos invadíveis de um jogo no

@@ -164,3 +164,27 @@ O repo Unity ainda **não existe** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)). Ao
 | `placement` no resultado | por jogador | **compartilhado pelo squad** |
 | `team_id` no ReportResult | vazio | carimbado pelo session (`squad-K`) |
 | Fan-out | por jogador | por jogador **e** por squad (sinks derivam) |
+
+
+## Modo + session manifest (ADR-0024, M1)
+
+O jogo pode ter **N modos** (perfis nomeados, M0); a sessão nasce de um modo e **congela o snapshot** do perfil (mudanças no cadastro não afetam partidas em voo). O que o data plane precisa saber:
+
+1. **Claim `mode_id` no connect token** (sempre presente; `"default"` quando o cliente não pediu modo). Lido no *connection approval* junto dos demais claims.
+2. **Session manifest — `session.v1.Session/GetSessionConfig(ref_id)`**: no boot da sessão, o Dedicated Server chama o RPC (mesmo canal/auth do `ReportResult`; `ref_id` = `match_id` no queue-form ou `session_id` no host_world) e recebe:
+
+```
+GetSessionConfigResponse{
+  session_id, match_id, game_id, mode_id,
+  archetype,          // este arquétipo
+  topology,           // "dedicated"
+  params_json,        // params do modo, JSON cru — leia SÓ as chaves que conhece
+  profile_hash        // hash do snapshot (logue para correlação com o backend)
+}
+```
+
+**Princípio:** o server **não hardcoda regras que o perfil declara** — lê `params_json` e ignora chaves desconhecidas. Param novo no cadastro **não muda este contrato**.
+
+3. **Validação de forma no `ReportResult`:** o session agora rejeita (`FailedPrecondition`) um outcome cujo *kind* não corresponda ao arquétipo do modo — reportar a forma errada é bug do server, não entra no fan-out.
+
+> `lobbySize`/`teamSize`/`respawnMode`/`scoringStats` chegam prontos no `params_json` — o server do BR não precisa de fonte própria de configuração.
