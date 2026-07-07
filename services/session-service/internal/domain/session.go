@@ -26,7 +26,36 @@ const (
 	// CloseAbandoned: fechada pela reconciliação — o game server sumiu da fleet
 	// sem ReportResult (spec 008, ADR-0022).
 	CloseAbandoned CloseReason = "abandoned"
+	// CloseHostLeft: mundo host_world encerrado limpo porque o host saiu
+	// (spec 011, ADR-0023). Distinto de abandoned (crash) — encerramento voluntário.
+	CloseHostLeft CloseReason = "host_left"
 )
+
+// SessionOrigin distingue como a sessão nasceu (ADR-0023, spec 011).
+type SessionOrigin string
+
+const (
+	// OriginMatch: sessão criada a partir de um match (queue_arena, specs 001–010).
+	OriginMatch SessionOrigin = "match"
+	// OriginHostWorld: mundo persistente aberto por um host, sem match prévio
+	// (host_world_dropin).
+	OriginHostWorld SessionOrigin = "host_world"
+)
+
+// Papéis do participante num mundo host_world_dropin (ADR-0023, ficha 01). O
+// host é o dono do mundo (não ocupa slot); coop/invader são phantoms com slots.
+const (
+	RoleHost    = "host"
+	RoleCoop    = "coop"
+	RoleInvader = "invader"
+)
+
+// RoleSlot é a capacidade e a ocupação de um papel num mundo. Occupants guarda
+// os playerIDs presentes; len(Occupants) < Capacity indica slot livre.
+type RoleSlot struct {
+	Capacity  int
+	Occupants []string
+}
 
 // TeamAssignment é um lado da partida NvN: um rótulo estável no match e seus
 // jogadores (ADR-0023, arquétipo queue_arena). Em FFA a composição é um único
@@ -36,15 +65,23 @@ type TeamAssignment struct {
 	Players []string
 }
 
-// Session é uma partida em andamento: o match alocado a um game server.
+// Session é uma partida em andamento: o match alocado a um game server, ou o
+// mundo persistente de um host (ADR-0023, spec 011). Origin distingue os dois.
 type Session struct {
 	ID            string
-	MatchID       string
+	MatchID       string // vazio em host_world (não há match)
 	GameID        string // jogo da partida (multi-tenant, ADR-0017)
 	Players       []string
 	TeamByPlayer  map[string]string // playerID -> teamID; nil/vazio em FFA (ADR-0023)
 	ServerID      string
 	ServerAddress string
+
+	// host_world_dropin (spec 011): Origin=host_world; HostPlayerID é o dono do
+	// mundo; RoleSlots é a capacidade/ocupação por papel (coop/invader). Em
+	// OriginMatch estes ficam zero/nil.
+	Origin       SessionOrigin
+	HostPlayerID string
+	RoleSlots    map[string]*RoleSlot
 
 	State       SessionState
 	OpenedAt    time.Time
@@ -109,6 +146,39 @@ type SessionService interface {
 	// sessão. ErrUnsupportedOutcome/ErrInvalidOutcome em outcome inválido;
 	// ErrSessionNotFound se não houver sessão para o match.
 	ReportResult(ctx context.Context, matchID string, outcome MatchOutcome) error
+
+	// OpenWorld abre um mundo persistente para o host (host_world_dropin): lê o
+	// perfil do jogo, aloca um game server, deriva os slots por papel e emite o
+	// connect token do host (papel host). ErrUnsupportedArchetype se o jogo não
+	// for host_world_dropin; ErrNoServer se o pool esgotar. Spec 011, ADR-0023.
+	OpenWorld(ctx context.Context, hostPlayerID, gameID string) (*Session, ConnectGrant, error)
+	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando
+	// um slot, e emite o connect token com o claim role. ErrWorldNotFound,
+	// ErrRoleNotEnabled, ErrRoleFull, ErrAlreadyJoined.
+	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, error)
+	// LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
+	// se o jogador não estiver no mundo. Se o jogador for o host, encerra o mundo.
+	LeaveWorld(ctx context.Context, sessionID, playerID string) error
+	// CloseWorld encerra o mundo (CloseHostLeft), libera o server e encerra a
+	// participação de todos. ErrWorldNotFound se não houver mundo aberto.
+	CloseWorld(ctx context.Context, sessionID string) error
+}
+
+// WorldProfile é o subconjunto do perfil host_world_dropin que o session precisa
+// para abrir um mundo (ADR-0023, spec 011): papéis habilitados e capacidade por
+// papel. Lido do game-registry via ProfileProvider.
+type WorldProfile struct {
+	Archetype    string   // deve ser "host_world_dropin"
+	EnabledRoles []string // "coop" e/ou "invader"
+	CoopSlots    int
+	InvaderSlots int
+}
+
+// ProfileProvider é a Port de saída que lê o perfil de multiplayer do jogo no
+// game-registry (ADR-0023). Devolve ErrProfileUnavailable quando o perfil está
+// ausente, o arquétipo é incompatível ou a leitura falha.
+type ProfileProvider interface {
+	WorldProfile(ctx context.Context, gameID string) (WorldProfile, error)
 }
 
 // ServerAllocator é a Port de saída do pool de game servers. O adapter static
@@ -134,12 +204,21 @@ type ServerRegistry interface {
 	LiveServerIDs(ctx context.Context) (map[string]struct{}, error)
 }
 
+// ConnectClaims são os claims opcionais por arquétipo carregados no connect
+// token (ADR-0023). Cada campo vira claim só quando não-vazio, para não poluir o
+// token. Cresce por arquétipo sem alterar a assinatura de Issue.
+type ConnectClaims struct {
+	TeamID string // queue_arena: time do jogador na partida NvN
+	Role   string // host_world_dropin: "host" | "coop" | "invader"
+}
+
 // ConnectTokenIssuer é a Port de saída que cunha o connect token (JWT EdDSA)
 // validado offline pelo game server via JWKS (ADR-0010/0011).
 type ConnectTokenIssuer interface {
-	// Issue emite um JWT EdDSA com sub/match_id/server/exp e, quando não vazio, o
-	// claim team_id (ADR-0023) — o game server lê o time no connection approval.
-	Issue(playerID, matchID, serverAddr, teamID string) (token string, err error)
+	// Issue emite um JWT EdDSA com sub/match_id/server/exp e os claims opcionais
+	// (ADR-0023) — o game server os lê no connection approval. refID é o match_id
+	// (queue_arena) ou o sessionID do mundo (host_world_dropin).
+	Issue(playerID, refID, serverAddr string, claims ConnectClaims) (token string, err error)
 	// JWKS devolve a chave pública (JSON) para verificação offline.
 	JWKS(ctx context.Context) ([]byte, error)
 }

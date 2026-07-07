@@ -16,4 +16,22 @@ var (
 	// sessão (ADR-0023): jogador em dois times, ou divergência entre a lista de
 	// players e os jogadores dos times.
 	ErrInvalidTeams = errors.New("session: invalid team composition")
+
+	// Erros do arquétipo host_world_dropin (ADR-0023, spec 011).
+
+	// ErrUnsupportedArchetype indica que o jogo não é host_world_dropin — só esse
+	// arquétipo abre mundo (OpenWorld) sem match prévio.
+	ErrUnsupportedArchetype = errors.New("session: unsupported archetype for host world")
+	// ErrRoleNotEnabled indica que o papel pedido não está habilitado no perfil do
+	// jogo (fora de EnabledRoles).
+	ErrRoleNotEnabled = errors.New("session: role not enabled")
+	// ErrRoleFull indica que os slots do papel no mundo estão esgotados.
+	ErrRoleFull = errors.New("session: role slots full")
+	// ErrWorldNotFound indica que não há mundo (sessão host_world) aberto com o id.
+	ErrWorldNotFound = errors.New("session: world not found")
+	// ErrAlreadyJoined indica que o jogador já ocupa um slot no mundo.
+	ErrAlreadyJoined = errors.New("session: player already joined world")
+	// ErrProfileUnavailable indica que o perfil de multiplayer do jogo não pôde ser
+	// lido/usado (ausente, arquétipo incompatível, rede) — origem no ProfileProvider.
+	ErrProfileUnavailable = errors.New("session: multiplayer profile unavailable")
 )
