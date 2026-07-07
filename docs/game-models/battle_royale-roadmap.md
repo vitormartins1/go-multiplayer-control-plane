@@ -100,9 +100,10 @@ O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [R
 
 **Specs:** `admin-bff` + `admin-ui` (numeração seguinte livre) + doc `battle_royale-dataplane-contract.md`.
 
-**Escopo:**
-- **Rooms:** a sala de um jogo `battle_royale` mostra o lobby (N/`lobbySize`) e o modo (solo/squad). Reusa o board de Rooms (`session/007`). *Vivos/eliminados ao vivo = follow-up (decisão #1).*
-- **Analytics:** bloco condicional por perfil (reusa o surfacing da B2/H3) — distribuição de colocações, taxa de "top 10", sobrevivência média.
+**Escopo:** (implementado — `admin-bff/015` + `admin-ui/021`; fechou também o gap da BR0-UI, o form de perfil BR)
+- **Rooms:** ✅ a sala de um jogo `battle_royale` mostra o lobby (N/`lobbySize`) e o modo (solo/squad), buscando o perfil por jogo (cacheado). *Vivos/eliminados ao vivo = follow-up (decisão #1).*
+- **Analytics:** ✅ bloco condicional com a distribuição de colocação (1º/top-10/resto) e a sobrevivência média (o bff propaga o campo `placement` da BR3).
+- **Perfil no console (gap BR0-UI):** ✅ o form de multiplayer ganhou o ramo `battle_royale` (lobbySize/teamSize/respawnMode/scoringStats), espelhando o do `host_world_dropin`.
 - **Contrato:** ✅ **escrito** — [`battle_royale-dataplane-contract.md`](./battle_royale-dataplane-contract.md) (par do `queue_arena`/`host_world_dropin`): o server do BR recebe o lobby via connect token (com `team_id` do squad), roda a partida com o `respawnMode` declarado, chama `ReportResult` com o `PlacementResult` terminal. Fonte de verdade das mudanças cross-repo no futuro `unity-battle-royale-data-plane`.
 
 **Depende de:** BR1 (Rooms lê lobby), BR3 (analytics lê colocações). **Tamanho:** **M**.
@@ -117,9 +118,9 @@ O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [R
 | BR1 — lobby grande + squads ✅ main | matchmaking/008 | M (menor: session intacto) | BR0 |
 | BR2 — resultado por colocação ✅ main | session/015 | M | BR1 |
 | BR3 — colher (3 sinks) ✅ main | achievements/010 + leaderboard/005 + analytics/005 | L | BR2 |
-| BR4 — console + contrato 🟡 (contrato ✅, surfacing pendente) | admin-bff + admin-ui + doc | M | BR1, BR3 |
+| BR4 — console + contrato ✅ main | admin-bff/015 + admin-ui/021 + doc | M | BR1, BR3 |
 
-Concluídas BR0–BR4, o `battle_royale` está **completo no control plane** (declarar → encher lobby/squads → reportar colocações → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-battle-royale-data-plane` (Unity) encarnando a zona/eliminação, consumindo o contrato de BR4.
+✅ **BR0–BR4 concluídas** — o `battle_royale` está **completo no control plane** (declarar → encher lobby/squads → reportar colocações → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-battle-royale-data-plane` (Unity) encarnando a zona/eliminação, consumindo o [contrato de BR4](./battle_royale-dataplane-contract.md).
 
 ## Aberturas que este roadmap **não** cobre (declaradas, adiadas)
 
