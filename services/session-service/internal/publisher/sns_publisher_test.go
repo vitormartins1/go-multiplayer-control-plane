@@ -149,6 +149,46 @@ func TestSNSPublish_Placement_EnvelopeDiscriminadoPorKind(t *testing.T) {
 	assert.Contains(t, raw, "entries")
 }
 
+// C2: o envelope collective é discriminado por kind e carrega o outcome da
+// SESSÃO + players[] (sem os campos results/won/entries dos outros kinds).
+func TestSNSPublish_Collective_EnvelopeDiscriminadoPorKind(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	outcome := domain.MatchOutcome{Kind: domain.OutcomeCollective, Collective: &domain.CollectiveResult{
+		Outcome: domain.MissionSuccess,
+		Players: []domain.CollectivePlayer{
+			{PlayerID: "p1", TeamID: "team-1", Stats: map[string]int64{"kills": 12}},
+			{PlayerID: "p2", TeamID: "team-1"},
+		},
+	}}
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", outcome))
+
+	require.NotNil(t, fake.in)
+	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico dos demais kinds")
+
+	var got collectiveEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, envelopeVersion, got.SchemaVersion)
+	assert.Equal(t, kindCollective, got.Kind)
+	assert.Equal(t, "match-1", got.MatchID)
+	assert.Equal(t, "game-1", got.GameID)
+	assert.Equal(t, domain.MissionSuccess, got.Outcome, "desfecho da sessão")
+	require.Len(t, got.Players, 2)
+	assert.Equal(t, collectivePlayerDTO{
+		PlayerID: "p1", TeamID: "team-1", Stats: map[string]int64{"kills": 12},
+	}, got.Players[0])
+	assert.Empty(t, got.Players[1].Stats, "stats vazio omitido")
+
+	// não carrega os campos dos outros kinds.
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &raw))
+	assert.NotContains(t, raw, "results")
+	assert.NotContains(t, raw, "entries")
+	assert.Contains(t, raw, "players")
+	assert.Contains(t, raw, "outcome")
+}
+
 // win_loss_draw segue intacto após o dispatch por kind (sem regressão).
 func TestSNSPublish_WinLossDraw_IntactoAposDispatch(t *testing.T) {
 	fake := &fakeSNS{}

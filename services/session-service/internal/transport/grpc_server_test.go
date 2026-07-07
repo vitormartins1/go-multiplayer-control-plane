@@ -184,12 +184,38 @@ func TestToMatchOutcome_Placement_MapeiaParaDominio(t *testing.T) {
 	assert.Equal(t, 2, out.Placement.Entries[1].Placement)
 }
 
+// toMatchOutcome mapeia o oneof collective (coop_mission, C2) para o domínio,
+// preservando o outcome da sessão + players (teamId/stats).
+func TestToMatchOutcome_Collective_MapeiaParaDominio(t *testing.T) {
+	req := &pb.ReportResultRequest{
+		MatchId: "m1",
+		Outcome: &pb.ReportResultRequest_Collective{Collective: &pb.CollectiveResult{
+			Outcome: "MISSION_SUCCESS",
+			Players: []*pb.CollectivePlayer{
+				{PlayerId: "p1", TeamId: "team-1", Stats: map[string]int64{"kills": 12}},
+				{PlayerId: "p2", TeamId: "team-1"},
+			},
+		}},
+	}
+	out := toMatchOutcome(req)
+
+	assert.Equal(t, "collective", out.Kind)
+	require.NotNil(t, out.Collective)
+	assert.Equal(t, "MISSION_SUCCESS", out.Collective.Outcome)
+	require.Len(t, out.Collective.Players, 2)
+	assert.Equal(t, "p1", out.Collective.Players[0].PlayerID)
+	assert.Equal(t, "team-1", out.Collective.Players[0].TeamID)
+	assert.Equal(t, map[string]int64{"kills": 12}, out.Collective.Players[0].Stats)
+	assert.Equal(t, "p2", out.Collective.Players[1].PlayerID)
+}
+
 // oneof vazio → MatchOutcome{} (Kind vazio, cai como unsupported na validação).
 func TestToMatchOutcome_OneofVazio_KindVazio(t *testing.T) {
 	out := toMatchOutcome(&pb.ReportResultRequest{MatchId: "m1"})
 	assert.Empty(t, out.Kind)
 	assert.Nil(t, out.WinLossDraw)
 	assert.Nil(t, out.Placement)
+	assert.Nil(t, out.Collective)
 }
 
 // Composição inconsistente (jogador em dois times) → InvalidArgument.

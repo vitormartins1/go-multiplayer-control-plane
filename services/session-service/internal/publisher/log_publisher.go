@@ -28,8 +28,22 @@ func New(log *slog.Logger) *Log {
 }
 
 // Publish loga o resultado da partida (fallback do fan-out real), despachando
-// por kind (win_loss_draw / placement).
+// por kind (win_loss_draw / placement / collective).
 func (l *Log) Publish(_ context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+	if outcome.Collective != nil {
+		for _, p := range outcome.Collective.Players {
+			l.log.Info("collective fan-out (log fallback)",
+				slog.String("game_id", gameID),
+				slog.String("match_id", matchID),
+				slog.String("kind", outcome.Kind),
+				slog.String("outcome", outcome.Collective.Outcome),
+				slog.String("player_id", p.PlayerID),
+				slog.String("team_id", p.TeamID),
+				slog.Any("stats", p.Stats),
+			)
+		}
+		return nil
+	}
 	if outcome.Placement != nil {
 		for _, e := range outcome.Placement.Entries {
 			l.log.Info("placement fan-out (log fallback)",

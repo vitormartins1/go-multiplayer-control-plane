@@ -208,5 +208,16 @@ func toMatchOutcome(req *pb.ReportResultRequest) domain.MatchOutcome {
 		}
 		return domain.MatchOutcome{Kind: domain.OutcomePlacement, Placement: &domain.PlacementResult{Entries: entries}}
 	}
+	if c := req.GetCollective(); c != nil {
+		players := make([]domain.CollectivePlayer, len(c.GetPlayers()))
+		for i, p := range c.GetPlayers() {
+			players[i] = domain.CollectivePlayer{
+				PlayerID: p.GetPlayerId(),
+				TeamID:   p.GetTeamId(),
+				Stats:    p.GetStats(),
+			}
+		}
+		return domain.MatchOutcome{Kind: domain.OutcomeCollective, Collective: &domain.CollectiveResult{Outcome: c.GetOutcome(), Players: players}}
+	}
 	return domain.MatchOutcome{} // Kind vazio -> ErrUnsupportedOutcome
 }

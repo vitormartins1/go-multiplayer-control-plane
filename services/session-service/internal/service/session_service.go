@@ -103,12 +103,12 @@ func WithOrphanGrace(d time.Duration) Option {
 // ErrUnsupportedArchetype e o queue_arena segue intacto.
 func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, publisher domain.ResultPublisher, opts ...Option) *Service {
 	s := &Service{
-		allocator:    allocator,
-		issuer:       issuer,
-		publisher:    publisher,
-		now:          time.Now,
-		orphanGrace:  time.Minute,
-		sessions:     make(map[string]*domain.Session),
+		allocator:           allocator,
+		issuer:              issuer,
+		publisher:           publisher,
+		now:                 time.Now,
+		orphanGrace:         time.Minute,
+		sessions:            make(map[string]*domain.Session),
 		matchIndex:          make(map[string]string),
 		closed:              make(map[domain.CloseReason]float64),
 		participationEvents: make(map[string]float64),
@@ -247,6 +247,11 @@ func stampTeams(o domain.MatchOutcome, teamByPlayer map[string]string) {
 			o.Placement.Entries[i].TeamID = teamByPlayer[o.Placement.Entries[i].PlayerID]
 		}
 	}
+	if o.Collective != nil {
+		for i := range o.Collective.Players {
+			o.Collective.Players[i].TeamID = teamByPlayer[o.Collective.Players[i].PlayerID]
+		}
+	}
 }
 
 // validateOutcome valida o outcome estruturalmente, despachando por kind
@@ -278,9 +283,26 @@ func validateOutcome(o domain.MatchOutcome) error {
 			}
 		}
 		return nil
+	case domain.OutcomeCollective:
+		if o.Collective == nil || len(o.Collective.Players) == 0 {
+			return domain.ErrInvalidOutcome
+		}
+		// estrutural: o desfecho da sessão está no vocabulário. Os valores de
+		// stats NÃO são checados (server autoritativo — como no placement, que
+		// só valida survivedMs, um campo dedicado, não o mapa stats).
+		if !missionOutcomes[o.Collective.Outcome] {
+			return domain.ErrInvalidOutcome
+		}
+		return nil
 	default:
 		return domain.ErrUnsupportedOutcome
 	}
+}
+
+// missionOutcomes é o vocabulário do desfecho coletivo do coop_mission (C2).
+var missionOutcomes = map[string]bool{
+	domain.MissionSuccess: true,
+	domain.MissionFailure: true,
 }
 
 // closeSession é o fechamento unificado (spec 004): marca CLOSED com motivo,
