@@ -25,6 +25,7 @@ import {
   type MultiplayerProfile,
   type QueueArenaParams,
   type HostWorldDropInParams,
+  type BattleRoyaleParams,
 } from "../lib/api";
 
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
@@ -52,6 +53,20 @@ const HWD_DEFAULTS: HostWorldDropInParams = {
   passwordEnabled: true,
   invasionEnabled: true,
 };
+
+const BR_DEFAULTS: BattleRoyaleParams = {
+  lobbySize: 60,
+  teamSize: 1,
+  respawnMode: "one_life",
+  scoringStats: [],
+};
+
+const RESPAWN_OPTIONS: { value: BattleRoyaleParams["respawnMode"]; label: string }[] = [
+  { value: "one_life", label: "Uma vida (BR clássico)" },
+  { value: "teammate_revive", label: "Revive por aliado" },
+  { value: "arena_1v1", label: "Arena 1v1 (Gulag)" },
+  { value: "reboot_timer", label: "Reboot com janela" },
+];
 
 function FieldLabel({ label, help }: { label: string; help: string }) {
   return (
@@ -95,6 +110,10 @@ function buildQueueArenaProfile(topology: "dedicated" | "p2p", p: QueueArenaPara
     roundsToWin: p.matchStructure === "best_of_rounds" ? p.roundsToWin : 0,
   };
   return { archetype: "queue_arena", topology, params };
+}
+
+function buildBattleRoyaleProfile(topology: "dedicated" | "p2p", p: BattleRoyaleParams): MultiplayerProfile {
+  return { archetype: "battle_royale", topology, params: { ...p } };
 }
 
 function buildHWDProfile(topology: "dedicated" | "p2p", p: HostWorldDropInParams): MultiplayerProfile {
@@ -429,14 +448,98 @@ function HostWorldDropInForm({
   );
 }
 
+// --- Formulário do Battle Royale ---
+// Layout: SimpleGrid 2-col (md+): [Lobby e squads | Respawn] + [Métricas — full].
+function BattleRoyaleForm({
+  p,
+  set,
+}: {
+  p: BattleRoyaleParams;
+  set: <K extends keyof BattleRoyaleParams>(k: K, v: BattleRoyaleParams[K]) => void;
+}) {
+  const invalidStats = p.scoringStats.filter((s) => !STAT_RE.test(s));
+  const minLobby = 2 * p.teamSize;
+  const lobbyTooSmall = p.lobbySize < minLobby;
+
+  return (
+    <>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Fieldset legend="Lobby e squads">
+          <Stack gap="sm">
+            <NumberInput
+              label={
+                <FieldLabel
+                  label="Tamanho do lobby"
+                  help="Alvo de jogadores por partida (ex.: 60). O matchmaking enche o lobby até este número antes de abrir a sessão. Deve ser ao menos 2× o tamanho do squad."
+                />
+              }
+              min={2}
+              value={p.lobbySize}
+              onChange={(v) => set("lobbySize", typeof v === "number" ? v : 2)}
+              error={lobbyTooSmall ? `Deve ser ≥ ${minLobby} (2 × squad)` : undefined}
+            />
+            <NumberInput
+              label={
+                <FieldLabel
+                  label="Tamanho do squad"
+                  help="Jogadores por time. 1 = solo (FFA); 2 = duo; 4 = squad. O matchmaking agrupa em squads; o último pode ficar menor."
+                />
+              }
+              min={1}
+              value={p.teamSize}
+              onChange={(v) => set("teamSize", typeof v === "number" ? v : 1)}
+            />
+          </Stack>
+        </Fieldset>
+
+        <Fieldset legend="Respawn">
+          <Select
+            label={
+              <FieldLabel
+                label="Modo de respawn"
+                help="Decide quando a colocação é fixada (comportamento do data plane; o backend só armazena). Uma vida: sem volta. Revive por aliado: derrubado ≠ eliminado. Arena 1v1: quem morre disputa um 1v1 pra voltar. Reboot: volta se o time pegar um item a tempo."
+              />
+            }
+            value={p.respawnMode}
+            onChange={(v) => v && set("respawnMode", v as BattleRoyaleParams["respawnMode"])}
+            allowDeselect={false}
+            data={RESPAWN_OPTIONS}
+          />
+        </Fieldset>
+      </SimpleGrid>
+
+      <Fieldset legend="Métricas">
+        <TagsInput
+          label={
+            <FieldLabel
+              label="Stats de pontuação"
+              help="Métricas extras que o data plane reporta no resultado além da colocação e da sobrevivência (ex.: kills). Cada stat gera um leaderboard automático. Use identificadores em minúsculas começando com letra."
+            />
+          }
+          description="Pressione Enter para adicionar cada stat."
+          value={p.scoringStats}
+          onChange={(v) => set("scoringStats", v)}
+          error={
+            invalidStats.length > 0
+              ? `Stat inválido: ${invalidStats.join(", ")} (só minúsculas, começa com letra)`
+              : undefined
+          }
+          clearable
+        />
+      </Fieldset>
+    </>
+  );
+}
+
 // --- Componente principal ---
 export function MultiplayerSettings({ gameId }: { gameId: string }) {
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(false);
   const [topology, setTopology] = useState<"dedicated" | "p2p">("dedicated");
-  const [archetype, setArchetype] = useState<"queue_arena" | "host_world_dropin">("queue_arena");
+  const [archetype, setArchetype] = useState<"queue_arena" | "host_world_dropin" | "battle_royale">("queue_arena");
   const [qa, setQA] = useState<QueueArenaParams>(QA_DEFAULTS);
   const [hwd, setHWD] = useState<HostWorldDropInParams>(HWD_DEFAULTS);
+  const [br, setBR] = useState<BattleRoyaleParams>(BR_DEFAULTS);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -451,8 +554,10 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           setArchetype(profile.archetype);
           if (profile.archetype === "queue_arena") {
             setQA({ ...QA_DEFAULTS, ...profile.params });
-          } else {
+          } else if (profile.archetype === "host_world_dropin") {
             setHWD({ ...HWD_DEFAULTS, ...profile.params });
+          } else {
+            setBR({ ...BR_DEFAULTS, ...profile.params });
           }
         } else {
           setConfigured(false);
@@ -460,6 +565,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           setArchetype("queue_arena");
           setQA(QA_DEFAULTS);
           setHWD(HWD_DEFAULTS);
+          setBR(BR_DEFAULTS);
         }
       })
       .catch((err) => {
@@ -481,9 +587,16 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
     setHWD((prev) => ({ ...prev, [key]: value }));
   }
 
+  function setBRField<K extends keyof BattleRoyaleParams>(key: K, value: BattleRoyaleParams[K]) {
+    setBR((prev) => ({ ...prev, [key]: value }));
+  }
+
   const invalidQAStats = qa.scoringStats.filter((s) => !STAT_RE.test(s));
   const hwdRolesEmpty = archetype === "host_world_dropin" && hwd.enabledRoles.length === 0;
-  const canSave = invalidQAStats.length === 0 && !hwdRolesEmpty && !saving;
+  const invalidBRStats = br.scoringStats.filter((s) => !STAT_RE.test(s));
+  const brLobbyInvalid = archetype === "battle_royale" && br.lobbySize < 2 * br.teamSize;
+  const canSave =
+    invalidQAStats.length === 0 && !hwdRolesEmpty && invalidBRStats.length === 0 && !brLobbyInvalid && !saving;
 
   async function save() {
     setSaving(true);
@@ -491,7 +604,9 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
       const profile =
         archetype === "queue_arena"
           ? buildQueueArenaProfile(topology, qa)
-          : buildHWDProfile(topology, hwd);
+          : archetype === "host_world_dropin"
+            ? buildHWDProfile(topology, hwd)
+            : buildBattleRoyaleProfile(topology, br);
       await api.setMultiplayerProfile(gameId, profile);
       setConfigured(true);
       notifications.show({ color: "green", message: "Perfil de multiplayer salvo." });
@@ -531,6 +646,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             data={[
               { value: "queue_arena", label: "Queue Arena — partida simétrica (FFA / NvN)" },
               { value: "host_world_dropin", label: "Host World Drop-in — mundo persistente (Soulslike)" },
+              { value: "battle_royale", label: "Battle Royale — lobby grande, colocação (PUBG/Fortnite)" },
             ]}
           />
 
@@ -558,8 +674,10 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
 
       {archetype === "queue_arena" ? (
         <QueueArenaForm p={qa} set={setQAField} />
-      ) : (
+      ) : archetype === "host_world_dropin" ? (
         <HostWorldDropInForm p={hwd} set={setHWDField} />
+      ) : (
+        <BattleRoyaleForm p={br} set={setBRField} />
       )}
 
       <Group>
