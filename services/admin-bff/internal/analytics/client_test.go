@@ -41,3 +41,30 @@ func TestOverview_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {
 	_, err := New(upstream.URL, nil).Overview(context.Background())
 	assert.ErrorIs(t, err, domain.ErrAnalyticsUnavailable)
 }
+
+func TestGameAnalytics_ParseiaRoleParticipations(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/admin/games/hw/analytics", r.URL.Path)
+		assert.Equal(t, "7", r.URL.Query().Get("days"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"hw","matches":0,"daily":[],
+			"roleParticipations":[{"role":"invader","event":"HOST_KILLED","count":3},{"role":"coop","event":"BOSS_DEFEATED","count":1}]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7)
+	require.NoError(t, err)
+	assert.Equal(t, "hw", d.GameID)
+	require.Len(t, d.RoleParticipations, 2)
+	assert.Equal(t, domain.ParticipationStat{Role: "invader", Event: "HOST_KILLED", Count: 3}, d.RoleParticipations[0])
+	assert.Empty(t, d.GameName, "nome é injetado pelo service")
+}
+
+func TestGameAnalytics_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer upstream.Close()
+	_, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 0)
+	assert.ErrorIs(t, err, domain.ErrAnalyticsUnavailable)
+}

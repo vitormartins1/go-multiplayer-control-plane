@@ -16,46 +16,48 @@ import (
 )
 
 type fakeService struct {
-	topo         domain.Topology
-	topoErr      error
-	live         domain.LiveMetrics
-	liveErr      error
-	page         domain.PlayerPage
-	pageErr      error
-	games        []domain.Game
-	gamesErr     error
-	createErr    error
-	profile      json.RawMessage
-	profileErr   error
-	gotProfile   json.RawMessage
-	catalog      []domain.Achievement
-	catErr       error
-	ach          []domain.PlayerAchievement
-	achErr       error
-	leaders      []domain.LeaderboardEntry
-	leadErr      error
-	pdata        []domain.PlayerDataEntry
-	pdataErr     error
-	save         domain.CloudSave
-	saveErr      error
-	gplayers     []domain.GamePlayer
-	gplayErr     error
-	pgames       []domain.Game
-	pgamesErr    error
-	sessions     domain.GameSessions
-	sessionsErr  error
-	fanout       domain.FanoutHealth
-	fanoutErr    error
-	analytics    domain.AnalyticsOverview
-	analyticsErr error
-	importResp   domain.ImportResponse
-	importErr    error
-	gotGameID    string
-	gotPlayer    string
-	gotBoard     string
-	gotLimit     int
-	gotOffset    int
-	gotState     string
+	topo             domain.Topology
+	topoErr          error
+	live             domain.LiveMetrics
+	liveErr          error
+	page             domain.PlayerPage
+	pageErr          error
+	games            []domain.Game
+	gamesErr         error
+	createErr        error
+	profile          json.RawMessage
+	profileErr       error
+	gotProfile       json.RawMessage
+	catalog          []domain.Achievement
+	catErr           error
+	ach              []domain.PlayerAchievement
+	achErr           error
+	leaders          []domain.LeaderboardEntry
+	leadErr          error
+	pdata            []domain.PlayerDataEntry
+	pdataErr         error
+	save             domain.CloudSave
+	saveErr          error
+	gplayers         []domain.GamePlayer
+	gplayErr         error
+	pgames           []domain.Game
+	pgamesErr        error
+	sessions         domain.GameSessions
+	sessionsErr      error
+	fanout           domain.FanoutHealth
+	fanoutErr        error
+	analytics        domain.AnalyticsOverview
+	analyticsErr     error
+	gameAnalytics    domain.GameAnalyticsDetail
+	gameAnalyticsErr error
+	importResp       domain.ImportResponse
+	importErr        error
+	gotGameID        string
+	gotPlayer        string
+	gotBoard         string
+	gotLimit         int
+	gotOffset        int
+	gotState         string
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -163,6 +165,11 @@ func (f *fakeService) FanoutHealth(context.Context) (domain.FanoutHealth, error)
 
 func (f *fakeService) AnalyticsOverview(context.Context) (domain.AnalyticsOverview, error) {
 	return f.analytics, f.analyticsErr
+}
+
+func (f *fakeService) GameAnalytics(_ context.Context, gameID string, _ int) (domain.GameAnalyticsDetail, error) {
+	f.gotGameID = gameID
+	return f.gameAnalytics, f.gameAnalyticsErr
 }
 
 func (f *fakeService) SetLeaderboardScore(_ context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error) {
@@ -698,6 +705,41 @@ func TestAnalyticsOverview_Fora_502(t *testing.T) {
 	defer srv.Close()
 
 	resp := get(t, srv, "/api/analytics/overview")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestGameAnalytics_200_ComRoleParticipations(t *testing.T) {
+	svc := &fakeService{gameAnalytics: domain.GameAnalyticsDetail{
+		GameID: "hw", GameName: "Souls-like", Matches: 0,
+		RoleParticipations: []domain.ParticipationStat{{Role: "invader", Event: "HOST_KILLED", Count: 3}},
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/analytics/games/hw?days=7")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "hw", svc.gotGameID)
+	var body struct {
+		GameName           string `json:"gameName"`
+		RoleParticipations []struct {
+			Role  string `json:"role"`
+			Count int64  `json:"count"`
+		} `json:"roleParticipations"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "Souls-like", body.GameName)
+	require.Len(t, body.RoleParticipations, 1)
+	assert.Equal(t, int64(3), body.RoleParticipations[0].Count)
+}
+
+func TestGameAnalytics_Fora_502(t *testing.T) {
+	svc := &fakeService{gameAnalyticsErr: domain.ErrAnalyticsUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/analytics/games/hw")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }

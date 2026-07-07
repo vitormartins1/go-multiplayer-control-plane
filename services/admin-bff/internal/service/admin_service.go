@@ -71,6 +71,18 @@ func (s *Service) AnalyticsOverview(ctx context.Context) (domain.AnalyticsOvervi
 	return ov, nil
 }
 
+// GameAnalytics lê o detalhe de analytics de um jogo (analytics-service) e injeta
+// o nome do jogo (game-registry, best-effort). Inclui roleParticipations
+// (host_world_dropin, spec 014). Analytics fora propaga ErrAnalyticsUnavailable.
+func (s *Service) GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalyticsDetail, error) {
+	d, err := s.analytics.GameAnalytics(ctx, gameID, days)
+	if err != nil {
+		return domain.GameAnalyticsDetail{}, err
+	}
+	d.GameName = s.gameNamesByID(ctx)[gameID]
+	return d, nil
+}
+
 // Players delega ao directory (API admin do identity-service).
 func (s *Service) Players(ctx context.Context, limit, offset int) (domain.PlayerPage, error) {
 	return s.directory.ListPlayers(ctx, limit, offset)

@@ -487,12 +487,17 @@ func TestGameSessions_SessionFora_PropagaErro(t *testing.T) {
 }
 
 type fakeAnalytics struct {
-	ov  domain.AnalyticsOverview
-	err error
+	ov     domain.AnalyticsOverview
+	detail domain.GameAnalyticsDetail
+	err    error
 }
 
 func (f *fakeAnalytics) Overview(context.Context) (domain.AnalyticsOverview, error) {
 	return f.ov, f.err
+}
+
+func (f *fakeAnalytics) GameAnalytics(_ context.Context, _ string, _ int) (domain.GameAnalyticsDetail, error) {
+	return f.detail, f.err
 }
 
 func TestAnalyticsOverview_InjetaNomeDoJogo(t *testing.T) {

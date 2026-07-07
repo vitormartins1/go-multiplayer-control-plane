@@ -47,6 +47,13 @@ type sessionDTO struct {
 	OpenedAt      time.Time  `json:"openedAt"`
 	ClosedAt      *time.Time `json:"closedAt"`
 	CloseReason   string     `json:"closeReason"`
+	Origin        string     `json:"origin"`
+	HostPlayerID  string     `json:"hostPlayerId"`
+	RoleSlots     []struct {
+		Role     string `json:"role"`
+		Capacity int    `json:"capacity"`
+		Occupied int    `json:"occupied"`
+	} `json:"roleSlots"`
 }
 
 // SessionsByGame lê as sessões do jogo, repassando o filtro state.
@@ -118,6 +125,10 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 		for _, id := range d.Players {
 			players = append(players, domain.SessionPlayer{ID: id}) // handle: service enriquece
 		}
+		var slots []domain.RoleSlot
+		for _, s := range d.RoleSlots {
+			slots = append(slots, domain.RoleSlot{Role: s.Role, Capacity: s.Capacity, Occupied: s.Occupied})
+		}
 		out = append(out, domain.GameSession{
 			SessionID:     d.SessionID,
 			MatchID:       d.MatchID,
@@ -128,6 +139,9 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 			OpenedAt:      d.OpenedAt,
 			ClosedAt:      d.ClosedAt,
 			CloseReason:   d.CloseReason,
+			Origin:        d.Origin,
+			HostPlayerID:  d.HostPlayerID,
+			RoleSlots:     slots,
 		})
 	}
 	return out
