@@ -15,4 +15,10 @@ var (
 	ErrUnsupportedTopology  = errors.New("game-registry: topologia não suportada")
 	ErrInvalidProfileParams = errors.New("game-registry: parâmetros do perfil inválidos")
 	ErrProfileNotFound      = errors.New("game-registry: perfil de multiplayer não configurado")
+
+	// Modos nomeados (ADR-0024, spec 009).
+	ErrInvalidModeID        = errors.New("game-registry: modeId inválido")
+	ErrModeNotFound         = errors.New("game-registry: modo não encontrado")
+	ErrDefaultModeProtected = errors.New("game-registry: o modo default não pode ser removido")
+	ErrTooManyModes         = errors.New("game-registry: limite de modos do jogo atingido")
 )

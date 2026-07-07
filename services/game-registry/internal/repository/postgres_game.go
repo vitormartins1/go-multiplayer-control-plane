@@ -103,10 +103,17 @@ func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*doma
 	if err != nil {
 		return nil, fmt.Errorf("game-registry repository: find by id: %w", err)
 	}
-	profile, err := decodeProfile(profileRaw)
+	modes, err := decodeModes(profileRaw)
 	if err != nil {
-		return nil, fmt.Errorf("game-registry repository: find by id: decode profile: %w", err)
+		return nil, fmt.Errorf("game-registry repository: find by id: decode modes: %w", err)
 	}
-	g.MultiplayerProfile = profile
+	g.MultiplayerModes = modes
+	// Compat interna (ADR-0024): MultiplayerProfile segue sendo o modo default.
+	for i := range modes {
+		if modes[i].ModeID == domain.DefaultModeID {
+			g.MultiplayerProfile = &modes[i].Profile
+			break
+		}
+	}
 	return &g, nil
 }

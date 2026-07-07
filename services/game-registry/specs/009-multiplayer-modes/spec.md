@@ -1,7 +1,7 @@
 # Spec: 009-multiplayer-modes
 
 **Serviço:** game-registry
-**Status:** Rascunho — aguardando aprovação
+**Status:** Aprovado (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0024 (modos de jogo — perfis nomeados + session manifest)
 **Roadmap:** `docs/game-models/multiplayer-modes-roadmap.md` — fatia **M0** (lado game-registry)

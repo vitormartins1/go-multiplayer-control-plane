@@ -48,6 +48,24 @@ func (m *mockService) GetMultiplayerProfile(ctx context.Context, gameID string) 
 	res, _ := args.Get(0).(*domain.MultiplayerProfile)
 	return res, args.Error(1)
 }
+func (m *mockService) SetMode(ctx context.Context, gameID, modeID, displayName string, p domain.MultiplayerProfile) (*domain.MultiplayerMode, error) {
+	args := m.Called(ctx, gameID, modeID, displayName, p)
+	res, _ := args.Get(0).(*domain.MultiplayerMode)
+	return res, args.Error(1)
+}
+func (m *mockService) GetMode(ctx context.Context, gameID, modeID string) (*domain.MultiplayerMode, error) {
+	args := m.Called(ctx, gameID, modeID)
+	res, _ := args.Get(0).(*domain.MultiplayerMode)
+	return res, args.Error(1)
+}
+func (m *mockService) ListModes(ctx context.Context, gameID string) ([]domain.MultiplayerMode, error) {
+	args := m.Called(ctx, gameID)
+	res, _ := args.Get(0).([]domain.MultiplayerMode)
+	return res, args.Error(1)
+}
+func (m *mockService) DeleteMode(ctx context.Context, gameID, modeID string) error {
+	return m.Called(ctx, gameID, modeID).Error(0)
+}
 
 type mockPresence struct{ mock.Mock }
 
