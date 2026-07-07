@@ -154,9 +154,11 @@ type ConnectGrant struct {
 	Token    string
 }
 
-// Vocabulário do outcome (ADR-0023). No MVP só o kind win_loss_draw existe.
+// Vocabulário do outcome (ADR-0023). win_loss_draw (queue_arena) e placement
+// (battle_royale, BR2) são os kinds existentes.
 const (
 	OutcomeWinLossDraw = "win_loss_draw"
+	OutcomePlacement   = "placement" // battle_royale (ADR-0023/BR2)
 
 	ResultWin  = "win"
 	ResultLoss = "loss"
@@ -165,11 +167,12 @@ const (
 
 // MatchOutcome é o resultado da partida, polimórfico por arquétipo (ADR-0023),
 // modelado como tagged union por ponteiro: exatamente o ponteiro do Kind
-// declarado é não-nil. No MVP só WinLossDraw (arquétipo queue_arena); novos
-// arquétipos adicionam um campo-ponteiro próprio (placement, collective, ...).
+// declarado é não-nil. WinLossDraw (queue_arena) e Placement (battle_royale);
+// novos arquétipos adicionam um campo-ponteiro próprio (collective, ...).
 type MatchOutcome struct {
-	Kind        string // "win_loss_draw" (único no MVP)
+	Kind        string // "win_loss_draw" | "placement"
 	WinLossDraw *WinLossDrawResult
+	Placement   *PlacementResult
 }
 
 // WinLossDrawResult é o outcome do queue_arena: vitória/derrota/empate por
@@ -185,6 +188,24 @@ type PlayerOutcome struct {
 	Outcome  string // "win" | "loss" | "draw"
 	Score    int64
 	Stats    map[string]int64 // métricas declaradas (kills, assists, ...); pode ser nil
+}
+
+// PlacementResult é o outcome ordinal do battle_royale (ADR-0023/BR2): uma
+// colocação por participante. Resultado terminal (a eliminação progressiva é
+// gameplay do data plane).
+type PlacementResult struct {
+	Entries []PlacementEntry
+}
+
+// PlacementEntry é a colocação de um participante no battle_royale. Squads
+// (squad-K, BR1) compartilham a colocação do time; o TeamID é carimbado pelo
+// session a partir da formação (não confiado no que o server ecoa).
+type PlacementEntry struct {
+	PlayerID   string
+	TeamID     string           // squad; vazio em solo/FFA
+	Placement  int              // colocação ordinal (1 = vencedor)
+	SurvivedMs int64            // tempo de sobrevivência (ms)
+	Stats      map[string]int64 // métricas extras opcionais (ex.: kills); pode ser nil
 }
 
 // SessionService é a Port de entrada: cria sessões a partir de matches e

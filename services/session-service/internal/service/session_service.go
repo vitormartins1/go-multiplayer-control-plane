@@ -233,35 +233,54 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 	return nil
 }
 
-// stampTeams sobrescreve o TeamID de cada PlayerOutcome com o time registrado na
+// stampTeams sobrescreve o TeamID de cada entrada com o time registrado na
 // formação (ADR-0023). Jogador fora da composição (ou FFA) fica com TeamID
-// vazio. Muta in-place via o ponteiro do WinLossDraw (tagged union do outcome).
+// vazio. Muta in-place via o ponteiro do kind ativo (tagged union do outcome).
 func stampTeams(o domain.MatchOutcome, teamByPlayer map[string]string) {
-	if o.WinLossDraw == nil {
-		return
+	if o.WinLossDraw != nil {
+		for i := range o.WinLossDraw.Players {
+			o.WinLossDraw.Players[i].TeamID = teamByPlayer[o.WinLossDraw.Players[i].PlayerID]
+		}
 	}
-	for i := range o.WinLossDraw.Players {
-		o.WinLossDraw.Players[i].TeamID = teamByPlayer[o.WinLossDraw.Players[i].PlayerID]
+	if o.Placement != nil {
+		for i := range o.Placement.Entries {
+			o.Placement.Entries[i].TeamID = teamByPlayer[o.Placement.Entries[i].PlayerID]
+		}
 	}
 }
 
-// validateOutcome valida o outcome estruturalmente (ADR-0023). Não valida contra
-// o perfil do jogo — o game server é autoritativo sobre o resultado.
+// validateOutcome valida o outcome estruturalmente, despachando por kind
+// (ADR-0023). Não valida contra o perfil do jogo — o game server é autoritativo
+// sobre o resultado (não recomputa a corrida nem exige colocações contíguas).
 func validateOutcome(o domain.MatchOutcome) error {
-	if o.Kind != domain.OutcomeWinLossDraw {
-		return domain.ErrUnsupportedOutcome
-	}
-	if o.WinLossDraw == nil || len(o.WinLossDraw.Players) == 0 {
-		return domain.ErrInvalidOutcome
-	}
-	for _, p := range o.WinLossDraw.Players {
-		switch p.Outcome {
-		case domain.ResultWin, domain.ResultLoss, domain.ResultDraw:
-		default:
+	switch o.Kind {
+	case domain.OutcomeWinLossDraw:
+		if o.WinLossDraw == nil || len(o.WinLossDraw.Players) == 0 {
 			return domain.ErrInvalidOutcome
 		}
+		for _, p := range o.WinLossDraw.Players {
+			switch p.Outcome {
+			case domain.ResultWin, domain.ResultLoss, domain.ResultDraw:
+			default:
+				return domain.ErrInvalidOutcome
+			}
+		}
+		return nil
+	case domain.OutcomePlacement:
+		if o.Placement == nil || len(o.Placement.Entries) == 0 {
+			return domain.ErrInvalidOutcome
+		}
+		// estrutural: colocação >= 1 e sobrevivência >= 0. Empates e
+		// não-contiguidade são permitidos (server autoritativo, ficha §5).
+		for _, e := range o.Placement.Entries {
+			if e.Placement < 1 || e.SurvivedMs < 0 {
+				return domain.ErrInvalidOutcome
+			}
+		}
+		return nil
+	default:
+		return domain.ErrUnsupportedOutcome
 	}
-	return nil
 }
 
 // closeSession é o fechamento unificado (spec 004): marca CLOSED com motivo,

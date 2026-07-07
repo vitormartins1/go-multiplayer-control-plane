@@ -115,7 +115,7 @@ O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [R
 |---|---|---|---|
 | BR0 — declaração do perfil 🔵 branch | game-registry/007 + admin-bff/admin-ui | M | — |
 | BR1 — lobby grande + squads 🔵 branch | matchmaking/008 | M (menor: session intacto) | BR0 |
-| BR2 — resultado por colocação | session/015 | M | BR1 |
+| BR2 — resultado por colocação 🔵 branch | session/015 | M | BR1 |
 | BR3 — colher (3 sinks) | achievements/010 + leaderboard/005 + analytics/005 | L | BR2 |
 | BR4 — console + contrato | admin-bff + admin-ui + doc | M | BR1, BR3 |
 

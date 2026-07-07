@@ -221,7 +221,7 @@ func TestReportResult_ComTimesEStats_Publica(t *testing.T) {
 
 func TestReportResult_KindNaoSuportado_ErrUnsupportedOutcome(t *testing.T) {
 	svc, _, _ := reportSetup(t)
-	err := svc.ReportResult(context.Background(), "match-1", domain.MatchOutcome{Kind: "placement"})
+	err := svc.ReportResult(context.Background(), "match-1", domain.MatchOutcome{Kind: "collective"})
 	assert.ErrorIs(t, err, domain.ErrUnsupportedOutcome)
 	assert.Equal(t, float64(1), svc.ActiveSessions(), "outcome inválido não encerra a sessão")
 }
@@ -608,4 +608,113 @@ func TestReportResult_FFA_TeamIDVazio(t *testing.T) {
 		assert.Empty(t, p.TeamID)
 	}
 	pub.AssertExpectations(t)
+}
+
+// --- outcome placement (battle_royale, ADR-0023/BR2) ---
+
+// placementOutcome monta um MatchOutcome placement com as entradas dadas.
+func placementOutcome(entries ...domain.PlacementEntry) domain.MatchOutcome {
+	return domain.MatchOutcome{Kind: domain.OutcomePlacement, Placement: &domain.PlacementResult{Entries: entries}}
+}
+
+// O caminho feliz do BR2: placement válido → publica (kind=placement), libera o
+// server e encerra a sessão (CloseResult) — mesmo fluxo terminal do win_loss_draw.
+func TestReportResult_Placement_PublicaLiberaEncerra(t *testing.T) {
+	svc, pub, alloc := reportSetup(t) // FFA p1/p2
+	outcome := placementOutcome(
+		domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: 900000},
+		domain.PlacementEntry{PlayerID: "p2", Placement: 2, SurvivedMs: 600000},
+	)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.MatchedBy(func(o domain.MatchOutcome) bool {
+		return o.Kind == domain.OutcomePlacement && o.Placement != nil && len(o.Placement.Entries) == 2
+	})).Return(nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome))
+	assert.Equal(t, float64(0), svc.ActiveSessions(), "sessão encerrada")
+	assert.Equal(t, float64(1), svc.ClosedTotal(domain.CloseResult))
+	pub.AssertExpectations(t)
+	alloc.AssertExpectations(t)
+}
+
+// Validação estrutural: entries vazio, placement < 1 e survivedMs < 0 → ErrInvalidOutcome.
+func TestReportResult_Placement_Invalido_ErrInvalidOutcome(t *testing.T) {
+	svc, _, _ := reportSetup(t)
+	errVazio := svc.ReportResult(context.Background(), "match-1", placementOutcome())
+	assert.ErrorIs(t, errVazio, domain.ErrInvalidOutcome, "entries vazio")
+
+	errColocacao := svc.ReportResult(context.Background(), "match-1",
+		placementOutcome(domain.PlacementEntry{PlayerID: "p1", Placement: 0}))
+	assert.ErrorIs(t, errColocacao, domain.ErrInvalidOutcome, "placement < 1")
+
+	errSurvive := svc.ReportResult(context.Background(), "match-1",
+		placementOutcome(domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: -1}))
+	assert.ErrorIs(t, errSurvive, domain.ErrInvalidOutcome, "survivedMs < 0")
+
+	assert.Equal(t, float64(1), svc.ActiveSessions(), "outcome inválido não encerra a sessão")
+}
+
+// Empate de colocação (co-eliminação, ficha §5): dois placement=1 são aceitos —
+// coerência de ranking é do data plane, não do session.
+func TestReportResult_Placement_EmpateAceito(t *testing.T) {
+	svc, pub, alloc := reportSetup(t)
+	outcome := placementOutcome(
+		domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: 800000},
+		domain.PlacementEntry{PlayerID: "p2", Placement: 1, SurvivedMs: 800000},
+	)
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).Return(nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", outcome),
+		"empate de colocação é aceito (session não recomputa a corrida)")
+	pub.AssertExpectations(t)
+}
+
+// Carimbo de squad (BR1): a entrada do jogador recebe o squad-K registrado na
+// formação, sobrescrevendo o que o server ecoou; solo/FFA fica com teamId vazio.
+func TestReportResult_Placement_CarimbaSquadDaFormacao(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	pub := &mockPublisher{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	svc := New(alloc, iss, pub)
+	// formação BR: p1/p2 no squad-1; p3 sem squad (solo).
+	teams := []domain.TeamAssignment{
+		{TeamID: "squad-1", Players: []string{"p1", "p2"}},
+		{Players: []string{"p3"}},
+	}
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", teams)
+	require.NoError(t, err)
+
+	// o server ecoa team_id errado — deve ser ignorado e recarimbado.
+	reported := placementOutcome(
+		domain.PlacementEntry{PlayerID: "p1", TeamID: "garbage", Placement: 1, SurvivedMs: 900000},
+		domain.PlacementEntry{PlayerID: "p2", TeamID: "garbage", Placement: 1, SurvivedMs: 900000},
+		domain.PlacementEntry{PlayerID: "p3", TeamID: "garbage", Placement: 2, SurvivedMs: 500000},
+	)
+	var captured domain.MatchOutcome
+	pub.On("Publish", mock.Anything, "game-1", "match-1", mock.Anything).
+		Run(func(args mock.Arguments) { captured = args.Get(3).(domain.MatchOutcome) }).Return(nil)
+
+	require.NoError(t, svc.ReportResult(context.Background(), "match-1", reported))
+	require.NotNil(t, captured.Placement)
+	byPlayer := map[string]string{}
+	for _, e := range captured.Placement.Entries {
+		byPlayer[e.PlayerID] = e.TeamID
+	}
+	assert.Equal(t, "squad-1", byPlayer["p1"])
+	assert.Equal(t, "squad-1", byPlayer["p2"])
+	assert.Empty(t, byPlayer["p3"], "solo fica com teamId vazio")
+	pub.AssertExpectations(t)
+}
+
+// placement para matchId inexistente → ErrSessionNotFound (inalterado).
+func TestReportResult_Placement_MatchInexistente_ErrSessionNotFound(t *testing.T) {
+	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{})
+	err := svc.ReportResult(context.Background(), "nao-existe",
+		placementOutcome(domain.PlacementEntry{PlayerID: "p1", Placement: 1}))
+	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
 }

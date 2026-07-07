@@ -159,6 +159,39 @@ func TestCreateSession_ComTimes_TokenCarregaTeamID(t *testing.T) {
 	}
 }
 
+// toMatchOutcome mapeia o oneof placement (battle_royale, BR2) para o domínio,
+// convertendo o placement int32 → int e preservando entries/survivedMs/stats.
+func TestToMatchOutcome_Placement_MapeiaParaDominio(t *testing.T) {
+	req := &pb.ReportResultRequest{
+		MatchId: "m1",
+		Outcome: &pb.ReportResultRequest_Placement{Placement: &pb.PlacementResult{
+			Entries: []*pb.PlacementEntry{
+				{PlayerId: "p1", TeamId: "squad-1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4}},
+				{PlayerId: "p3", Placement: 2, SurvivedMs: 500000},
+			},
+		}},
+	}
+	out := toMatchOutcome(req)
+
+	assert.Equal(t, "placement", out.Kind)
+	require.NotNil(t, out.Placement)
+	require.Len(t, out.Placement.Entries, 2)
+	assert.Equal(t, "p1", out.Placement.Entries[0].PlayerID)
+	assert.Equal(t, "squad-1", out.Placement.Entries[0].TeamID)
+	assert.Equal(t, 1, out.Placement.Entries[0].Placement)
+	assert.Equal(t, int64(900000), out.Placement.Entries[0].SurvivedMs)
+	assert.Equal(t, map[string]int64{"kills": 4}, out.Placement.Entries[0].Stats)
+	assert.Equal(t, 2, out.Placement.Entries[1].Placement)
+}
+
+// oneof vazio → MatchOutcome{} (Kind vazio, cai como unsupported na validação).
+func TestToMatchOutcome_OneofVazio_KindVazio(t *testing.T) {
+	out := toMatchOutcome(&pb.ReportResultRequest{MatchId: "m1"})
+	assert.Empty(t, out.Kind)
+	assert.Nil(t, out.WinLossDraw)
+	assert.Nil(t, out.Placement)
+}
+
 // Composição inconsistente (jogador em dois times) → InvalidArgument.
 func TestCreateSession_TimesInconsistentes_InvalidArgument(t *testing.T) {
 	client, _ := setup(t, []string{"10.0.0.1:7777"})

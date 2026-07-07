@@ -30,6 +30,10 @@ var (
 // decisão #3): mesmo tópico match-results, kind distinto do win_loss_draw.
 const kindParticipationEvent = "participation_event"
 
+// kindPlacement é o discriminador do envelope de colocação (battle_royale, BR2):
+// mesmo tópico match-results, kind distinto do win_loss_draw.
+const kindPlacement = "placement"
+
 // envelopeVersion é a versão do schema da mensagem publicada no tópico. Os
 // consumidores ignoram campos desconhecidos; bumps de major viram um novo campo.
 //
@@ -72,6 +76,25 @@ type participationEnvelope struct {
 	Outcome       string `json:"outcome"`
 }
 
+// placementEnvelope é o envelope do battle_royale (BR2) no mesmo tópico
+// match-results. Discriminado por kind=placement; carrega uma colocação ordinal
+// por participante (sem results/won, que são do win_loss_draw).
+type placementEnvelope struct {
+	SchemaVersion int                 `json:"schemaVersion"`
+	Kind          string              `json:"kind"`
+	MatchID       string              `json:"matchId"`
+	GameID        string              `json:"gameId"`
+	Entries       []placementEntryDTO `json:"entries"`
+}
+
+type placementEntryDTO struct {
+	PlayerID   string           `json:"playerId"`
+	TeamID     string           `json:"teamId,omitempty"`
+	Placement  int              `json:"placement"`
+	SurvivedMs int64            `json:"survivedMs"`
+	Stats      map[string]int64 `json:"stats,omitempty"`
+}
+
 // snsClient é a fração da API do SNS que usamos (permite fake em teste).
 type snsClient interface {
 	Publish(ctx context.Context, in *sns.PublishInput, optFns ...func(*sns.Options)) (*sns.PublishOutput, error)
@@ -98,9 +121,20 @@ func NewSNS(ctx context.Context, topicARN string, log *slog.Logger) (*SNS, error
 	return &SNS{client: client, topicARN: topicARN, log: log}, nil
 }
 
-// Publish serializa o envelope e publica no tópico. Retorna erro em falha.
+// Publish serializa o envelope do kind ativo e publica no tópico (ADR-0023:
+// despacha por outcome.Kind — win_loss_draw ou placement). Retorna erro em falha.
 func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
-	players := outcome.WinLossDraw.Players // no MVP só o kind win_loss_draw chega aqui (validado no service)
+	switch outcome.Kind {
+	case domain.OutcomePlacement:
+		return s.publishPlacement(ctx, gameID, matchID, outcome.Placement)
+	default:
+		return s.publishWinLossDraw(ctx, gameID, matchID, outcome)
+	}
+}
+
+// publishWinLossDraw publica o envelope do queue_arena (kind=win_loss_draw).
+func (s *SNS) publishWinLossDraw(ctx context.Context, gameID, matchID string, outcome domain.MatchOutcome) error {
+	players := outcome.WinLossDraw.Players
 	env := envelope{
 		SchemaVersion: envelopeVersion,
 		MatchID:       matchID,
@@ -124,6 +158,55 @@ func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domai
 		return fmt.Errorf("session publisher: marshal envelope: %w", err)
 	}
 
+	if err := s.publish(ctx, body); err != nil {
+		return err
+	}
+	s.log.Info("result publicado no tópico",
+		slog.String("game_id", gameID),
+		slog.String("match_id", matchID),
+		slog.Int("players", len(players)),
+	)
+	return nil
+}
+
+// publishPlacement publica o envelope do battle_royale (kind=placement, BR2).
+func (s *SNS) publishPlacement(ctx context.Context, gameID, matchID string, result *domain.PlacementResult) error {
+	env := placementEnvelope{
+		SchemaVersion: envelopeVersion,
+		Kind:          kindPlacement,
+		MatchID:       matchID,
+		GameID:        gameID,
+		Entries:       make([]placementEntryDTO, 0, len(result.Entries)),
+	}
+	for _, e := range result.Entries {
+		env.Entries = append(env.Entries, placementEntryDTO{
+			PlayerID:   e.PlayerID,
+			TeamID:     e.TeamID,
+			Placement:  e.Placement,
+			SurvivedMs: e.SurvivedMs,
+			Stats:      e.Stats,
+		})
+	}
+
+	body, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("session publisher: marshal placement envelope: %w", err)
+	}
+
+	if err := s.publish(ctx, body); err != nil {
+		return err
+	}
+	s.log.Info("placement publicado no tópico",
+		slog.String("game_id", gameID),
+		slog.String("match_id", matchID),
+		slog.Int("entries", len(result.Entries)),
+	)
+	return nil
+}
+
+// publish envia o corpo já serializado ao tópico e contabiliza o resultado
+// (fanout_publish_total). Reuso entre os kinds.
+func (s *SNS) publish(ctx context.Context, body []byte) error {
 	if _, err := s.client.Publish(ctx, &sns.PublishInput{
 		TopicArn: aws.String(s.topicARN),
 		Message:  aws.String(string(body)),
@@ -132,11 +215,6 @@ func (s *SNS) Publish(ctx context.Context, gameID, matchID string, outcome domai
 		return fmt.Errorf("session publisher: sns publish: %w", err)
 	}
 	publishTotal.WithLabelValues("ok").Inc()
-	s.log.Info("result publicado no tópico",
-		slog.String("game_id", gameID),
-		slog.String("match_id", matchID),
-		slog.Int("players", len(players)),
-	)
 	return nil
 }
 

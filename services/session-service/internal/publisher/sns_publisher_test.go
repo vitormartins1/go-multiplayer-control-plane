@@ -108,3 +108,58 @@ func TestSNSPublish_ErroDoSNS_Propaga(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sns publish")
 }
+
+// placementOutcome monta um MatchOutcome placement para os testes do publisher.
+func placementOutcome(entries ...domain.PlacementEntry) domain.MatchOutcome {
+	return domain.MatchOutcome{Kind: domain.OutcomePlacement, Placement: &domain.PlacementResult{Entries: entries}}
+}
+
+// BR2: o envelope placement é discriminado por kind e carrega entries[] (sem os
+// campos results/won do win_loss_draw).
+func TestSNSPublish_Placement_EnvelopeDiscriminadoPorKind(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	outcome := placementOutcome(
+		domain.PlacementEntry{PlayerID: "p1", TeamID: "squad-1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4}},
+		domain.PlacementEntry{PlayerID: "p3", Placement: 2, SurvivedMs: 500000},
+	)
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1", outcome))
+
+	require.NotNil(t, fake.in)
+	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico do win_loss_draw")
+
+	var got placementEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, envelopeVersion, got.SchemaVersion)
+	assert.Equal(t, kindPlacement, got.Kind)
+	assert.Equal(t, "match-1", got.MatchID)
+	assert.Equal(t, "game-1", got.GameID)
+	require.Len(t, got.Entries, 2)
+	assert.Equal(t, placementEntryDTO{
+		PlayerID: "p1", TeamID: "squad-1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4},
+	}, got.Entries[0])
+	assert.Equal(t, 2, got.Entries[1].Placement)
+	assert.Empty(t, got.Entries[1].TeamID, "solo/FFA: teamId omitido")
+
+	// não carrega os campos do win_loss_draw.
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &raw))
+	assert.NotContains(t, raw, "results")
+	assert.Contains(t, raw, "entries")
+}
+
+// win_loss_draw segue intacto após o dispatch por kind (sem regressão).
+func TestSNSPublish_WinLossDraw_IntactoAposDispatch(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}
+
+	require.NoError(t, p.Publish(context.Background(), "game-1", "match-1",
+		wld(domain.PlayerOutcome{PlayerID: "p1", Outcome: domain.ResultWin, Score: 5})))
+
+	var got envelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, domain.OutcomeWinLossDraw, got.Kind)
+	require.Len(t, got.Results, 1)
+	assert.True(t, got.Results[0].Won)
+}

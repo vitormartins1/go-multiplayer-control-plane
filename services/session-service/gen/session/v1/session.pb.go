@@ -951,6 +951,7 @@ type ReportResultRequest struct {
 	// Types that are valid to be assigned to Outcome:
 	//
 	//	*ReportResultRequest_WinLossDraw
+	//	*ReportResultRequest_Placement
 	Outcome       isReportResultRequest_Outcome `protobuf_oneof:"outcome"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1009,6 +1010,15 @@ func (x *ReportResultRequest) GetWinLossDraw() *WinLossDrawResult {
 	return nil
 }
 
+func (x *ReportResultRequest) GetPlacement() *PlacementResult {
+	if x != nil {
+		if x, ok := x.Outcome.(*ReportResultRequest_Placement); ok {
+			return x.Placement
+		}
+	}
+	return nil
+}
+
 type isReportResultRequest_Outcome interface {
 	isReportResultRequest_Outcome()
 }
@@ -1017,7 +1027,13 @@ type ReportResultRequest_WinLossDraw struct {
 	WinLossDraw *WinLossDrawResult `protobuf:"bytes,2,opt,name=win_loss_draw,json=winLossDraw,proto3,oneof"` // arquétipo queue_arena
 }
 
+type ReportResultRequest_Placement struct {
+	Placement *PlacementResult `protobuf:"bytes,3,opt,name=placement,proto3,oneof"` // arquétipo battle_royale (ADR-0023/BR2)
+}
+
 func (*ReportResultRequest_WinLossDraw) isReportResultRequest_Outcome() {}
+
+func (*ReportResultRequest_Placement) isReportResultRequest_Outcome() {}
 
 type ReportResultResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1178,6 +1194,133 @@ func (x *PlayerOutcome) GetStats() map[string]int64 {
 	return nil
 }
 
+// PlacementResult é o outcome do arquétipo battle_royale (ADR-0023/BR2):
+// colocação ordinal (1º..Nº) por participante. Resultado terminal — o server do
+// BR reporta as colocações de todos no fim; a eliminação progressiva é gameplay
+// do data plane.
+type PlacementResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*PlacementEntry      `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlacementResult) Reset() {
+	*x = PlacementResult{}
+	mi := &file_session_v1_session_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlacementResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlacementResult) ProtoMessage() {}
+
+func (x *PlacementResult) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlacementResult.ProtoReflect.Descriptor instead.
+func (*PlacementResult) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PlacementResult) GetEntries() []*PlacementEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+// PlacementEntry é a colocação de um participante no battle_royale. Squads
+// (squad-K, BR1) compartilham a colocação do time; o session carimba o team_id
+// canônico a partir da formação.
+type PlacementEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	TeamId        string                 `protobuf:"bytes,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`                                                            // squad; vazio em solo/FFA (carimbado pelo session)
+	Placement     int32                  `protobuf:"varint,3,opt,name=placement,proto3" json:"placement,omitempty"`                                                                   // colocação ordinal (1 = vencedor)
+	SurvivedMs    int64                  `protobuf:"varint,4,opt,name=survived_ms,json=survivedMs,proto3" json:"survived_ms,omitempty"`                                               // tempo de sobrevivência (ms); intrínseco ao BR
+	Stats         map[string]int64       `protobuf:"bytes,5,rep,name=stats,proto3" json:"stats,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // métricas extras opcionais (ex.: kills)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlacementEntry) Reset() {
+	*x = PlacementEntry{}
+	mi := &file_session_v1_session_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlacementEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlacementEntry) ProtoMessage() {}
+
+func (x *PlacementEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_session_v1_session_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlacementEntry.ProtoReflect.Descriptor instead.
+func (*PlacementEntry) Descriptor() ([]byte, []int) {
+	return file_session_v1_session_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PlacementEntry) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *PlacementEntry) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *PlacementEntry) GetPlacement() int32 {
+	if x != nil {
+		return x.Placement
+	}
+	return 0
+}
+
+func (x *PlacementEntry) GetSurvivedMs() int64 {
+	if x != nil {
+		return x.SurvivedMs
+	}
+	return 0
+}
+
+func (x *PlacementEntry) GetStats() map[string]int64 {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
 var File_session_v1_session_proto protoreflect.FileDescriptor
 
 const file_session_v1_session_proto_rawDesc = "" +
@@ -1247,10 +1390,11 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x06grants\x18\x03 \x03(\v2\x18.session.v1.ConnectGrantR\x06grants\"P\n" +
 	"\fConnectGrant\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12#\n" +
-	"\rconnect_token\x18\x02 \x01(\tR\fconnectToken\"\x80\x01\n" +
+	"\rconnect_token\x18\x02 \x01(\tR\fconnectToken\"\xbd\x01\n" +
 	"\x13ReportResultRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12C\n" +
-	"\rwin_loss_draw\x18\x02 \x01(\v2\x1d.session.v1.WinLossDrawResultH\x00R\vwinLossDrawB\t\n" +
+	"\rwin_loss_draw\x18\x02 \x01(\v2\x1d.session.v1.WinLossDrawResultH\x00R\vwinLossDraw\x12;\n" +
+	"\tplacement\x18\x03 \x01(\v2\x1b.session.v1.PlacementResultH\x00R\tplacementB\t\n" +
 	"\aoutcome\"\x16\n" +
 	"\x14ReportResultResponse\"H\n" +
 	"\x11WinLossDrawResult\x123\n" +
@@ -1261,6 +1405,19 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\aoutcome\x18\x03 \x01(\tR\aoutcome\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x03R\x05score\x12:\n" +
 	"\x05stats\x18\x05 \x03(\v2$.session.v1.PlayerOutcome.StatsEntryR\x05stats\x1a8\n" +
+	"\n" +
+	"StatsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"G\n" +
+	"\x0fPlacementResult\x124\n" +
+	"\aentries\x18\x01 \x03(\v2\x1a.session.v1.PlacementEntryR\aentries\"\xfc\x01\n" +
+	"\x0ePlacementEntry\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x17\n" +
+	"\ateam_id\x18\x02 \x01(\tR\x06teamId\x12\x1c\n" +
+	"\tplacement\x18\x03 \x01(\x05R\tplacement\x12\x1f\n" +
+	"\vsurvived_ms\x18\x04 \x01(\x03R\n" +
+	"survivedMs\x12;\n" +
+	"\x05stats\x18\x05 \x03(\v2%.session.v1.PlacementEntry.StatsEntryR\x05stats\x1a8\n" +
 	"\n" +
 	"StatsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1289,7 +1446,7 @@ func file_session_v1_session_proto_rawDescGZIP() []byte {
 	return file_session_v1_session_proto_rawDescData
 }
 
-var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_session_v1_session_proto_goTypes = []any{
 	(*OpenWorldRequest)(nil),                 // 0: session.v1.OpenWorldRequest
 	(*OpenWorldResponse)(nil),                // 1: session.v1.OpenWorldResponse
@@ -1312,7 +1469,10 @@ var file_session_v1_session_proto_goTypes = []any{
 	(*ReportResultResponse)(nil),             // 18: session.v1.ReportResultResponse
 	(*WinLossDrawResult)(nil),                // 19: session.v1.WinLossDrawResult
 	(*PlayerOutcome)(nil),                    // 20: session.v1.PlayerOutcome
-	nil,                                      // 21: session.v1.PlayerOutcome.StatsEntry
+	(*PlacementResult)(nil),                  // 21: session.v1.PlacementResult
+	(*PlacementEntry)(nil),                   // 22: session.v1.PlacementEntry
+	nil,                                      // 23: session.v1.PlayerOutcome.StatsEntry
+	nil,                                      // 24: session.v1.PlacementEntry.StatsEntry
 }
 var file_session_v1_session_proto_depIdxs = []int32{
 	16, // 0: session.v1.OpenWorldResponse.host_grant:type_name -> session.v1.ConnectGrant
@@ -1321,29 +1481,32 @@ var file_session_v1_session_proto_depIdxs = []int32{
 	14, // 3: session.v1.CreateSessionRequest.teams:type_name -> session.v1.Team
 	16, // 4: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
 	19, // 5: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
-	20, // 6: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
-	21, // 7: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
-	13, // 8: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
-	17, // 9: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
-	0,  // 10: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
-	2,  // 11: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
-	4,  // 12: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
-	6,  // 13: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
-	8,  // 14: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
-	11, // 15: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
-	15, // 16: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
-	18, // 17: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
-	1,  // 18: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
-	3,  // 19: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
-	5,  // 20: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
-	7,  // 21: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
-	9,  // 22: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
-	12, // 23: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
-	16, // [16:24] is the sub-list for method output_type
-	8,  // [8:16] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	21, // 6: session.v1.ReportResultRequest.placement:type_name -> session.v1.PlacementResult
+	20, // 7: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
+	23, // 8: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
+	22, // 9: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
+	24, // 10: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
+	13, // 11: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
+	17, // 12: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
+	0,  // 13: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
+	2,  // 14: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
+	4,  // 15: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
+	6,  // 16: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
+	8,  // 17: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
+	11, // 18: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
+	15, // 19: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
+	18, // 20: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
+	1,  // 21: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
+	3,  // 22: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
+	5,  // 23: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
+	7,  // 24: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
+	9,  // 25: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
+	12, // 26: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
+	19, // [19:27] is the sub-list for method output_type
+	11, // [11:19] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_session_v1_session_proto_init() }
@@ -1353,6 +1516,7 @@ func file_session_v1_session_proto_init() {
 	}
 	file_session_v1_session_proto_msgTypes[17].OneofWrappers = []any{
 		(*ReportResultRequest_WinLossDraw)(nil),
+		(*ReportResultRequest_Placement)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1360,7 +1524,7 @@ func file_session_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_session_v1_session_proto_rawDesc), len(file_session_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

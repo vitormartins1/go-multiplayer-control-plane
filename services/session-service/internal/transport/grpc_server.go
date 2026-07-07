@@ -195,5 +195,18 @@ func toMatchOutcome(req *pb.ReportResultRequest) domain.MatchOutcome {
 		}
 		return domain.MatchOutcome{Kind: domain.OutcomeWinLossDraw, WinLossDraw: &domain.WinLossDrawResult{Players: players}}
 	}
+	if pl := req.GetPlacement(); pl != nil {
+		entries := make([]domain.PlacementEntry, len(pl.GetEntries()))
+		for i, e := range pl.GetEntries() {
+			entries[i] = domain.PlacementEntry{
+				PlayerID:   e.GetPlayerId(),
+				TeamID:     e.GetTeamId(),
+				Placement:  int(e.GetPlacement()), // int32 (proto) -> int (domínio)
+				SurvivedMs: e.GetSurvivedMs(),
+				Stats:      e.GetStats(),
+			}
+		}
+		return domain.MatchOutcome{Kind: domain.OutcomePlacement, Placement: &domain.PlacementResult{Entries: entries}}
+	}
 	return domain.MatchOutcome{} // Kind vazio -> ErrUnsupportedOutcome
 }
