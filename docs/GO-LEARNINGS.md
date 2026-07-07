@@ -831,3 +831,21 @@ func writeRawJSON(w http.ResponseWriter, status int, raw json.RawMessage) {
 ```
 
 **Pegadinha / nuance:** `json.RawMessage` **não valida** que os bytes são JSON — só os carrega. Se você aceitar um `RawMessage` de fora e reencaminhar, um corpo lixo passa batido (aqui tudo bem: o game-registry rejeita o que for inválido). E no PUT eu leio `r.Body` com `io.ReadAll` em vez do `decode`/`DisallowUnknownFields` usado nos outros handlers — de propósito: campos desconhecidos são responsabilidade do dono da validação (o backend de domínio), não do passthrough. Contraste com [[22]] (`oneof`/tagged union): lá o transport **conhece e traduz** a forma; aqui ele deliberadamente **não conhece** — dois extremos do mesmo eixo "quanto a borda sabe do payload".
+
+---
+
+## 24 — SQL montado por modo + a inferência de tipo do parâmetro no pgx
+
+**O que é / por que importa:** às vezes duas variantes de uma operação diferem só numa **expressão** dentro de um SQL grande (o resto — INSERT/ON CONFLICT/RETURNING — é idêntico). Em vez de duplicar a query, monta-se a fração que varia numa `string` e concatena-se. Fiz isso no critério por stat das conquistas (ADR-0023 A1): `cumulative` soma (`progress + delta`) e `per_match` guarda o melhor (`GREATEST(progress, delta)`) — mesma instrução, expressão trocada por `mode`. É o "SQL como dado" com parcimônia: só o operador muda, os placeholders `$n` continuam os mesmos (nunca interpolar valor — sempre parâmetro).
+
+**Onde no projeto:** `achievements-service/internal/repository/postgres_achievement.go` — `recordStatProgress`. A idempotência é de graça: o incremento cumulativo roda dentro da MESMA tx que marca `processed_matches`, e essa tx só executa uma vez por `matchID` — então somar não corre risco de dupla contagem (diferente de um `ZINCRBY` solto, que a fatia A2 do leaderboard vai ter que deduplicar à mão).
+
+```go
+progressExpr := "LEAST(player_achievements.progress + $6::bigint, $4)::int" // cumulative
+if mode == domain.StatModePerMatch {
+    progressExpr = "LEAST(GREATEST(player_achievements.progress::bigint, $6::bigint), $4)::int"
+}
+q := `... ON CONFLICT (...) DO UPDATE SET progress = ` + progressExpr + ` WHERE ...`
+```
+
+**Pegadinha / nuance:** o `$6` (delta, um `int64`) sem cast explícito fez o Postgres inferir o tipo como **`text`** — porque o mesmo placeholder aparece em vários contextos e o planner não conseguiu unificar. Resultado: `GREATEST(integer, text) cannot be matched` / `column is of type integer but expression is of type bigint`. A cura é **castar o parâmetro na própria SQL** (`$6::bigint`) e o resultado final para a coluna (`::int`, já capado em `$4`). Diferente de C#/EF, onde o tipo do parâmetro vem do CLR e o provider resolve; no pgx o parâmetro chega ao servidor com tipo a inferir, e em query montada essa inferência falha calada até o operador reclamar. Regra: quando um placeholder numérico entra em `GREATEST`/`LEAST`/aritmética misturada, casta explícito.

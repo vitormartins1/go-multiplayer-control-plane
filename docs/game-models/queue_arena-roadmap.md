@@ -51,7 +51,9 @@ admin-bff threada `?board` pela cadeia (top-N + override de score); admin-ui gan
 
 ---
 
-## A1 — Conquistas por `stats`/`teamId`  (aprofunda o colher)
+## A1 — Conquistas por `stats`/`teamId`  ✅ **FEITO** (main, exceto `teamId`)
+
+> Mergeado: achievements/008 (critério por stat `cumulative`/`per_match`, migration 005, consumer lê `stats`, aplicação na tx idempotente por matchID) + cauda admin-bff (passthrough `statKey`/`statMode`) + admin-ui/018 (editor com toggle de critério). Validado ponta a ponta pelo fan-out (kills → `ace` per_match desbloqueia, `sharpshooter` cumulative acumula e trava em 100; idempotência intacta). **`teamId` ficou como follow-up** (conquistas por time), separado na tabela de estado do README.
 
 **Objetivo:** conquistas com critério por métrica (ex.: "10 kills") e por time, usando `stats`/`teamId` que o outcome já carrega.
 
@@ -94,7 +96,7 @@ admin-bff threada `?board` pela cadeia (top-N + override de score); admin-ui gan
 | B1 — perfil no console ✅ | admin-bff/012 + admin-ui/015 | L | — |
 | B2a — analytics loss/draw ✅ | admin-bff (campos) + admin-ui/016 | S | — |
 | B2b — seletor de board ✅ | admin-bff/013 + admin-ui/017 | S–M | B1 (GET perfil) |
-| A1 — conquistas por stats/teamId | achievements/008 (+admin-ui/018) | M–L | — |
+| A1 — conquistas por stats ✅ | achievements/008 (+admin-ui/018) | M–L | — |
 | A2 — leaderboard acumulativo | leaderboard/004 | M | — |
 
 Concluídas B1+B2+A1+A2, o `queue_arena` está **completo** (backend + console). Próxima etapa: bloco C.
