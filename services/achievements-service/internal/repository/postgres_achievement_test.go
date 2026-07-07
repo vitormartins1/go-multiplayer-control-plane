@@ -270,6 +270,68 @@ func TestIsolamentoEntreJogos(t *testing.T) {
 	assert.Empty(t, progOutro, "progresso é isolado por jogo")
 }
 
+// ApplyParticipationEvent é idempotente por (session_id, player_id, event):
+// reprocessar o mesmo evento não incrementa o progresso de novo (spec 009).
+func TestApplyParticipationEvent_Reprocessado_NaoDobra(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+	require.NoError(t, repo.CreateAchievement(ctx, &domain.Achievement{
+		GameID: sandbox, ID: "first_invasion", Name: "Primeira invasão", Description: "d",
+		EventType: domain.EventInvasionWon, Target: 1,
+	}))
+
+	types := domain.ParticipationEventTypes("invader", "HOST_KILLED", "SUCCESS")
+	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", types, at)
+	require.NoError(t, err)
+	assert.False(t, dup)
+
+	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", types, at)
+	require.NoError(t, err)
+	assert.True(t, dup, "reentrega do mesmo evento é no-op")
+
+	prog := mustProgress(t, repo, sandbox, "inv-1")
+	assert.Equal(t, 1, prog["first_invasion"].Progress, "não dobra na reentrega")
+	assert.False(t, prog["first_invasion"].UnlockedAt.IsZero(), "desbloqueada")
+}
+
+// Sessões distintas do mesmo jogador acumulam (a chave inclui session_id).
+func TestApplyParticipationEvent_SessoesDistintas_Acumulam(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+	require.NoError(t, repo.CreateAchievement(ctx, &domain.Achievement{
+		GameID: sandbox, ID: "social_butterfly", Name: "Sociável", Description: "d",
+		EventType: domain.EventWorldJoined, Target: 5,
+	}))
+	types := domain.ParticipationEventTypes("coop", "JOINED", "NEUTRAL")
+
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "JOINED", types, at)
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-2", "coop-1", "JOINED", types, at)
+	require.NoError(t, err)
+
+	prog := mustProgress(t, repo, sandbox, "coop-1")
+	assert.Equal(t, 2, prog["social_butterfly"].Progress, "duas sessões somam")
+}
+
+// Evento sem event type (ex.: LEFT) é marcado processado sem tocar progresso.
+func TestApplyParticipationEvent_SemEventType_ProcessaSemProgresso(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", nil, at)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	// reprocessar continua no-op idempotente.
+	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", nil, at)
+	require.NoError(t, err)
+	assert.True(t, dup)
+
+	assert.Empty(t, mustProgress(t, repo, sandbox, "p-9"), "sem progresso")
+}
+
 func mustProgress(t *testing.T, repo *PostgresAchievementRepository, gameID, playerID string) map[string]struct {
 	Progress   int
 	UnlockedAt time.Time

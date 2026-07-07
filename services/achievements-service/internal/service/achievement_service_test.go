@@ -47,6 +47,11 @@ func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string,
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *mockRepo) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event string, eventTypes []string, at time.Time) (bool, error) {
+	args := m.Called(ctx, gameID, sessionID, playerID, event, eventTypes, at)
+	return args.Bool(0), args.Error(1)
+}
+
 func (m *mockRepo) ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
 	args := m.Called(ctx, gameID, achievementID)
 	e, _ := args.Get(0).([]domain.AchievementProgressEntry)
@@ -117,6 +122,40 @@ func TestApplyMatchResult_OutcomeParaEventos(t *testing.T) {
 			repo.AssertExpectations(t)
 		})
 	}
+}
+
+func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
+	cases := map[string]struct {
+		role, event, outcome string
+		want                 []string
+	}{
+		"invasor vence":  {"invader", "HOST_KILLED", "SUCCESS", []string{domain.EventInvasionWon}},
+		"coop ajuda":     {"coop", "BOSS_DEFEATED", "SUCCESS", []string{domain.EventCoopBossHelped}},
+		"joined":         {"coop", "JOINED", "NEUTRAL", []string{domain.EventWorldJoined}},
+		"left sem trad.": {"coop", "LEFT", "NEUTRAL", nil},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			repo := new(mockRepo)
+			svc := New(repo)
+			repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", c.event, c.want, mock.Anything).Return(false, nil)
+
+			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", c.role, c.event, c.outcome)
+			require.NoError(t, err)
+			assert.False(t, dup)
+			repo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestApplyParticipationEvent_Duplicado_PropagaDup(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED", mock.Anything, mock.Anything).Return(true, nil)
+
+	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "invader", "HOST_KILLED", "SUCCESS")
+	require.NoError(t, err)
+	assert.True(t, dup)
 }
 
 // Partida já processada -> o repo devolve dup=true; o service propaga (no-op).

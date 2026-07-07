@@ -152,6 +152,19 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 	return dup, nil
 }
 
+// ApplyParticipationEvent traduz um evento de participação do host_world_dropin
+// (spec 013/009) nos event types de gameplay por papel e delega ao repo a
+// aplicação idempotente por (sessionID, playerID, event). Consumido pelo fan-out
+// durável (SQS). dup=true quando o evento já havia sido processado (no-op).
+func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, role, event, outcome string) (bool, error) {
+	eventTypes := domain.ParticipationEventTypes(role, event, outcome)
+	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventTypes, s.now().UTC())
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply participation event: %w", err)
+	}
+	return dup, nil
+}
+
 // ProgressForAchievement devolve o progresso de todos os jogadores na conquista.
 func (s *Service) ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
 	entries, err := s.repo.ProgressForAchievement(ctx, gameID, achievementID)
