@@ -87,6 +87,19 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
           </SimpleGrid>
         </Stack>
       )}
+
+      {/* coop_mission (C4): desfecho coletivo da missão. Só aparece quando o jogo
+          reportou resultados coletivos (mission). */}
+      {data?.mission && (
+        <Stack gap="xs">
+          <Title order={5}>Desfecho das missões</Title>
+          <SimpleGrid cols={{ base: 2, sm: 3 }}>
+            <StatCard label="Missões cumpridas" value={String(data.mission.successes)} />
+            <StatCard label="Missões falhas" value={String(data.mission.failures)} />
+            <StatCard label="Taxa de sucesso" value={`${(data.mission.successRate * 100).toFixed(1)}%`} />
+          </SimpleGrid>
+        </Stack>
+      )}
     </Stack>
   );
 }

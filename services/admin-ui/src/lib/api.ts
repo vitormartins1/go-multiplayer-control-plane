@@ -252,6 +252,7 @@ export interface GameAnalyticsDetail {
   daily: AnalyticsDaily[];
   roleParticipations: ParticipationStat[];
   placement?: PlacementDistribution; // battle_royale (BR4); ausente fora do BR
+  mission?: MissionDistribution; // coop_mission (C4); ausente fora do coop
 }
 
 // PlacementDistribution é o histograma de colocação do battle_royale (BR3/BR4).
@@ -261,6 +262,13 @@ export interface PlacementDistribution {
   rest: number;
   entries: number;
   avgSurvivedMs: number;
+}
+
+// MissionDistribution é a distribuição de desfecho da missão do coop_mission (C3/C4).
+export interface MissionDistribution {
+  successes: number;
+  failures: number;
+  successRate: number;
 }
 
 // LiveMetrics: contadores operacionais do gameplay loop. null = métrica ausente/fonte fora.

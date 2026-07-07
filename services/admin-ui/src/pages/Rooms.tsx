@@ -82,6 +82,13 @@ export function Rooms() {
     return { lobbySize: p.params.lobbySize, mode: teamSize === 1 ? "Solo/FFA" : `Squads de ${teamSize}` };
   }
 
+  // coopInfo devolve o rótulo do time se o jogo da sala é coop_mission.
+  function coopInfo(s: GameSession): { teamSize: number } | null {
+    const p = s.gameId ? profiles[s.gameId] : null;
+    if (!p || p.archetype !== "coop_mission") return null;
+    return { teamSize: p.params.teamSize };
+  }
+
   const rows = useMemo(() => {
     if (!data) return [];
     const active = filter === "closed" ? [] : data.active;
@@ -162,6 +169,7 @@ export function Rooms() {
                 key={s.sessionId}
                 session={s}
                 br={brInfo(s)}
+                coop={coopInfo(s)}
                 expanded={expandedId === s.sessionId}
                 onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
                 onClose={() => setClosing(s)}
@@ -199,12 +207,14 @@ export function Rooms() {
 function RoomRow({
   session: s,
   br,
+  coop,
   expanded,
   onToggle,
   onClose,
 }: {
   session: GameSession;
   br: { lobbySize: number; mode: string } | null;
+  coop: { teamSize: number } | null;
   expanded: boolean;
   onToggle: () => void;
   onClose: () => void;
@@ -223,6 +233,11 @@ function RoomRow({
           {br && (
             <Badge size="xs" variant="light" color="grape" mt={2}>
               lobby {s.players.length}/{br.lobbySize} · {br.mode}
+            </Badge>
+          )}
+          {coop && (
+            <Badge size="xs" variant="light" color="teal" mt={2}>
+              co-op {s.players.length}/{coop.teamSize}
             </Badge>
           )}
         </Table.Td>
