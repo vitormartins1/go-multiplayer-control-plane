@@ -79,12 +79,21 @@ func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
 
 type gameAnalyticsDTO struct {
 	gameStatDTO
-	Daily []dailyDTO `json:"daily"`
+	Daily              []dailyDTO             `json:"daily"`
+	RoleParticipations []participationStatDTO `json:"roleParticipations"`
 }
 
 type dailyDTO struct {
 	Day     string `json:"day"`
 	Matches int64  `json:"matches"`
+}
+
+// participationStatDTO é a contagem por papel/evento do host_world_dropin (spec
+// 004). Vazio no queue_arena.
+type participationStatDTO struct {
+	Role  string `json:"role"`
+	Event string `json:"event"`
+	Count int64  `json:"count"`
 }
 
 func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +109,12 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	dto := gameAnalyticsDTO{gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}}
+	dto := gameAnalyticsDTO{gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{}}
 	for _, d := range ga.Daily {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
+	}
+	for _, p := range ga.RoleParticipations {
+		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{Role: p.Role, Event: p.Event, Count: p.Count})
 	}
 	writeJSON(w, http.StatusOK, dto)
 }

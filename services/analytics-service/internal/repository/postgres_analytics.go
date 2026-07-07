@@ -88,6 +88,37 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 	return false, tx.Commit(ctx)
 }
 
+// ApplyParticipation agrega um evento de participação do host_world_dropin
+// (spec 004) por (game_id, role, event), idempotente por (session_id, player_id,
+// event) na mesma tx (mesma garantia do ApplyMatch). Reprocessar é no-op.
+func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.ParticipationEvent) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply participation: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO processed_participations (session_id, player_id, event, game_id)
+		 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+		evt.SessionID, evt.PlayerID, evt.Event, evt.GameID)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply participation: mark: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processado: no-op idempotente
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_participation_rollup (game_id, role, event, count)
+		VALUES ($1, $2, $3, 1)
+		ON CONFLICT (game_id, role, event) DO UPDATE SET count = game_participation_rollup.count + 1`,
+		evt.GameID, evt.Role, evt.Event); err != nil {
+		return false, fmt.Errorf("analytics repository: apply participation: rollup: %w", err)
+	}
+	return false, tx.Commit(ctx)
+}
+
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -176,7 +207,27 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		}
 		out.Daily = append(out.Daily, d)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return domain.GameAnalytics{}, err
+	}
+
+	// participações por papel/evento (host_world_dropin, spec 004). Aditivo:
+	// queue_arena não tem linhas aqui -> lista vazia.
+	prows, err := r.pool.Query(ctx, `
+		SELECT role, event, count FROM game_participation_rollup
+		WHERE game_id = $1 ORDER BY role, event`, gameID)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: participations: %w", err)
+	}
+	defer prows.Close()
+	for prows.Next() {
+		var p domain.ParticipationStat
+		if err := prows.Scan(&p.Role, &p.Event, &p.Count); err != nil {
+			return domain.GameAnalytics{}, fmt.Errorf("analytics repository: scan participation: %w", err)
+		}
+		out.RoleParticipations = append(out.RoleParticipations, p)
+	}
+	return out, prows.Err()
 }
 
 func avg(sum, n int64) float64 {

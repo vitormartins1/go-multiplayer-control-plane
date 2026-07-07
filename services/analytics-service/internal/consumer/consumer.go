@@ -73,26 +73,78 @@ func (c *Consumer) handleBatch(ctx context.Context, msgs []types.Message) {
 	var inflight []pending
 	for i := range msgs {
 		m := msgs[i]
-		match, err := parse([]byte(aws.ToString(m.Body)))
-		if err != nil {
-			// mensagem malformada: não deleta (vai à DLQ), não trava as outras.
-			c.log.Error("envelope inválido (vai à DLQ)", slog.String("err", err.Error()))
-			continue
+		body := []byte(aws.ToString(m.Body))
+		kind, matchID := peekKind(body)
+		switch {
+		case kind == "participation_event":
+			evt, err := parseParticipation(body)
+			if err != nil {
+				c.log.Error("participation inválido (vai à DLQ)", slog.String("err", err.Error()))
+				continue
+			}
+			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitParticipation(ctx, evt)})
+		case kind == "win_loss_draw" || matchID != "":
+			match, err := parse(body)
+			if err != nil {
+				// malformado: não deleta (vai à DLQ), não trava as outras.
+				c.log.Error("envelope inválido (vai à DLQ)", slog.String("err", err.Error()))
+				continue
+			}
+			inflight = append(inflight, pending{msg: m, done: c.pool.Submit(ctx, match)})
+		default:
+			// kind desconhecido/ausente sem matchId: não é nosso -> descarta (deleta).
+			c.log.Debug("envelope ignorado (kind não tratado)", slog.String("kind", kind))
+			c.deleteMessage(ctx, m)
 		}
-		inflight = append(inflight, pending{msg: m, done: c.pool.Submit(ctx, match)})
 	}
 	for _, p := range inflight {
 		if err := <-p.done; err != nil {
 			c.log.Error("agregação falhou (mensagem volta à fila)", slog.String("err", err.Error()))
 			continue
 		}
-		if _, err := c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-			QueueUrl:      aws.String(c.queueURL),
-			ReceiptHandle: p.msg.ReceiptHandle,
-		}); err != nil {
-			c.log.Error("delete falhou (idempotência cobre a reentrega)", slog.String("err", err.Error()))
-		}
+		c.deleteMessage(ctx, p.msg)
 	}
+}
+
+// deleteMessage remove a mensagem da fila (sucesso ou descarte). Falha de delete
+// não é fatal: a idempotência (processed_matches/participations) cobre a reentrega.
+func (c *Consumer) deleteMessage(ctx context.Context, m types.Message) {
+	if _, err := c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(c.queueURL),
+		ReceiptHandle: m.ReceiptHandle,
+	}); err != nil {
+		c.log.Error("delete falhou (idempotência cobre a reentrega)", slog.String("err", err.Error()))
+	}
+}
+
+// peekKind espia o kind e o matchId do envelope sem desserializar o corpo todo,
+// para o dispatch (ADR-0023, spec 004): win_loss_draw / participation_event.
+func peekKind(body []byte) (kind, matchID string) {
+	var head struct {
+		Kind    string `json:"kind"`
+		MatchID string `json:"matchId"`
+	}
+	_ = json.Unmarshal(body, &head) // corpo malformado cai no parse específico (DLQ)
+	return head.Kind, head.MatchID
+}
+
+// parseParticipation desserializa o envelope participation_event (host_world_dropin).
+func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
+	var env struct {
+		GameID    string `json:"gameId"`
+		SessionID string `json:"sessionId"`
+		PlayerID  string `json:"playerId"`
+		Role      string `json:"role"`
+		Event     string `json:"event"`
+		Outcome   string `json:"outcome"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return domain.ParticipationEvent{}, fmt.Errorf("unmarshal participation: %w", err)
+	}
+	return domain.ParticipationEvent{
+		GameID: env.GameID, SessionID: env.SessionID, PlayerID: env.PlayerID,
+		Role: env.Role, Event: env.Event, Outcome: env.Outcome,
+	}, nil
 }
 
 // parse desserializa o envelope do fan-out (struct próprio, desacoplado).
