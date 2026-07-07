@@ -187,6 +187,29 @@ func withSurvivedMs(stats map[string]int64, survivedMs int64) map[string]int64 {
 	return out
 }
 
+// ApplyCollectiveResult traduz o desfecho COLETIVO da missão (coop_mission, C3)
+// em event types de gameplay (played p/ todos; success/failed conforme o desfecho
+// da SESSÃO, via CollectiveEventTypes) e stats por jogador, delegando ao repo a
+// aplicação idempotente por matchID. Consumido pelo fan-out durável
+// (kind=collective, session/016). dup=true quando a partida já havia sido
+// processada (no-op). Espelha ApplyPlacementResult.
+func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, outcome string, players []domain.CollectivePlayer) (bool, error) {
+	events := domain.CollectiveEventTypes(outcome) // igual para todos (desfecho coletivo)
+	inputs := make([]domain.PlayerMatchInput, 0, len(players))
+	for _, p := range players {
+		inputs = append(inputs, domain.PlayerMatchInput{
+			PlayerID:   p.PlayerID,
+			EventTypes: events,
+			Stats:      p.Stats,
+		})
+	}
+	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, inputs, s.now().UTC())
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply collective result: %w", err)
+	}
+	return dup, nil
+}
+
 // ApplyParticipationEvent traduz um evento de participação do host_world_dropin
 // (spec 013/009) nos event types de gameplay por papel e delega ao repo a
 // aplicação idempotente por (sessionID, playerID, event). Consumido pelo fan-out

@@ -164,6 +164,45 @@ func TestApplyPlacementResult_SurvivedMsExplicito_NaoSobrescreve(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+// ApplyCollectiveResult (coop_mission, C3): o desfecho coletivo vira played +
+// success/failed IGUAL para todos; os stats seguem por jogador.
+func TestApplyCollectiveResult_DesfechoColetivoParaTodos(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+
+	players := []domain.CollectivePlayer{
+		{PlayerID: "p1", Stats: map[string]int64{"kills": 12}},
+		{PlayerID: "p2", Stats: map[string]int64{"revives": 3}},
+	}
+	want := []domain.PlayerMatchInput{
+		{PlayerID: "p1", EventTypes: []string{"coop_mission_played", "coop_mission_success"}, Stats: map[string]int64{"kills": 12}},
+		{PlayerID: "p2", EventTypes: []string{"coop_mission_played", "coop_mission_success"}, Stats: map[string]int64{"revives": 3}},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-coop", want, mock.Anything).Return(false, nil)
+
+	dup, err := svc.ApplyCollectiveResult(context.Background(), gameID, "match-coop", domain.MissionSuccess, players)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	repo.AssertExpectations(t)
+}
+
+// Falha da missão: todos recebem played + failed.
+func TestApplyCollectiveResult_Falha(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+
+	players := []domain.CollectivePlayer{{PlayerID: "p1"}}
+	want := []domain.PlayerMatchInput{
+		{PlayerID: "p1", EventTypes: []string{"coop_mission_played", "coop_mission_failed"}, Stats: nil},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(true, nil)
+
+	dup, err := svc.ApplyCollectiveResult(context.Background(), gameID, "m", domain.MissionFailure, players)
+	require.NoError(t, err)
+	assert.True(t, dup, "reprocessar mesmo matchId é no-op")
+	repo.AssertExpectations(t)
+}
+
 func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 	cases := map[string]struct {
 		role, event, outcome string
