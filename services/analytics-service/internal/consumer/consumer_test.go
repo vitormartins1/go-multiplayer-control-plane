@@ -38,8 +38,9 @@ func TestPeekKind_Dispatch(t *testing.T) {
 		wantKind  string
 		wantMatch string
 	}{
-		"participation":     {`{"kind":"participation_event","sessionId":"w1"}`, "participation_event", ""},
-		"win_loss_draw":     {`{"kind":"win_loss_draw","matchId":"m1"}`, "win_loss_draw", "m1"},
+		"participation":      {`{"kind":"participation_event","sessionId":"w1"}`, "participation_event", ""},
+		"placement":          {`{"kind":"placement","matchId":"m1"}`, "placement", "m1"},
+		"win_loss_draw":      {`{"kind":"win_loss_draw","matchId":"m1"}`, "win_loss_draw", "m1"},
 		"v1 legado sem kind": {`{"matchId":"m1","results":[]}`, "", "m1"},
 		"desconhecido":       {`{"kind":"summon_posted"}`, "summon_posted", ""},
 	}
@@ -59,6 +60,21 @@ func TestParseParticipation_LeCampos(t *testing.T) {
 	assert.Equal(t, domain.ParticipationEvent{
 		GameID: "g1", SessionID: "w1", PlayerID: "inv-1", Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS",
 	}, evt)
+}
+
+// O envelope placement (battle_royale) é lido em colocação + sobrevivência.
+func TestParsePlacement_LeEntradas(t *testing.T) {
+	body := []byte(`{"kind":"placement","matchId":"m1","gameId":"g1","entries":[
+		{"playerId":"p1","teamId":"squad-1","placement":1,"survivedMs":900000,"stats":{"kills":4}},
+		{"playerId":"p2","placement":42,"survivedMs":100000}
+	]}`)
+	pr, err := parsePlacement(body)
+	require.NoError(t, err)
+	assert.Equal(t, "m1", pr.MatchID)
+	assert.Equal(t, "g1", pr.GameID)
+	require.Len(t, pr.Entries, 2)
+	assert.Equal(t, domain.PlacementEntry{Placement: 1, SurvivedMs: 900000}, pr.Entries[0])
+	assert.Equal(t, domain.PlacementEntry{Placement: 42, SurvivedMs: 100000}, pr.Entries[1])
 }
 
 // Envelope v1 legado (sem outcome): deriva de won (win/loss), sem empate.

@@ -16,11 +16,13 @@ import (
 var _ domain.Ingestor = (*Pool)(nil)
 
 // job é uma unidade a agregar + o channel de retorno do resultado. É polimórfica
-// (spec 004): participation não-nil => caminho de participação (host_world_dropin);
-// senão => o match (queue_arena).
+// (specs 004/005): placement não-nil => caminho de colocação (battle_royale);
+// senão participation não-nil => participação (host_world_dropin); senão => o
+// match (queue_arena).
 type job struct {
 	match         domain.MatchResult
 	participation *domain.ParticipationEvent
+	placement     *domain.PlacementResult
 	done          chan error
 }
 
@@ -82,9 +84,12 @@ func (p *Pool) process(ctx context.Context, j job) {
 		dup bool
 		err error
 	)
-	if j.participation != nil {
+	switch {
+	case j.placement != nil:
+		dup, err = p.repo.ApplyPlacement(ctx, *j.placement)
+	case j.participation != nil:
 		dup, err = p.repo.ApplyParticipation(ctx, *j.participation)
-	} else {
+	default:
 		dup, err = p.repo.ApplyMatch(ctx, j.match)
 	}
 	p.observe(dup, err)
@@ -118,6 +123,21 @@ func (p *Pool) SubmitParticipation(ctx context.Context, evt domain.Participation
 	case <-ctx.Done():
 		done <- ctx.Err()
 	case p.jobs <- job{participation: &evt, done: done}:
+	}
+	return done
+}
+
+// SubmitPlacement entrega um resultado por colocação ao pool (spec 005), pelo
+// mesmo mecanismo de fan-in (channel de retorno) do Submit.
+func (p *Pool) SubmitPlacement(ctx context.Context, pr domain.PlacementResult) <-chan error {
+	done := make(chan error, 1)
+	if p.metrics != nil {
+		p.metrics.received.Inc()
+	}
+	select {
+	case <-ctx.Done():
+		done <- ctx.Err()
+	case p.jobs <- job{placement: &pr, done: done}:
 	}
 	return done
 }

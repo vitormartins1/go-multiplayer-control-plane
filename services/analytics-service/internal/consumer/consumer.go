@@ -83,6 +83,14 @@ func (c *Consumer) handleBatch(ctx context.Context, msgs []types.Message) {
 				continue
 			}
 			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitParticipation(ctx, evt)})
+		case kind == "placement":
+			// battle_royale (session/015): tem matchId, então precede o ramo abaixo.
+			pr, err := parsePlacement(body)
+			if err != nil {
+				c.log.Error("placement inválido (vai à DLQ)", slog.String("err", err.Error()))
+				continue
+			}
+			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitPlacement(ctx, pr)})
 		case kind == "win_loss_draw" || matchID != "":
 			match, err := parse(body)
 			if err != nil {
@@ -145,6 +153,27 @@ func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
 		GameID: env.GameID, SessionID: env.SessionID, PlayerID: env.PlayerID,
 		Role: env.Role, Event: env.Event, Outcome: env.Outcome,
 	}, nil
+}
+
+// parsePlacement desserializa o envelope placement (battle_royale, session/015).
+// O analytics só agrega colocação + sobrevivência (ignora playerId/teamId/stats).
+func parsePlacement(body []byte) (domain.PlacementResult, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Entries []struct {
+			Placement  int   `json:"placement"`
+			SurvivedMs int64 `json:"survivedMs"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return domain.PlacementResult{}, fmt.Errorf("unmarshal placement: %w", err)
+	}
+	pr := domain.PlacementResult{MatchID: env.MatchID, GameID: env.GameID}
+	for _, e := range env.Entries {
+		pr.Entries = append(pr.Entries, domain.PlacementEntry{Placement: e.Placement, SurvivedMs: e.SurvivedMs})
+	}
+	return pr, nil
 }
 
 // parse desserializa o envelope do fan-out (struct próprio, desacoplado).

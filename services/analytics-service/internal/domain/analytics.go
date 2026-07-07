@@ -28,6 +28,36 @@ type MatchResult struct {
 	Results []PlayerResult
 }
 
+// BattleRoyaleTopNThreshold é o limiar do "top N" (política do sink, consistente
+// com os demais sinks da BR3). No histograma do analytics os baldes são
+// mutuamente exclusivos: o 1º lugar vai só para winners; top_n é 2..threshold.
+const BattleRoyaleTopNThreshold = 10
+
+// PlacementResult é o resultado por colocação (battle_royale, BR3) ingerido do
+// fan-out (kind=placement, session/015). Unidade do caminho de placement do pool.
+type PlacementResult struct {
+	MatchID string
+	GameID  string
+	Entries []PlacementEntry
+}
+
+// PlacementEntry é a colocação de um participante. O analytics só agrega
+// distribuição e sobrevivência (não guarda playerId).
+type PlacementEntry struct {
+	Placement  int
+	SurvivedMs int64
+}
+
+// PlacementDistribution é o histograma de colocação de um jogo + sobrevivência
+// média (read model, BR3). Aditivo ao GameAnalytics; nil fora do battle_royale.
+type PlacementDistribution struct {
+	Winners       int64 // colocação == 1
+	TopN          int64 // 2..threshold
+	Rest          int64 // > threshold
+	Entries       int64 // participantes (winners+topN+rest)
+	AvgSurvivedMs float64
+}
+
 // GameStat é o rollup de um jogo (avgScore derivado no read).
 type GameStat struct {
 	GameID         string
@@ -70,6 +100,9 @@ type GameAnalytics struct {
 	// (host_world_dropin). Vazia no queue_arena. Aditivo (spec 004). Nome distinto
 	// do GameStat.Participations (contagem do queue_arena).
 	RoleParticipations []ParticipationStat
+	// Placement é a distribuição de colocação do battle_royale (BR3, spec 005).
+	// nil fora do battle_royale. Aditivo.
+	Placement *PlacementDistribution
 }
 
 // ParticipationEvent é um evento de participação ingerido do fan-out
@@ -100,6 +133,10 @@ type MatchRepository interface {
 	// (gameID, role, event), idempotente por (sessionID, playerID, event) numa tx.
 	// dup=true se o evento já havia sido processado (no-op). Spec 004.
 	ApplyParticipation(ctx context.Context, evt ParticipationEvent) (dup bool, err error)
+	// ApplyPlacement agrega a distribuição de colocação de uma partida
+	// (battle_royale, BR3) numa tx, idempotente por matchID (processed_matches).
+	// dup=true se a partida já havia sido processada (no-op). Spec 005.
+	ApplyPlacement(ctx context.Context, pr PlacementResult) (dup bool, err error)
 	// Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 	Overview(ctx context.Context) (Overview, error)
 	// GameAnalytics devolve o resumo do jogo + a série diária dos últimos `days`.
@@ -114,4 +151,7 @@ type Ingestor interface {
 	// SubmitParticipation entrega um evento de participação ao pool (spec 004),
 	// pelo mesmo mecanismo de fan-in (channel de retorno) do Submit.
 	SubmitParticipation(ctx context.Context, evt ParticipationEvent) <-chan error
+	// SubmitPlacement entrega um resultado por colocação ao pool (spec 005), pelo
+	// mesmo mecanismo de fan-in do Submit.
+	SubmitPlacement(ctx context.Context, pr PlacementResult) <-chan error
 }
