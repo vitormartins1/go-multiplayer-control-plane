@@ -61,14 +61,11 @@ O `go-game-host-world-dropin-dataplane` (Unity) é **⬜ planejado** ([REPO-TOPO
 
 **Objetivo:** o **segundo modo** do matchmaking, o mais simples primeiro — **busca + injeção automática**. O invasor pede um alvo; o sistema encontra um mundo elegível e o **injeta** (o host não escolhe). Prova o modelo "descobrir sessão existente e entrar", não "formar partida nova".
 
-**Specs:** `matchmaking/006-world-discovery-invade` (+ reuso do `JoinWorld` de H0).
+**Specs (duas, acopladas — o lado session apareceu ao aterrissar no código):**
+- **`session/012-invadable-world-directory`** (dependência): o `OpenWorld` da H0 passa a carregar os **atributos de matchmaking do host** (soul level, weapon tier) e o session expõe `ListInvadableWorlds(gameID)` — mundos abertos com **slot de invasor livre** + atributos. Fonte de dados **pura** (sem política de elegibilidade). Modelo **pull** (matchmaking consulta o session). Senha adiada (follow-up).
+- **`matchmaking/006-world-discovery-invade`** (estrela): novo RPC unary `Invade(gameID, soulLevel, weaponTier)` → lê o perfil (`InvasionEnabled`/`LevelRangeEnabled`/`WeaponTierEnabled`), lista mundos via `session/012`, filtra por **faixa assimétrica** (matemática = função de domínio pura, testável), escolhe um e injeta via `JoinWorld` (H0) com `role=invader`. Retry no próximo mundo se encher na corrida (`ErrRoleFull`); `ErrNoEligibleWorld` se nada casar; `ErrInvasionNotSupported` se o arquétipo/flag não permite. Queue-form (`FindMatch`) intacto.
 
-**Escopo (matchmaking-service):**
-- Nova entrada `FindInvadableWorld(ctx, gameID, invaderProfile{soulLevel, weaponTier, password}) → MatchResult`: lê o perfil (`InvasionEnabled`, `LevelRangeEnabled`, `WeaponTierEnabled`, `PasswordEnabled`); busca uma sessão `host_world` aberta com **slot de invasor livre** e faixa compatível (soul level assimétrico da ficha §4; weapon tier; senha ignora faixas); injeta via `JoinWorld` e devolve o connect token com `role=invader`. `ErrNoEligibleWorld` se nada casar.
-- **Índice de mundos abertos:** o matchmaking precisa descobrir sessões elegíveis. → Port de saída `WorldDirectory` (LIST de mundos abertos por jogo, com faixa/slots livres) implementada pelo session-service. Decisão no plan: push (session anuncia) vs pull (matchmaking consulta o session). **Recomendação:** pull (gRPC ao session) para o MVP; índice dedicado depois se virar gargalo.
-- Faixas de compatibilidade: modelar `soulLevel`/`weaponTier`/`password` como um `TicketCriteria` do arquétipo (o `queue_arena` não usa). A matemática da faixa (soul level ± assimétrico) mora no service, testável isolada.
-
-**Depende de:** H0 (`JoinWorld` + mundos abertos consultáveis). **Tamanho:** **L**.
+**Depende de:** H0 (`JoinWorld`). **Tamanho:** **L** (dois serviços). **Nota:** a senha (play-with-friends, que ignora a faixa) ficou como follow-up nas duas specs — H1a foca a invasão por faixa.
 
 ---
 
@@ -92,7 +89,7 @@ O `go-game-host-world-dropin-dataplane` (Unity) é **⬜ planejado** ([REPO-TOPO
 
 **Objetivo:** o server do mundo reporta **eventos por participante** (não um placar terminal), o fan-out os distribui, e os sinks colhem por papel. Fecha o "gap central" do baseline para este arquétipo.
 
-**Specs:** `session/012-participation-events` (+ consumers em achievements/analytics; doc `host_world_dropin-dataplane-contract.md`).
+**Specs:** `session/013-participation-events` (+ consumers em achievements/analytics; doc `host_world_dropin-dataplane-contract.md`).
 
 **Escopo:**
 - **session:** `ReportParticipationEvent(ctx, sessionID, ParticipationEvent{playerID, role, event, outcome})` — `event ∈ {JOINED, BOSS_DEFEATED, HOST_KILLED, DIED, LEFT}`, `outcome ∈ {SUCCESS, FAIL, NEUTRAL}` interpretado pelo papel. Alguns eventos mexem no slot (`LEFT`/`DIED` do phantom liberam; `HOST_KILLED` encerra o mundo). Publica no `match-results` com envelope `kind: participation_event` (decisão #3).
@@ -124,10 +121,10 @@ O `go-game-host-world-dropin-dataplane` (Unity) é **⬜ planejado** ([REPO-TOPO
 
 | Fatia | Specs | Tamanho | Depende |
 |---|---|---|---|
-| H0 — sessão host-cêntrica | session/011 | XL | perfil (✅) |
-| H1a — injeção (invasão) | matchmaking/006 | L | H0 |
+| H0 — sessão host-cêntrica ✅ **main** | session/011 | XL | perfil (✅) |
+| H1a — injeção (invasão) | session/012 + matchmaking/006 | L | H0 |
 | H1b — sinais (co-op) | matchmaking/007 | L | H0, H1a |
-| H2 — evento/papel + contrato | session/012 (+consumers) | L–XL | H0 |
+| H2 — evento/papel + contrato | session/013 (+consumers) | L–XL | H0 |
 | H3 — console | admin-bff + admin-ui | M | H0, H2 |
 
 Concluídas H0–H3, o `host_world_dropin` está **completo no control plane** (declarar → abrir mundo → descobrir/injetar por papel → reportar eventos → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `go-game-host-world-dropin-dataplane` (Unity) encarnando o mundo de verdade, consumindo o contrato de H2.
