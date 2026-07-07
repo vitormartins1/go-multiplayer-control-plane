@@ -30,8 +30,8 @@ func (m *mockRepo) FindByID(ctx context.Context, id string) (*domain.Game, error
 func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
 	return m.Called(ctx, id, name).Error(0)
 }
-func (m *mockRepo) UpsertMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) error {
-	return m.Called(ctx, gameID, p).Error(0)
+func (m *mockRepo) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
+	return m.Called(ctx, gameID, modes).Error(0)
 }
 
 func TestRename_Valido_AtualizaNomeMantemChave(t *testing.T) {

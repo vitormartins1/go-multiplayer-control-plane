@@ -26,9 +26,23 @@ type Game struct {
 	ImageSource         string // "generated" no MVP
 	GeneratedImageSeed  string // seed determinística (default = slug)
 	GeneratedImageStyle string // estilo do gerador (default = "shapes")
-	// MultiplayerProfile é o perfil de multiplayer do jogo (ADR-0023), nil se
-	// ainda não configurado. Carregado por FindByID; List não o carrega.
+	// MultiplayerProfile é o perfil do modo "default" (ADR-0023; compat interna
+	// pós-ADR-0024), nil se ainda não configurado. Carregado por FindByID; List
+	// não o carrega.
 	MultiplayerProfile *MultiplayerProfile
+	// MultiplayerModes é a coleção de modos do jogo (ADR-0024): "default"
+	// primeiro, demais por ModeID asc. Carregada por FindByID; List não a carrega.
+	MultiplayerModes []MultiplayerMode
+}
+
+// MultiplayerMode é um perfil de multiplayer NOMEADO (ADR-0024): um jogo tem
+// 1—N modos, cada um com um id estável (vai para ticket/token/envelope no M1)
+// e o corpo do ADR-0023 intacto. Renomear a exibição é DisplayName; o ModeID é
+// imutável na prática.
+type MultiplayerMode struct {
+	ModeID      string // slug estável: ^[a-z][a-z0-9-]{0,31}$; "default" = modo do alias legado
+	DisplayName string // opcional; exibição no console
+	Profile     MultiplayerProfile
 }
 
 // Valores de vocabulário do perfil suportados (ADR-0023). O conjunto de
@@ -39,6 +53,10 @@ const (
 	ArchetypeBattleRoyale    = "battle_royale"
 	ArchetypeCoopMission     = "coop_mission"
 	TopologyDedicated        = "dedicated"
+
+	// DefaultModeID é o modo servido pelo alias legado /multiplayer-profile e o
+	// fallback dos consumidores até o M1 (ADR-0024). Não pode ser removido.
+	DefaultModeID = "default"
 
 	// Modos de respawn do battle_royale (ADR-0023, ficha 03). Declarados no
 	// perfil e lidos pelo data plane, que decide quando a colocação é fixada;
@@ -172,6 +190,16 @@ type GameService interface {
 	// GetMultiplayerProfile devolve o perfil do jogo; ErrGameNotFound se o jogo
 	// não existir; ErrProfileNotFound se existir sem perfil configurado.
 	GetMultiplayerProfile(ctx context.Context, gameID string) (*MultiplayerProfile, error)
+
+	// Modos nomeados (ADR-0024, spec 009). SetMode valida e faz upsert do modo
+	// (ErrInvalidModeID/ErrTooManyModes/erros de perfil das specs 006-008);
+	// DeleteMode protege o "default" (ErrDefaultModeProtected); GetMode/DeleteMode
+	// devolvem ErrModeNotFound se o modo não existir. Todos: ErrGameNotFound se o
+	// jogo não existir.
+	SetMode(ctx context.Context, gameID, modeID, displayName string, p MultiplayerProfile) (*MultiplayerMode, error)
+	GetMode(ctx context.Context, gameID, modeID string) (*MultiplayerMode, error)
+	ListModes(ctx context.Context, gameID string) ([]MultiplayerMode, error)
+	DeleteMode(ctx context.Context, gameID, modeID string) error
 }
 
 // GameRepository é a Port de saída de persistência (implementada em repository).
@@ -184,8 +212,9 @@ type GameRepository interface {
 	FindByID(ctx context.Context, id string) (*Game, error)
 	// UpdateName atualiza só o nome do jogo; ErrGameNotFound se não existir.
 	UpdateName(ctx context.Context, id, name string) error
-	// UpsertMultiplayerProfile persiste (cria ou substitui) o perfil de
-	// multiplayer do jogo; ErrGameNotFound se o jogo não existir. A validação do
-	// perfil é responsabilidade do service (o repositório só persiste).
-	UpsertMultiplayerProfile(ctx context.Context, gameID string, p MultiplayerProfile) error
+	// SetModes substitui a coleção de modos do jogo (ADR-0024); ErrGameNotFound
+	// se o jogo não existir. A validação é responsabilidade do service (o
+	// repositório só persiste). O service faz read-modify-write via FindByID —
+	// last-write-wins aceito (único escritor é o console; ver plan da spec 009).
+	SetModes(ctx context.Context, gameID string, modes []MultiplayerMode) error
 }

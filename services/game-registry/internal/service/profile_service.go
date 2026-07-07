@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 )
@@ -42,47 +43,22 @@ var (
 	}
 )
 
+// Modos nomeados (ADR-0024, spec 009).
+var modeIDRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+
+const (
+	maxModesPerGame   = 16
+	maxDisplayNameLen = 60
+)
+
+// SetMultiplayerProfile é o alias legado (specs 006–008): opera o modo
+// "default", preservando o displayName existente (o corpo legado não o tem).
 func (s *service) SetMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) (*domain.MultiplayerProfile, error) {
-	if !supportedArchetypes[p.Archetype] {
-		return nil, domain.ErrUnsupportedArchetype
+	m, err := s.setMode(ctx, gameID, domain.DefaultModeID, nil, p)
+	if err != nil {
+		return nil, err
 	}
-	if !supportedTopologies[p.Topology] {
-		return nil, domain.ErrUnsupportedTopology
-	}
-	switch p.Archetype {
-	case domain.ArchetypeQueueArena:
-		if p.QueueArena == nil {
-			return nil, domain.ErrInvalidProfileParams
-		}
-		if err := validateQueueArena(*p.QueueArena); err != nil {
-			return nil, err
-		}
-	case domain.ArchetypeHostWorldDropIn:
-		if p.HostWorldDropIn == nil {
-			return nil, domain.ErrInvalidProfileParams
-		}
-		if err := validateHostWorldDropIn(*p.HostWorldDropIn); err != nil {
-			return nil, err
-		}
-	case domain.ArchetypeBattleRoyale:
-		if p.BattleRoyale == nil {
-			return nil, domain.ErrInvalidProfileParams
-		}
-		if err := validateBattleRoyale(*p.BattleRoyale); err != nil {
-			return nil, err
-		}
-	case domain.ArchetypeCoopMission:
-		if p.CoopMission == nil {
-			return nil, domain.ErrInvalidProfileParams
-		}
-		if err := validateCoopMission(*p.CoopMission); err != nil {
-			return nil, err
-		}
-	}
-	if err := s.repo.UpsertMultiplayerProfile(ctx, gameID, p); err != nil {
-		return nil, fmt.Errorf("game-registry service: set profile: %w", err)
-	}
-	return &p, nil
+	return &m.Profile, nil
 }
 
 func (s *service) GetMultiplayerProfile(ctx context.Context, gameID string) (*domain.MultiplayerProfile, error) {
@@ -94,6 +70,146 @@ func (s *service) GetMultiplayerProfile(ctx context.Context, gameID string) (*do
 		return nil, domain.ErrProfileNotFound
 	}
 	return g.MultiplayerProfile, nil
+}
+
+func (s *service) SetMode(ctx context.Context, gameID, modeID, displayName string, p domain.MultiplayerProfile) (*domain.MultiplayerMode, error) {
+	return s.setMode(ctx, gameID, modeID, &displayName, p)
+}
+
+// setMode valida e faz upsert de um modo. displayName == nil preserva o do modo
+// existente (caminho do alias legado). Read-modify-write via FindByID +
+// SetModes — last-write-wins aceito (plan da spec 009).
+func (s *service) setMode(ctx context.Context, gameID, modeID string, displayName *string, p domain.MultiplayerProfile) (*domain.MultiplayerMode, error) {
+	if !modeIDRE.MatchString(modeID) {
+		return nil, domain.ErrInvalidModeID
+	}
+	if displayName != nil {
+		trimmed := strings.TrimSpace(*displayName)
+		if len(trimmed) > maxDisplayNameLen {
+			return nil, domain.ErrInvalidProfileParams
+		}
+		displayName = &trimmed
+	}
+	if err := validateProfile(p); err != nil {
+		return nil, err
+	}
+
+	g, err := s.repo.FindByID(ctx, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: set mode: %w", err)
+	}
+	modes := g.MultiplayerModes
+	idx := -1
+	for i := range modes {
+		if modes[i].ModeID == modeID {
+			idx = i
+			break
+		}
+	}
+
+	name := ""
+	switch {
+	case displayName != nil:
+		name = *displayName
+	case idx >= 0:
+		name = modes[idx].DisplayName
+	}
+	mode := domain.MultiplayerMode{ModeID: modeID, DisplayName: name, Profile: p}
+	if idx >= 0 {
+		modes[idx] = mode
+	} else {
+		if len(modes) >= maxModesPerGame {
+			return nil, domain.ErrTooManyModes
+		}
+		modes = append(modes, mode)
+	}
+
+	if err := s.repo.SetModes(ctx, gameID, modes); err != nil {
+		return nil, fmt.Errorf("game-registry service: set mode: %w", err)
+	}
+	return &mode, nil
+}
+
+func (s *service) GetMode(ctx context.Context, gameID, modeID string) (*domain.MultiplayerMode, error) {
+	g, err := s.repo.FindByID(ctx, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: get mode: %w", err)
+	}
+	for i := range g.MultiplayerModes {
+		if g.MultiplayerModes[i].ModeID == modeID {
+			return &g.MultiplayerModes[i], nil
+		}
+	}
+	return nil, domain.ErrModeNotFound
+}
+
+func (s *service) ListModes(ctx context.Context, gameID string) ([]domain.MultiplayerMode, error) {
+	g, err := s.repo.FindByID(ctx, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: list modes: %w", err)
+	}
+	// Já ordenada pelo decode (default primeiro, demais por modeId asc).
+	return g.MultiplayerModes, nil
+}
+
+func (s *service) DeleteMode(ctx context.Context, gameID, modeID string) error {
+	g, err := s.repo.FindByID(ctx, gameID)
+	if err != nil {
+		return fmt.Errorf("game-registry service: delete mode: %w", err)
+	}
+	if modeID == domain.DefaultModeID {
+		return domain.ErrDefaultModeProtected
+	}
+	modes := g.MultiplayerModes
+	idx := -1
+	for i := range modes {
+		if modes[i].ModeID == modeID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return domain.ErrModeNotFound
+	}
+	modes = append(modes[:idx], modes[idx+1:]...)
+	if err := s.repo.SetModes(ctx, gameID, modes); err != nil {
+		return fmt.Errorf("game-registry service: delete mode: %w", err)
+	}
+	return nil
+}
+
+// validateProfile valida arquétipo, topologia e os params do arquétipo (regras
+// das specs 006–008, reusadas intactas por modo — ADR-0024).
+func validateProfile(p domain.MultiplayerProfile) error {
+	if !supportedArchetypes[p.Archetype] {
+		return domain.ErrUnsupportedArchetype
+	}
+	if !supportedTopologies[p.Topology] {
+		return domain.ErrUnsupportedTopology
+	}
+	switch p.Archetype {
+	case domain.ArchetypeQueueArena:
+		if p.QueueArena == nil {
+			return domain.ErrInvalidProfileParams
+		}
+		return validateQueueArena(*p.QueueArena)
+	case domain.ArchetypeHostWorldDropIn:
+		if p.HostWorldDropIn == nil {
+			return domain.ErrInvalidProfileParams
+		}
+		return validateHostWorldDropIn(*p.HostWorldDropIn)
+	case domain.ArchetypeBattleRoyale:
+		if p.BattleRoyale == nil {
+			return domain.ErrInvalidProfileParams
+		}
+		return validateBattleRoyale(*p.BattleRoyale)
+	case domain.ArchetypeCoopMission:
+		if p.CoopMission == nil {
+			return domain.ErrInvalidProfileParams
+		}
+		return validateCoopMission(*p.CoopMission)
+	}
+	return nil
 }
 
 // validateQueueArena aplica as regras condicionais da spec 006. Rejeita também

@@ -34,7 +34,8 @@ func mut(base domain.QueueArenaParams, f func(*domain.QueueArenaParams)) domain.
 
 func TestSetMultiplayerProfile_Valido_UpsertEDevolve(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 
 	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validProfile())
 	require.NoError(t, err)
@@ -102,7 +103,8 @@ func TestSetMultiplayerProfile_VariantesValidas_Ok(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			qa := qa
 			repo := new(mockRepo)
-			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{Archetype: domain.ArchetypeQueueArena, Topology: domain.TopologyDedicated, QueueArena: &qa}
 			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
 			assert.NoError(t, err)
@@ -112,7 +114,7 @@ func TestSetMultiplayerProfile_VariantesValidas_Ok(t *testing.T) {
 
 func TestSetMultiplayerProfile_JogoInexistente_ErrGameNotFound(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("UpsertMultiplayerProfile", mock.Anything, "nao", mock.Anything).Return(domain.ErrGameNotFound)
+	repo.On("FindByID", mock.Anything, "nao").Return(nil, domain.ErrGameNotFound)
 	_, err := New(repo).SetMultiplayerProfile(context.Background(), "nao", validProfile())
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
@@ -170,7 +172,8 @@ func mutHWD(base domain.HostWorldDropInParams, f func(*domain.HostWorldDropInPar
 
 func TestSetMultiplayerProfile_HostWorldDropIn_Valido_UpsertEDevolve(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 
 	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validHWDProfile())
 	require.NoError(t, err)
@@ -222,7 +225,8 @@ func TestSetMultiplayerProfile_HostWorldDropIn_VariantesValidas_Ok(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			hw := hw
 			repo := new(mockRepo)
-			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{
 				Archetype:       domain.ArchetypeHostWorldDropIn,
 				Topology:        domain.TopologyDedicated,
@@ -261,7 +265,8 @@ func mutBR(base domain.BattleRoyaleParams, f func(*domain.BattleRoyaleParams)) d
 
 func TestSetMultiplayerProfile_BattleRoyale_Valido_UpsertEDevolve(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 
 	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validBRProfile())
 	require.NoError(t, err)
@@ -314,7 +319,8 @@ func TestSetMultiplayerProfile_BattleRoyale_VariantesValidas_Ok(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			br := br
 			repo := new(mockRepo)
-			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{
 				Archetype:    domain.ArchetypeBattleRoyale,
 				Topology:     domain.TopologyDedicated,
@@ -354,7 +360,8 @@ func mutCM(base domain.CoopMissionParams, f func(*domain.CoopMissionParams)) dom
 
 func TestSetMultiplayerProfile_CoopMission_Valido_UpsertEDevolve(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 
 	p, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validCMProfile())
 	require.NoError(t, err)
@@ -407,7 +414,8 @@ func TestSetMultiplayerProfile_CoopMission_VariantesValidas_Ok(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cm := cm
 			repo := new(mockRepo)
-			repo.On("UpsertMultiplayerProfile", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{
 				Archetype:   domain.ArchetypeCoopMission,
 				Topology:    domain.TopologyDedicated,

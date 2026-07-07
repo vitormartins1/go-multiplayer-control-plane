@@ -29,9 +29,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games", h.list)
 	mux.HandleFunc("GET /games/{id}", h.get)
 	mux.HandleFunc("PUT /games/{id}", h.rename)
-	// Perfil de multiplayer (ADR-0023, spec 006).
+	// Perfil de multiplayer — alias legado do modo "default" (ADR-0023/0024).
 	mux.HandleFunc("PUT /games/{id}/multiplayer-profile", h.setProfile)
 	mux.HandleFunc("GET /games/{id}/multiplayer-profile", h.getProfile)
+	// Modos nomeados (ADR-0024, spec 009).
+	mux.HandleFunc("GET /games/{id}/multiplayer-profiles", h.listModes)
+	mux.HandleFunc("PUT /games/{id}/multiplayer-profiles/{modeId}", h.setMode)
+	mux.HandleFunc("GET /games/{id}/multiplayer-profiles/{modeId}", h.getMode)
+	mux.HandleFunc("DELETE /games/{id}/multiplayer-profiles/{modeId}", h.deleteMode)
 	// Presença por jogo (ADR-0019): marca (login-into-game) e lista a base.
 	mux.HandleFunc("PUT /games/{gameId}/players/{playerID}", h.markPresence)
 	mux.HandleFunc("GET /games/{gameId}/players", h.listPlayers)
@@ -110,11 +115,40 @@ type coopMissionParamsDTO struct {
 	ScoringStats   []string `json:"scoringStats,omitempty"`
 }
 
-// gameWithProfileDTO estende o jogo com o perfil no GET /games/{id}. O perfil
-// serializa como objeto ou null (sem omitempty); a lista usa gameDTO puro.
+// gameWithProfileDTO estende o jogo com o perfil (modo default, compat) e o
+// resumo dos modos no GET /games/{id}. O perfil serializa como objeto ou null
+// (sem omitempty); a lista usa gameDTO puro.
 type gameWithProfileDTO struct {
 	gameDTO
-	MultiplayerProfile *profileDTO `json:"multiplayerProfile"`
+	MultiplayerProfile *profileDTO      `json:"multiplayerProfile"`
+	MultiplayerModes   []modeSummaryDTO `json:"multiplayerModes"`
+}
+
+// modeSummaryDTO é o resumo de um modo no GET /games/{id} (spec 009).
+type modeSummaryDTO struct {
+	ModeID      string `json:"modeId"`
+	DisplayName string `json:"displayName,omitempty"`
+	Archetype   string `json:"archetype"`
+}
+
+// modeDTO é um modo completo (coleção multiplayer-profiles). O embed do
+// profileDTO achata archetype/topology/params no mesmo objeto JSON.
+type modeDTO struct {
+	ModeID      string `json:"modeId"`
+	DisplayName string `json:"displayName,omitempty"`
+	profileDTO
+}
+
+// setModeRequest é o corpo do PUT do modo (modeId vem do path).
+type setModeRequest struct {
+	DisplayName string          `json:"displayName"`
+	Archetype   string          `json:"archetype"`
+	Topology    string          `json:"topology"`
+	Params      json.RawMessage `json:"params"`
+}
+
+func toModeDTO(m *domain.MultiplayerMode) modeDTO {
+	return modeDTO{ModeID: m.ModeID, DisplayName: m.DisplayName, profileDTO: *profileToDTO(&m.Profile)}
 }
 
 func profileToDomain(d profileDTO) domain.MultiplayerProfile {
@@ -258,10 +292,65 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
+	summaries := make([]modeSummaryDTO, 0, len(g.MultiplayerModes))
+	for i := range g.MultiplayerModes {
+		m := &g.MultiplayerModes[i]
+		summaries = append(summaries, modeSummaryDTO{
+			ModeID: m.ModeID, DisplayName: m.DisplayName, Archetype: m.Profile.Archetype,
+		})
+	}
 	writeJSON(w, http.StatusOK, gameWithProfileDTO{
 		gameDTO:            toDTO(g),
 		MultiplayerProfile: profileToDTO(g.MultiplayerProfile),
+		MultiplayerModes:   summaries,
 	})
+}
+
+// --- modos nomeados (ADR-0024, spec 009) ---
+
+func (h *Handler) listModes(w http.ResponseWriter, r *http.Request) {
+	modes, err := h.games.ListModes(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	out := make([]modeDTO, 0, len(modes))
+	for i := range modes {
+		out = append(out, toModeDTO(&modes[i]))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) setMode(w http.ResponseWriter, r *http.Request) {
+	var req setModeRequest
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	p := profileToDomain(profileDTO{Archetype: req.Archetype, Topology: req.Topology, Params: req.Params})
+	m, err := h.games.SetMode(r.Context(), r.PathValue("id"), r.PathValue("modeId"), req.DisplayName, p)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toModeDTO(m))
+}
+
+func (h *Handler) getMode(w http.ResponseWriter, r *http.Request) {
+	m, err := h.games.GetMode(r.Context(), r.PathValue("id"), r.PathValue("modeId"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toModeDTO(m))
+}
+
+func (h *Handler) deleteMode(w http.ResponseWriter, r *http.Request) {
+	if err := h.games.DeleteMode(r.Context(), r.PathValue("id"), r.PathValue("modeId")); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // setProfile faz upsert do perfil de multiplayer do jogo (ADR-0023, spec 006).
@@ -395,6 +484,14 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid_profile_params")
 	case errors.Is(err, domain.ErrProfileNotFound):
 		writeError(w, http.StatusNotFound, "profile_not_found")
+	case errors.Is(err, domain.ErrInvalidModeID):
+		writeError(w, http.StatusBadRequest, "invalid_mode_id")
+	case errors.Is(err, domain.ErrModeNotFound):
+		writeError(w, http.StatusNotFound, "mode_not_found")
+	case errors.Is(err, domain.ErrDefaultModeProtected):
+		writeError(w, http.StatusConflict, "default_mode_protected")
+	case errors.Is(err, domain.ErrTooManyModes):
+		writeError(w, http.StatusBadRequest, "too_many_modes")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

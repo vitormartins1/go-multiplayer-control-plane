@@ -4,21 +4,35 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 )
 
-// Persistência do perfil de multiplayer (ADR-0023, spec 006): coluna JSONB
-// multiplayer_profile na tabela games. O formato armazenado é
-// { archetype, topology, params }, onde params é o objeto do arquétipo — o que
-// mantém archetype/topology no topo e acomoda params polimórficos por arquétipo.
+// Persistência dos modos de multiplayer (ADR-0023 + ADR-0024, specs 006/009):
+// coluna JSONB multiplayer_profile na tabela games. Formato v2 (spec 009):
+// { "modes": { "<modeId>": { displayName?, archetype, topology, params } } }.
+// O formato v1 (um único objeto { archetype, topology, params } no topo) é
+// aceito na leitura e interpretado como o modo "default" (upgrade lazy); todo
+// write persiste v2. Params fica cru (RawMessage), decodificado por archetype.
 
-// storedProfile é o envelope persistido; params fica cru (RawMessage) para ser
-// decodificado conforme o archetype.
+// storedProfile é o corpo de um perfil persistido (formato do ADR-0023).
 type storedProfile struct {
 	Archetype string          `json:"archetype"`
 	Topology  string          `json:"topology"`
 	Params    json.RawMessage `json:"params"`
+}
+
+// storedMode é um modo persistido (v2): o perfil + o displayName. O modeId é a
+// chave do mapa, não um campo do valor.
+type storedMode struct {
+	DisplayName string `json:"displayName,omitempty"`
+	storedProfile
+}
+
+// storedModes é o envelope v2 da coluna.
+type storedModes struct {
+	Modes map[string]storedMode `json:"modes"`
 }
 
 // storedQueueArena é o shape persistido dos params do arquétipo queue_arena.
@@ -64,19 +78,95 @@ type storedHostWorldDropIn struct {
 	InvasionEnabled   bool     `json:"invasionEnabled"`
 }
 
-func (r *PostgresGameRepository) UpsertMultiplayerProfile(ctx context.Context, gameID string, p domain.MultiplayerProfile) error {
-	raw, err := encodeProfile(&p)
+func (r *PostgresGameRepository) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
+	raw, err := encodeModes(modes)
 	if err != nil {
-		return fmt.Errorf("game-registry repository: upsert profile: encode: %w", err)
+		return fmt.Errorf("game-registry repository: set modes: encode: %w", err)
 	}
 	tag, err := r.pool.Exec(ctx, `UPDATE games SET multiplayer_profile = $2 WHERE id = $1`, gameID, raw)
 	if err != nil {
-		return fmt.Errorf("game-registry repository: upsert profile: %w", err)
+		return fmt.Errorf("game-registry repository: set modes: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrGameNotFound
 	}
 	return nil
+}
+
+// encodeModes serializa a coleção de modos no formato v2.
+func encodeModes(modes []domain.MultiplayerMode) ([]byte, error) {
+	sm := storedModes{Modes: make(map[string]storedMode, len(modes))}
+	for i := range modes {
+		m := &modes[i]
+		raw, err := encodeProfile(&m.Profile)
+		if err != nil {
+			return nil, fmt.Errorf("modo %q: %w", m.ModeID, err)
+		}
+		var sp storedProfile
+		if err := json.Unmarshal(raw, &sp); err != nil {
+			return nil, fmt.Errorf("modo %q: %w", m.ModeID, err)
+		}
+		sm.Modes[m.ModeID] = storedMode{DisplayName: m.DisplayName, storedProfile: sp}
+	}
+	return json.Marshal(sm)
+}
+
+// decodeModes desserializa a coluna para a coleção de modos, ordenada com
+// "default" primeiro e os demais por modeId asc (determinístico para transport
+// e service). Aceita o formato v1 (objeto único) como o modo "default" —
+// upgrade lazy: o próximo write persiste v2. Coluna NULL/vazia -> nil.
+func decodeModes(raw []byte) ([]domain.MultiplayerMode, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var probe struct {
+		Modes json.RawMessage `json:"modes"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return nil, err
+	}
+	if probe.Modes == nil {
+		// v1: um único perfil no topo -> modo "default" sem displayName.
+		p, err := decodeProfile(raw)
+		if err != nil || p == nil {
+			return nil, err
+		}
+		return []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: *p}}, nil
+	}
+	var sm storedModes
+	if err := json.Unmarshal(raw, &sm); err != nil {
+		return nil, err
+	}
+	out := make([]domain.MultiplayerMode, 0, len(sm.Modes))
+	for modeID, stored := range sm.Modes {
+		body, err := json.Marshal(stored.storedProfile)
+		if err != nil {
+			return nil, err
+		}
+		p, err := decodeProfile(body)
+		if err != nil {
+			return nil, fmt.Errorf("modo %q: %w", modeID, err)
+		}
+		if p == nil {
+			continue
+		}
+		out = append(out, domain.MultiplayerMode{ModeID: modeID, DisplayName: stored.DisplayName, Profile: *p})
+	}
+	sortModes(out)
+	return out, nil
+}
+
+// sortModes ordena in-place: "default" primeiro, demais por ModeID asc.
+func sortModes(modes []domain.MultiplayerMode) {
+	sort.Slice(modes, func(i, j int) bool {
+		if modes[i].ModeID == domain.DefaultModeID {
+			return true
+		}
+		if modes[j].ModeID == domain.DefaultModeID {
+			return false
+		}
+		return modes[i].ModeID < modes[j].ModeID
+	})
 }
 
 // encodeProfile serializa o perfil de domínio para o JSONB armazenado.
