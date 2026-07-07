@@ -29,10 +29,14 @@ type Provisioned struct {
 	Tokens        map[string]string // playerID -> connect token
 }
 
-// Estruturas de formação do arquétipo queue_arena (ADR-0023).
+// Estruturas de formação (ADR-0023). FFA e teams são do queue_arena; squads é
+// do battle_royale — "teams ragged": o último squad pode ter menos que TeamSize
+// jogadores (lobbySize pode não ser múltiplo de teamSize) e a contagem de squads
+// é derivada por ⌈Size/TeamSize⌉ na composição.
 const (
-	StructureFFA   = "ffa"
-	StructureTeams = "teams"
+	StructureFFA    = "ffa"
+	StructureTeams  = "teams"
+	StructureSquads = "squads"
 )
 
 // MatchFormat é a forma da partida derivada do perfil de multiplayer do jogo

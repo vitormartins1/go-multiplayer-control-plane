@@ -107,7 +107,9 @@ func TestProvision_MatchSizeJogadores_TokenPorJogador(t *testing.T) {
 
 func TestProvision_SemServer_EntregaFailed(t *testing.T) {
 	prov := &fakeProvisioner{}
-	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
+	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) {
+		return domain.Provisioned{}, domain.ErrNoServer
+	})
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
@@ -141,7 +143,9 @@ func TestProvision_ErroGenerico_EntregaFailed(t *testing.T) {
 
 func TestProvision_ReJoinAposFalha_ConsegueMatch(t *testing.T) {
 	prov := &fakeProvisioner{}
-	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) { return domain.Provisioned{}, domain.ErrNoServer })
+	prov.set(func(string, []domain.TeamAssignment) (domain.Provisioned, error) {
+		return domain.Provisioned{}, domain.ErrNoServer
+	})
 	mm := New(time.Hour, newFakeProvider(2), prov)
 
 	ch1, _ := mm.Join(context.Background(), "game-1", "p1")
@@ -370,6 +374,98 @@ func TestTryForm_Teams3x3_SeisJogadoresDoisTimesDeTres(t *testing.T) {
 	require.Len(t, teams, 2)
 	assert.Equal(t, []string{"a", "b", "c"}, teams[0].Players)
 	assert.Equal(t, []string{"d", "e", "f"}, teams[1].Players)
+}
+
+// squads (battle_royale): particiona o lobby em blocos de teamSize, rótulos
+// "squad-K". lobbySize múltiplo de teamSize → todos os squads cheios.
+func TestTryForm_Squads_ParticionaEmSquadsCheios(t *testing.T) {
+	prov := successProvisioner()
+	provider := newFakeProvider(0)
+	provider.formats["br"] = domain.MatchFormat{Size: 8, Structure: domain.StructureSquads, TeamSize: 4}
+	mm := New(time.Hour, provider, prov)
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	for _, p := range []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
+		ch, _ := mm.Join(ctx, "br", p)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+	for _, ch := range chs {
+		<-ch
+	}
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	require.Len(t, prov.gotTeams, 1)
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 2)
+	assert.Equal(t, "squad-1", teams[0].TeamID)
+	assert.Equal(t, []string{"p1", "p2", "p3", "p4"}, teams[0].Players)
+	assert.Equal(t, "squad-2", teams[1].TeamID)
+	assert.Equal(t, []string{"p5", "p6", "p7", "p8"}, teams[1].Players)
+}
+
+// squads ragged: lobbySize NÃO múltiplo de teamSize → o último squad é menor.
+// Nenhum jogador fica de fora (BR0 permite lobby não-múltiplo).
+func TestTryForm_Squads_UltimoSquadRagged(t *testing.T) {
+	prov := successProvisioner()
+	provider := newFakeProvider(0)
+	provider.formats["br"] = domain.MatchFormat{Size: 10, Structure: domain.StructureSquads, TeamSize: 4}
+	mm := New(time.Hour, provider, prov)
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	players := []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10"}
+	for _, p := range players {
+		ch, _ := mm.Join(ctx, "br", p)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+	for _, ch := range chs {
+		<-ch
+	}
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 3, "⌈10/4⌉ = 3 squads")
+	assert.Equal(t, []string{"p1", "p2", "p3", "p4"}, teams[0].Players)
+	assert.Equal(t, []string{"p5", "p6", "p7", "p8"}, teams[1].Players)
+	assert.Equal(t, "squad-3", teams[2].TeamID)
+	assert.Equal(t, []string{"p9", "p10"}, teams[2].Players, "último squad ragged (2 jogadores)")
+
+	var total int
+	for _, tm := range teams {
+		total += len(tm.Players)
+	}
+	assert.Equal(t, len(players), total, "nenhum jogador perdido")
+}
+
+// battle_royale solo: teamSize 1 vira ffa no Format → um assignment sem TeamID.
+func TestTryForm_BattleRoyaleSolo_FFA(t *testing.T) {
+	prov := successProvisioner()
+	provider := newFakeProvider(0)
+	provider.formats["br"] = domain.MatchFormat{Size: 3, Structure: domain.StructureFFA}
+	mm := New(time.Hour, provider, prov)
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	for _, p := range []string{"p1", "p2", "p3"} {
+		ch, _ := mm.Join(ctx, "br", p)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+	for _, ch := range chs {
+		<-ch
+	}
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 1)
+	assert.Empty(t, teams[0].TeamID, "solo BR = FFA, sem team_id")
+	assert.Equal(t, []string{"p1", "p2", "p3"}, teams[0].Players)
 }
 
 // ffa: o provisioner recebe um único assignment sem TeamID (sem times).

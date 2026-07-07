@@ -53,8 +53,42 @@ func TestMatchSize_404_ErrProfileUnavailable(t *testing.T) {
 }
 
 func TestMatchSize_ArchetypeNaoSuportado_ErrProfileUnavailable(t *testing.T) {
+	// host_world_dropin não usa fila (usa invasão/sinais) — Format o rejeita.
 	srv := serverReturning(t, http.StatusOK,
-		`{"archetype":"battle_royale","topology":"dedicated","params":{"structure":"ffa","playerCount":60}}`, nil)
+		`{"archetype":"host_world_dropin","topology":"dedicated","params":{"enabledRoles":["invader"],"invaderSlots":1}}`, nil)
+	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
+	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+}
+
+func TestMatchSize_BattleRoyaleSolo_FFA(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"battle_royale","topology":"dedicated","params":{"lobbySize":100,"teamSize":1,"respawnMode":"one_life"}}`, nil)
+	format, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
+	require.NoError(t, err)
+	assert.Equal(t, domain.StructureFFA, format.Structure)
+	assert.Equal(t, 100, format.Size)
+}
+
+func TestMatchSize_BattleRoyaleSquad_Squads(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"battle_royale","topology":"dedicated","params":{"lobbySize":60,"teamSize":4,"respawnMode":"one_life"}}`, nil)
+	format, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
+	require.NoError(t, err)
+	assert.Equal(t, domain.StructureSquads, format.Structure)
+	assert.Equal(t, 60, format.Size)
+	assert.Equal(t, 4, format.TeamSize)
+}
+
+func TestMatchSize_BattleRoyale_LobbyZero_ErrProfileUnavailable(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"battle_royale","topology":"dedicated","params":{"lobbySize":0,"teamSize":4}}`, nil)
+	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
+	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+}
+
+func TestMatchSize_BattleRoyale_TeamSizeZero_ErrProfileUnavailable(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"battle_royale","topology":"dedicated","params":{"lobbySize":60,"teamSize":0}}`, nil)
 	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }

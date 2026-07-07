@@ -26,9 +26,13 @@ var (
 // exige (spec 007). Vocabulário do game-registry.
 const roleCoop = "coop"
 
-// archetypeQueueArena é o único arquétipo cujo tamanho o matchmaking sabe
-// derivar nesta fatia (ADR-0023). Vocabulário do game-registry.
-const archetypeQueueArena = "queue_arena"
+// Arquétipos cuja formação o matchmaking sabe derivar via Format (ADR-0023).
+// Vocabulário do game-registry. host_world_dropin não entra aqui: não usa fila
+// (usa invasão/sinais — specs 006/007), então Format o rejeita.
+const (
+	archetypeQueueArena   = "queue_arena"
+	archetypeBattleRoyale = "battle_royale"
+)
 
 // Client chama o game-registry em baseURL (ex.: http://game-registry:8080).
 type Client struct {
@@ -54,6 +58,8 @@ type profileResponse struct {
 		PlayerCount int    `json:"playerCount"`
 		TeamCount   int    `json:"teamCount"`
 		TeamSize    int    `json:"teamSize"`
+		// battle_royale (spec 007): alvo do lobby; TeamSize (acima) é o squad.
+		LobbySize int `json:"lobbySize"`
 		// host_world_dropin (spec 006/007): flags que ligam/desligam cada filtro.
 		// Ausentes em queue_arena (ficam false). enabledRoles lista os papéis
 		// habilitados (coop/invader) — o co-op (spec 007) exige "coop".
@@ -129,30 +135,47 @@ func (c *Client) CoopPolicy(ctx context.Context, gameID string) (domain.CoopPoli
 }
 
 // Format lê o perfil do jogo e deriva a formação do match (tamanho + estrutura
-// + composição de lados). Qualquer falha (jogo/perfil ausente, arquétipo !=
-// queue_arena, tamanho inválido, rede) vira ErrProfileUnavailable — o ticket
-// não deve entrar na fila.
+// + composição de lados). Qualquer falha (jogo/perfil ausente, arquétipo sem
+// fila, tamanho inválido, rede) vira ErrProfileUnavailable — o ticket não deve
+// entrar na fila. Serve queue_arena (ffa/teams) e battle_royale (ffa/squads);
+// host_world_dropin não usa fila.
 func (c *Client) Format(ctx context.Context, gameID string) (domain.MatchFormat, error) {
 	p, err := c.getProfile(ctx, gameID)
 	if err != nil {
 		return domain.MatchFormat{}, err
 	}
-	if p.Archetype != archetypeQueueArena {
+
+	var format domain.MatchFormat
+	switch p.Archetype {
+	case archetypeQueueArena:
+		format = domain.MatchFormat{Structure: p.Params.Structure}
+		switch p.Params.Structure {
+		case domain.StructureFFA:
+			format.Size = p.Params.PlayerCount
+		case domain.StructureTeams:
+			format.TeamCount = p.Params.TeamCount
+			format.TeamSize = p.Params.TeamSize
+			format.Size = p.Params.TeamCount * p.Params.TeamSize
+		}
+	case archetypeBattleRoyale:
+		if p.Params.TeamSize <= 0 {
+			return domain.MatchFormat{}, fmt.Errorf("registryclient: teamSize inválido (%d) para battle_royale: %w",
+				p.Params.TeamSize, domain.ErrProfileUnavailable)
+		}
+		// teamSize 1 = solo → ffa (colocação por jogador, sem team_id); teamSize
+		// >= 2 = duo/squad → squads (partição ragged na composição).
+		if p.Params.TeamSize == 1 {
+			format = domain.MatchFormat{Structure: domain.StructureFFA, Size: p.Params.LobbySize}
+		} else {
+			format = domain.MatchFormat{Structure: domain.StructureSquads, Size: p.Params.LobbySize, TeamSize: p.Params.TeamSize}
+		}
+	default:
 		return domain.MatchFormat{}, fmt.Errorf("registryclient: archetype %q não suportado: %w", p.Archetype, domain.ErrProfileUnavailable)
 	}
 
-	format := domain.MatchFormat{Structure: p.Params.Structure}
-	switch p.Params.Structure {
-	case domain.StructureFFA:
-		format.Size = p.Params.PlayerCount
-	case domain.StructureTeams:
-		format.TeamCount = p.Params.TeamCount
-		format.TeamSize = p.Params.TeamSize
-		format.Size = p.Params.TeamCount * p.Params.TeamSize
-	}
 	if format.Size <= 0 {
-		return domain.MatchFormat{}, fmt.Errorf("registryclient: tamanho inválido (%d) para structure %q: %w",
-			format.Size, p.Params.Structure, domain.ErrProfileUnavailable)
+		return domain.MatchFormat{}, fmt.Errorf("registryclient: tamanho inválido (%d) para archetype %q: %w",
+			format.Size, p.Archetype, domain.ErrProfileUnavailable)
 	}
 	return format, nil
 }
