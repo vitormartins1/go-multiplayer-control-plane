@@ -93,6 +93,24 @@ func TestMatchSize_BattleRoyale_TeamSizeZero_ErrProfileUnavailable(t *testing.T)
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
 }
 
+func TestMatchSize_CoopMission_TimeUnico(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"coop_mission","topology":"dedicated","params":{"teamSize":4,"botfillEnabled":true}}`, nil)
+	format, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
+	require.NoError(t, err)
+	assert.Equal(t, domain.StructureTeams, format.Structure)
+	assert.Equal(t, 1, format.TeamCount, "co-op = um único time")
+	assert.Equal(t, 4, format.TeamSize)
+	assert.Equal(t, 4, format.Size, "Size = teamSize (um time)")
+}
+
+func TestMatchSize_CoopMission_TeamSizeInvalido_ErrProfileUnavailable(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"coop_mission","topology":"dedicated","params":{"teamSize":1}}`, nil)
+	_, err := New(srv.URL, srv.Client()).Format(t.Context(), "g1")
+	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+}
+
 func TestMatchSize_TamanhoZero_ErrProfileUnavailable(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
 		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":0}}`, nil)

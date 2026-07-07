@@ -376,6 +376,34 @@ func TestTryForm_Teams3x3_SeisJogadoresDoisTimesDeTres(t *testing.T) {
 	assert.Equal(t, []string{"d", "e", "f"}, teams[1].Players)
 }
 
+// coop_mission: um único time (TeamCount=1) de teamSize contra o ambiente. O
+// provisioner recebe 1 assignment "team-1" com todos os jogadores (C1).
+func TestTryForm_CoopMission_TimeUnico(t *testing.T) {
+	prov := successProvisioner()
+	provider := newFakeProvider(0)
+	provider.formats["coop"] = domain.MatchFormat{Size: 4, Structure: domain.StructureTeams, TeamCount: 1, TeamSize: 4}
+	mm := New(time.Hour, provider, prov)
+	ctx := context.Background()
+
+	var chs []<-chan domain.MatchResult
+	for _, p := range []string{"p1", "p2", "p3", "p4"} {
+		ch, _ := mm.Join(ctx, "coop", p)
+		chs = append(chs, ch)
+	}
+	mm.tryForm()
+	for _, ch := range chs {
+		<-ch
+	}
+
+	prov.mu.Lock()
+	defer prov.mu.Unlock()
+	require.Len(t, prov.gotTeams, 1)
+	teams := prov.gotTeams[0]
+	require.Len(t, teams, 1, "co-op = um único time")
+	assert.Equal(t, "team-1", teams[0].TeamID)
+	assert.Equal(t, []string{"p1", "p2", "p3", "p4"}, teams[0].Players)
+}
+
 // squads (battle_royale): particiona o lobby em blocos de teamSize, rótulos
 // "squad-K". lobbySize múltiplo de teamSize → todos os squads cheios.
 func TestTryForm_Squads_ParticionaEmSquadsCheios(t *testing.T) {
