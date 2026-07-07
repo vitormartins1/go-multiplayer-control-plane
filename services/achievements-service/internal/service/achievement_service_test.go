@@ -124,6 +124,46 @@ func TestApplyMatchResult_OutcomeParaEventos(t *testing.T) {
 	}
 }
 
+// ApplyPlacementResult (battle_royale, BR3) traduz a colocação em event types e
+// injeta survived_ms nos stats; a idempotência é do repo (validamos a tradução).
+func TestApplyPlacementResult_TraduzEventTypesEInjetaSurvival(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+
+	entries := []domain.PlacementEntry{
+		{PlayerID: "p1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4}},
+		{PlayerID: "p2", Placement: 30, SurvivedMs: 300000},
+	}
+	want := []domain.PlayerMatchInput{
+		{PlayerID: "p1", EventTypes: []string{"battle_royale_played", "battle_royale_win", "battle_royale_top_n"}, Stats: map[string]int64{"kills": 4, "survived_ms": 900000}},
+		{PlayerID: "p2", EventTypes: []string{"battle_royale_played"}, Stats: map[string]int64{"survived_ms": 300000}},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-br", want, mock.Anything).Return(false, nil)
+
+	dup, err := svc.ApplyPlacementResult(context.Background(), gameID, "match-br", entries)
+	require.NoError(t, err)
+	assert.False(t, dup)
+	repo.AssertExpectations(t)
+}
+
+// survived_ms explícito nos stats não é sobrescrito pela sobrevivência de topo.
+func TestApplyPlacementResult_SurvivedMsExplicito_NaoSobrescreve(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo)
+
+	entries := []domain.PlacementEntry{
+		{PlayerID: "p1", Placement: 5, SurvivedMs: 111, Stats: map[string]int64{"survived_ms": 999}},
+	}
+	want := []domain.PlayerMatchInput{
+		{PlayerID: "p1", EventTypes: []string{"battle_royale_played", "battle_royale_top_n"}, Stats: map[string]int64{"survived_ms": 999}},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
+
+	_, err := svc.ApplyPlacementResult(context.Background(), gameID, "m", entries)
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
+}
+
 func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 	cases := map[string]struct {
 		role, event, outcome string

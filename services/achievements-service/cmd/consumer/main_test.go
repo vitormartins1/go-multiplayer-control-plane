@@ -20,10 +20,12 @@ type dispatchRepo struct {
 	matchCalled         bool
 	participationCalled bool
 	gotEvent            string
+	gotPlayers          []domain.PlayerMatchInput
 }
 
-func (r *dispatchRepo) ApplyMatchResult(context.Context, string, string, []domain.PlayerMatchInput, time.Time) (bool, error) {
+func (r *dispatchRepo) ApplyMatchResult(_ context.Context, _, _ string, players []domain.PlayerMatchInput, _ time.Time) (bool, error) {
 	r.matchCalled = true
+	r.gotPlayers = players
 	return false, nil
 }
 
@@ -84,6 +86,18 @@ func TestMakeHandler_V1SemKindComMatchId_RoteiaParaMatchResult(t *testing.T) {
 	_, err := handle([]byte(`{"matchId":"m1","gameId":"g","results":[{"playerId":"p1","won":true}]}`))
 	require.NoError(t, err)
 	assert.True(t, repo.matchCalled, "envelope v1 legado ainda vai para o match result")
+}
+
+func TestMakeHandler_Placement_RoteiaParaPlacement(t *testing.T) {
+	repo, handle := newHandler(t)
+	_, err := handle([]byte(`{"kind":"placement","matchId":"m1","gameId":"g","entries":[{"playerId":"p1","placement":1,"survivedMs":900000,"stats":{"kills":4}},{"playerId":"p2","placement":42,"survivedMs":100000}]}`))
+	require.NoError(t, err)
+	assert.True(t, repo.matchCalled, "placement usa o caminho ApplyMatchResult (idempotente por matchId)")
+	assert.False(t, repo.participationCalled)
+	require.Len(t, repo.gotPlayers, 2)
+	assert.Equal(t, []string{"battle_royale_played", "battle_royale_win", "battle_royale_top_n"}, repo.gotPlayers[0].EventTypes)
+	assert.Equal(t, int64(900000), repo.gotPlayers[0].Stats["survived_ms"], "survivedMs exposto como stat")
+	assert.Equal(t, []string{"battle_royale_played"}, repo.gotPlayers[1].EventTypes, "fora do top N só played")
 }
 
 func TestMakeHandler_KindDesconhecido_Descarta(t *testing.T) {

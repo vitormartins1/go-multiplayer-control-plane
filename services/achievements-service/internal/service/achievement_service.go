@@ -152,6 +152,41 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 	return dup, nil
 }
 
+// ApplyPlacementResult traduz o resultado por colocação (battle_royale, BR3) em
+// event types de gameplay (played/win/top_n via PlacementEventTypes) e stats
+// (survived_ms exposto p/ os critérios por-métrica) e delega ao repo a aplicação
+// idempotente por matchID. Consumido pelo fan-out durável (kind=placement,
+// session/015). dup=true quando a partida já havia sido processada (no-op).
+func (s *Service) ApplyPlacementResult(ctx context.Context, gameID, matchID string, entries []domain.PlacementEntry) (bool, error) {
+	players := make([]domain.PlayerMatchInput, 0, len(entries))
+	for _, e := range entries {
+		players = append(players, domain.PlayerMatchInput{
+			PlayerID:   e.PlayerID,
+			EventTypes: domain.PlacementEventTypes(e.Placement),
+			Stats:      withSurvivedMs(e.Stats, e.SurvivedMs),
+		})
+	}
+	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply placement result: %w", err)
+	}
+	return dup, nil
+}
+
+// withSurvivedMs devolve os stats com survived_ms injetado (a sobrevivência é um
+// campo de topo do placement; expô-la como stat deixa os critérios por-métrica
+// mirá-la). Não sobrescreve um survived_ms já presente no mapa.
+func withSurvivedMs(stats map[string]int64, survivedMs int64) map[string]int64 {
+	out := make(map[string]int64, len(stats)+1)
+	for k, v := range stats {
+		out[k] = v
+	}
+	if _, ok := out[domain.StatSurvivedMs]; !ok {
+		out[domain.StatSurvivedMs] = survivedMs
+	}
+	return out
+}
+
 // ApplyParticipationEvent traduz um evento de participação do host_world_dropin
 // (spec 013/009) nos event types de gameplay por papel e delega ao repo a
 // aplicação idempotente por (sessionID, playerID, event). Consumido pelo fan-out
