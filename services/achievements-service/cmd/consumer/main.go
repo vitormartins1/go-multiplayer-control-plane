@@ -110,36 +110,87 @@ func run(log *slog.Logger) error {
 	return nil
 }
 
-// makeHandler desserializa o envelope do fan-out e aplica o resultado idempotente.
-// Mensagem malformada retorna erro (vai à DLQ) em vez de ser descartada.
+// makeHandler desserializa o envelope do fan-out e o despacha por kind (ADR-0023,
+// spec 013/009): win_loss_draw (queue_arena) → ApplyMatchResult; participation_event
+// (host_world_dropin) → ApplyParticipationEvent; kind desconhecido → descarta (o
+// SNS faz fan-out para todas as filas). Mensagem malformada vai à DLQ.
 func makeHandler(svc *service.Service, log *slog.Logger) consumer.Handler {
 	return func(ctx context.Context, body []byte) (bool, error) {
-		var env struct {
+		var head struct {
+			Kind    string `json:"kind"`
 			MatchID string `json:"matchId"`
-			GameID  string `json:"gameId"`
-			Results []struct {
-				PlayerID string           `json:"playerId"`
-				Won      bool             `json:"won"`
-				Outcome  string           `json:"outcome"` // ADR-0023 (v2); ausente no v1 -> fallback no Won
-				Stats    map[string]int64 `json:"stats"`   // ADR-0023 A1: critério por métrica
-			} `json:"results"`
 		}
-		if err := json.Unmarshal(body, &env); err != nil {
-			return false, fmt.Errorf("unmarshal envelope: %w", err)
+		if err := json.Unmarshal(body, &head); err != nil {
+			return false, fmt.Errorf("unmarshal envelope head: %w", err)
 		}
-		results := make([]domain.MatchResult, 0, len(env.Results))
-		for _, r := range env.Results {
-			results = append(results, domain.MatchResult{PlayerID: r.PlayerID, Won: r.Won, Outcome: r.Outcome, Stats: r.Stats})
+
+		switch {
+		case head.Kind == "participation_event":
+			return handleParticipation(ctx, svc, log, body)
+		case head.Kind == "win_loss_draw" || head.MatchID != "":
+			// win_loss_draw explícito, ou envelope v1 legado (sem kind, com matchId).
+			return handleMatchResult(ctx, svc, log, body)
+		default:
+			// kind desconhecido/ausente sem matchId: não é nosso — descarta (não DLQ).
+			log.Debug("envelope ignorado (kind não tratado)", slog.String("kind", head.Kind))
+			return false, nil
 		}
-		dup, err := svc.ApplyMatchResult(ctx, env.GameID, env.MatchID, results)
-		if err != nil {
-			return false, err
-		}
-		if dup {
-			log.Info("partida já processada (no-op)", slog.String("match_id", env.MatchID))
-		}
-		return dup, nil
 	}
+}
+
+// handleMatchResult aplica o resultado win_loss_draw (queue_arena), idempotente
+// por matchId.
+func handleMatchResult(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		MatchID string `json:"matchId"`
+		GameID  string `json:"gameId"`
+		Results []struct {
+			PlayerID string           `json:"playerId"`
+			Won      bool             `json:"won"`
+			Outcome  string           `json:"outcome"` // ADR-0023 (v2); ausente no v1 -> fallback no Won
+			Stats    map[string]int64 `json:"stats"`   // ADR-0023 A1: critério por métrica
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal match envelope: %w", err)
+	}
+	results := make([]domain.MatchResult, 0, len(env.Results))
+	for _, r := range env.Results {
+		results = append(results, domain.MatchResult{PlayerID: r.PlayerID, Won: r.Won, Outcome: r.Outcome, Stats: r.Stats})
+	}
+	dup, err := svc.ApplyMatchResult(ctx, env.GameID, env.MatchID, results)
+	if err != nil {
+		return false, err
+	}
+	if dup {
+		log.Info("partida já processada (no-op)", slog.String("match_id", env.MatchID))
+	}
+	return dup, nil
+}
+
+// handleParticipation aplica um evento de participação (host_world_dropin),
+// idempotente por (sessionId, playerId, event).
+func handleParticipation(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
+	var env struct {
+		GameID    string `json:"gameId"`
+		SessionID string `json:"sessionId"`
+		PlayerID  string `json:"playerId"`
+		Role      string `json:"role"`
+		Event     string `json:"event"`
+		Outcome   string `json:"outcome"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return false, fmt.Errorf("unmarshal participation envelope: %w", err)
+	}
+	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.Role, env.Event, env.Outcome)
+	if err != nil {
+		return false, err
+	}
+	if dup {
+		log.Info("evento de participação já processado (no-op)",
+			slog.String("session_id", env.SessionID), slog.String("player_id", env.PlayerID), slog.String("event", env.Event))
+	}
+	return dup, nil
 }
 
 func metricsServer(port string) *http.Server {

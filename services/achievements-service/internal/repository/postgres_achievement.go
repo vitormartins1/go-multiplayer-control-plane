@@ -220,6 +220,45 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 	return false, tx.Commit(ctx)
 }
 
+// ApplyParticipationEvent aplica os event types de um evento de participação
+// (host_world_dropin, spec 013/009) numa única tx, idempotente por
+// (session_id, player_id, event). A marca em processed_participations + o
+// progresso vivem na MESMA tx (mesma garantia do ApplyMatchResult): reprocessar
+// é no-op e um crash no meio não deixa o evento "processado" sem efeito.
+// eventTypes vazio (evento sem conquista, ex.: LEFT) → só marca processado.
+func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event string, eventTypes []string, at time.Time) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("achievements repository: apply participation: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO processed_participations (session_id, player_id, event, game_id)
+		 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+		sessionID, playerID, event, gameID)
+	if err != nil {
+		return false, fmt.Errorf("achievements repository: apply participation: mark: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processado: no-op idempotente
+	}
+
+	// critério por evento: +1 por ocorrência para cada event type traduzido.
+	for _, et := range eventTypes {
+		matches, err := findByEventType(ctx, tx, gameID, et)
+		if err != nil {
+			return false, err
+		}
+		for _, a := range matches {
+			if _, err := recordProgress(ctx, tx, gameID, playerID, a.ID, a.Target, at); err != nil {
+				return false, err
+			}
+		}
+	}
+	return false, tx.Commit(ctx)
+}
+
 // recordStatProgress avança o progresso de uma conquista por stat de forma
 // atômica (ADR-0023 A1). cumulative soma o valor da partida ao acumulado;
 // per_match guarda o melhor valor de partida. Em ambos o progress é capado em

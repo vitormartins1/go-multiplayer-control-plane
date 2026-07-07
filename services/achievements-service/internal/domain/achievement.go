@@ -124,6 +124,11 @@ type AchievementRepository interface {
 	// e de forma idempotente por matchID (SQS entrega at-least-once, ADR-0020).
 	// dup=true se a partida já havia sido processada (no-op).
 	ApplyMatchResult(ctx context.Context, gameID, matchID string, players []PlayerMatchInput, at time.Time) (dup bool, err error)
+	// ApplyParticipationEvent aplica os event types de um evento de participação
+	// (host_world_dropin, spec 013/009) numa única transação, idempotente por
+	// (sessionID, playerID, event). eventTypes vazio → marca processado sem
+	// progresso. dup=true se o evento já havia sido processado (no-op).
+	ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event string, eventTypes []string, at time.Time) (dup bool, err error)
 	// CreateAchievement persiste uma conquista no catálogo do jogo;
 	// ErrAchievementExists em violação de unicidade (game_id, id).
 	CreateAchievement(ctx context.Context, a *Achievement) error
