@@ -35,6 +35,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/002_add_progress.sql",
 			"../../migrations/003_add_game_scope.sql",
 			"../../migrations/004_processed_matches.sql",
+			"../../migrations/005_stat_criteria.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -106,7 +107,7 @@ func TestApplyMatchResult_Reprocessada_NaoDobraProgresso(t *testing.T) {
 	at := time.Now().UTC()
 
 	// p1 venceu; "first_win" (event_type=match_won, target=1) deve desbloquear.
-	players := []domain.PlayerEvents{
+	players := []domain.PlayerMatchInput{
 		{PlayerID: "p1", EventTypes: []string{"match_played", "match_won"}},
 	}
 
@@ -129,7 +130,7 @@ func TestApplyMatchResult_PartidasDistintas_Acumulam(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
 	ctx := context.Background()
 	at := time.Now().UTC()
-	players := []domain.PlayerEvents{{PlayerID: "p1", EventTypes: []string{"match_won"}}}
+	players := []domain.PlayerMatchInput{{PlayerID: "p1", EventTypes: []string{"match_won"}}}
 
 	_, err := repo.ApplyMatchResult(ctx, sandbox, "match-1", players, at)
 	require.NoError(t, err)
@@ -138,6 +139,94 @@ func TestApplyMatchResult_PartidasDistintas_Acumulam(t *testing.T) {
 
 	prog := mustProgress(t, repo, sandbox, "p1")
 	assert.Equal(t, 2, prog["ten_wins"].Progress, "duas partidas distintas somam no ten_wins")
+}
+
+// Critério por stat cumulative: o valor do stat soma entre partidas e desbloqueia
+// ao atingir o threshold (ADR-0023 A1). Usa o seed "sharpshooter" (kills, 100).
+func TestApplyMatchResult_StatCumulative_Soma(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	// duas partidas: 40 + 70 kills = 110 >= 100 (desbloqueia na 2ª, trava em 100).
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 40}}}, at)
+	require.NoError(t, err)
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 40, prog["sharpshooter"].Progress)
+	assert.True(t, prog["sharpshooter"].UnlockedAt.IsZero(), "40 < 100: ainda bloqueada")
+
+	_, err = repo.ApplyMatchResult(ctx, sandbox, "m2",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 70}}}, at)
+	require.NoError(t, err)
+	prog = mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 100, prog["sharpshooter"].Progress, "acumulado trava no threshold")
+	assert.False(t, prog["sharpshooter"].UnlockedAt.IsZero(), "110 >= 100: desbloqueada")
+}
+
+// Critério por stat per_match: guarda o MELHOR valor de partida e desbloqueia
+// quando UMA partida atinge o threshold. Seed "ace" (kills, 5, per_match).
+func TestApplyMatchResult_StatPerMatch_MelhorPartida(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	// 3 kills: progride mas não desbloqueia (best=3).
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 3}}}, at)
+	require.NoError(t, err)
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 3, prog["ace"].Progress, "melhor partida = 3")
+	assert.True(t, prog["ace"].UnlockedAt.IsZero())
+
+	// 2 kills: pior partida NÃO regride o progresso (best continua 3).
+	_, err = repo.ApplyMatchResult(ctx, sandbox, "m2",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 2}}}, at)
+	require.NoError(t, err)
+	prog = mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 3, prog["ace"].Progress, "partida pior não regride o melhor")
+
+	// 6 kills numa partida: >= 5 desbloqueia (progress trava em 5).
+	_, err = repo.ApplyMatchResult(ctx, sandbox, "m3",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 6}}}, at)
+	require.NoError(t, err)
+	prog = mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 5, prog["ace"].Progress, "progress trava no threshold")
+	assert.False(t, prog["ace"].UnlockedAt.IsZero(), "6 >= 5 numa partida: desbloqueada")
+}
+
+// Reprocessar a mesma partida não dobra o acumulado do stat (idempotência por
+// matchID — a tx que marca processed_matches é a mesma que soma).
+func TestApplyMatchResult_StatCumulative_Idempotente(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+	players := []domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 30}}}
+
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1", players, at)
+	require.NoError(t, err)
+	dup, err := repo.ApplyMatchResult(ctx, sandbox, "m1", players, at)
+	require.NoError(t, err)
+	assert.True(t, dup, "reentrega detectada")
+
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 30, prog["sharpshooter"].Progress, "acumulado não dobra na reentrega")
+}
+
+// Stat ausente do resultado -> a conquista daquele stat não ganha progresso.
+func TestApplyMatchResult_StatAusente_SemProgresso(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	// só "assists" no resultado; nenhuma conquista casa "assists" no seed.
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"assists": 9}}}, at)
+	require.NoError(t, err)
+
+	prog := mustProgress(t, repo, sandbox, "p1")
+	_, hasSharp := prog["sharpshooter"]
+	assert.False(t, hasSharp, "kills ausente -> sharpshooter sem progresso")
 }
 
 func TestCreateAchievement_MesmoIdEmJogosDiferentes_Coexiste(t *testing.T) {

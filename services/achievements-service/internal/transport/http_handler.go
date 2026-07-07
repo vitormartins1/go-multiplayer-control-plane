@@ -126,6 +126,8 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		EventType   string `json:"eventType"`
+		StatKey     string `json:"statKey"`
+		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
@@ -133,13 +135,14 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	a, err := h.svc.CreateAchievement(r.Context(), r.PathValue("gameId"), domain.Achievement{
-		ID: req.ID, Name: req.Name, Description: req.Description, EventType: req.EventType, Target: req.Target,
+		ID: req.ID, Name: req.Name, Description: req.Description,
+		EventType: req.EventType, StatKey: req.StatKey, StatMode: req.StatMode, Target: req.Target,
 	})
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
+	writeJSON(w, http.StatusCreated, toAchievementDTO(*a))
 }
 
 // adminUpdateAchievement edita uma conquista do catálogo do jogo (admin).
@@ -148,6 +151,8 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		EventType   string `json:"eventType"`
+		StatKey     string `json:"statKey"`
+		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
@@ -155,13 +160,14 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	a, err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.Achievement{
-		Name: req.Name, Description: req.Description, EventType: req.EventType, Target: req.Target,
+		Name: req.Name, Description: req.Description,
+		EventType: req.EventType, StatKey: req.StatKey, StatMode: req.StatMode, Target: req.Target,
 	})
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
+	writeJSON(w, http.StatusOK, toAchievementDTO(*a))
 }
 
 // adminDeleteAchievement remove uma conquista do catálogo do jogo (admin).
@@ -264,7 +270,9 @@ type achievementDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	EventType   string `json:"eventType"` // exposto para o painel editar (006-catalog-crud)
+	EventType   string `json:"eventType"`          // critério por evento (006-catalog-crud)
+	StatKey     string `json:"statKey,omitempty"`  // critério por stat (ADR-0023 A1)
+	StatMode    string `json:"statMode,omitempty"` // cumulative | per_match
 	Target      int    `json:"target"`
 }
 
@@ -285,10 +293,17 @@ type playerAchievementDTO struct {
 	UnlockedAt  *time.Time `json:"unlocked_at,omitempty"`
 }
 
+func toAchievementDTO(a domain.Achievement) achievementDTO {
+	return achievementDTO{
+		ID: a.ID, Name: a.Name, Description: a.Description,
+		EventType: a.EventType, StatKey: a.StatKey, StatMode: a.StatMode, Target: a.Target,
+	}
+}
+
 func toAchievementDTOs(in []domain.Achievement) []achievementDTO {
 	out := make([]achievementDTO, 0, len(in))
 	for _, a := range in {
-		out = append(out, achievementDTO{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, Target: a.Target})
+		out = append(out, toAchievementDTO(a))
 	}
 	return out
 }

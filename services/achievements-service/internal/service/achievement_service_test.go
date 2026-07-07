@@ -27,6 +27,11 @@ func (m *mockRepo) FindByEventType(ctx context.Context, gameID, eventType string
 	return args.Get(0).([]domain.Achievement), args.Error(1)
 }
 
+func (m *mockRepo) FindByStatKey(ctx context.Context, gameID, statKey string) ([]domain.Achievement, error) {
+	args := m.Called(ctx, gameID, statKey)
+	return args.Get(0).([]domain.Achievement), args.Error(1)
+}
+
 func (m *mockRepo) ListPlayerProgress(ctx context.Context, gameID, playerID string) ([]domain.PlayerProgress, error) {
 	args := m.Called(ctx, gameID, playerID)
 	return args.Get(0).([]domain.PlayerProgress), args.Error(1)
@@ -37,7 +42,7 @@ func (m *mockRepo) RecordProgress(ctx context.Context, gameID, playerID, achieve
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string, players []domain.PlayerEvents, at time.Time) (bool, error) {
+func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string, players []domain.PlayerMatchInput, at time.Time) (bool, error) {
 	args := m.Called(ctx, gameID, matchID, players, at)
 	return args.Bool(0), args.Error(1)
 }
@@ -74,7 +79,7 @@ func TestApplyMatchResult_TraduzEventosPorVitoria(t *testing.T) {
 		{PlayerID: "p1", Won: true},
 		{PlayerID: "p2", Won: false},
 	}
-	want := []domain.PlayerEvents{
+	want := []domain.PlayerMatchInput{
 		{PlayerID: "p1", EventTypes: []string{"match_played", "match_won"}},
 		{PlayerID: "p2", EventTypes: []string{"match_played"}},
 	}
@@ -104,7 +109,7 @@ func TestApplyMatchResult_OutcomeParaEventos(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := new(mockRepo)
 			svc := New(repo)
-			want := []domain.PlayerEvents{{PlayerID: "p", EventTypes: c.want}}
+			want := []domain.PlayerMatchInput{{PlayerID: "p", EventTypes: c.want}}
 			repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
 
 			_, err := svc.ApplyMatchResult(context.Background(), gameID, "m", []domain.MatchResult{c.result})
@@ -270,6 +275,54 @@ func TestCreateAchievement_Invalido(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrInvalidAchievement)
 	}
 	repo.AssertNotCalled(t, "CreateAchievement", mock.Anything, mock.Anything)
+}
+
+func TestCreateAchievement_StatValido_PersisteCriterio(t *testing.T) {
+	repo := &mockRepo{}
+	var captured *domain.Achievement
+	repo.On("CreateAchievement", mock.Anything, mock.AnythingOfType("*domain.Achievement")).
+		Return(nil).
+		Run(func(args mock.Arguments) { captured = args.Get(1).(*domain.Achievement) })
+
+	a, err := New(repo).CreateAchievement(context.Background(), gameID, domain.Achievement{
+		ID: "sharpshooter", Name: "Franco-atirador", StatKey: "kills", StatMode: "cumulative", Target: 100,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "kills", a.StatKey)
+	assert.Equal(t, "cumulative", captured.StatMode)
+	assert.Empty(t, captured.EventType)
+}
+
+func TestCreateAchievement_StatInvalido(t *testing.T) {
+	repo := &mockRepo{}
+	cases := map[string]domain.Achievement{
+		"stat_key mau":          {ID: "ok-slug", Name: "n", StatKey: "Kills", StatMode: "cumulative"},
+		"stat_mode mau":         {ID: "ok-slug", Name: "n", StatKey: "kills", StatMode: "total"},
+		"stat + event juntos":   {ID: "ok-slug", Name: "n", StatKey: "kills", StatMode: "per_match", EventType: "kill"},
+		"stat_mode sem statkey": {ID: "ok-slug", Name: "n", EventType: "kill", StatMode: "cumulative"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := New(repo).CreateAchievement(context.Background(), gameID, c)
+			assert.ErrorIs(t, err, domain.ErrInvalidAchievement)
+		})
+	}
+	repo.AssertNotCalled(t, "CreateAchievement", mock.Anything, mock.Anything)
+}
+
+// ApplyMatchResult repassa os stats crus no PlayerMatchInput (a aplicação por
+// métrica é do repo; aqui validamos a passagem).
+func TestApplyMatchResult_PropagaStats(t *testing.T) {
+	repo := new(mockRepo)
+	want := []domain.PlayerMatchInput{
+		{PlayerID: "p1", EventTypes: []string{"match_played", "match_won"}, Stats: map[string]int64{"kills": 7}},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
+
+	_, err := New(repo).ApplyMatchResult(context.Background(), gameID, "m",
+		[]domain.MatchResult{{PlayerID: "p1", Outcome: "win", Stats: map[string]int64{"kills": 7}}})
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
 }
 
 func TestCreateAchievement_JaExiste_Propaga(t *testing.T) {

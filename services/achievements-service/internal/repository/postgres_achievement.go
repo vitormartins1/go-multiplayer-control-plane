@@ -38,8 +38,11 @@ func NewPostgresAchievementRepository(pool *pgxpool.Pool) *PostgresAchievementRe
 	return &PostgresAchievementRepository{pool: pool}
 }
 
+// achievementCols é a projeção comum do catálogo (ordem casada por scanAchievements).
+const achievementCols = `game_id, id, name, description, event_type, stat_key, stat_mode, target`
+
 func (r *PostgresAchievementRepository) ListCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error) {
-	const q = `SELECT game_id, id, name, description, event_type, target
+	const q = `SELECT ` + achievementCols + `
 	           FROM achievements WHERE game_id = $1 ORDER BY id`
 	rows, err := r.pool.Query(ctx, q, gameID)
 	if err != nil {
@@ -53,13 +56,30 @@ func (r *PostgresAchievementRepository) FindByEventType(ctx context.Context, gam
 	return findByEventType(ctx, r.pool, gameID, eventType)
 }
 
-// findByEventType roda a busca num querier (pool ou tx).
+// findByEventType roda a busca num querier (pool ou tx). Só critérios por evento
+// (event_type <> '' — as conquistas por stat têm event_type vazio).
 func findByEventType(ctx context.Context, q querier, gameID, eventType string) ([]domain.Achievement, error) {
-	const sql = `SELECT game_id, id, name, description, event_type, target
+	const sql = `SELECT ` + achievementCols + `
 	             FROM achievements WHERE game_id = $1 AND event_type = $2 ORDER BY id`
 	rows, err := q.Query(ctx, sql, gameID, eventType)
 	if err != nil {
 		return nil, fmt.Errorf("achievements repository: find by event type: %w", err)
+	}
+	defer rows.Close()
+	return scanAchievements(rows)
+}
+
+func (r *PostgresAchievementRepository) FindByStatKey(ctx context.Context, gameID, statKey string) ([]domain.Achievement, error) {
+	return findByStatKey(ctx, r.pool, gameID, statKey)
+}
+
+// findByStatKey roda a busca das conquistas por stat cujo stat_key casa.
+func findByStatKey(ctx context.Context, q querier, gameID, statKey string) ([]domain.Achievement, error) {
+	const sql = `SELECT ` + achievementCols + `
+	             FROM achievements WHERE game_id = $1 AND stat_key = $2 ORDER BY id`
+	rows, err := q.Query(ctx, sql, gameID, statKey)
+	if err != nil {
+		return nil, fmt.Errorf("achievements repository: find by stat key: %w", err)
 	}
 	defer rows.Close()
 	return scanAchievements(rows)
@@ -148,11 +168,13 @@ func recordProgress(ctx context.Context, qr querier, gameID, playerID, achieveme
 	return unlockedAt != nil, nil // desbloqueou nesta chamada?
 }
 
-// ApplyMatchResult aplica os eventos da partida numa única transação, idempotente
-// por matchID (ADR-0020). A marca em processed_matches + o progresso vivem na
-// MESMA tx: reprocessar (entrega at-least-once do SQS) é no-op e um crash no meio
-// não deixa a partida "processada" sem efeito.
-func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, gameID, matchID string, players []domain.PlayerEvents, at time.Time) (bool, error) {
+// ApplyMatchResult aplica os eventos e stats da partida numa única transação,
+// idempotente por matchID (ADR-0020). A marca em processed_matches + o progresso
+// vivem na MESMA tx: reprocessar (entrega at-least-once do SQS) é no-op e um crash
+// no meio não deixa a partida "processada" sem efeito. Como a tx roda uma única
+// vez por matchID, os incrementos cumulativos de stat são seguros (não há dupla
+// contagem, diferente de um ZINCRBY solto).
+func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, gameID, matchID string, players []domain.PlayerMatchInput, at time.Time) (bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("achievements repository: apply match: begin: %w", err)
@@ -170,6 +192,7 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 	}
 
 	for _, pe := range players {
+		// critério por evento: +1 por ocorrência (como sempre).
 		for _, et := range pe.EventTypes {
 			matches, err := findByEventType(ctx, tx, gameID, et)
 			if err != nil {
@@ -181,16 +204,64 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 				}
 			}
 		}
+		// critério por stat: avança pela métrica (cumulative/per_match).
+		for statKey, value := range pe.Stats {
+			matches, err := findByStatKey(ctx, tx, gameID, statKey)
+			if err != nil {
+				return false, err
+			}
+			for _, a := range matches {
+				if _, err := recordStatProgress(ctx, tx, gameID, pe.PlayerID, a.ID, a.Target, value, a.StatMode, at); err != nil {
+					return false, err
+				}
+			}
+		}
 	}
 	return false, tx.Commit(ctx)
+}
+
+// recordStatProgress avança o progresso de uma conquista por stat de forma
+// atômica (ADR-0023 A1). cumulative soma o valor da partida ao acumulado;
+// per_match guarda o melhor valor de partida. Em ambos o progress é capado em
+// target, o desbloqueio é registrado uma única vez (COALESCE) e o WHERE evita
+// mexer após o desbloqueio. delta é o valor do stat nesta partida (>= 0).
+func recordStatProgress(ctx context.Context, qr querier, gameID, playerID, achievementID string, target int, delta int64, mode string, at time.Time) (bool, error) {
+	// A expressão de progresso difere pelo modo; o resto da instrução é igual.
+	// cumulative: progress + delta ; per_match: max(progress, delta).
+	// $6 (delta) precisa de cast explícito: sem ele o Postgres infere text (o
+	// mesmo $6 aparece em vários contextos). progress é INT -> casta o resultado
+	// (já capado em $4).
+	progressExpr := "LEAST(player_achievements.progress + $6::bigint, $4)::int"
+	unlockPred := "player_achievements.progress + $6::bigint >= $4"
+	if mode == domain.StatModePerMatch {
+		progressExpr = "LEAST(GREATEST(player_achievements.progress::bigint, $6::bigint), $4)::int"
+		unlockPred = "$6::bigint >= $4"
+	}
+	q := `INSERT INTO player_achievements (game_id, player_id, achievement_id, progress, unlocked_at)
+	      VALUES ($1, $2, $3, LEAST($6::bigint, $4)::int, CASE WHEN $6::bigint >= $4 THEN $5::timestamptz ELSE NULL END)
+	      ON CONFLICT (game_id, player_id, achievement_id) DO UPDATE
+	        SET progress    = ` + progressExpr + `,
+	            unlocked_at = COALESCE(player_achievements.unlocked_at,
+	                                   CASE WHEN ` + unlockPred + ` THEN $5::timestamptz END)
+	        WHERE player_achievements.unlocked_at IS NULL
+	      RETURNING unlocked_at`
+	var unlockedAt *time.Time
+	err := qr.QueryRow(ctx, q, gameID, playerID, achievementID, target, at, delta).Scan(&unlockedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // WHERE barrou: já estava desbloqueada
+	}
+	if err != nil {
+		return false, fmt.Errorf("achievements repository: record stat progress: %w", err)
+	}
+	return unlockedAt != nil, nil
 }
 
 // CreateAchievement adiciona uma conquista ao catálogo do jogo (admin).
 // Violação de unicidade (game_id, id) vira ErrAchievementExists.
 func (r *PostgresAchievementRepository) CreateAchievement(ctx context.Context, a *domain.Achievement) error {
-	const q = `INSERT INTO achievements (game_id, id, name, description, event_type, target)
-	           VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.Target)
+	const q = `INSERT INTO achievements (game_id, id, name, description, event_type, stat_key, stat_mode, target)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
@@ -205,9 +276,9 @@ func (r *PostgresAchievementRepository) CreateAchievement(ctx context.Context, a
 // Zero linhas afetadas -> ErrAchievementNotFound.
 func (r *PostgresAchievementRepository) UpdateAchievement(ctx context.Context, a *domain.Achievement) error {
 	const q = `UPDATE achievements
-	           SET name = $3, description = $4, event_type = $5, target = $6
+	           SET name = $3, description = $4, event_type = $5, stat_key = $6, stat_mode = $7, target = $8
 	           WHERE game_id = $1 AND id = $2`
-	tag, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.Target)
+	tag, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target)
 	if err != nil {
 		return fmt.Errorf("achievements repository: update achievement: %w", err)
 	}
@@ -248,7 +319,7 @@ func scanAchievements(rows pgx.Rows) ([]domain.Achievement, error) {
 	var out []domain.Achievement
 	for rows.Next() {
 		var a domain.Achievement
-		if err := rows.Scan(&a.GameID, &a.ID, &a.Name, &a.Description, &a.EventType, &a.Target); err != nil {
+		if err := rows.Scan(&a.GameID, &a.ID, &a.Name, &a.Description, &a.EventType, &a.StatKey, &a.StatMode, &a.Target); err != nil {
 			return nil, fmt.Errorf("achievements repository: scan: %w", err)
 		}
 		out = append(out, a)
