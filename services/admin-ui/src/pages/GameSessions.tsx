@@ -18,6 +18,7 @@ import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
+import { SessionAvatar } from "../components/SessionAvatar";
 
 const POLL_MS = 5000;
 
@@ -152,9 +153,12 @@ function SessionRow({
         onClick={onToggle}
       >
         <Table.Td>
-          <Text ff="monospace" size="sm">
-            {truncate(s.matchId)}
-          </Text>
+          <Group gap={6} wrap="nowrap">
+            <SessionAvatar seed={s.sessionId} />
+            <Text ff="monospace" size="sm">
+              {truncate(s.matchId)}
+            </Text>
+          </Group>
         </Table.Td>
         <Table.Td>
           <Group gap={4} wrap="nowrap">
@@ -208,6 +212,7 @@ function SessionRow({
               <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
                 <Stack gap="xs">
                   <Group gap="xl" wrap="wrap">
+                    <SessionAvatar seed={s.sessionId} size={40} />
                     <Stack gap={2}>
                       <Text size="xs" c="dimmed" fw={600}>SESSION ID</Text>
                       <Text ff="monospace" size="xs">{s.sessionId}</Text>
