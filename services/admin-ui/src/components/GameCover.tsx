@@ -36,12 +36,15 @@ function initial(name: string): string {
 interface GameCoverProps {
   game: Game;
   variant?: "cover" | "mini";
+  // withName=false esconde a faixa do nome (036): em contextos onde o nome já
+  // está ao lado (ex.: Dados do jogo), a faixa só quebrava texto em larguras menores.
+  withName?: boolean;
 }
 
 // GameCover é a capa procedural/determinística de um jogo (003-generated-cover).
 // "cover" = card 9:16 da biblioteca (imagem + faixa com o nome); "mini" = swatch
 // quadrado para o seletor do header.
-export function GameCover({ game, variant = "cover" }: GameCoverProps) {
+export function GameCover({ game, variant = "cover", withName = true }: GameCoverProps) {
   const uri = useMemo(() => coverDataUri(game), [game.id, game.generatedImageSeed, game.generatedImageStyle, game.slug, game.image, game.imageSource]);
 
   if (variant === "mini") {
@@ -74,6 +77,7 @@ export function GameCover({ game, variant = "cover" }: GameCoverProps) {
         }}
       >
         {/* faixa inferior para leitura do nome sobre a imagem */}
+        {withName && (
         <Box
           style={{
             position: "absolute",
@@ -90,6 +94,7 @@ export function GameCover({ game, variant = "cover" }: GameCoverProps) {
             {game.slug}
           </Text>
         </Box>
+        )}
         {/* acessibilidade: inicial não visível, só rótulo */}
         <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
           {initial(game.name)}
