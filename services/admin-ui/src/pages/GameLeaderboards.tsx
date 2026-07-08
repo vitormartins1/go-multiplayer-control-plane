@@ -4,6 +4,8 @@ import { useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { api, type LeaderEntry } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { PlayerAvatar } from "../components/PlayerAvatar";
+import { GuestBadge } from "../components/GuestBadge";
 
 const SCORE_BOARD = "score";
 
@@ -101,7 +103,15 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             {data.map((e) => (
               <Table.Tr key={e.playerId}>
                 <Table.Td>{e.rank}</Table.Td>
-                <Table.Td c="dimmed">{e.playerId}</Table.Td>
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <PlayerAvatar seed={e.playerId} size={24} />
+                    <Text size="sm" c="dimmed">
+                      {e.playerId}
+                    </Text>
+                    <GuestBadge playerId={e.playerId} />
+                  </Group>
+                </Table.Td>
                 <Table.Td>{e.score}</Table.Td>
                 <Table.Td>
                   <ActionIcon variant="subtle" color="gray" onClick={() => openEdit(e)} aria-label="Ajustar score">
