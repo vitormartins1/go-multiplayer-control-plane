@@ -2,6 +2,7 @@ import { Alert, Button, Code, Group, Loader, Stack, Table, Text } from "@mantine
 import { IconRefresh } from "@tabler/icons-react";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { JsonTree } from "../components/JsonTree";
 
 // PlayerDataView: dado de gameplay do jogador no jogo ativo (gameId vem do
 // contexto global, via PlayerDetail). Sem gameId -> orienta a escolher no header.
@@ -25,29 +26,28 @@ export function PlayerDataView({ playerId, gameId }: { playerId: string; gameId:
       {!!error && <Alert color="red">Falha ao carregar (player-data indisponível?).</Alert>}
       {data && data.length === 0 && <Text c="dimmed">Nenhum dado para este jogador neste jogo.</Text>}
       {data && data.length > 0 && (
-        <Table striped highlightOnHover withTableBorder>
+        // sem highlightOnHover: o hover mudando a cor atrapalha a leitura das
+        // células com JSON (spec 042).
+        <Table striped withTableBorder verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Namespace</Table.Th>
-              <Table.Th>Key</Table.Th>
+              <Table.Th w={140}>Namespace</Table.Th>
+              <Table.Th w={140}>Key</Table.Th>
               <Table.Th>Value</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {data.map((e) => {
               const isPrimitive = e.value === null || typeof e.value !== "object";
-              const formatted = isPrimitive ? String(e.value) : JSON.stringify(e.value, null, 2);
               return (
                 <Table.Tr key={`${e.namespace}/${e.key}`}>
                   <Table.Td>{e.namespace}</Table.Td>
                   <Table.Td>{e.key}</Table.Td>
                   <Table.Td>
                     {isPrimitive ? (
-                      <Code>{formatted}</Code>
+                      <Code>{String(e.value)}</Code>
                     ) : (
-                      <Code block style={{ maxHeight: 200, overflow: "auto" }}>
-                        {formatted}
-                      </Code>
+                      <JsonTree value={e.value} />
                     )}
                   </Table.Td>
                 </Table.Tr>
