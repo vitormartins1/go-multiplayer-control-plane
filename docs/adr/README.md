@@ -28,3 +28,4 @@
 | [0022](0022-orphan-session-reconcile-agones.md) | Reconciliação de sessões órfãs contra o Agones (fecha `abandoned`, TTL vira backstop) | Accepted | 2026-07-06 | session |
 | [0023](0023-multiplayer-profile.md) | Perfil de multiplayer por jogo — arquétipo + parâmetros orientando o control plane | Accepted | 2026-07-06 | game-registry, matchmaking, session, achievements, leaderboard, analytics, admin-bff, admin-ui, data plane |
 | [0024](0024-multiplayer-modes.md) | Modos de jogo — perfis de multiplayer nomeados por jogo + session manifest | Accepted | 2026-07-07 | game-registry, matchmaking, session, achievements, leaderboard, analytics, admin-bff, admin-ui, data plane |
+| [0025](0025-game-deletion-soft-delete.md) | Remoção de jogo — soft delete no game-registry (hard purge adiado por evidência) | Accepted | 2026-07-08 | game-registry, admin-bff, admin-ui |
