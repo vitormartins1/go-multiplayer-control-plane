@@ -21,8 +21,13 @@ A visão materializada é componente próprio (Mantine), sem lib.
 - Player data: a tabela perde o `highlightOnHover` (mantém `striped`/borda).
 - Valores JSON (objeto/array) em **ambas** as abas passam a usar um **tree
   interativo read-only** (`JsonTree`): expande/colapsa chaves `{}` e arrays
-  `[]`, segue o color scheme do console, sem edição e sem clipboard. Primitivos
+  `[]`, segue o color scheme do console, sem edição. *(Refinado 2026-07-08:
+  copiar valor/subárvore habilitado — interação sem edição; nó colapsado
+  mostra a contagem de itens; strings longas truncam expansível.)* Primitivos
   continuam como `Code` inline.
+- Player data ganha a coluna **Leitura consolidada** à direita da coluna
+  Estrutura (JSON) — o mesmo `JsonMaterialized` do cloud save, por linha.
+  *(Refinado 2026-07-08, a pedido do usuário após validar no cloud save.)*
 - Cloud save (quando o blob é JSON): abaixo dos metadados, **duas colunas**
   (1 em telas menores):
   - **Estrutura (JSON)** — o tree interativo do blob decodificado;
