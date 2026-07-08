@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Button, Divider, Fieldset, Group, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Box, Button, Divider, Fieldset, Group, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { api, type Game } from "../lib/api";
+import { GameCover } from "../components/GameCover";
 import { MultiplayerSettings } from "./MultiplayerSettings";
 
 export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () => void }) {
@@ -28,31 +29,37 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
     <Stack maw={960}>
       <Title order={4}>Identidade</Title>
       <Fieldset legend="Dados do jogo">
-        <Stack gap="sm">
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            <TextInput
-              label="Nome"
-              value={name}
-              onChange={(e) => setName(e.currentTarget.value)}
-              maxLength={100}
-            />
-            <TextInput
-              label="Slug"
-              value={game.slug}
-              readOnly
-              disabled
-              description="Chave estável — não muda."
-            />
-          </SimpleGrid>
-          <Group>
-            <Button onClick={save} disabled={!canSave} loading={saving}>
-              Salvar
-            </Button>
-          </Group>
-          <Text size="xs" c="dimmed">
-            Remover jogo ainda não está disponível (envolve apagar dados em vários serviços).
-          </Text>
-        </Stack>
+        {/* Capa gerada ao lado dos campos (026) — a "identidade" visual do jogo. */}
+        <Group align="flex-start" gap="lg">
+          <Box w={110} style={{ flexShrink: 0 }}>
+            <GameCover game={game} />
+          </Box>
+          <Stack gap="sm" style={{ flex: 1, minWidth: 260 }}>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <TextInput
+                label="Nome"
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+                maxLength={100}
+              />
+              <TextInput
+                label="Slug"
+                value={game.slug}
+                readOnly
+                disabled
+                description="Chave estável — não muda."
+              />
+            </SimpleGrid>
+            <Group>
+              <Button onClick={save} disabled={!canSave} loading={saving}>
+                Salvar
+              </Button>
+            </Group>
+            <Text size="xs" c="dimmed">
+              Remover jogo ainda não está disponível (envolve apagar dados em vários serviços).
+            </Text>
+          </Stack>
+        </Group>
       </Fieldset>
 
       <Divider my="md" />

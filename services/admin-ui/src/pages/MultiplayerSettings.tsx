@@ -21,9 +21,17 @@ import {
   TagsInput,
   Text,
   TextInput,
+  Title,
   Tooltip,
 } from "@mantine/core";
-import { IconInfoCircle, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconArrowLeft,
+  IconInfoCircle,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import {
   api,
@@ -654,6 +662,44 @@ function CoopMissionForm({
   );
 }
 
+// modeSummary resume os parâmetros de um modo numa linha escaneável (026) —
+// a coluna "Configuração" da lista. Função pura, narrowing por arquétipo.
+function modeSummary(m: MultiplayerMode): string {
+  switch (m.archetype) {
+    case "queue_arena": {
+      const p = m.params;
+      const comp =
+        p.structure === "ffa" ? `FFA · ${p.playerCount} jogadores` : `${p.teamCount} times de ${p.teamSize}`;
+      const win =
+        p.winCondition === "first_to_score"
+          ? `primeiro a ${p.scoreTarget}`
+          : p.winCondition === "highest_at_time"
+            ? `${p.durationSeconds}s no relógio`
+            : p.winCondition === "objective"
+              ? "objetivo"
+              : "eliminação";
+      const rounds = p.matchStructure === "best_of_rounds" ? ` · melhor de ${2 * p.roundsToWin - 1}` : "";
+      return `${comp} · ${win}${rounds}`;
+    }
+    case "host_world_dropin": {
+      const p = m.params;
+      const parts: string[] = [];
+      if (p.enabledRoles.includes("coop")) parts.push(`co-op ${p.coopSlots}`);
+      if (p.enabledRoles.includes("invader")) parts.push(`invasor ${p.invaderSlots}`);
+      return parts.join(" + ") || "sem papéis externos";
+    }
+    case "battle_royale": {
+      const p = m.params;
+      return `${p.teamSize === 1 ? "Solo" : `Squad ${p.teamSize}`} · lobby ${p.lobbySize}`;
+    }
+    case "coop_mission": {
+      const p = m.params;
+      const n = p.missions.length;
+      return `Time ${p.teamSize}${n > 0 ? ` · ${n} miss${n > 1 ? "ões" : "ão"}` : ""}`;
+    }
+  }
+}
+
 // --- Rótulos por arquétipo (lista de modos) ---
 const ARCHETYPE_META: Record<
   MultiplayerProfile["archetype"],
@@ -772,8 +818,36 @@ function ModeEditor({
     }
   }
 
+  const archetypeChanged = isEdit && archetype !== mode.archetype;
+
   return (
     <Stack>
+      {/* Cabeçalho do editor (026): contexto + ações também no topo. */}
+      <Group justify="space-between">
+        <Group gap="xs">
+          <ActionIcon variant="subtle" aria-label="Voltar" onClick={onCancel} disabled={saving}>
+            <IconArrowLeft size={18} />
+          </ActionIcon>
+          <Title order={5}>
+            {isEdit ? (
+              <>
+                Editar <Code>{mode.modeId}</Code>
+              </>
+            ) : (
+              "Novo modo"
+            )}
+          </Title>
+        </Group>
+        <Group gap="xs">
+          <Button size="xs" variant="default" onClick={onCancel} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button size="xs" onClick={save} disabled={!canSave} loading={saving}>
+            Salvar modo
+          </Button>
+        </Group>
+      </Group>
+
       <Fieldset legend="Identidade do modo">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <TextInput
@@ -849,6 +923,13 @@ function ModeEditor({
           </Tooltip>
         </SimpleGrid>
       </Fieldset>
+
+      {archetypeChanged && (
+        <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
+          Trocar o arquétipo redefine os parâmetros deste modo e muda o contrato com o data
+          plane — os parâmetros do arquétipo anterior serão descartados ao salvar.
+        </Alert>
+      )}
 
       <Divider label="Configurações do arquétipo" labelPosition="left" />
 
@@ -985,6 +1066,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             <Table.Th>Modo</Table.Th>
             <Table.Th>ID</Table.Th>
             <Table.Th>Arquétipo</Table.Th>
+            <Table.Th>Configuração</Table.Th>
             <Table.Th w={90} />
           </Table.Tr>
         </Table.Thead>
@@ -1005,6 +1087,11 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                   <Badge variant="light" color={meta.color}>
                     {meta.label}
                   </Badge>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm" c="dimmed">
+                    {modeSummary(m)}
+                  </Text>
                 </Table.Td>
                 <Table.Td>
                   <Group gap={4} justify="flex-end" wrap="nowrap">
