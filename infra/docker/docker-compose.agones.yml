@@ -4,7 +4,7 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.agones.yml up -d session-service
 #
-# Pré-requisito: go-game-dataplane/tools/k3d/up.sh já rodou — ele gera o
+# Pré-requisito: unity-queue-arena-data-plane/tools/k3d/up.sh já rodou — ele gera o
 # kubeconfig-compose.yaml (API server via host.docker.internal:6550, gitignored).
 services:
   session-service:
@@ -18,6 +18,6 @@ services:
       DEV_PUBLIC_HOST: 127.0.0.1
       SESSION_TTL: 30m
     volumes:
-      - ../../../go-game-dataplane/tools/k3d/kubeconfig-compose.yaml:/kubeconfig:ro
+      - ../../../unity-queue-arena-data-plane/tools/k3d/kubeconfig-compose.yaml:/kubeconfig:ro
     extra_hosts:
       - host.docker.internal:host-gateway
