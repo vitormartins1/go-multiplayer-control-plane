@@ -83,7 +83,7 @@ func (r *PostgresGameRepository) SetModes(ctx context.Context, gameID string, mo
 	if err != nil {
 		return fmt.Errorf("game-registry repository: set modes: encode: %w", err)
 	}
-	tag, err := r.pool.Exec(ctx, `UPDATE games SET multiplayer_profile = $2 WHERE id = $1`, gameID, raw)
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET multiplayer_profile = $2 WHERE id = $1 AND deleted_at IS NULL`, gameID, raw)
 	if err != nil {
 		return fmt.Errorf("game-registry repository: set modes: %w", err)
 	}

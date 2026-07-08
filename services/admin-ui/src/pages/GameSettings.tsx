@@ -1,16 +1,34 @@
 import { useState } from "react";
-import { Box, Button, Divider, Fieldset, Group, Stack, Text, TextInput, Title } from "@mantine/core";
+import {
+  Box,
+  Button,
+  Divider,
+  Fieldset,
+  Group,
+  Modal,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { api, type Game } from "../lib/api";
+import { useNavigate } from "react-router-dom";
+import { api, HttpError, type Game } from "../lib/api";
 import { GameCover } from "../components/GameCover";
 import { MultiplayerSettings } from "./MultiplayerSettings";
 
 export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () => void }) {
+  const navigate = useNavigate();
   const [name, setName] = useState(game.name);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const trimmed = name.trim();
   const canSave = trimmed !== "" && trimmed !== game.name && !saving;
+  // Confirmação destrutiva (spec 038): digitar o nome exato do jogo.
+  const canDelete = confirmName === game.name && !deleting;
 
   async function save() {
     setSaving(true);
@@ -22,6 +40,24 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
       notifications.show({ color: "red", message: "Falha ao renomear (nome inválido ou serviço fora?)." });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function removeGame() {
+    setDeleting(true);
+    try {
+      await api.deleteGame(game.id);
+      notifications.show({ color: "green", message: `"${game.name}" removido.` });
+      navigate("/games");
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) {
+        // Já removido (outra aba/admin): o destino é o mesmo — a biblioteca.
+        notifications.show({ color: "yellow", message: "Jogo não encontrado — já havia sido removido." });
+        navigate("/games");
+        return;
+      }
+      notifications.show({ color: "red", message: "Falha ao remover (serviço fora?). Tente de novo." });
+      setDeleting(false);
     }
   }
 
@@ -59,9 +95,6 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
                 Salvar
               </Button>
             </Group>
-            <Text size="xs" c="dimmed">
-              Remover jogo ainda não está disponível (envolve apagar dados em vários serviços).
-            </Text>
           </Stack>
         </Group>
       </Fieldset>
@@ -75,6 +108,58 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
         Por ora, apenas um perfil por jogo.
       */}
       <MultiplayerSettings gameId={game.id} />
+
+      <Divider my="md" />
+
+      <Title order={4}>Zona de perigo</Title>
+      <Fieldset legend="Remover jogo">
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Text size="sm" c="dimmed" style={{ flex: 1, minWidth: 260 }}>
+            O jogo some do console e para de aceitar filas e sessões novas. Conquistas, saves,
+            leaderboards e analytics ficam inacessíveis. Não há desfazer pelo console.
+          </Text>
+          <Button color="red" variant="outline" onClick={() => setDeleteOpen(true)}>
+            Remover jogo
+          </Button>
+        </Group>
+      </Fieldset>
+
+      <Modal
+        opened={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false);
+          setConfirmName("");
+        }}
+        title={`Remover "${game.name}"`}
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            Esta ação remove o jogo do console e bloqueia novas filas e sessões. Sessões em
+            andamento terminam naturalmente. Conquistas, saves, leaderboards e analytics ficam
+            inacessíveis. <strong>Não há desfazer pelo console.</strong>
+          </Text>
+          <TextInput
+            label={`Digite "${game.name}" para confirmar`}
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.currentTarget.value)}
+            data-autofocus
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setDeleteOpen(false);
+                setConfirmName("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button color="red" disabled={!canDelete} loading={deleting} onClick={removeGame}>
+              Remover definitivamente
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

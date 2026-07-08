@@ -101,6 +101,10 @@ func (f *fakeRegistry) RenameGame(_ context.Context, id, name string) (*domain.G
 	}
 	return &domain.Game{ID: id, Name: name}, nil
 }
+func (f *fakeRegistry) DeleteGame(_ context.Context, id string) error {
+	f.gotGameID = id
+	return f.err
+}
 func (f *fakeRegistry) GetMultiplayerProfile(_ context.Context, gameID string) (json.RawMessage, error) {
 	f.gotGameID = gameID
 	return f.profile, f.err

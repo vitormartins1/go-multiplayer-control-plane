@@ -76,7 +76,7 @@ Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-
 2. ✅ **Fan-out resiliente — FEITO** (ADR-0020, spec `session/006-durable-fanout`).
 3. ✅ **analytics-service — FEITO** (ADR-0021). *Evoluções v1→v2 quando fizer sentido:* telemetria genérica (`POST /events`); deep-dive por jogo (aba no GameDetail). O **event store cru** (C2 do ADR-0021) é o escape se a pré-agregação engessar.
 4. ✅ **Importação CSV de conquistas — FEITA** (specs `admin-bff/011` + `admin-ui/014`, commit `1947ce4`).
-5. **Remover jogo** no painel — *rename* ✅ feito. *Delete* segue **adiado** por precisar de decisão sobre dado órfão (cascata cross-service). **Precisa de ADR** — opções: *soft delete* (mais barato) vs *hard cascade*. A aba Configurações já avisa "remover ainda não disponível".
+5. ✅ **Remover jogo — FEITO (2026-07-08)**: ADR-0025 (soft delete no registry; hard purge = evolução gated por evidência) + specs `game-registry/010` (deleted_at, filtro na fonte no repository, DELETE /games/{id}) + `admin-bff/018` (passthrough) + `admin-ui/038` (zona de perigo + modal digitando o nome). Validado e2e no compose (204/404, some da lista, slug reservado 409).
 6. **Leaderboard**: seasons/janelas por período + paginação.
 7. ✅ **Cleanup admin-bff — FEITO**: extraído `internal/upstream` (`Do`, `ErrorCode`, `DefaultClient`) — 5 adapters (achievements, cloudsave, playerdata, leaderboard, gameregistry) sem mais `do()`/`classify()`/`errorCode()` locais.
 8. **SQS queue depth no Grafana** (observabilidade futura): visibilidade de profundidade de fila e DLQ requer `yet-another-cloudwatch-exporter` (YACE). Métricas do lado consumidor já estão no dashboard `game-lifecycle`. Implementar quando chegar em produção AWS.

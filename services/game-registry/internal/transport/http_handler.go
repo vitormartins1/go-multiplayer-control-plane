@@ -29,6 +29,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games", h.list)
 	mux.HandleFunc("GET /games/{id}", h.get)
 	mux.HandleFunc("PUT /games/{id}", h.rename)
+	mux.HandleFunc("DELETE /games/{id}", h.delete)
 	// Perfil de multiplayer — alias legado do modo "default" (ADR-0023/0024).
 	mux.HandleFunc("PUT /games/{id}/multiplayer-profile", h.setProfile)
 	mux.HandleFunc("GET /games/{id}/multiplayer-profile", h.getProfile)
@@ -403,6 +404,16 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toDTO(g))
+}
+
+// delete marca o jogo como removido (soft delete, ADR-0025, spec 010): 204;
+// inexistente ou já deletado -> 404.
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	if err := h.games.Delete(r.Context(), r.PathValue("id")); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // markPresence registra a presença do jogador {playerID} no jogo {gameId}

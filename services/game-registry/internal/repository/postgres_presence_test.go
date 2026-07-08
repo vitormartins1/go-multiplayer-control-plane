@@ -33,6 +33,7 @@ func newPresencePool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/001_create_games.sql",
 			"../../migrations/003_create_game_players.sql",
 			"../../migrations/004_add_cover_metadata.sql",
+			"../../migrations/006_add_deleted_at.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -104,6 +105,47 @@ func TestPresence_GamesByPlayer_SoOsJogosDoPlayer(t *testing.T) {
 	none, err := pres.GamesByPlayer(ctx, "fantasma")
 	require.NoError(t, err)
 	assert.Empty(t, none, "player sem presença -> nenhum jogo")
+}
+
+// --- soft delete (ADR-0025, spec 010): presença de jogo deletado ---
+
+func TestPresence_JogoDeletado_UpsertErrGameNotFound(t *testing.T) {
+	pool := newPresencePool(t)
+	games := NewPostgresGameRepository(pool)
+	pres := NewPostgresPresenceRepository(pool)
+	ctx := context.Background()
+
+	g := newGame("tetris", "Tetris")
+	require.NoError(t, games.Create(ctx, g))
+	require.NoError(t, games.SoftDelete(ctx, g.ID))
+
+	err := pres.Upsert(ctx, g.ID, "p1", "Alice")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound, "marca de presença recusada em jogo deletado")
+}
+
+func TestPresence_JogoDeletado_SomeDaReversaEListaVazia(t *testing.T) {
+	pool := newPresencePool(t)
+	games := NewPostgresGameRepository(pool)
+	pres := NewPostgresPresenceRepository(pool)
+	ctx := context.Background()
+
+	ga := newGame("game-a", "Game A")
+	gb := newGame("game-b", "Game B")
+	require.NoError(t, games.Create(ctx, ga))
+	require.NoError(t, games.Create(ctx, gb))
+	require.NoError(t, pres.Upsert(ctx, ga.ID, "p1", "Alice"))
+	require.NoError(t, pres.Upsert(ctx, gb.ID, "p1", "Alice"))
+
+	require.NoError(t, games.SoftDelete(ctx, ga.ID))
+
+	got, err := pres.GamesByPlayer(ctx, "p1")
+	require.NoError(t, err)
+	require.Len(t, got, 1, "consulta reversa omite o deletado")
+	assert.Equal(t, "Game B", got[0].Name)
+
+	base, err := pres.ListByGame(ctx, ga.ID)
+	require.NoError(t, err)
+	assert.Empty(t, base, "base do jogo deletado responde vazia (mesma forma de jogo sem players)")
 }
 
 func TestPresence_ListByGame_IsoladoEOrdenado(t *testing.T) {

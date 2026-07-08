@@ -154,6 +154,9 @@ type GameRegistry interface {
 	CreateGame(ctx context.Context, slug, name string) (*Game, error)
 	// RenameGame altera o nome do jogo. UpstreamError (400/404) propagado.
 	RenameGame(ctx context.Context, id, name string) (*Game, error)
+	// DeleteGame remove o jogo (soft delete no registry, ADR-0025).
+	// UpstreamError(404) se inexistente/já deletado.
+	DeleteGame(ctx context.Context, id string) error
 	// PlayersOf lê a player base do jogo (presença, ADR-0019).
 	PlayersOf(ctx context.Context, gameID string) ([]GamePlayer, error)
 	// GamesOfPlayer lê os jogos em que o player está presente (consulta reversa).

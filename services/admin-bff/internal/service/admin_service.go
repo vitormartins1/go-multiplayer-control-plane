@@ -103,6 +103,11 @@ func (s *Service) RenameGame(ctx context.Context, id, name string) (*domain.Game
 	return s.registry.RenameGame(ctx, id, name)
 }
 
+// DeleteGame remove o jogo (soft delete no registry, ADR-0025, spec 018).
+func (s *Service) DeleteGame(ctx context.Context, id string) error {
+	return s.registry.DeleteGame(ctx, id)
+}
+
 // GetMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023, passthrough).
 func (s *Service) GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error) {
 	return s.registry.GetMultiplayerProfile(ctx, gameID)

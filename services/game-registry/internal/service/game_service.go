@@ -76,6 +76,15 @@ func (s *service) Rename(ctx context.Context, id, name string) (*domain.Game, er
 	return g, nil
 }
 
+// Delete marca o jogo como removido (soft delete, ADR-0025). Sem regra além
+// do repasse: a semântica (deletado = inexistente) mora no repository.
+func (s *service) Delete(ctx context.Context, id string) error {
+	if err := s.repo.SoftDelete(ctx, id); err != nil {
+		return fmt.Errorf("game-registry service: delete: %w", err)
+	}
+	return nil
+}
+
 func (s *service) List(ctx context.Context) ([]domain.Game, error) {
 	games, err := s.repo.List(ctx)
 	if err != nil {
