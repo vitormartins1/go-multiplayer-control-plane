@@ -51,3 +51,9 @@ A capa a 110px dentro do Fieldset quebrou o texto da faixa e ficou deslocada (fe
 Vitor). Novo layout: **coluna própria à direita** (Grid 8/4 em md+), capa com largura
 dinâmica da coluna + sticky ao rolar, abrangendo Identidade e Multiplayer; em telas
 pequenas a capa cai para o final da página (ordem natural do DOM).
+
+## Ajuste pós-validação visual 2 (2026-07-07)
+
+Com a coluna da capa em 1/3 (Grid 8/4) a capa dominava demais a tela (feedback do
+Vitor). Reduzida para **1/4** (Grid 9/3 em md+); resto do comportamento (sticky,
+capa ao final em telas pequenas) mantido.

@@ -43,3 +43,10 @@ os modos (hoje invisíveis fora de Configurações).
 
 - Aba Overview dedicada; gráficos no header; navegação por clique nos badges de modo;
   polling adicional.
+
+## Ajuste pós-validação visual (2026-07-07)
+
+Feedback do Vitor: os 4 StatCards eram redundantes com os badges das tabs — removidos
+(o componente `StatCard` continua em uso em outras páginas). Os badges de modos subiram
+para **a mesma linha do nome** (capa mini + título + badges), no lugar do slug — o slug
+fica na aba Configurações. Sem fetch novo além do `listMultiplayerModes` já existente.
