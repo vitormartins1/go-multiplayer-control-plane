@@ -1147,3 +1147,41 @@ for _, t := range m.queue {
 **Contraste com C#:** um `Dictionary<TKey,…>` com chave customizada exige `Equals`/`GetHashCode` corretos (ou um `record`, que os gera). Em Go a igualdade estrutural de structs comparáveis é da linguagem — o compilador também **recusa** usar como chave um struct com campo não-comparável (slice/map/func), transformando um bug de runtime do C# antigo em erro de compilação.
 
 **Pegadinha / nuance:** cuidado ao "evoluir" a chave: adicionar um campo `[]string` ao struct quebra a compilação de todos os maps que o usam como chave — o que é bom (o compilador te força a decidir), mas surpreende. Para chaves grandes, prefira campos que identifiquem (ids), não os dados inteiros.
+
+## 33 — Relógio injetável como campo-função: `now func() time.Time`
+
+**O que é / por que importa:** código que deriva comportamento do tempo (a key diária do leaderboard, expiração, janelas) é intestável se chamar `time.Now()` direto — o teste não controla "que dia é hoje" e fica flaky perto de viradas (meia-noite UTC, troca de semana ISO). Em Go, o idiomático **não** é criar uma interface `Clock` com implementação fake: basta um **campo do tipo função** no struct, default `time.Now`, que o teste substitui por um lambda. Funções são valores de primeira classe — a "interface de um método só" vira um campo-função sem cerimônia.
+
+**Onde no projeto:** `leaderboard-service/internal/storage/redis_store.go` (spec 007 — a key da janela periódica é derivada de `s.now()`); o teste de integração fixa o relógio e testa **virada de período** avançando-o (`redis_store_test.go`).
+
+```mermaid
+flowchart LR
+    subgraph prod [produção]
+        A[NewRedisStore] -->|"now = time.Now"| K1["windowKey(..., s.now())<br/>:d:20260708"]
+    end
+    subgraph test [teste de integração]
+        B["store.now = func() { return fixedNow }"] --> K2[":d:20260708 (estável)"]
+        B -->|"avança 24h"| K3[":d:20260709 (virada testada)"]
+    end
+```
+
+```go
+type RedisStore struct {
+	client *redis.Client
+	prefix string
+	// now permite fixar o relógio nos testes. Produção: time.Now.
+	now func() time.Time
+}
+
+func NewRedisStore(addr, prefix string) *RedisStore {
+	return &RedisStore{ /* ... */ now: time.Now}
+}
+
+// no teste (mesmo package): períodos determinísticos e virada controlada.
+store.now = func() time.Time { return fixedNow }
+store.now = func() time.Time { return fixedNow.Add(24 * time.Hour) } // "amanhã"
+```
+
+**Contraste com C#:** o .NET moderno resolveu isso com uma abstração dedicada (`TimeProvider`, .NET 8) injetada via DI — antes disso, cada projeto inventava seu `IClock`. Em Go o campo-função dá o mesmo poder sem tipo novo, sem DI container e sem mock framework: o teste atribui uma closure e pronto. A regra geral: **dependência de um método só = campo-função; duas ou mais operações relacionadas = interface**.
+
+**Pegadinha / nuance:** o campo é minúsculo (não exportado) — só testes no **mesmo package** conseguem trocá-lo, o que aqui é proposital (é detalhe de teste, não API). Se o construtor esquecer o default (`now: time.Now`), o primeiro uso é um nil pointer dereference em produção; o teste de smoke pega, mas vale conferir no construtor. E capture o instante **uma vez por operação** (`t := s.now()` no topo) — chamar `s.now()` várias vezes na mesma operação pode cruzar uma virada no meio e espalhar o write em períodos diferentes.
