@@ -26,7 +26,7 @@ unity-<archetype>-data-plane        # um por arquétipo (Unity)
 
 | Arquétipo (ADR-0023) | Repo data plane (nome decidido) | Repo atual | Status |
 |---|---|---|---|
-| `queue_arena` | `unity-queue-arena-data-plane` | `go-game-dataplane` | ✅ existe (referência; jogo "Packet Arena") — **renomear** |
+| `queue_arena` | `unity-queue-arena-data-plane` | `go-game-dataplane` | ✅ existe (referência; jogo "Packet Arena") — **rename executado no conteúdo (2026-07-08)**: namespace/asmdefs `QueueArena.*`, docs e codegen apontando p/ `go-multiplayer-control-plane`; falta só o `mv` da pasta (dono) |
 | `battle_royale` | `unity-battle-royale-data-plane` | — | ⬜ planejado (criar quando atacar o arquétipo) |
 | `coop_mission` | `unity-coop-mission-data-plane` | — | ⬜ planejado |
 | `host_world_dropin` | `unity-host-world-dropin-data-plane` | — | ⬜ planejado |
@@ -54,8 +54,8 @@ Renomear toca o module path Go e várias referências. Estado:
 1. **Repos GitHub:** renomear (GitHub redireciona o antigo por um tempo) e `git remote set-url`.
 2. ~~**Module path Go**~~ ✅ **feito (2026-07-07):** `go.mod` + 128 arquivos de imports + `go_package` dos 2 protos + stubs regenerados via `buf` (não usar `sed` no `.pb.go` — corrompe o `rawDesc`). 721 testes verdes com `-race`.
 3. ~~**Referências em docs do backend**~~ ✅ **feito/verificado (2026-07-08):** varredura completa — só restam menções históricas intencionais (`ADR-0001`, `GO-LEARNINGS #30`, notas de rename neste doc e no NEXT-STEPS). Nenhum path/config embute o nome da pasta (o project name do compose deriva de `infra/docker`).
-4. **Referências no data plane** (`go-game-dataplane`): README, CLAUDE.md, ROADMAP, specs, links `../go-game-backend`.
-5. **Memórias** do assistente que citam nomes de repo (`dataplane-repo`, etc.).
+4. ~~**Referências no data plane**~~ ✅ **feito (2026-07-08):** README, CLAUDE.md, ROADMAP, specs, ADRs, tools e `codegen.csproj` (links `../go-game-backend` → `../go-multiplayer-control-plane`); namespace/asmdefs `GameDataplane.*` → `QueueArena.*`. Falta o `mv` da pasta (+ mover a pasta de memória do assistente e reinstalar o LaunchAgent `pi5-tunnels`, que embute o path absoluto no plist).
+5. **Memórias** do assistente que citam nomes de repo (`dataplane-repo`, etc.) — conteúdo atualizado em 2026-07-08; a pasta de memória move junto com o `mv`.
 6. **CI/CD e paths** que embutam o nome do repo/módulo.
 
 > Sugestão de sequência: renomear os repos → module path → varredura de referências → validar build/CI. Feito de uma vez para não conviver com nomes mistos.
