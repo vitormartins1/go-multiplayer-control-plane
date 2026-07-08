@@ -370,6 +370,9 @@ export const api = {
   createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),
   renameGame: (gameId: string, name: string) =>
     putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}`, { name }),
+  // Soft delete no registry (ADR-0025): o jogo some do console; dados nos
+  // demais serviços ficam órfãos e inacessíveis. 404 = já removido.
+  deleteGame: (gameId: string) => del(`/api/games/${encodeURIComponent(gameId)}`),
   // Perfil de multiplayer (ADR-0023). getMultiplayerProfile -> null em 404
   // (jogo ainda não configurado); demais erros propagam.
   getMultiplayerProfile: async (

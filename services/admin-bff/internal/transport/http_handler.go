@@ -22,6 +22,7 @@ type AdminService interface {
 	Games(ctx context.Context) ([]domain.Game, error)
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
 	RenameGame(ctx context.Context, id, name string) (*domain.Game, error)
+	DeleteGame(ctx context.Context, id string) error
 	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
 	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
 	ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error)
@@ -67,6 +68,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games", h.games)
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
+	mux.HandleFunc("DELETE /api/games/{gameId}", h.deleteGame)
 	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profile", h.getMultiplayerProfile)
 	mux.HandleFunc("PUT /api/games/{gameId}/multiplayer-profile", h.setMultiplayerProfile)
 	// Modos nomeados (ADR-0024, spec 017) — passthrough cru da coleção.
@@ -187,6 +189,16 @@ func (h *Handler) renameGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, g)
+}
+
+// deleteGame remove o jogo (soft delete no registry, ADR-0025, spec 018):
+// passthrough com os códigos do upstream intactos (204/404).
+func (h *Handler) deleteGame(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.DeleteGame(r.Context(), r.PathValue("gameId")); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // getMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023, spec 012).

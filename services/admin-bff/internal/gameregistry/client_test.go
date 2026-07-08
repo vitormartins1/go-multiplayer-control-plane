@@ -223,6 +223,31 @@ func TestSetMultiplayerMode_PutRawNoPath(t *testing.T) {
 	assert.JSONEq(t, body, string(got))
 }
 
+func TestDeleteGame_204(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/games/g1", r.URL.Path)
+		assert.Equal(t, http.MethodDelete, r.Method)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	require.NoError(t, New(srv.URL, srv.Client()).DeleteGame(context.Background(), "g1"))
+}
+
+func TestDeleteGame_404_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"not_found"}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).DeleteGame(context.Background(), "g1")
+	var ue *domain.UpstreamError
+	require.True(t, errors.As(err, &ue))
+	assert.Equal(t, http.StatusNotFound, ue.Status)
+	assert.Equal(t, "not_found", ue.Code, "código do upstream preservado")
+}
+
 func TestDeleteMultiplayerMode_204(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/games/g1/multiplayer-profiles/tdm", r.URL.Path)

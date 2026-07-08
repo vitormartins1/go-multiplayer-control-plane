@@ -1,7 +1,7 @@
 # Spec: 010-game-soft-delete
 
 **Serviço:** game-registry
-**Status:** Rascunho
+**Status:** Aprovado (2026-07-08)
 **Data:** 2026-07-08
 **ADR:** 0025 (remoção de jogo — soft delete no registry)
 

@@ -42,9 +42,23 @@ func (r *PostgresGameRepository) Create(ctx context.Context, g *domain.Game) err
 }
 
 func (r *PostgresGameRepository) UpdateName(ctx context.Context, id, name string) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE games SET name = $2 WHERE id = $1`, id, name)
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET name = $2 WHERE id = $1 AND deleted_at IS NULL`, id, name)
 	if err != nil {
 		return fmt.Errorf("game-registry repository: update name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGameNotFound
+	}
+	return nil
+}
+
+// SoftDelete marca deleted_at (ADR-0025). O UPDATE condicional cobre
+// inexistente e já deletado com uma query só (RowsAffected 0), sem corrida.
+func (r *PostgresGameRepository) SoftDelete(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE games SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return fmt.Errorf("game-registry repository: soft delete: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrGameNotFound
@@ -64,7 +78,7 @@ func scanGame(row interface{ Scan(...any) error }, g *domain.Game) error {
 }
 
 func (r *PostgresGameRepository) List(ctx context.Context) ([]domain.Game, error) {
-	const q = `SELECT ` + selectCols + ` FROM games ORDER BY name ASC`
+	const q = `SELECT ` + selectCols + ` FROM games WHERE deleted_at IS NULL ORDER BY name ASC`
 	rows, err := r.pool.Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("game-registry repository: list: %w", err)
@@ -89,7 +103,7 @@ func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*doma
 	// FindByID também carrega o perfil de multiplayer (coluna JSONB); List não o
 	// faz (spec 006 — lista não infla). Por isso a query/scan são próprios, sem
 	// reusar scanGame.
-	const q = `SELECT ` + selectCols + `, multiplayer_profile FROM games WHERE id = $1`
+	const q = `SELECT ` + selectCols + `, multiplayer_profile FROM games WHERE id = $1 AND deleted_at IS NULL`
 	var g domain.Game
 	var profileRaw []byte
 	err := r.pool.QueryRow(ctx, q, id).Scan(

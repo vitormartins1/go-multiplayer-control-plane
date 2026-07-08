@@ -66,6 +66,9 @@ func (m *mockService) ListModes(ctx context.Context, gameID string) ([]domain.Mu
 func (m *mockService) DeleteMode(ctx context.Context, gameID, modeID string) error {
 	return m.Called(ctx, gameID, modeID).Error(0)
 }
+func (m *mockService) Delete(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
 
 type mockPresence struct{ mock.Mock }
 
@@ -448,6 +451,30 @@ func TestGet_SemPerfil_MultiplayerProfileNull(t *testing.T) {
 	val, ok := resp["multiplayerProfile"]
 	require.True(t, ok, "chave presente")
 	assert.Nil(t, val, "valor null quando sem perfil")
+}
+
+func TestDelete_JogoVivo_204(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Delete", mock.Anything, "id-1").Return(nil)
+	rr := do(newServer(svc), http.MethodDelete, "/games/id-1", "")
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	svc.AssertExpectations(t)
+}
+
+func TestDelete_InexistenteOuJaDeletado_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("Delete", mock.Anything, "x").Return(domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodDelete, "/games/x", "")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestGet_JogoDeletado_404(t *testing.T) {
+	// Deletado = inexistente por fora (spec 010): o repo filtra e o service
+	// propaga ErrGameNotFound.
+	svc := new(mockService)
+	svc.On("Get", mock.Anything, "id-del").Return(nil, domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-del", "")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestList_NaoIncluiMultiplayerProfile(t *testing.T) {

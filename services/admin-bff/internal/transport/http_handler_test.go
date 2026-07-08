@@ -87,6 +87,10 @@ func (f *fakeService) RenameGame(_ context.Context, id, name string) (*domain.Ga
 	}
 	return &domain.Game{ID: id, Name: name}, nil
 }
+func (f *fakeService) DeleteGame(_ context.Context, id string) error {
+	f.gotGameID = id
+	return f.gamesErr
+}
 func (f *fakeService) GetMultiplayerProfile(_ context.Context, gameID string) (json.RawMessage, error) {
 	f.gotGameID = gameID
 	return f.profile, f.profileErr
@@ -777,6 +781,47 @@ func TestRenameGame_200(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "g1", svc.gotGameID)
 	assert.Contains(t, readBody(t, resp), `"name":"Novo"`)
+}
+
+func TestDeleteGame_204(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/g1", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+}
+
+func TestDeleteGame_404_Propaga(t *testing.T) {
+	svc := &fakeService{gamesErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "not_found"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/x", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Contains(t, readBody(t, resp), "not_found")
+}
+
+func TestDeleteGame_RegistryFora_502(t *testing.T) {
+	svc := &fakeService{gamesErr: domain.ErrGameRegistryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/games/g1", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
 
 func TestGetMultiplayerProfile_200(t *testing.T) {

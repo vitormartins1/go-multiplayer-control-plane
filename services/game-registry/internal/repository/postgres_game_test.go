@@ -32,6 +32,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/001_create_games.sql",
 			"../../migrations/004_add_cover_metadata.sql",
 			"../../migrations/005_add_multiplayer_profile.sql",
+			"../../migrations/006_add_deleted_at.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -370,6 +371,58 @@ func TestPostgresGameRepository_DecodeModes_UpgradeLazyDeV1(t *testing.T) {
 	var raw []byte
 	require.NoError(t, pool.QueryRow(ctx, `SELECT multiplayer_profile FROM games WHERE id = $1`, g.ID).Scan(&raw))
 	assert.Contains(t, string(raw), `"modes"`, "coluna reescrita no formato v2")
+}
+
+// --- soft delete (ADR-0025, spec 010) ---
+
+func TestPostgresGameRepository_SoftDelete_PreservaLinhaESomeDasLeituras(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresGameRepository(pool)
+	ctx := context.Background()
+
+	g := newGame("tetris", "Tetris")
+	require.NoError(t, repo.Create(ctx, g))
+	require.NoError(t, repo.SoftDelete(ctx, g.ID))
+
+	// A linha continua no banco (auditoria/undelete manual)…
+	var deletedAt *time.Time
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT deleted_at FROM games WHERE id = $1`, g.ID).Scan(&deletedAt))
+	require.NotNil(t, deletedAt, "deleted_at marcado")
+
+	// …mas o repositório o trata como inexistente em todas as operações.
+	_, err := repo.FindByID(ctx, g.ID)
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+	assert.ErrorIs(t, repo.UpdateName(ctx, g.ID, "X"), domain.ErrGameNotFound)
+	assert.ErrorIs(t, repo.SetModes(ctx, g.ID,
+		[]domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}), domain.ErrGameNotFound)
+
+	list, err := repo.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, list, "deletado some da listagem")
+}
+
+func TestPostgresGameRepository_SoftDelete_RepetidoOuInexistente_ErrGameNotFound(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+
+	g := newGame("tetris", "Tetris")
+	require.NoError(t, repo.Create(ctx, g))
+	require.NoError(t, repo.SoftDelete(ctx, g.ID))
+	assert.ErrorIs(t, repo.SoftDelete(ctx, g.ID), domain.ErrGameNotFound, "segundo delete = inexistente")
+	assert.ErrorIs(t, repo.SoftDelete(ctx, "00000000-0000-0000-0000-000000000000"), domain.ErrGameNotFound)
+}
+
+func TestPostgresGameRepository_SoftDelete_SlugPermaneceReservado(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+
+	g := newGame("tetris", "Tetris")
+	require.NoError(t, repo.Create(ctx, g))
+	require.NoError(t, repo.SoftDelete(ctx, g.ID))
+
+	err := repo.Create(ctx, newGame("tetris", "Tetris Reborn"))
+	assert.ErrorIs(t, err, domain.ErrSlugTaken, "unicidade de slug é global, inclui deletados (ADR-0025)")
 }
 
 func TestPostgresGameRepository_SetModes_DeletePersiste(t *testing.T) {

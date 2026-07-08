@@ -182,6 +182,10 @@ type GameService interface {
 	// Rename altera só o nome do jogo (slug/id são estáveis). ErrInvalidName em
 	// entrada inválida; ErrGameNotFound se não existir.
 	Rename(ctx context.Context, id, name string) (*Game, error)
+	// Delete marca o jogo como removido (soft delete, ADR-0025): a partir daí o
+	// jogo responde como inexistente em toda a API e o slug permanece reservado.
+	// ErrGameNotFound se ausente ou já deletado.
+	Delete(ctx context.Context, id string) error
 	// SetMultiplayerProfile valida e faz upsert do perfil de multiplayer do jogo
 	// (ADR-0023). ErrUnsupportedArchetype/ErrUnsupportedTopology/
 	// ErrInvalidProfileParams em entrada inválida; ErrGameNotFound se o jogo não
@@ -212,6 +216,11 @@ type GameRepository interface {
 	FindByID(ctx context.Context, id string) (*Game, error)
 	// UpdateName atualiza só o nome do jogo; ErrGameNotFound se não existir.
 	UpdateName(ctx context.Context, id, name string) error
+	// SoftDelete marca deleted_at (ADR-0025); ErrGameNotFound se ausente ou já
+	// deletado. Jogo deletado nunca sai deste repositório: List/FindByID/
+	// UpdateName/SetModes o tratam como inexistente — o domínio não representa
+	// o estado "deletado".
+	SoftDelete(ctx context.Context, id string) error
 	// SetModes substitui a coleção de modos do jogo (ADR-0024); ErrGameNotFound
 	// se o jogo não existir. A validação é responsabilidade do service (o
 	// repositório só persiste). O service faz read-modify-write via FindByID —

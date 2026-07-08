@@ -80,6 +80,18 @@ func (c *Client) RenameGame(ctx context.Context, id, name string) (*domain.Game,
 	return &g, nil
 }
 
+// DeleteGame remove o jogo (DELETE /games/{id} — soft delete no registry,
+// ADR-0025). 204 esperado; 404 (inexistente/já deletado) vira UpstreamError.
+func (c *Client) DeleteGame(ctx context.Context, id string) error {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/games/"+url.PathEscape(id), nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
 // GetMultiplayerProfile lê o perfil de multiplayer do jogo (ADR-0023). Devolve o
 // corpo cru — o BFF não interpreta a forma (que cresce por arquétipo).
 func (c *Client) GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error) {

@@ -33,6 +33,9 @@ func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
 func (m *mockRepo) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
 	return m.Called(ctx, gameID, modes).Error(0)
 }
+func (m *mockRepo) SoftDelete(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
 
 func TestRename_Valido_AtualizaNomeMantemChave(t *testing.T) {
 	repo := new(mockRepo)
@@ -119,6 +122,22 @@ func TestRegister_SlugTaken_PropagaErro(t *testing.T) {
 	repo.On("Create", mock.Anything, mock.Anything).Return(domain.ErrSlugTaken)
 	_, err := New(repo).Register(context.Background(), "tetris", "Tetris")
 	assert.ErrorIs(t, err, domain.ErrSlugTaken)
+}
+
+func TestDelete_JogoVivo_MarcaSoftDelete(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("SoftDelete", mock.Anything, "g1").Return(nil)
+	require.NoError(t, New(repo).Delete(context.Background(), "g1"))
+	repo.AssertExpectations(t)
+}
+
+func TestDelete_InexistenteOuJaDeletado_ErrGameNotFound(t *testing.T) {
+	// O repo cobre os dois casos com o mesmo erro (UPDATE condicional): o
+	// segundo DELETE responde como inexistente (spec 010).
+	repo := new(mockRepo)
+	repo.On("SoftDelete", mock.Anything, "x").Return(domain.ErrGameNotFound)
+	err := New(repo).Delete(context.Background(), "x")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 
 func TestGet_Inexistente_PropagaNotFound(t *testing.T) {
