@@ -1,6 +1,6 @@
 # Topologia de repositórios — control plane + data planes por arquétipo
 
-> **Status:** **nomes decididos (2026-07-07); rename do control plane COMPLETO (2026-07-08).** Module path Go, protos (`go_package` + stubs regenerados via `buf`), docs **e a pasta local** (`mv` em 2026-07-08, compose recriado com dados preservados) já usam `go-multiplayer-control-plane`. O repo segue **local** (sem remote) por decisão do dono — quando for publicar, criar já com o nome novo. Data planes novos nascem com o nome do padrão; o `go-game-dataplane` (queue_arena) renomeia quando for tocado.
+> **Status:** **rename COMPLETO nos dois repos; ambos publicados no GitHub (2026-07-08).** Control plane: module path Go, protos (`go_package` + stubs regenerados via `buf`), docs **e a pasta local** (`mv` em 2026-07-08, compose recriado com dados preservados) já usam `go-multiplayer-control-plane`. Data plane `queue_arena`: conteúdo (namespace/asmdefs `QueueArena.*`) e pasta renomeados para `unity-queue-arena-data-plane`. Os dois vivem como repos **privados** em `github.com/vitormartins1/{go-multiplayer-control-plane,unity-queue-arena-data-plane}` (push 2026-07-08; remotes atualizados). Data planes novos nascem com o nome do padrão.
 >
 > **Motivação:** o ADR-0023 generalizou o multiplayer por **arquétipo** (`queue_arena`, `battle_royale`, `coop_mission`, `host_world_dropin`). A tese de validação (`docs/game-models/`) é ter **um data plane de referência por arquétipo** — cada um é um projeto Unity próprio, com um repo próprio, para testar e validar aquele tipo de jogo de forma isolada. Com N data planes chegando, o nome genérico atual (`go-game-dataplane`) deixa de escalar.
 
@@ -10,7 +10,7 @@
 2. **O data plane é do arquétipo, não do jogo.** O repo representa a *forma* de multiplayer (`queue_arena`), não um jogo/tema específico (câmera, arte, economia são conteúdo — ficha 05: gênero ≠ arquétipo). Por isso o nome do repo usa o **vocabulário do arquétipo do ADR-0023**, não um nome de produto.
 3. **Forma certa acima de compatibilidade do data plane.** Ao evoluir o backend, priorizamos o design correto do control plane mesmo que isso quebre um data plane já implementado. O data plane migra depois; as mudanças cross-repo ficam documentadas (ex.: `docs/game-models/queue_arena-dataplane-contract.md`). Confirmado pelo dono do projeto em 2026-07-06.
 4. **Data plane de referência ≠ jogo real.** Com modos por jogo (ADR-0024), um jogo real pode cruzar arquétipos (Elden Ring = `host_world_dropin` + `queue_arena` no Coliseu; CoD = `queue_arena` + `battle_royale`). Os repos `unity-<archetype>-data-plane` continuam sendo **veículos de validação/exemplo por arquétipo**; um **jogo de verdade** é uma categoria própria de repo, que implementa os modos que quiser consumindo a integração comum.
-5. **SDK Unity compartilhado — planejado para o futuro (decisão 2026-07-07).** O código de integração (auth → FindMatch → connect token → report + leitura do session manifest) tende a se repetir em cada data plane. A extração para um pacote UPM (ex.: `unity-controlplane-sdk`) é **válida e desejada, mas adiada**: só quando os arquétipos estiverem validados nos data planes de referência e um jogo final entrar em cena (repo local, nada publicado por ora). Até lá, cada data plane copia o handshake do anterior — a duplicação é o custo aceito.
+5. **SDK Unity compartilhado — planejado para o futuro (decisão 2026-07-07).** O código de integração (auth → FindMatch → connect token → report + leitura do session manifest) tende a se repetir em cada data plane. A extração para um pacote UPM (ex.: `unity-controlplane-sdk`) é **válida e desejada, mas adiada**: só quando os arquétipos estiverem validados nos data planes de referência e um jogo final entrar em cena (repos privados no GitHub desde 2026-07-08; nenhum pacote publicado). Até lá, cada data plane copia o handshake do anterior — a duplicação é o custo aceito.
 
 ## Padrão de nomenclatura (decidido)
 
@@ -26,11 +26,11 @@ unity-<archetype>-data-plane        # um por arquétipo (Unity)
 
 | Arquétipo (ADR-0023) | Repo data plane (nome decidido) | Repo atual | Status |
 |---|---|---|---|
-| `queue_arena` | `unity-queue-arena-data-plane` | `go-game-dataplane` | ✅ existe (referência; jogo "Packet Arena") — **rename executado no conteúdo (2026-07-08)**: namespace/asmdefs `QueueArena.*`, docs e codegen apontando p/ `go-multiplayer-control-plane`; falta só o `mv` da pasta (dono) |
+| `queue_arena` | `unity-queue-arena-data-plane` | `unity-queue-arena-data-plane` | ✅ **rename COMPLETO (2026-07-08)**: conteúdo (namespace/asmdefs `QueueArena.*`, docs, codegen) + `mv` da pasta + GitHub privado (`vitormartins1/unity-queue-arena-data-plane`) |
 | `battle_royale` | `unity-battle-royale-data-plane` | — | ⬜ planejado (criar quando atacar o arquétipo) |
 | `coop_mission` | `unity-coop-mission-data-plane` | — | ⬜ planejado |
 | `host_world_dropin` | `unity-host-world-dropin-data-plane` | — | ⬜ planejado |
-| — (control plane) | `go-multiplayer-control-plane` | `go-game-backend` | ✅ **renomeado por completo** (module path + docs 2026-07-07; `mv` da pasta 2026-07-08) |
+| — (control plane) | `go-multiplayer-control-plane` | `go-multiplayer-control-plane` | ✅ **renomeado por completo** (module path + docs 2026-07-07; `mv` da pasta 2026-07-08) + GitHub privado |
 
 > `go-game-unity` (repo vazio, órfão): resquício do plano antigo (memória "dataplane-repo"). Data plane real virou `go-game-dataplane`. **Arquivar/remover** no rename.
 
@@ -51,10 +51,10 @@ flowchart TB
 
 Renomear toca o module path Go e várias referências. Estado:
 
-1. **Repos GitHub:** renomear (GitHub redireciona o antigo por um tempo) e `git remote set-url`.
+1. ~~**Repos GitHub**~~ ✅ **feito (2026-07-08):** os dois repos publicados como **privados** com os nomes novos; `git remote set-url` aplicado no data plane (o antigo `go-game-dataplane.git` redirecionava para o nome novo).
 2. ~~**Module path Go**~~ ✅ **feito (2026-07-07):** `go.mod` + 128 arquivos de imports + `go_package` dos 2 protos + stubs regenerados via `buf` (não usar `sed` no `.pb.go` — corrompe o `rawDesc`). 721 testes verdes com `-race`.
 3. ~~**Referências em docs do backend**~~ ✅ **feito/verificado (2026-07-08):** varredura completa — só restam menções históricas intencionais (`ADR-0001`, `GO-LEARNINGS #30`, notas de rename neste doc e no NEXT-STEPS). Nenhum path/config embute o nome da pasta (o project name do compose deriva de `infra/docker`).
-4. ~~**Referências no data plane**~~ ✅ **feito (2026-07-08):** README, CLAUDE.md, ROADMAP, specs, ADRs, tools e `codegen.csproj` (links `../go-game-backend` → `../go-multiplayer-control-plane`); namespace/asmdefs `GameDataplane.*` → `QueueArena.*`. Falta o `mv` da pasta (+ mover a pasta de memória do assistente e reinstalar o LaunchAgent `pi5-tunnels`, que embute o path absoluto no plist).
+4. ~~**Referências no data plane**~~ ✅ **feito (2026-07-08):** README, CLAUDE.md, ROADMAP, specs, ADRs, tools e `codegen.csproj` (links `../go-game-backend` → `../go-multiplayer-control-plane`); namespace/asmdefs `GameDataplane.*` → `QueueArena.*`; `mv` da pasta executado (memória do assistente movida junto).
 5. **Memórias** do assistente que citam nomes de repo (`dataplane-repo`, etc.) — conteúdo atualizado em 2026-07-08; a pasta de memória move junto com o `mv`.
 6. **CI/CD e paths** que embutam o nome do repo/módulo.
 
@@ -64,6 +64,7 @@ Renomear toca o module path Go e várias referências. Estado:
 
 - [x] ~~Fechar os nomes~~ — decididos em 2026-07-07 (control plane `go-multiplayer-control-plane`; data planes `unity-<archetype>-data-plane`).
 - [x] ~~Executar o rename do control plane~~ — module path + protos + docs feitos em 2026-07-07; falta só o `mv` da pasta (nota no topo).
-- [ ] Criar os repos data plane planejados conforme cada arquétipo for atacado (já com o nome do padrão); renomear o `go-game-dataplane` quando for tocado.
+- [x] ~~Renomear o `go-game-dataplane`~~ — **feito (2026-07-08)**: `unity-queue-arena-data-plane` (conteúdo + pasta + GitHub).
+- [ ] Criar os repos data plane planejados conforme cada arquétipo for atacado (já com o nome do padrão).
 - [ ] **Futuro:** extrair o SDK Unity compartilhado (`unity-controlplane-sdk`, princípio 5) quando o primeiro jogo final entrar em cena.
 - [ ] (Opcional) Registrar como **ADR** se quiser tornar a convenção formal — hoje é decisão deste doc.

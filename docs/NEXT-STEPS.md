@@ -61,7 +61,7 @@ ADRs recentes: 0018 (service auth), 0019 (presença por jogo), 0020 (fan-out dur
 
 ## ⚠️ Pendente de você (ações fora do código)
 
-1. **Push pro GitHub — adiado por decisão (2026-07-07):** o repo fica **local** por ora. Quando for publicar, criar já como `github.com/vitormartins1/go-multiplayer-control-plane` (o module path já é esse), `git remote add origin …`, `git push -u origin main`. Só então o CI (GitHub Actions) roda de verdade.
+1. ~~**Push pro GitHub**~~ ✅ **FEITO (2026-07-08):** os dois repos publicados como **privados** — `github.com/vitormartins1/go-multiplayer-control-plane` e `github.com/vitormartins1/unity-queue-arena-data-plane`. O CI (GitHub Actions) passa a rodar de verdade — conferir o primeiro run (precisa de Docker p/ os testes de integração/e2e do fan-out).
 2. ~~**Rename do control plane**~~ ✅ **CONCLUÍDO (2026-07-08):** `mv` da pasta executado (`~/projects/go-multiplayer-control-plane`), memória do assistente movida, `go build ./...` verde e compose recriado via `up -d` com os volumes anônimos reaproveitados (dados de demo preservados). **Gotcha registrado:** o `up -d` recriou os containers de bind mount normais (Prometheus, Grafana), mas **não** o `session-service` — mudança no *source* de um `secret` top-level não entra no hash de config do compose, então o container antigo tentou montar o `.pem` no path velho e falhou; resolvido com `up -d --force-recreate session-service`. Pendências residuais do rename são cross-repo: referências no `go-game-dataplane` (links `../go-game-backend`) quando ele for tocado, e arquivar o repo órfão `go-game-unity` (`REPO-TOPOLOGY.md`). Data planes novos: `unity-<archetype>-data-plane`.
 
 ## Painel jogo-cêntrico (✅ completo)
@@ -77,7 +77,7 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 
 Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Ordem sugerida:
 
-1. **Push pro GitHub** (acima) → CI passa a rodar. **Atenção:** o CI agora precisa de Docker p/ os testes de integração/e2e do fan-out (LocalStack + Postgres via testcontainers).
+1. ✅ **Push pro GitHub — FEITO (2026-07-08)** (acima). Pendência residual: conferir o primeiro run do CI (**precisa de Docker** p/ os testes de integração/e2e do fan-out — LocalStack + Postgres via testcontainers).
 2. ✅ **Fan-out resiliente — FEITO** (ADR-0020, spec `session/006-durable-fanout`).
 3. ✅ **analytics-service — FEITO** (ADR-0021). *Evoluções v1→v2 quando fizer sentido:* telemetria genérica (`POST /events`); deep-dive por jogo (aba no GameDetail). O **event store cru** (C2 do ADR-0021) é o escape se a pré-agregação engessar.
 4. ✅ **Importação CSV de conquistas — FEITA** (specs `admin-bff/011` + `admin-ui/014`, commit `1947ce4`).
