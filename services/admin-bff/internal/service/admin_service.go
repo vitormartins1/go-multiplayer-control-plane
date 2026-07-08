@@ -88,6 +88,11 @@ func (s *Service) Players(ctx context.Context, limit, offset int) (domain.Player
 	return s.directory.ListPlayers(ctx, limit, offset)
 }
 
+// Player delega ao directory o lookup por id (spec 020).
+func (s *Service) Player(ctx context.Context, playerID string) (domain.Player, error) {
+	return s.directory.GetPlayer(ctx, playerID)
+}
+
 // Games lista os jogos (game-registry).
 func (s *Service) Games(ctx context.Context) ([]domain.Game, error) {
 	return s.registry.ListGames(ctx)

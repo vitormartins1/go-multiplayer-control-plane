@@ -27,6 +27,9 @@ var (
 	// ErrCloudSaveUnavailable indica que o cloud-save-service está inacessível.
 	// O transport mapeia -> 502.
 	ErrCloudSaveUnavailable = errors.New("admin: cloud-save source unavailable")
+	// ErrPlayerNotFound indica que o jogador não existe no identity (spec 020).
+	// O transport mapeia -> 404.
+	ErrPlayerNotFound = errors.New("admin: player not found")
 )
 
 // UpstreamError carrega um erro de validação (4xx) repassado de um serviço

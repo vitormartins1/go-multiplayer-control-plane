@@ -135,6 +135,9 @@ type PlayerDirectory interface {
 	// ListPlayers lê a página de usuários. Devolve ErrIdentityUnavailable se o
 	// identity estiver inacessível.
 	ListPlayers(ctx context.Context, limit, offset int) (PlayerPage, error)
+	// GetPlayer lê um usuário pelo id (spec 020). Devolve ErrPlayerNotFound
+	// quando não existe; ErrIdentityUnavailable se o identity estiver inacessível.
+	GetPlayer(ctx context.Context, playerID string) (Player, error)
 }
 
 // GamePlayer é uma entrada da player base de um jogo (presença, ADR-0019):

@@ -19,6 +19,7 @@ type AdminService interface {
 	Topology(ctx context.Context) (domain.Topology, error)
 	LiveMetrics(ctx context.Context) (domain.LiveMetrics, error)
 	Players(ctx context.Context, limit, offset int) (domain.PlayerPage, error)
+	Player(ctx context.Context, playerID string) (domain.Player, error)
 	Games(ctx context.Context) ([]domain.Game, error)
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
 	RenameGame(ctx context.Context, id, name string) (*domain.Game, error)
@@ -65,6 +66,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/topology", h.topology)
 	mux.HandleFunc("GET /api/metrics/live", h.liveMetrics)
 	mux.HandleFunc("GET /api/players", h.players)
+	mux.HandleFunc("GET /api/players/{playerID}", h.player)
 	mux.HandleFunc("GET /api/games", h.games)
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
@@ -137,6 +139,24 @@ func (h *Handler) players(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+// player: um usuário pelo id (spec 020) — handle do header do PlayerDetail.
+// Inexistente -> 404; identity fora -> 502.
+func (h *Handler) player(w http.ResponseWriter, r *http.Request) {
+	p, err := h.svc.Player(r.Context(), r.PathValue("playerID"))
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrPlayerNotFound):
+			writeError(w, http.StatusNotFound, "player_not_found")
+		case errors.Is(err, domain.ErrIdentityUnavailable):
+			writeError(w, http.StatusBadGateway, "players_unavailable")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
 }
 
 func atoiOr(s string, def int) int {

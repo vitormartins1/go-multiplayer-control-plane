@@ -71,3 +71,35 @@ func (c *Client) ListPlayers(ctx context.Context, limit, offset int) (domain.Pla
 	}
 	return page, nil
 }
+
+// GetPlayer chama o /admin/players/{id} do identity (spec 020). 404 vira
+// ErrPlayerNotFound; falha de conexão/HTTP vira ErrIdentityUnavailable.
+func (c *Client) GetPlayer(ctx context.Context, playerID string) (domain.Player, error) {
+	u := c.baseURL + "/admin/players/" + url.PathEscape(playerID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return domain.Player{}, fmt.Errorf("identity: build request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return domain.Player{}, fmt.Errorf("%w: %v", domain.ErrIdentityUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return domain.Player{}, domain.ErrPlayerNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return domain.Player{}, fmt.Errorf("%w: status %d", domain.ErrIdentityUnavailable, resp.StatusCode)
+	}
+
+	var body struct {
+		ID        string    `json:"id"`
+		Handle    string    `json:"handle"`
+		CreatedAt time.Time `json:"createdAt"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return domain.Player{}, fmt.Errorf("identity: decode: %w", err)
+	}
+	return domain.Player{ID: body.ID, Handle: body.Handle, CreatedAt: body.CreatedAt}, nil
+}
