@@ -188,8 +188,10 @@ type LeaderboardEntry struct {
 // (top-N por jogo, ADR-0017). O board seleciona o ranking (score ou um por stat,
 // ADR-0023 / leaderboard/003); "" -> o leaderboard-service assume "score".
 type LeaderboardReader interface {
-	// TopForGame lê o top-N do board do jogo. Indisponibilidade -> ErrLeaderboardUnavailable.
-	TopForGame(ctx context.Context, gameID, board string, limit int) ([]LeaderboardEntry, error)
+	// TopForGame lê a página [offset, offset+limit) do board na janela pedida
+	// (spec 019; "" -> all-time no upstream). Indisponibilidade ->
+	// ErrLeaderboardUnavailable.
+	TopForGame(ctx context.Context, gameID, board, window string, limit, offset int) ([]LeaderboardEntry, error)
 	// SetScore substitui o score do jogador no board independente do valor atual
 	// (admin override). Indisponibilidade -> ErrLeaderboardUnavailable.
 	SetScore(ctx context.Context, gameID, playerID, board string, score int64) (LeaderboardEntry, error)

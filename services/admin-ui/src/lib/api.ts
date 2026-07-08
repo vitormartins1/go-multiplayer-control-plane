@@ -429,10 +429,17 @@ export const api = {
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/achievements`,
       signal,
     ),
-  // board seleciona o ranking (score ou um por stat, ADR-0023). Omitido -> score.
-  gameLeaderboard: (gameId: string, board?: string, limit = 20, signal?: AbortSignal) => {
-    const q = new URLSearchParams({ limit: String(limit) });
-    if (board) q.set("board", board);
+  // board seleciona o ranking (score ou um por stat, ADR-0023); window a janela
+  // de tempo e offset a página (spec 039). Omitidos -> score / all-time / 0.
+  gameLeaderboard: (
+    gameId: string,
+    opts?: { board?: string; window?: string; limit?: number; offset?: number },
+    signal?: AbortSignal,
+  ) => {
+    const q = new URLSearchParams({ limit: String(opts?.limit ?? 20) });
+    if (opts?.board) q.set("board", opts.board);
+    if (opts?.window && opts.window !== "alltime") q.set("window", opts.window);
+    if (opts?.offset) q.set("offset", String(opts.offset));
     return getJSON<LeaderEntry[]>(
       `/api/games/${encodeURIComponent(gameId)}/leaderboard?${q.toString()}`,
       signal,

@@ -11,7 +11,10 @@ import (
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/leaderboard-service/internal/domain"
 )
 
-const score = domain.BoardScore
+const (
+	score   = domain.BoardScore
+	alltime = domain.WindowAllTime
+)
 
 type mockStore struct{ mock.Mock }
 
@@ -19,13 +22,13 @@ func (m *mockStore) Submit(ctx context.Context, gameID, board, playerID string, 
 	return m.Called(ctx, gameID, board, playerID, s).Error(0)
 }
 
-func (m *mockStore) Rank(ctx context.Context, gameID, board, playerID string) (int64, int64, error) {
-	args := m.Called(ctx, gameID, board, playerID)
+func (m *mockStore) Rank(ctx context.Context, gameID, board, window, playerID string) (int64, int64, error) {
+	args := m.Called(ctx, gameID, board, window, playerID)
 	return args.Get(0).(int64), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *mockStore) Top(ctx context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
-	args := m.Called(ctx, gameID, board, limit)
+func (m *mockStore) Top(ctx context.Context, gameID, board, window string, limit int) ([]domain.Entry, error) {
+	args := m.Called(ctx, gameID, board, window, limit)
 	e, _ := args.Get(0).([]domain.Entry)
 	return e, args.Error(1)
 }
@@ -34,8 +37,8 @@ func (m *mockStore) ForceScore(ctx context.Context, gameID, board, playerID stri
 	return m.Called(ctx, gameID, board, playerID, s).Error(0)
 }
 
-func (m *mockStore) Range(ctx context.Context, gameID, board string, start, stop int64) ([]domain.Entry, error) {
-	args := m.Called(ctx, gameID, board, start, stop)
+func (m *mockStore) Range(ctx context.Context, gameID, board, window string, start, stop int64) ([]domain.Entry, error) {
+	args := m.Called(ctx, gameID, board, window, start, stop)
 	e, _ := args.Get(0).([]domain.Entry)
 	return e, args.Error(1)
 }
@@ -48,7 +51,8 @@ func (m *mockStore) ApplyCumulative(ctx context.Context, gameID, matchID string,
 func TestSubmit_RetornaEntryComRank1Based(t *testing.T) {
 	store := &mockStore{}
 	store.On("Submit", mock.Anything, "g1", score, "p1", int64(1500)).Return(nil)
-	store.On("Rank", mock.Anything, "g1", score, "p1").Return(int64(2), int64(1500), nil) // 0-based rank 2
+	// a entry devolvida é a do all-time (contrato pré-janelas, spec 007).
+	store.On("Rank", mock.Anything, "g1", score, alltime, "p1").Return(int64(2), int64(1500), nil) // 0-based rank 2
 
 	e, err := New(store).Submit(context.Background(), "g1", score, "p1", 1500)
 
@@ -61,7 +65,7 @@ func TestSubmit_RetornaEntryComRank1Based(t *testing.T) {
 func TestSubmit_BoardCustomizado_RepassaAoStore(t *testing.T) {
 	store := &mockStore{}
 	store.On("Submit", mock.Anything, "g1", "kills", "p1", int64(7)).Return(nil)
-	store.On("Rank", mock.Anything, "g1", "kills", "p1").Return(int64(0), int64(7), nil)
+	store.On("Rank", mock.Anything, "g1", "kills", alltime, "p1").Return(int64(0), int64(7), nil)
 
 	e, err := New(store).Submit(context.Background(), "g1", "kills", "p1", 7)
 
@@ -107,15 +111,63 @@ func TestApplyCumulative_PropagaDup(t *testing.T) {
 
 func TestTop_BoardInvalido_ErrInvalidBoard(t *testing.T) {
 	store := &mockStore{}
-	_, err := New(store).Top(context.Background(), "g1", "", 10) // board vazio é inválido no service
+	_, err := New(store).Top(context.Background(), "g1", "", alltime, 10, 0) // board vazio é inválido no service
 	require.ErrorIs(t, err, domain.ErrInvalidBoard)
-	store.AssertNotCalled(t, "Top", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	store.AssertNotCalled(t, "Range", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestTop_WindowInvalida_ErrInvalidWindow(t *testing.T) {
+	store := &mockStore{}
+	_, err := New(store).Top(context.Background(), "g1", score, "quarterly", 10, 0)
+	require.ErrorIs(t, err, domain.ErrInvalidWindow)
+	store.AssertNotCalled(t, "Range", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestTop_WindowVazia_DefaultAllTime(t *testing.T) {
+	store := &mockStore{}
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(0), int64(9)).Return([]domain.Entry{}, nil)
+
+	_, err := New(store).Top(context.Background(), "g1", score, "", 10, 0)
+
+	require.NoError(t, err)
+	store.AssertExpectations(t)
+}
+
+func TestTop_WindowPeriodica_Repassa(t *testing.T) {
+	store := &mockStore{}
+	store.On("Range", mock.Anything, "g1", score, domain.WindowWeekly, int64(0), int64(9)).Return([]domain.Entry{}, nil)
+
+	_, err := New(store).Top(context.Background(), "g1", score, domain.WindowWeekly, 10, 0)
+
+	require.NoError(t, err)
+	store.AssertExpectations(t)
+}
+
+func TestTop_Offset_PaginaContigua(t *testing.T) {
+	store := &mockStore{}
+	// offset 20, limit 10 -> posições [20, 29].
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(20), int64(29)).Return([]domain.Entry{}, nil)
+
+	_, err := New(store).Top(context.Background(), "g1", score, alltime, 10, 20)
+
+	require.NoError(t, err)
+	store.AssertExpectations(t)
+}
+
+func TestTop_OffsetNegativo_ClampaParaZero(t *testing.T) {
+	store := &mockStore{}
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(0), int64(9)).Return([]domain.Entry{}, nil)
+
+	_, err := New(store).Top(context.Background(), "g1", score, alltime, 10, -5)
+
+	require.NoError(t, err)
+	store.AssertExpectations(t)
 }
 
 func TestForceSubmit_SubstituiERetornaEntry(t *testing.T) {
 	store := &mockStore{}
 	store.On("ForceScore", mock.Anything, "g1", score, "p1", int64(50)).Return(nil)
-	store.On("Rank", mock.Anything, "g1", score, "p1").Return(int64(0), int64(50), nil)
+	store.On("Rank", mock.Anything, "g1", score, alltime, "p1").Return(int64(0), int64(50), nil)
 
 	e, err := New(store).ForceSubmit(context.Background(), "g1", score, "p1", 50)
 
@@ -134,72 +186,90 @@ func TestForceSubmit_BoardInvalido_ErrInvalidBoard(t *testing.T) {
 
 func TestAround_BoardInvalido_ErrInvalidBoard(t *testing.T) {
 	store := &mockStore{}
-	_, err := New(store).Around(context.Background(), "g1", "BAD!", "p1", 3)
+	_, err := New(store).Around(context.Background(), "g1", "BAD!", alltime, "p1", 3)
 	require.ErrorIs(t, err, domain.ErrInvalidBoard)
-	store.AssertNotCalled(t, "Rank", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	store.AssertNotCalled(t, "Rank", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestAround_WindowInvalida_ErrInvalidWindow(t *testing.T) {
+	store := &mockStore{}
+	_, err := New(store).Around(context.Background(), "g1", score, "season1", "p1", 3)
+	require.ErrorIs(t, err, domain.ErrInvalidWindow)
+	store.AssertNotCalled(t, "Rank", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTop_ClampLimit(t *testing.T) {
 	store := &mockStore{}
-	store.On("Top", mock.Anything, "g1", score, maxLimit).Return([]domain.Entry{}, nil) // 999 -> 100
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(0), int64(maxLimit-1)).Return([]domain.Entry{}, nil) // 999 -> 100
 
-	_, err := New(store).Top(context.Background(), "g1", score, 999)
+	_, err := New(store).Top(context.Background(), "g1", score, alltime, 999, 0)
 
 	require.NoError(t, err)
-	store.AssertCalled(t, "Top", mock.Anything, "g1", score, maxLimit)
+	store.AssertExpectations(t)
 }
 
 func TestTop_LimitZero_UsaDefault(t *testing.T) {
 	store := &mockStore{}
-	store.On("Top", mock.Anything, "g1", score, defaultLimit).Return([]domain.Entry{}, nil)
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(0), int64(defaultLimit-1)).Return([]domain.Entry{}, nil)
 
-	_, err := New(store).Top(context.Background(), "g1", score, 0)
+	_, err := New(store).Top(context.Background(), "g1", score, alltime, 0, 0)
 
 	require.NoError(t, err)
-	store.AssertCalled(t, "Top", mock.Anything, "g1", score, defaultLimit)
+	store.AssertExpectations(t)
 }
 
 func TestAround_CalculaJanela(t *testing.T) {
 	store := &mockStore{}
-	store.On("Rank", mock.Anything, "g1", score, "p1").Return(int64(10), int64(500), nil)
-	store.On("Range", mock.Anything, "g1", score, int64(7), int64(13)).Return([]domain.Entry{}, nil) // 10±3
+	store.On("Rank", mock.Anything, "g1", score, alltime, "p1").Return(int64(10), int64(500), nil)
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(7), int64(13)).Return([]domain.Entry{}, nil) // 10±3
 
-	_, err := New(store).Around(context.Background(), "g1", score, "p1", 3)
+	_, err := New(store).Around(context.Background(), "g1", score, alltime, "p1", 3)
 
 	require.NoError(t, err)
-	store.AssertCalled(t, "Range", mock.Anything, "g1", score, int64(7), int64(13))
+	store.AssertCalled(t, "Range", mock.Anything, "g1", score, alltime, int64(7), int64(13))
+}
+
+func TestAround_WindowPeriodica_RankNaJanela(t *testing.T) {
+	store := &mockStore{}
+	store.On("Rank", mock.Anything, "g1", score, domain.WindowDaily, "p1").Return(int64(4), int64(90), nil)
+	store.On("Range", mock.Anything, "g1", score, domain.WindowDaily, int64(1), int64(7)).Return([]domain.Entry{}, nil)
+
+	_, err := New(store).Around(context.Background(), "g1", score, domain.WindowDaily, "p1", 3)
+
+	require.NoError(t, err)
+	store.AssertExpectations(t)
 }
 
 func TestAround_NoTopo_StartNaoNegativo(t *testing.T) {
 	store := &mockStore{}
-	store.On("Rank", mock.Anything, "g1", score, "p1").Return(int64(1), int64(900), nil)
-	store.On("Range", mock.Anything, "g1", score, int64(0), int64(6)).Return([]domain.Entry{}, nil) // 1±5 -> start 0
+	store.On("Rank", mock.Anything, "g1", score, alltime, "p1").Return(int64(1), int64(900), nil)
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(0), int64(6)).Return([]domain.Entry{}, nil) // 1±5 -> start 0
 
-	_, err := New(store).Around(context.Background(), "g1", score, "p1", 5)
+	_, err := New(store).Around(context.Background(), "g1", score, alltime, "p1", 5)
 
 	require.NoError(t, err)
-	store.AssertCalled(t, "Range", mock.Anything, "g1", score, int64(0), int64(6))
+	store.AssertCalled(t, "Range", mock.Anything, "g1", score, alltime, int64(0), int64(6))
 }
 
 func TestAround_NaoRankeado_Propaga(t *testing.T) {
 	store := &mockStore{}
-	store.On("Rank", mock.Anything, "g1", score, "p1").Return(int64(0), int64(0), domain.ErrNotRanked)
+	store.On("Rank", mock.Anything, "g1", score, alltime, "p1").Return(int64(0), int64(0), domain.ErrNotRanked)
 
-	_, err := New(store).Around(context.Background(), "g1", score, "p1", 3)
+	_, err := New(store).Around(context.Background(), "g1", score, alltime, "p1", 3)
 
 	require.ErrorIs(t, err, domain.ErrNotRanked)
-	store.AssertNotCalled(t, "Range", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	store.AssertNotCalled(t, "Range", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAround_ClampKMax(t *testing.T) {
 	store := &mockStore{}
-	store.On("Rank", mock.Anything, "g1", score, "p1").Return(int64(100), int64(10), nil)
-	store.On("Range", mock.Anything, "g1", score, int64(50), int64(150)).Return([]domain.Entry{}, nil) // 100 ± 50 (clamp)
+	store.On("Rank", mock.Anything, "g1", score, alltime, "p1").Return(int64(100), int64(10), nil)
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(50), int64(150)).Return([]domain.Entry{}, nil) // 100 ± 50 (clamp)
 
-	_, err := New(store).Around(context.Background(), "g1", score, "p1", 999)
+	_, err := New(store).Around(context.Background(), "g1", score, alltime, "p1", 999)
 
 	require.NoError(t, err)
-	store.AssertCalled(t, "Range", mock.Anything, "g1", score, int64(50), int64(150))
+	store.AssertCalled(t, "Range", mock.Anything, "g1", score, alltime, int64(50), int64(150))
 }
 
 func TestSubmit_ErroStore_Propaga(t *testing.T) {
@@ -209,14 +279,15 @@ func TestSubmit_ErroStore_Propaga(t *testing.T) {
 	_, err := New(store).Submit(context.Background(), "g1", score, "p1", 10)
 
 	require.Error(t, err)
-	store.AssertNotCalled(t, "Rank", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	store.AssertNotCalled(t, "Rank", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestTop_ErroStore_Propaga(t *testing.T) {
 	store := &mockStore{}
-	store.On("Top", mock.Anything, "g1", score, defaultLimit).Return([]domain.Entry(nil), errors.New("redis down"))
+	store.On("Range", mock.Anything, "g1", score, alltime, int64(0), int64(defaultLimit-1)).
+		Return([]domain.Entry(nil), errors.New("redis down"))
 
-	_, err := New(store).Top(context.Background(), "g1", score, 0)
+	_, err := New(store).Top(context.Background(), "g1", score, alltime, 0, 0)
 
 	require.Error(t, err)
 }

@@ -56,6 +56,7 @@ type fakeService struct {
 	gotGameID        string
 	gotPlayer        string
 	gotBoard         string
+	gotWindow        string
 	gotLimit         int
 	gotOffset        int
 	gotState         string
@@ -145,8 +146,8 @@ func (f *fakeService) ImportAchievements(_ context.Context, gameID string, _ []d
 	f.gotGameID = gameID
 	return f.importResp, f.importErr
 }
-func (f *fakeService) GameLeaderboard(_ context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
-	f.gotGameID, f.gotBoard, f.gotLimit = gameID, board, limit
+func (f *fakeService) GameLeaderboard(_ context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotBoard, f.gotWindow, f.gotLimit, f.gotOffset = gameID, board, window, limit, offset
 	return f.leaders, f.leadErr
 }
 func (f *fakeService) PlayerData(_ context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error) {
@@ -467,6 +468,18 @@ func TestGameLeaderboard_200(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.Len(t, body, 1)
 	assert.Equal(t, "bob", body[0].PlayerID)
+}
+
+func TestGameLeaderboard_WindowEOffset_Propagados(t *testing.T) {
+	svc := &fakeService{leaders: []domain.LeaderboardEntry{}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/game-9/leaderboard?window=monthly&offset=10")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "monthly", svc.gotWindow)
+	assert.Equal(t, 10, svc.gotOffset)
 }
 
 func TestGameLeaderboard_Fora_502(t *testing.T) {

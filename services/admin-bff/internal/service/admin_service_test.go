@@ -141,11 +141,13 @@ type fakeLeaderboard struct {
 	err       error
 	gotGameID string
 	gotLimit  int
+	gotOffset int
 	gotBoard  string
+	gotWindow string
 }
 
-func (f *fakeLeaderboard) TopForGame(_ context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
-	f.gotGameID, f.gotBoard, f.gotLimit = gameID, board, limit
+func (f *fakeLeaderboard) TopForGame(_ context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error) {
+	f.gotGameID, f.gotBoard, f.gotWindow, f.gotLimit, f.gotOffset = gameID, board, window, limit, offset
 	return f.entries, f.err
 }
 
@@ -348,11 +350,13 @@ func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
 
 func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
-	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb}).GameLeaderboard(context.Background(), "game-9", "kills", 10)
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb}).GameLeaderboard(context.Background(), "game-9", "kills", "weekly", 10, 20)
 	require.NoError(t, err)
 	assert.Equal(t, "game-9", lb.gotGameID)
 	assert.Equal(t, "kills", lb.gotBoard)
+	assert.Equal(t, "weekly", lb.gotWindow)
 	assert.Equal(t, 10, lb.gotLimit)
+	assert.Equal(t, 20, lb.gotOffset)
 	require.Len(t, got, 1)
 	assert.Equal(t, "bob", got[0].PlayerID)
 }

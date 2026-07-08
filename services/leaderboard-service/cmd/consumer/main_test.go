@@ -34,13 +34,13 @@ func (f *fakeStore) Submit(_ context.Context, _, board, playerID string, s int64
 	return nil
 }
 func (f *fakeStore) ForceScore(context.Context, string, string, string, int64) error { return nil }
-func (f *fakeStore) Rank(context.Context, string, string, string) (int64, int64, error) {
+func (f *fakeStore) Rank(context.Context, string, string, string, string) (int64, int64, error) {
 	return 0, 0, nil
 }
-func (f *fakeStore) Top(context.Context, string, string, int) ([]domain.Entry, error) {
+func (f *fakeStore) Top(context.Context, string, string, string, int) ([]domain.Entry, error) {
 	return nil, nil
 }
-func (f *fakeStore) Range(context.Context, string, string, int64, int64) ([]domain.Entry, error) {
+func (f *fakeStore) Range(context.Context, string, string, string, int64, int64) ([]domain.Entry, error) {
 	return nil, nil
 }
 func (f *fakeStore) ApplyCumulative(_ context.Context, _, matchID string, incrs []domain.Increment) (bool, error) {

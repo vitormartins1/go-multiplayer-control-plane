@@ -37,7 +37,8 @@ func (s *Service) Submit(ctx context.Context, gameID, board, playerID string, sc
 	if err := s.store.Submit(ctx, gameID, board, playerID, score); err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: submit: %w", err)
 	}
-	rank0, best, err := s.store.Rank(ctx, gameID, board, playerID)
+	// A entry devolvida é a do all-time (contrato pré-janelas preservado).
+	rank0, best, err := s.store.Rank(ctx, gameID, board, domain.WindowAllTime, playerID)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: rank: %w", err)
 	}
@@ -52,7 +53,7 @@ func (s *Service) ForceSubmit(ctx context.Context, gameID, board, playerID strin
 	if err := s.store.ForceScore(ctx, gameID, board, playerID, score); err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: force submit: %w", err)
 	}
-	rank0, best, err := s.store.Rank(ctx, gameID, board, playerID)
+	rank0, best, err := s.store.Rank(ctx, gameID, board, domain.WindowAllTime, playerID)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("leaderboard service: rank after force: %w", err)
 	}
@@ -76,23 +77,34 @@ func (s *Service) ApplyCumulative(ctx context.Context, gameID, matchID string, i
 	return dup, nil
 }
 
-func (s *Service) Top(ctx context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
+// Top devolve a página [offset, offset+limit) da janela pedida (spec 007).
+func (s *Service) Top(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.Entry, error) {
 	if !domain.ValidBoard(board) {
 		return nil, domain.ErrInvalidBoard
 	}
-	entries, err := s.store.Top(ctx, gameID, board, clampLimit(limit))
+	window, err := resolveWindow(window)
+	if err != nil {
+		return nil, err
+	}
+	limit = clampLimit(limit)
+	start := int64(clampOffset(offset))
+	entries, err := s.store.Range(ctx, gameID, board, window, start, start+int64(limit)-1)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: top: %w", err)
 	}
 	return entries, nil
 }
 
-func (s *Service) Around(ctx context.Context, gameID, board, playerID string, k int) ([]domain.Entry, error) {
+func (s *Service) Around(ctx context.Context, gameID, board, window, playerID string, k int) ([]domain.Entry, error) {
 	if !domain.ValidBoard(board) {
 		return nil, domain.ErrInvalidBoard
 	}
+	window, err := resolveWindow(window)
+	if err != nil {
+		return nil, err
+	}
 	k = clampAround(k)
-	rank0, _, err := s.store.Rank(ctx, gameID, board, playerID)
+	rank0, _, err := s.store.Rank(ctx, gameID, board, window, playerID)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: around: %w", err) // ErrNotRanked propaga
 	}
@@ -101,11 +113,23 @@ func (s *Service) Around(ctx context.Context, gameID, board, playerID string, k 
 		start = 0
 	}
 	stop := rank0 + int64(k)
-	entries, err := s.store.Range(ctx, gameID, board, start, stop)
+	entries, err := s.store.Range(ctx, gameID, board, window, start, stop)
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard service: around range: %w", err)
 	}
 	return entries, nil
+}
+
+// resolveWindow aplica o default (vazia -> all-time, robustez para chamadores
+// internos) e valida o nome.
+func resolveWindow(window string) (string, error) {
+	if window == "" {
+		return domain.WindowAllTime, nil
+	}
+	if !domain.ValidWindow(window) {
+		return "", domain.ErrInvalidWindow
+	}
+	return window, nil
 }
 
 func clampLimit(n int) int {
@@ -117,6 +141,13 @@ func clampLimit(n int) int {
 	default:
 		return n
 	}
+}
+
+func clampOffset(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func clampAround(k int) int {

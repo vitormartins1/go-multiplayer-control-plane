@@ -32,9 +32,11 @@ type fakeService struct {
 	aroundErr     error
 	gotGameID     string
 	gotBoard      string
+	gotWindow     string
 	gotPlayerID   string
 	gotScore      int64
 	gotLimit      int
+	gotOffset     int
 	gotK          int
 }
 
@@ -54,16 +56,19 @@ func (f *fakeService) ForceSubmit(_ context.Context, gameID, board, playerID str
 	return f.submitEntry, nil
 }
 
-func (f *fakeService) Top(_ context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
+func (f *fakeService) Top(_ context.Context, gameID, board, window string, limit, offset int) ([]domain.Entry, error) {
 	f.gotGameID = gameID
 	f.gotBoard = board
+	f.gotWindow = window
 	f.gotLimit = limit
+	f.gotOffset = offset
 	return f.topEntries, f.topErr
 }
 
-func (f *fakeService) Around(_ context.Context, gameID, board, playerID string, k int) ([]domain.Entry, error) {
+func (f *fakeService) Around(_ context.Context, gameID, board, window, playerID string, k int) ([]domain.Entry, error) {
 	f.gotGameID = gameID
 	f.gotBoard = board
+	f.gotWindow = window
 	f.gotPlayerID = playerID
 	f.gotK = k
 	return f.aroundEntries, f.aroundErr
@@ -175,6 +180,51 @@ func TestTop_BoardInvalido_400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestTop_WindowEOffset_Propagados(t *testing.T) {
+	svc := &fakeService{topEntries: []domain.Entry{}}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard?window=weekly&offset=20", "tok", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, domain.WindowWeekly, svc.gotWindow)
+	assert.Equal(t, 20, svc.gotOffset)
+}
+
+func TestTop_SemWindow_DefaultAllTime(t *testing.T) {
+	svc := &fakeService{topEntries: []domain.Entry{}}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard", "tok", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, domain.WindowAllTime, svc.gotWindow, "window ausente -> all-time (compat)")
+	assert.Equal(t, 0, svc.gotOffset)
+}
+
+func TestTop_WindowInvalida_400(t *testing.T) {
+	svc := &fakeService{topErr: domain.ErrInvalidWindow}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard?window=quarterly", "tok", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestMe_Window_Propagada(t *testing.T) {
+	svc := &fakeService{aroundEntries: []domain.Entry{}}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/leaderboard/me?window=daily", "tok", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, domain.WindowDaily, svc.gotWindow)
+}
+
 func TestMe_200_PassaAround(t *testing.T) {
 	svc := &fakeService{aroundEntries: []domain.Entry{{Rank: 3, PlayerID: "p1", Score: 100}}}
 	srv := newServer(svc, fakeVerifier{playerID: "p1"})
@@ -239,6 +289,18 @@ func TestAdminSubmit_200_ServerAuthoritative(t *testing.T) {
 	assert.Equal(t, "game-9", svc.gotGameID, "jogo do path")
 	assert.Equal(t, "p9", svc.gotPlayerID, "jogador do path (não JWT)")
 	assert.Equal(t, int64(42), svc.gotScore)
+}
+
+func TestAdminTop_WindowEOffset_Propagados(t *testing.T) {
+	svc := &fakeService{topEntries: []domain.Entry{}}
+	srv := newServer(svc, fakeVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/games/game-9/leaderboard?window=monthly&offset=10", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, domain.WindowMonthly, svc.gotWindow)
+	assert.Equal(t, 10, svc.gotOffset)
 }
 
 func TestAdminTop_200_PorJogo(t *testing.T) {
