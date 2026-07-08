@@ -19,6 +19,7 @@ import { api, type GameSession, type RoleSlot, type MultiplayerProfile } from ".
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
+import { GuestBadge } from "../components/GuestBadge";
 
 const POLL_MS = 5000;
 
@@ -267,6 +268,7 @@ function RoomRow({
                   <Group gap={6} wrap="nowrap">
                     <PlayerAvatar seed={p.id} />
                     <Text size="sm">{p.handle || truncate(p.id)}</Text>
+                    <GuestBadge playerId={p.id} />
                   </Group>
                 </Tooltip>
               ))}
@@ -329,9 +331,12 @@ function RoomRow({
                         <Group key={p.id} gap={6} wrap="nowrap">
                           <PlayerAvatar seed={p.id} size={24} />
                           <Stack gap={0}>
-                            <Text size="xs" fw={500}>
-                              {p.handle || "—"}
-                            </Text>
+                            <Group gap={4} wrap="nowrap">
+                              <Text size="xs" fw={500}>
+                                {p.handle || "—"}
+                              </Text>
+                              <GuestBadge playerId={p.id} />
+                            </Group>
                             <Text ff="monospace" size="xs" c="dimmed">
                               {p.id}
                             </Text>
