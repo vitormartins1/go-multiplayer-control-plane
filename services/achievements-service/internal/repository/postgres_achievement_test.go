@@ -36,6 +36,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/003_add_game_scope.sql",
 			"../../migrations/004_processed_matches.sql",
 			"../../migrations/005_stat_criteria.sql",
+			"../../migrations/006_processed_participations.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
