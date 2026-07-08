@@ -1,7 +1,7 @@
 # Spec: 024-avatar-by-login-kind
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-polish (revisão de UX pós-M1).
 
@@ -31,9 +31,9 @@ o estilo por tipo de login e adiciona um badge "guest" nas listagens.
 
 ## Casos de Teste / Verificação
 
-- [ ] seed `guest-...` → robô (Bottts); seed uuid de conta → Open Peeps; estável entre páginas
-- [ ] badge guest aparece em GamePlayers/GameSessions/Rooms para IDs `guest-`, ausente para contas
-- [ ] `npm run build` (tsc + vite) limpo
+- [x] seed `guest-...` → robô (Bottts); seed uuid de conta → Open Peeps; estável entre páginas
+- [x] badge guest aparece em GamePlayers/GameSessions/Rooms para IDs `guest-`, ausente para contas
+- [x] `npm run build` (tsc + vite) limpo
 
 ## Fora do escopo
 

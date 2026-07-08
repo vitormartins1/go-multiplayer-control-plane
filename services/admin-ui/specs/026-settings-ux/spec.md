@@ -1,7 +1,7 @@
 # Spec: 026-settings-ux
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-polish. Refina a aba Settings (GameSettings + MultiplayerSettings)
 sem mudar o esqueleto (Fieldsets 2 colunas + tooltips ficam).
@@ -35,11 +35,11 @@ lista de modos não resume os parâmetros; (4) a seção Identidade não mostra 
 
 ## Casos de Teste / Verificação
 
-- [ ] criar/editar mostram título e voltar; Salvar no topo funciona igual ao do rodapé
-- [ ] alert só aparece na edição com arquétipo ≠ salvo; some ao voltar ao original
-- [ ] resumo correto para os 4 arquétipos (casos: FFA, times, BR squad, coop, HWD)
-- [ ] capa visível na Identidade sem quebrar o grid em telas estreitas
-- [ ] `npm run build` limpo
+- [x] criar/editar mostram título e voltar; Salvar no topo funciona igual ao do rodapé
+- [x] alert só aparece na edição com arquétipo ≠ salvo; some ao voltar ao original
+- [x] resumo correto para os 4 arquétipos (casos: FFA, times, BR squad, coop, HWD)
+- [x] capa visível na Identidade sem quebrar o grid em telas estreitas
+- [x] `npm run build` limpo
 
 ## Fora do escopo
 

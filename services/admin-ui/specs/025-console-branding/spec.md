@@ -1,7 +1,7 @@
 # Spec: 025-console-branding
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-polish.
 
@@ -27,9 +27,9 @@ deve ecoar isso.
 
 ## Casos de Teste / Verificação
 
-- [ ] header sem emoji; ícone, título, sufixo e badge alinhados na linha de 56px
-- [ ] navegação/navbar intactas
-- [ ] `npm run build` limpo
+- [x] header sem emoji; ícone, título, sufixo e badge alinhados na linha de 56px
+- [x] navegação/navbar intactas
+- [x] `npm run build` limpo
 
 ## Fora do escopo
 

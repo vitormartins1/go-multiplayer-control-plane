@@ -1,7 +1,7 @@
 # Spec: 028-rooms-mode-badge
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-polish. Surfacing do M1 (ADR-0024): o board de sessões já carrega
 `modeId` (session/017 → BFF), a UI ainda não o exibe.
@@ -22,9 +22,9 @@
 
 ## Casos de Teste / Verificação
 
-- [ ] sessão criada com modo → badge com o modeId; resposta sem campo → `default`
-- [ ] filtro aparece só com ≥2 modos e restringe corretamente
-- [ ] `npm run build` limpo
+- [x] sessão criada com modo → badge com o modeId; resposta sem campo → `default`
+- [x] filtro aparece só com ≥2 modos e restringe corretamente
+- [x] `npm run build` limpo
 
 ## Fora do escopo
 

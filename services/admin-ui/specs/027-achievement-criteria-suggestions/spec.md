@@ -1,7 +1,7 @@
 # Spec: 027-achievement-criteria-suggestions
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-polish. Decisão de design: **sugestão, não validação dura** — o
 envelope de stats é aberto por design (ADR-0023, params declarativos); o console sugere o
@@ -38,11 +38,11 @@ vocabulário fixo derivado pelos sinks por arquétipo (constantes do achievement
 
 ## Casos de Teste / Verificação
 
-- [ ] jogo com modos tdm (kills, assists) e ranked (kills) → sugestões únicas com origem
-- [ ] eventos sugeridos só dos arquétipos cadastrados; sem modos → lista completa
-- [ ] valor digitado fora da lista é aceito e salvo (creatable)
-- [ ] modos indisponíveis → form funciona como hoje
-- [ ] `npm run build` limpo
+- [x] jogo com modos tdm (kills, assists) e ranked (kills) → sugestões únicas com origem
+- [x] eventos sugeridos só dos arquétipos cadastrados; sem modos → lista completa
+- [x] valor digitado fora da lista é aceito e salvo (creatable)
+- [x] modos indisponíveis → form funciona como hoje
+- [x] `npm run build` limpo
 
 ## Fora do escopo
 
