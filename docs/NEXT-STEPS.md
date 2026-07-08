@@ -1,4 +1,4 @@
-# NEXT-STEPS — handoff (atualizado 2026-07-07)
+# NEXT-STEPS — handoff (atualizado 2026-07-08)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
@@ -50,14 +50,19 @@ Gameplay loop fechado e observável no painel:
 
 **Trilha de serviços da tese: 100% construída.** 11 serviços Go + 3 workers de fila (achievements/leaderboard/analytics-consumer): identity, game-registry, achievements, player-data, cloud-save, leaderboard, matchmaking (gRPC), session (gRPC), **analytics**, admin-bff, admin-ui. Observabilidade: Prometheus + Grafana (7 dashboards) + Tempo.
 
-ADRs recentes: 0018 (service auth), 0019 (presença por jogo), 0020 (fan-out durável SNS→SQS), **0021 (analytics via worker pool)**.
+ADRs recentes: 0018 (service auth), 0019 (presença por jogo), 0020 (fan-out durável SNS→SQS), 0021 (analytics via worker pool), 0022 (reconcile de órfãs), 0023 (perfil multiplayer), 0024 (modos + manifest), **0025 (remoção de jogo — soft delete)**.
+
+**Fechados em 2026-07-08 (pós-ADR-0024):**
+
+- **Remoção de jogo** (ADR-0025, specs `game-registry/010` + `admin-bff/018` + `admin-ui/038`): soft delete no registry como ponto de corte único (`deleted_at`, filtro na fonte no repository — jogo deletado = inexistente por fora); presença recusada, reversa omite, slug reservado; zona de perigo no console com confirmação pelo nome. Purge assíncrono = evolução gated (Opção C do ADR).
+- **Leaderboard: janelas por período + paginação** (specs `leaderboard/007` + `admin-bff/019` + `admin-ui/039`): rankings `daily`/`weekly`/`monthly` derivados do relógio UTC sobre a key Redis existente (all-time intacta, zero migration); writes espalham nas 4 janelas (idempotência única no cumulativo; consumer intocado); `?window`/`?offset` ponta a ponta até a aba Leaderboards (SegmentedControl + "Carregar mais"). **Seasons nomeadas adiadas por evidência** (exigirão ADR sobre onde vive a config).
 
 > **Data plane muito à frente do que este doc registrava:** o `go-game-dataplane` (Unity) fechou as Fases 0–6 e está na 7 — Dedicated Server ARM64 orquestrado por Agones (k3d local → homelab Pi 5), com o handshake completo `login → FindMatch → session aloca via Agones → connect token Ed25519 → partida → ReportResult` rodando de verdade. Foi isso que tornou o fan-out durável urgente (game server real reportando resultado). `docs/UNITY-INTEGRATION.md` está **desatualizado** (marcado "rascunho" com TODOs já resolvidos) — candidato a atualização.
 
 ## ⚠️ Pendente de você (ações fora do código)
 
 1. **Push pro GitHub — adiado por decisão (2026-07-07):** o repo fica **local** por ora. Quando for publicar, criar já como `github.com/vitormartins1/go-multiplayer-control-plane` (o module path já é esse), `git remote add origin …`, `git push -u origin main`. Só então o CI (GitHub Actions) roda de verdade.
-2. **Rename do control plane — ✅ executado (2026-07-07):** module path Go + protos (`buf`) + docs já usam `go-multiplayer-control-plane`. **Falta só o `mv` da pasta local** (fazer com a sessão fechada): `cd ~/projects && mv go-game-backend go-multiplayer-control-plane` — e copiar a memória do assistente (`~/.claude/projects/-Users-vitormartins-projects-go-game-backend` → `...-go-multiplayer-control-plane`). Data planes: `unity-<archetype>-data-plane` ao criar cada um; `go-game-dataplane` renomeia quando for tocado (`REPO-TOPOLOGY.md`).
+2. **Rename do control plane — falta só o `mv` da pasta (instruções detalhadas dadas em 2026-07-08):** module path Go + protos (`buf`) + docs já usam `go-multiplayer-control-plane` desde 2026-07-07; a varredura de 2026-07-08 confirmou que só restam menções históricas intencionais. Roteiro: (a) fechar sessões/IDE e **parar** o compose com `docker compose -f infra/docker/docker-compose.yml stop` (**não** `down`: os Postgres usam volumes anônimos — `down` remove os containers e o próximo `up` criaria volumes novos, perdendo os dados de demo; o project name do compose deriva da pasta `infra/docker`, não do nome do repo, então o rename não o afeta); (b) `cd ~/projects && mv go-game-backend go-multiplayer-control-plane`; (c) mover a memória do assistente: `mv ~/.claude/projects/-Users-vitormartins-projects-go-game-backend ~/.claude/projects/-Users-vitormartins-projects-go-multiplayer-control-plane`; (d) reabrir na pasta nova, `go build ./...` + `docker compose -f infra/docker/docker-compose.yml start` para validar. Data planes: `unity-<archetype>-data-plane` ao criar cada um; `go-game-dataplane` renomeia quando for tocado (`REPO-TOPOLOGY.md`).
 
 ## Painel jogo-cêntrico (✅ completo)
 

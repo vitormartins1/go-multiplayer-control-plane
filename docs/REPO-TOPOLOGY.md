@@ -53,7 +53,7 @@ Renomear toca o module path Go e várias referências. Quando decidido:
 
 1. **Repos GitHub:** renomear (GitHub redireciona o antigo por um tempo) e `git remote set-url`.
 2. ~~**Module path Go**~~ ✅ **feito (2026-07-07):** `go.mod` + 128 arquivos de imports + `go_package` dos 2 protos + stubs regenerados via `buf` (não usar `sed` no `.pb.go` — corrompe o `rawDesc`). 721 testes verdes com `-race`.
-3. **Referências em docs do backend** (ajustar os links relativos `../go-game-dataplane` e menções): `docs/ARCHITECTURE.md`, `docs/NEXT-STEPS.md`, `docs/ROADMAP.md`, `docs/UNITY-INTEGRATION.md`, `docs/game-models/*`, ADRs 0010/0011/0012/0020/0021/0022/0023 e `docs/adr/README.md`.
+3. ~~**Referências em docs do backend**~~ ✅ **feito/verificado (2026-07-08):** varredura completa — só restam menções históricas intencionais (`ADR-0001`, `GO-LEARNINGS #30`, notas de rename neste doc e no NEXT-STEPS). Nenhum path/config embute o nome da pasta (o project name do compose deriva de `infra/docker`).
 4. **Referências no data plane** (`go-game-dataplane`): README, CLAUDE.md, ROADMAP, specs, links `../go-game-backend`.
 5. **Memórias** do assistente que citam nomes de repo (`dataplane-repo`, etc.).
 6. **CI/CD e paths** que embutam o nome do repo/módulo.
