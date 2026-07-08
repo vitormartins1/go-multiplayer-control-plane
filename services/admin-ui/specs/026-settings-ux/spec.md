@@ -44,3 +44,10 @@ lista de modos não resume os parâmetros; (4) a seção Identidade não mostra 
 ## Fora do escopo
 
 - Validação nova de formulário; reordenar/duplicar modos; delete de jogo.
+
+## Ajuste pós-validação visual (2026-07-07)
+
+A capa a 110px dentro do Fieldset quebrou o texto da faixa e ficou deslocada (feedback do
+Vitor). Novo layout: **coluna própria à direita** (Grid 8/4 em md+), capa com largura
+dinâmica da coluna + sticky ao rolar, abrangendo Identidade e Multiplayer; em telas
+pequenas a capa cai para o final da página (ordem natural do DOM).

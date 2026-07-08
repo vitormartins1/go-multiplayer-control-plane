@@ -16,6 +16,7 @@ import {
   Text,
   Textarea,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useForm, type UseFormReturnType } from "@mantine/form";
@@ -86,6 +87,19 @@ function eventSuggestions(modes: MultiplayerMode[]): Suggestions {
     for (const ev of EVENT_VOCABULARY[a]) if (!origin.has(ev)) origin.set(ev, a);
   }
   return { values: [...origin.keys()], origin };
+}
+
+// DriftBadge é o aviso de consistência (029): critério apontando para algo que
+// o cadastro de modos não conhece. Detecta drift, não impede — read-only,
+// provavelmente typo/rename, mas pode ser intencional (envelope aberto).
+function DriftBadge({ label, tooltip }: { label: string; tooltip: string }) {
+  return (
+    <Tooltip label={tooltip} multiline w={280} withArrow>
+      <Badge size="xs" variant="outline" color="yellow" style={{ cursor: "default" }}>
+        {label}
+      </Badge>
+    </Tooltip>
+  );
 }
 
 // SuggestInput é o Autocomplete com origem esmaecida por opção — texto fora da
@@ -207,6 +221,10 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
   const stats = statSuggestions(modes ?? []);
   const events = eventSuggestions(modes ?? []);
+  // Check de drift (029) só com modos carregados E existentes — sem falso alarme.
+  const canCheck = (modes?.length ?? 0) > 0;
+  const statDeclared = (key: string) => !canCheck || stats.origin.has(key);
+  const eventKnown = (type: string) => !canCheck || events.origin.has(type);
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<CatalogAchievement | null>(null);
   const [deleting, setDeleting] = useState<CatalogAchievement | null>(null);
@@ -453,13 +471,29 @@ export function GameAchievements({ gameId }: { gameId: string }) {
                 <Table.Td c="dimmed">{a.description}</Table.Td>
                 <Table.Td>
                   {a.statKey ? (
-                    <Badge variant="light" color="grape">
-                      {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
-                    </Badge>
+                    <Group gap={6} wrap="nowrap">
+                      <Badge variant="light" color="grape">
+                        {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
+                      </Badge>
+                      {!statDeclared(a.statKey) && (
+                        <DriftBadge
+                          label="não declarado"
+                          tooltip={`O stat "${a.statKey}" não consta dos scoringStats de nenhum modo do jogo. O data plane ainda pode reportá-lo, mas confira se não é typo ou resto de um rename.`}
+                        />
+                      )}
+                    </Group>
                   ) : (
-                    <Text c="dimmed" size="sm">
-                      {a.eventType}
-                    </Text>
+                    <Group gap={6} wrap="nowrap">
+                      <Text c="dimmed" size="sm">
+                        {a.eventType}
+                      </Text>
+                      {!!a.eventType && !eventKnown(a.eventType) && (
+                        <DriftBadge
+                          label="fora do vocabulário"
+                          tooltip={`O evento "${a.eventType}" não faz parte do vocabulário dos arquétipos cadastrados neste jogo — a conquista pode nunca disparar. Confira se não é typo.`}
+                        />
+                      )}
+                    </Group>
                   )}
                 </Table.Td>
                 <Table.Td>{a.target}</Table.Td>

@@ -45,6 +45,7 @@ import {
   type BattleRoyaleParams,
   type CoopMissionParams,
 } from "../lib/api";
+import { ARCHETYPE_META } from "../lib/archetypeMeta";
 
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -699,17 +700,6 @@ function modeSummary(m: MultiplayerMode): string {
     }
   }
 }
-
-// --- Rótulos por arquétipo (lista de modos) ---
-const ARCHETYPE_META: Record<
-  MultiplayerProfile["archetype"],
-  { label: string; color: string }
-> = {
-  queue_arena: { label: "Queue Arena", color: "blue" },
-  host_world_dropin: { label: "Host World Drop-in", color: "grape" },
-  battle_royale: { label: "Battle Royale", color: "orange" },
-  coop_mission: { label: "Co-op Mission", color: "teal" },
-};
 
 // --- Editor de um modo (ADR-0024, spec 023) ---
 // Reusa o form por arquétipo como corpo; a moldura adiciona a identidade do
