@@ -684,8 +684,9 @@ export function modeSummary(m: MultiplayerMode): string {
     case "host_world_dropin": {
       const p = m.params;
       const parts: string[] = [];
-      if (p.enabledRoles.includes("coop")) parts.push(`co-op ${p.coopSlots}`);
-      if (p.enabledRoles.includes("invader")) parts.push(`invasor ${p.invaderSlots}`);
+      const roles = p.enabledRoles ?? []; // defensivo: respostas antigas omitiam arrays vazios
+      if (roles.includes("coop")) parts.push(`co-op ${p.coopSlots}`);
+      if (roles.includes("invader")) parts.push(`invasor ${p.invaderSlots}`);
       return parts.join(" + ") || "sem papéis externos";
     }
     case "battle_royale": {
@@ -694,7 +695,7 @@ export function modeSummary(m: MultiplayerMode): string {
     }
     case "coop_mission": {
       const p = m.params;
-      const n = p.missions.length;
+      const n = (p.missions ?? []).length; // defensivo: idem
       return `Time ${p.teamSize}${n > 0 ? ` · ${n} miss${n > 1 ? "ões" : "ão"}` : ""}`;
     }
   }
