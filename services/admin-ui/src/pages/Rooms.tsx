@@ -21,6 +21,7 @@ import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
+import { SessionAvatar } from "../components/SessionAvatar";
 
 const POLL_MS = 5000;
 
@@ -269,9 +270,12 @@ function RoomRow({
           )}
         </Table.Td>
         <Table.Td>
-          <Text ff="monospace" size="sm">
-            {truncate(s.matchId)}
-          </Text>
+          <Group gap={6} wrap="nowrap">
+            <SessionAvatar seed={s.sessionId} />
+            <Text ff="monospace" size="sm">
+              {truncate(s.matchId)}
+            </Text>
+          </Group>
         </Table.Td>
         <Table.Td>
           {s.state === "open" ? (
@@ -330,6 +334,7 @@ function RoomRow({
               <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
                 <Stack gap="xs">
                   <Group gap="xl" wrap="wrap">
+                    <SessionAvatar seed={s.sessionId} size={40} />
                     <Field label="JOGO" value={s.gameName || s.gameId || "—"} />
                     <Field label="MODO" value={s.modeId || "default"} mono />
                     <Field label={s.origin === "host_world" ? "MUNDO" : "MATCH ID"} value={s.matchId || s.sessionId} mono />

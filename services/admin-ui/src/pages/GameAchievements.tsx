@@ -37,6 +37,8 @@ import {
 import { CSV_TEMPLATE, parseCSV, type ParseError } from "../lib/csv";
 import { useAsync } from "../lib/useAsync";
 import { AchievementIcon } from "../components/AchievementIcon";
+import { PlayerAvatar } from "../components/PlayerAvatar";
+import { GuestBadge } from "../components/GuestBadge";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
@@ -385,8 +387,8 @@ export function GameAchievements({ gameId }: { gameId: string }) {
 
     setImporting(true);
     try {
-      const achievements = rows.map(({ id, name, description, eventType, target }) => ({
-        id, name, description, eventType, target,
+      const achievements = rows.map(({ id, name, description, eventType, target, statKey, statMode }) => ({
+        id, name, description, eventType, target, statKey: statKey ?? "", statMode,
       }));
       const result = await api.importAchievements(gameId, achievements);
       setImportResult(result);
@@ -666,7 +668,17 @@ export function GameAchievements({ gameId }: { gameId: string }) {
                 <Table.Tbody>
                   {progressEntries.map((e) => (
                     <Table.Tr key={e.playerId}>
-                      <Table.Td c="dimmed">{e.playerId.slice(0, 8)}…</Table.Td>
+                      <Table.Td>
+                        <Group gap={6} wrap="nowrap">
+                          <PlayerAvatar seed={e.playerId} size={24} />
+                          <Tooltip label={e.playerId}>
+                            <Text size="sm" c="dimmed">
+                              {e.playerId.slice(0, 8)}…
+                            </Text>
+                          </Tooltip>
+                          <GuestBadge playerId={e.playerId} />
+                        </Group>
+                      </Table.Td>
                       <Table.Td ta="center">
                         {e.progress}/{progressAchievement?.target ?? "?"}
                       </Table.Td>

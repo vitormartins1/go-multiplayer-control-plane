@@ -3,13 +3,22 @@
 // são suportadas para valores com vírgulas).
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
+const STAT_RE = /^[a-z][a-z0-9_]*$/;
 const REQUIRED_HEADERS = ["id", "name", "description", "eventtype", "target"] as const;
 
+// Modelo baixável (033): CSV não tem comentários padronizados, então a
+// documentação são as próprias linhas de exemplo — uma por tipo de critério,
+// com descrições que explicam o que cada linha demonstra. statKey/statMode são
+// opcionais: preenchidos → critério por métrica (eventType fica vazio);
+// vazios → critério por evento (formato antigo, retrocompatível).
 export const CSV_TEMPLATE =
-  "id,name,description,eventType,target\n" +
-  "first_win,First Win,Win your first match,match_won,1\n" +
-  "ten_wins,Ten Wins,Win ten matches,match_won,10\n" +
-  "reach_level_10,Level 10,Reach level 10 in your first session,level_reached,10\n";
+  "id,name,description,eventType,target,statKey,statMode\n" +
+  'primeira_vitoria,Primeira Vitória,"Exemplo: evento simples — dispara na 1ª ocorrência de match_won",match_won,1,,\n' +
+  'veterano,Veterano,"Exemplo: evento acumulado — 10 ocorrências de match_played",match_played,10,,\n' +
+  'campeao_royale,Campeão do Royale,"Exemplo: evento de outro arquétipo (battle_royale)",battle_royale_win,1,,\n' +
+  'exterminador,Exterminador,"Exemplo: métrica acumulada — soma de kills entre partidas até 500",,500,kills,cumulative\n' +
+  'furia,Fúria,"Exemplo: métrica por partida — 8 kills numa única partida",,8,kills,per_match\n' +
+  'pontuacao_lendaria,Pontuação Lendária,"Exemplo: métrica score (intrínseca a todo resultado) numa partida",,100,score,per_match\n';
 
 export interface ParsedRow {
   row: number;
@@ -18,6 +27,8 @@ export interface ParsedRow {
   description: string;
   eventType: string;
   target: number;
+  statKey?: string;
+  statMode?: "cumulative" | "per_match";
 }
 
 export interface ParseError {
@@ -86,6 +97,9 @@ export function parseCSV(text: string): ParseResult {
   const iDesc = idx("description");
   const iEvent = idx("eventtype");
   const iTarget = idx("target");
+  // colunas opcionais (033): ausentes no arquivo → -1 → campo sempre vazio.
+  const iStatKey = idx("statkey");
+  const iStatMode = idx("statmode");
 
   const rows: ParsedRow[] = [];
   const errors: ParseError[] = [];
@@ -100,6 +114,8 @@ export function parseCSV(text: string): ParseResult {
     const description = cols[iDesc] ?? "";
     const eventType = cols[iEvent] ?? "";
     const rawTarget = cols[iTarget] ?? "";
+    const statKey = (iStatKey >= 0 ? cols[iStatKey] : "") ?? "";
+    const statMode = ((iStatMode >= 0 ? cols[iStatMode] : "") ?? "").toLowerCase();
 
     if (!id) {
       errors.push({ row, message: `Linha ${row}: campo 'id' é obrigatório.` });
@@ -116,8 +132,33 @@ export function parseCSV(text: string): ParseResult {
       errors.push({ row, message: `Linha ${row}: campo 'name' é obrigatório.` });
       continue;
     }
-    if (!eventType) {
-      errors.push({ row, message: `Linha ${row}: campo 'eventType' é obrigatório.` });
+    // Critério (033): exatamente um de eventType/statKey por linha.
+    if (statKey && eventType) {
+      errors.push({
+        row,
+        message: `Linha ${row}: preencha 'eventType' OU 'statKey', nunca os dois (o critério é por evento ou por métrica).`,
+      });
+      continue;
+    }
+    if (!eventType && !statKey) {
+      errors.push({
+        row,
+        message: `Linha ${row}: informe um critério — 'eventType' (por evento) ou 'statKey' (por métrica).`,
+      });
+      continue;
+    }
+    if (statKey && !STAT_RE.test(statKey)) {
+      errors.push({
+        row,
+        message: `Linha ${row}: 'statKey' inválido — minúsculo, começa com letra, só letras/números/_ (ex.: kills).`,
+      });
+      continue;
+    }
+    if (statKey && statMode !== "cumulative" && statMode !== "per_match") {
+      errors.push({
+        row,
+        message: `Linha ${row}: 'statMode' deve ser 'cumulative' ou 'per_match' quando 'statKey' está preenchido (recebido: "${statMode || "vazio"}").`,
+      });
       continue;
     }
     const target = parseInt(rawTarget, 10);
@@ -138,7 +179,15 @@ export function parseCSV(text: string): ParseResult {
     }
     seenIds.set(id, row);
 
-    rows.push({ row, id, name, description, eventType, target });
+    rows.push({
+      row,
+      id,
+      name,
+      description,
+      eventType,
+      target,
+      ...(statKey ? { statKey, statMode: statMode as "cumulative" | "per_match" } : {}),
+    });
   }
 
   return { rows, errors };
