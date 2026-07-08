@@ -127,6 +127,12 @@ type Session struct {
 	OpenedAt    time.Time
 	ClosedAt    time.Time // zero enquanto OPEN
 	CloseReason CloseReason
+
+	// Result é o outcome gravado no fechamento por ReportResult (spec 018):
+	// exatamente o que foi publicado no fan-out, com team_id já carimbado.
+	// Nil em sessões abertas e nos fechamentos sem resultado (ttl/admin/
+	// abandoned/host_left/host_killed).
+	Result *MatchOutcome
 }
 
 // WorldAttributes são os atributos de matchmaking que o host informa ao abrir o

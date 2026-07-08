@@ -245,6 +245,13 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 		return fmt.Errorf("session service: report result: publish: %w", err)
 	}
 
+	// Grava o outcome publicado na sessão (spec 018): o admin mostra
+	// exatamente o que saiu no fan-out (team_id carimbado). Sob lock — o
+	// sweeper/reconciler podem fechar a sessão concorrentemente.
+	s.mu.Lock()
+	sess.Result = &outcome
+	s.mu.Unlock()
+
 	if _, err := s.closeSession(ctx, sessionID, domain.CloseResult); err != nil {
 		return fmt.Errorf("session service: report result: %w", err)
 	}

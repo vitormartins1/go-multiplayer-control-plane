@@ -55,6 +55,14 @@ type sessionDTO struct {
 		Capacity int    `json:"capacity"`
 		Occupied int    `json:"occupied"`
 	} `json:"roleSlots"`
+
+	// Detalhe rico (session spec 018) — passthrough 1:1; os tipos do domain já
+	// espelham o shape do session, então decodifica direto neles.
+	Archetype   string               `json:"archetype"`
+	ProfileHash string               `json:"profileHash"`
+	ModeParams  json.RawMessage      `json:"modeParams"`
+	Teams       []domain.SessionTeam `json:"teams"`
+	Result      *domain.MatchResult  `json:"result"`
 }
 
 // SessionsByGame lê as sessões do jogo, repassando o filtro state.
@@ -144,6 +152,11 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 			Origin:        d.Origin,
 			HostPlayerID:  d.HostPlayerID,
 			RoleSlots:     slots,
+			Archetype:     d.Archetype,
+			ProfileHash:   d.ProfileHash,
+			ModeParams:    d.ModeParams,
+			Teams:         d.Teams,
+			Result:        d.Result,
 		})
 	}
 	return out

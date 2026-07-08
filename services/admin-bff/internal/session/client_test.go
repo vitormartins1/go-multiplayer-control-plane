@@ -129,3 +129,38 @@ func TestCloseSession_404_UpstreamError(t *testing.T) {
 	require.ErrorAs(t, err, &ue)
 	assert.Equal(t, http.StatusNotFound, ue.Status)
 }
+
+// Spec 018 (session): snapshot do modo, formação e resultado repassados 1:1.
+func TestSessionsByGame_DetalheRico_RepassaSnapshotEResultado(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"active": [],
+			"closed": [{"sessionId":"s1","matchId":"m1","state":"closed","players":["p1","p3"],
+				"openedAt":"2026-07-08T12:00:00Z","closedAt":"2026-07-08T12:01:00Z","closeReason":"result",
+				"archetype":"queue_arena","profileHash":"abc123",
+				"modeParams":{"structure":"teams","scoreTarget":5},
+				"teams":[{"teamId":"team-1","players":["p1"]},{"teamId":"team-2","players":["p3"]}],
+				"result":{"kind":"win_loss_draw","winLossDraw":[
+					{"playerId":"p1","teamId":"team-1","outcome":"win","score":4,"stats":{"orbs":4}},
+					{"playerId":"p3","teamId":"team-2","outcome":"loss","score":1}]}}]
+		}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).SessionsByGame(context.Background(), "g1", "")
+
+	require.NoError(t, err)
+	require.Len(t, got.Closed, 1)
+	s := got.Closed[0]
+	assert.Equal(t, "queue_arena", s.Archetype)
+	assert.Equal(t, "abc123", s.ProfileHash)
+	assert.JSONEq(t, `{"structure":"teams","scoreTarget":5}`, string(s.ModeParams))
+	require.Len(t, s.Teams, 2)
+	assert.Equal(t, domain.SessionTeam{TeamID: "team-1", Players: []string{"p1"}}, s.Teams[0])
+	require.NotNil(t, s.Result)
+	assert.Equal(t, "win_loss_draw", s.Result.Kind)
+	require.Len(t, s.Result.WinLossDraw, 2)
+	assert.Equal(t, "win", s.Result.WinLossDraw[0].Outcome)
+	assert.Equal(t, int64(4), s.Result.WinLossDraw[0].Stats["orbs"])
+}

@@ -19,6 +19,7 @@ import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
+import { SessionMatchDetail } from "../components/SessionMatchDetail";
 
 const POLL_MS = 5000;
 
@@ -239,6 +240,8 @@ function SessionRow({
                       ))}
                     </Group>
                   </Stack>
+
+                  <SessionMatchDetail session={s} />
 
                   <Group gap="xl" wrap="wrap">
                     <Stack gap={2}>
