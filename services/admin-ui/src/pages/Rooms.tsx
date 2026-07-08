@@ -13,7 +13,6 @@ import {
   Stack,
   Table,
   Text,
-  Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { api, type GameSession, type RoleSlot, type MultiplayerProfile } from "../lib/api";
@@ -22,6 +21,7 @@ import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 import { SessionAvatar } from "../components/SessionAvatar";
+import { PlayersSummary } from "../components/PlayersSummary";
 
 const POLL_MS = 5000;
 
@@ -292,17 +292,8 @@ function RoomRow({
           {s.origin === "host_world" ? (
             <RoleSlots slots={s.roleSlots ?? []} />
           ) : (
-            <Group gap="xs" wrap="nowrap">
-              {s.players.map((p) => (
-                <Tooltip key={p.id} label={p.handle ? `${p.handle} (${p.id})` : p.id}>
-                  <Group gap={6} wrap="nowrap">
-                    <PlayerAvatar seed={p.id} />
-                    <Text size="sm">{p.handle || truncate(p.id)}</Text>
-                    <GuestBadge playerId={p.id} />
-                  </Group>
-                </Tooltip>
-              ))}
-            </Group>
+            // resumo compacto (034): a lista completa vive no painel expandido.
+            <PlayersSummary players={s.players} capacity={br?.lobbySize ?? coop?.teamSize} />
           )}
         </Table.Td>
         <Table.Td>
