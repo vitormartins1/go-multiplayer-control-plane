@@ -35,6 +35,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	// Admin (interno, sem auth — ver specs/003-admin-list-users): lista de usuários.
 	mux.HandleFunc("GET /admin/players", h.adminListPlayers)
+	// Lookup por id (specs/004-admin-player-by-id): handle de UM jogador.
+	mux.HandleFunc("GET /admin/players/{playerID}", h.adminGetPlayer)
 }
 
 type credentials struct {
@@ -138,6 +140,21 @@ func (h *Handler) adminListPlayers(w http.ResponseWriter, r *http.Request) {
 		players[i] = playerDTO{ID: a.ID, Handle: a.Handle, CreatedAt: a.CreatedAt}
 	}
 	writeJSON(w, http.StatusOK, listPlayersResponse{Total: total, Players: players})
+}
+
+// adminGetPlayer devolve um usuário pelo id (specs/004-admin-player-by-id).
+// Conta inexistente -> 404 player_not_found.
+func (h *Handler) adminGetPlayer(w http.ResponseWriter, r *http.Request) {
+	acc, err := h.players.GetPlayer(r.Context(), r.PathValue("playerID"))
+	if err != nil {
+		if errors.Is(err, domain.ErrAccountNotFound) {
+			writeError(w, http.StatusNotFound, "player_not_found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	writeJSON(w, http.StatusOK, playerDTO{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
 }
 
 // atoiOr devolve o inteiro de s, ou def se vazio/inválido.

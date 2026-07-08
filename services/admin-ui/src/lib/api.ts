@@ -365,6 +365,10 @@ export const api = {
 
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),
+  // Um jogador pelo id (spec 040): handle do header do PlayerDetail. 404 quando
+  // não existe (ex.: guest) — o chamador trata como fallback, não como erro fatal.
+  player: (playerID: string, signal?: AbortSignal) =>
+    getJSON<Player>(`/api/players/${encodeURIComponent(playerID)}`, signal),
 
   games: (signal?: AbortSignal) => getJSON<Game[]>("/api/games", signal),
   createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),

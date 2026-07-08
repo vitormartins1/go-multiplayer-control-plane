@@ -44,12 +44,18 @@ type AccountRepository interface {
 	ListAccounts(ctx context.Context, limit, offset int) ([]Account, error)
 	// CountAccounts devolve o total de contas (para a página exibir "N usuários").
 	CountAccounts(ctx context.Context) (int, error)
+	// FindByID busca uma conta pelo id. Mesma projeção do ListAccounts (sem
+	// password_hash). ErrAccountNotFound quando não existe (feature 004).
+	FindByID(ctx context.Context, id string) (*Account, error)
 }
 
 // PlayerLister é a Port de entrada do listing admin (feature 003-admin-list-users):
 // lista as contas paginadas e devolve o total. Read-only, control plane interno.
+// A feature 004-admin-player-by-id adiciona o lookup individual.
 type PlayerLister interface {
 	ListPlayers(ctx context.Context, limit, offset int) (players []Account, total int, err error)
+	// GetPlayer devolve a conta pelo id; ErrAccountNotFound quando não existe.
+	GetPlayer(ctx context.Context, id string) (*Account, error)
 }
 
 // TokenIssuer é a Port de saída de emissão de tokens.

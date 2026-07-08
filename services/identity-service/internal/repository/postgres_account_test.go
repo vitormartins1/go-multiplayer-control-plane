@@ -119,6 +119,31 @@ func TestPostgresAccountRepository_ListAccounts_Paginacao(t *testing.T) {
 	assert.Equal(t, []string{"Bob", "Alice"}, []string{page2[0].Handle, page2[1].Handle})
 }
 
+func TestPostgresAccountRepository_FindByID_ProjecaoSemHash(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	ctx := context.Background()
+
+	acc := newAccount("Vitor")
+	require.NoError(t, repo.Create(ctx, acc))
+
+	got, err := repo.FindByID(ctx, acc.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Vitor", got.Handle)
+	assert.Empty(t, got.PasswordHash, "password_hash nunca é lido no caminho admin")
+}
+
+func TestPostgresAccountRepository_FindByID_Inexistente_RetornaErrAccountNotFound(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	_, err := repo.FindByID(context.Background(), uuid.NewString())
+	assert.ErrorIs(t, err, domain.ErrAccountNotFound)
+}
+
+func TestPostgresAccountRepository_FindByID_UUIDInvalido_RetornaErrAccountNotFound(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	_, err := repo.FindByID(context.Background(), "nao-e-uuid")
+	assert.ErrorIs(t, err, domain.ErrAccountNotFound)
+}
+
 func TestPostgresAccountRepository_CountAccounts(t *testing.T) {
 	repo := NewPostgresAccountRepository(newTestPool(t))
 	ctx := context.Background()

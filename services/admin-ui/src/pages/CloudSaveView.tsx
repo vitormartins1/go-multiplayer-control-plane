@@ -1,26 +1,33 @@
-import { Alert, Button, Code, Group, Loader, Stack, Table, Text } from "@mantine/core";
+import { Alert, Button, Card, Code, Group, Loader, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
 import { api, HttpError, type CloudSave } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { JsonTree } from "../components/JsonTree";
+import { JsonMaterialized } from "../components/JsonMaterialized";
 
-// decodePreview tenta decodificar o blob base64 para texto legível. JSON é
-// reindentado; texto vai cru; binário vira null (mostramos só os metadados).
-function decodePreview(contentType: string, blobB64: string): string | null {
+// decodeBlob classifica o blob base64 (spec 042): JSON parseado -> tree +
+// leitura consolidada; texto -> cru; binário -> só metadados.
+type DecodedBlob =
+  | { kind: "json"; value: unknown }
+  | { kind: "text"; text: string }
+  | { kind: "binary" };
+
+function decodeBlob(contentType: string, blobB64: string): DecodedBlob {
   let text: string;
   try {
     text = atob(blobB64);
   } catch {
-    return null;
+    return { kind: "binary" };
   }
   if (contentType.includes("json")) {
     try {
-      return JSON.stringify(JSON.parse(text), null, 2);
+      return { kind: "json", value: JSON.parse(text) };
     } catch {
-      return text;
+      return { kind: "text", text };
     }
   }
-  if (contentType.startsWith("text/")) return text;
-  return null; // binário/desconhecido
+  if (contentType.startsWith("text/")) return { kind: "text", text };
+  return { kind: "binary" };
 }
 
 // CloudSaveView: save do jogador no jogo ativo (gameId vem do contexto global,
@@ -35,7 +42,7 @@ export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: 
 
   const notFound = error instanceof HttpError && error.status === 404;
   const otherError = !!error && !notFound;
-  const preview = data ? decodePreview(data.contentType, data.blob) : null;
+  const decoded = data ? decodeBlob(data.contentType, data.blob) : null;
 
   return (
     <Stack>
@@ -48,7 +55,7 @@ export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: 
       {loading && !data && <Loader />}
       {otherError && <Alert color="red">Falha ao carregar (cloud-save indisponível?).</Alert>}
       {notFound && <Text c="dimmed">Nenhum save para este jogador neste jogo.</Text>}
-      {data && (
+      {data && decoded && (
         <Stack gap="xs">
           <Table withTableBorder>
             <Table.Tbody>
@@ -66,9 +73,27 @@ export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: 
               </Table.Tr>
             </Table.Tbody>
           </Table>
-          {preview !== null ? (
-            <Code block>{preview}</Code>
-          ) : (
+
+          {decoded.kind === "json" && (
+            // duas leituras do mesmo blob (spec 042): a estrutura navegável e a
+            // versão materializada para bater o olho.
+            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+              <Card withBorder padding="md">
+                <Text size="sm" fw={600} mb="xs">
+                  Estrutura (JSON)
+                </Text>
+                <JsonTree value={decoded.value} collapsed={false} />
+              </Card>
+              <Card withBorder padding="md">
+                <Text size="sm" fw={600} mb="xs">
+                  Leitura consolidada
+                </Text>
+                <JsonMaterialized value={decoded.value} />
+              </Card>
+            </SimpleGrid>
+          )}
+          {decoded.kind === "text" && <Code block>{decoded.text}</Code>}
+          {decoded.kind === "binary" && (
             <Text c="dimmed" size="sm">
               Conteúdo binário ({data.size} bytes) — preview indisponível.
             </Text>

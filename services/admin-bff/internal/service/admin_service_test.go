@@ -158,14 +158,21 @@ func (f *fakeLeaderboard) SetScore(_ context.Context, gameID, _, board string, _
 
 type fakeDirectory struct {
 	page      domain.PlayerPage
+	player    domain.Player
 	err       error
 	gotLimit  int
 	gotOffset int
+	gotPlayer string
 }
 
 func (f *fakeDirectory) ListPlayers(_ context.Context, limit, offset int) (domain.PlayerPage, error) {
 	f.gotLimit, f.gotOffset = limit, offset
 	return f.page, f.err
+}
+
+func (f *fakeDirectory) GetPlayer(_ context.Context, playerID string) (domain.Player, error) {
+	f.gotPlayer = playerID
+	return f.player, f.err
 }
 
 type fakePlayerData struct {

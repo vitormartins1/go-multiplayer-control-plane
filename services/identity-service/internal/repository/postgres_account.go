@@ -74,6 +74,26 @@ func (r *PostgresAccountRepository) CountAccounts(ctx context.Context) (int, err
 	return n, nil
 }
 
+// FindByID busca a conta pelo id com a mesma projeção do ListAccounts — o
+// password_hash NÃO é lido (caminho admin, feature 004-admin-player-by-id).
+func (r *PostgresAccountRepository) FindByID(ctx context.Context, id string) (*domain.Account, error) {
+	const q = `SELECT id, handle, created_at FROM accounts WHERE id = $1`
+	var a domain.Account
+	err := r.pool.QueryRow(ctx, q, id).Scan(&a.ID, &a.Handle, &a.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrAccountNotFound
+	}
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "22P02" { // invalid_text_representation
+			// id que nem é UUID válido: conta que não existe, não erro interno.
+			return nil, domain.ErrAccountNotFound
+		}
+		return nil, fmt.Errorf("identity repository: find by id: %w", err)
+	}
+	return &a, nil
+}
+
 func (r *PostgresAccountRepository) FindByHandle(ctx context.Context, handle string) (*domain.Account, error) {
 	const q = `SELECT id, handle, password_hash, created_at FROM accounts WHERE lower(handle) = lower($1)`
 	var a domain.Account

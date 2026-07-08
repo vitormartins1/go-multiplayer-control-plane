@@ -22,6 +22,8 @@ type fakeService struct {
 	liveErr          error
 	page             domain.PlayerPage
 	pageErr          error
+	player           domain.Player
+	playerErr        error
 	games            []domain.Game
 	gamesErr         error
 	createErr        error
@@ -71,6 +73,10 @@ func (f *fakeService) LiveMetrics(context.Context) (domain.LiveMetrics, error) {
 func (f *fakeService) Players(_ context.Context, limit, offset int) (domain.PlayerPage, error) {
 	f.gotLimit, f.gotOffset = limit, offset
 	return f.page, f.pageErr
+}
+func (f *fakeService) Player(_ context.Context, playerID string) (domain.Player, error) {
+	f.gotPlayer = playerID
+	return f.player, f.playerErr
 }
 func (f *fakeService) Games(context.Context) ([]domain.Game, error) {
 	return f.games, f.gamesErr
@@ -310,6 +316,44 @@ func TestPlayers_IdentityFora_502(t *testing.T) {
 	defer srv.Close()
 
 	resp := get(t, srv, "/api/players")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestPlayer_200_DevolveJogador(t *testing.T) {
+	svc := &fakeService{player: domain.Player{ID: "id-1", Handle: "Alice"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players/id-1")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "id-1", svc.gotPlayer)
+
+	var body domain.Player
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "Alice", body.Handle)
+}
+
+func TestPlayer_Inexistente_404(t *testing.T) {
+	svc := &fakeService{playerErr: domain.ErrPlayerNotFound}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players/nope")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "player_not_found")
+}
+
+func TestPlayer_IdentityFora_502(t *testing.T) {
+	svc := &fakeService{playerErr: domain.ErrIdentityUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players/id-1")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }

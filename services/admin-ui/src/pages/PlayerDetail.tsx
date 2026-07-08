@@ -1,28 +1,48 @@
-import { Alert, Anchor, Breadcrumbs, Group, Loader, Select, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Breadcrumbs, Group, Loader, Stack, Tabs, Text, Title } from "@mantine/core";
 import { IconCloud, IconDatabase, IconTrophy } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { PlayerAchievements } from "./PlayerAchievements";
 import { PlayerDataView } from "./PlayerDataView";
 import { CloudSaveView } from "./CloudSaveView";
-import { PlayerAvatar } from "../components/PlayerAvatar";
+import { PlayerAvatar, isGuest } from "../components/PlayerAvatar";
+import { GuestBadge } from "../components/GuestBadge";
+import { GameChipsSelector } from "../components/GameChipsSelector";
 
 export function PlayerDetail() {
   const { playerId = "" } = useParams();
+  // fromGameId: jogo de origem quando a navegação partiu da aba Players de um
+  // jogo (spec 040) — pré-seleciona esse jogo em vez do primeiro da lista.
+  const { state } = useLocation() as { state?: { fromGameId?: string } };
+  const fromGameId = state?.fromGameId;
   // Os jogos são escopados a ESTE jogador (presença reversa), não a um contexto
   // global. O primeiro vem pré-selecionado (ADR-0019 + spec 004).
   const { data: games, loading, error } = useAsync((s) => api.gamesOfPlayer(playerId, s), [playerId]);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // Seleciona o primeiro jogo sempre que a lista muda (inclui trocar de jogador:
-  // o router reusa o componente, então precisamos re-selecionar — senão o jogo
-  // do jogador anterior ficaria preso). Seleção manual persiste dentro do mesmo
-  // jogador (a lista só refaz quando playerId muda).
+  // Handle do jogador (spec 040): best-effort — guest não tem conta (curto-
+  // circuito sem fetch) e falha/404 mantém o fallback "Jogador" do header.
+  const { data: player } = useAsync(
+    (s) => (isGuest(playerId) ? Promise.resolve(null) : api.player(playerId, s).catch(() => null)),
+    [playerId],
+  );
+  const displayName = isGuest(playerId) ? "Convidado" : (player?.handle ?? "Jogador");
+
+  // Seleciona o jogo de origem (quando presente na lista) ou o primeiro sempre
+  // que a lista muda (inclui trocar de jogador: o router reusa o componente,
+  // então precisamos re-selecionar — senão o jogo do jogador anterior ficaria
+  // preso). Seleção manual persiste dentro do mesmo jogador (a lista só refaz
+  // quando playerId muda).
   useEffect(() => {
-    setGameId(games && games.length > 0 ? games[0].id : null);
-  }, [games]);
+    if (!games || games.length === 0) {
+      setGameId(null);
+      return;
+    }
+    const origin = games.find((g) => g.id === fromGameId);
+    setGameId(origin ? origin.id : games[0].id);
+  }, [games, fromGameId]);
 
   return (
     <Stack>
@@ -30,28 +50,23 @@ export function PlayerDetail() {
         <Anchor component={Link} to="/players">
           Players
         </Anchor>
-        <Text>{playerId.slice(0, 8)}…</Text>
+        <Text>{player?.handle ?? `${playerId.slice(0, 8)}…`}</Text>
       </Breadcrumbs>
       <Group justify="space-between" align="flex-end">
         <Group>
           <PlayerAvatar seed={playerId} size={48} />
           <div>
-            <Title order={3}>Jogador</Title>
+            <Group gap="xs">
+              <Title order={3}>{displayName}</Title>
+              <GuestBadge playerId={playerId} />
+            </Group>
             <Text c="dimmed" size="sm" mt={-4}>
               {playerId}
             </Text>
           </div>
         </Group>
         {games && games.length > 0 && (
-          <Select
-            label="Jogo"
-            data={games.map((g) => ({ value: g.id, label: g.name }))}
-            value={gameId}
-            onChange={setGameId}
-            w={240}
-            allowDeselect={false}
-            searchable
-          />
+          <GameChipsSelector games={games} value={gameId} onChange={setGameId} />
         )}
       </Group>
 
