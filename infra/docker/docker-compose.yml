@@ -142,6 +142,13 @@ services:
     environment:
       PORT: "8080"
       GRPC_PORT: "50051"
+      # Snapshot do perfil do modo no CreateSession (ADR-0024) — obrigatório
+      # para QUALQUER sessão; sem isso o Create falha com profile unavailable.
+      GAME_REGISTRY_URL: http://game-registry:8080
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018)
+      # Pool mock maior que o default (3): permite várias salas abertas ao
+      # mesmo tempo no console em dev (cada sessão aberta segura um slot).
+      SERVER_POOL: 10.0.0.1:7777,10.0.0.2:7777,10.0.0.3:7777,10.0.0.4:7777,10.0.0.5:7777,10.0.0.6:7777,10.0.0.7:7777,10.0.0.8:7777
       # Fan-out durável (ADR-0020): publica o resultado no tópico SNS match-results.
       MATCH_RESULTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:match-results
       AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão MinIO/S3)
