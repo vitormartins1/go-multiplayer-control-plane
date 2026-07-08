@@ -125,11 +125,11 @@ export function GamePlayers({
           <Table.Tbody>
             {hasOnline && <SectionRow label="Online" count={online.length} color="green" />}
             {online.map((p) => (
-              <PlayerRow key={p.playerId} player={p} online={true} onNavigate={() => nav(`/players/${p.playerId}`)} />
+              <PlayerRow key={p.playerId} player={p} online={true} onNavigate={() => nav(`/players/${p.playerId}`, { state: { fromGameId: gameId } })} />
             ))}
             {hasOnline && offline.length > 0 && <SectionRow label="Outros" count={offline.length} />}
             {offline.map((p) => (
-              <PlayerRow key={p.playerId} player={p} online={false} onNavigate={() => nav(`/players/${p.playerId}`)} />
+              <PlayerRow key={p.playerId} player={p} online={false} onNavigate={() => nav(`/players/${p.playerId}`, { state: { fromGameId: gameId } })} />
             ))}
           </Table.Tbody>
         </Table>
