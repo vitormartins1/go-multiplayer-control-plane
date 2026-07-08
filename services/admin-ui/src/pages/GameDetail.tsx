@@ -1,4 +1,4 @@
-import { Anchor, Badge, Breadcrumbs, Group, SimpleGrid, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Anchor, Badge, Breadcrumbs, Group, Stack, Tabs, Text, Title } from "@mantine/core";
 import { IconChartBar, IconChartPie, IconServer2, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -6,7 +6,6 @@ import { api } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { useAsync } from "../lib/useAsync";
 import { GameCover } from "../components/GameCover";
-import { StatCard } from "../components/StatCard";
 import { GameAchievements } from "./GameAchievements";
 import { GameAnalytics } from "./GameAnalytics";
 import { GameLeaderboards } from "./GameLeaderboards";
@@ -55,20 +54,14 @@ export function GameDetail() {
         </Anchor>
         <Text>{game?.name ?? gameId}</Text>
       </Breadcrumbs>
-      {/* Fotografia do jogo no primeiro olhar (030): capa + slug + modos + totais. */}
+      {/* Fotografia do jogo no primeiro olhar (030, ajustada pós-validação):
+          capa mini + nome + badges dos modos numa linha só. Slug fica na aba
+          Configurações; totais ficam nos badges das tabs (sem StatCards). */}
       <Group gap="sm" align="center">
         {game && <GameCover game={game} variant="mini" />}
         <Title order={3}>{game?.name ?? "Jogo"}</Title>
-        {game && (
-          <Text size="sm" c="dimmed">
-            {game.slug}
-          </Text>
-        )}
-      </Group>
-
-      {gameModes && (
-        <Group gap={6}>
-          {gameModes.length === 0 ? (
+        {gameModes &&
+          (gameModes.length === 0 ? (
             <Badge variant="light" color="gray">
               sem multiplayer
             </Badge>
@@ -78,16 +71,8 @@ export function GameDetail() {
                 {m.modeId}
               </Badge>
             ))
-          )}
-        </Group>
-      )}
-
-      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-        <StatCard label="Modos" value={gameModes ? String(gameModes.length) : "—"} />
-        <StatCard label="Salas abertas" value={sessions ? String(sessions.active.length) : "—"} />
-        <StatCard label="Jogadores" value={gamePlayers ? String(gamePlayers.length) : "—"} />
-        <StatCard label="Conquistas" value={catalog ? String(catalog.length) : "—"} />
-      </SimpleGrid>
+          ))}
+      </Group>
 
       {/* keepMounted=false: painel desmontado ao trocar de aba — o polling da
           aba Sessions só roda com ela visível. */}

@@ -25,12 +25,12 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
     }
   }
 
-  // Capa em coluna própria à direita (ajuste da 026): tamanho dinâmico (1/3 da
-  // largura em md+), sticky ao rolar os forms longos; em telas pequenas cai
-  // para o final (ordem natural do DOM: conteúdo antes, capa depois).
+  // Capa em coluna própria à direita (ajuste da 026): 1/4 da largura em md+
+  // (1/3 dominava demais a tela), sticky ao rolar os forms longos; em telas
+  // pequenas cai para o final (ordem natural do DOM: conteúdo antes, capa depois).
   return (
     <Grid maw={1100} gutter="xl">
-      <Grid.Col span={{ base: 12, md: 8 }}>
+      <Grid.Col span={{ base: 12, md: 9 }}>
         <Stack>
           <Title order={4}>Identidade</Title>
           <Fieldset legend="Dados do jogo">
@@ -73,7 +73,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
         </Stack>
       </Grid.Col>
 
-      <Grid.Col span={{ base: 12, md: 4 }}>
+      <Grid.Col span={{ base: 12, md: 3 }}>
         <Box style={{ position: "sticky", top: 72 }}>
           <GameCover game={game} />
           <Text size="xs" c="dimmed" ta="center" mt={6}>
