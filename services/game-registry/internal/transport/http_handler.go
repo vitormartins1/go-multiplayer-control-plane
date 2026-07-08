@@ -87,7 +87,7 @@ type queueArenaParamsDTO struct {
 	MatchStructure  string   `json:"matchStructure"`
 	RoundsToWin     int      `json:"roundsToWin,omitempty"`
 	AllowDraw       bool     `json:"allowDraw"`
-	ScoringStats    []string `json:"scoringStats,omitempty"`
+	ScoringStats    []string `json:"scoringStats"`
 }
 
 type hostWorldDropInParamsDTO struct {
@@ -104,15 +104,15 @@ type battleRoyaleParamsDTO struct {
 	LobbySize    int      `json:"lobbySize,omitempty"`
 	TeamSize     int      `json:"teamSize,omitempty"`
 	RespawnMode  string   `json:"respawnMode"`
-	ScoringStats []string `json:"scoringStats,omitempty"`
+	ScoringStats []string `json:"scoringStats"`
 }
 
 type coopMissionParamsDTO struct {
 	TeamSize       int      `json:"teamSize,omitempty"`
-	Missions       []string `json:"missions,omitempty"`
-	Difficulties   []string `json:"difficulties,omitempty"`
+	Missions       []string `json:"missions"`
+	Difficulties   []string `json:"difficulties"`
 	BotfillEnabled bool     `json:"botfillEnabled"`
-	ScoringStats   []string `json:"scoringStats,omitempty"`
+	ScoringStats   []string `json:"scoringStats"`
 }
 
 // gameWithProfileDTO estende o jogo com o perfil (modo default, compat) e o
@@ -161,13 +161,13 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
 			TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
 			DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
-			RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+			RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: nonNil(qa.ScoringStats),
 		}
 	case domain.ArchetypeHostWorldDropIn:
 		var hw hostWorldDropInParamsDTO
 		_ = json.Unmarshal(d.Params, &hw)
 		p.HostWorldDropIn = &domain.HostWorldDropInParams{
-			EnabledRoles:      hw.EnabledRoles,
+			EnabledRoles:      nonNil(hw.EnabledRoles),
 			CoopSlots:         hw.CoopSlots,
 			InvaderSlots:      hw.InvaderSlots,
 			LevelRangeEnabled: hw.LevelRangeEnabled,
@@ -182,7 +182,7 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			LobbySize:    br.LobbySize,
 			TeamSize:     br.TeamSize,
 			RespawnMode:  br.RespawnMode,
-			ScoringStats: br.ScoringStats,
+			ScoringStats: nonNil(br.ScoringStats),
 		}
 	case domain.ArchetypeCoopMission:
 		var cm coopMissionParamsDTO
@@ -198,6 +198,16 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 	return p
 }
 
+// nonNil garante slice não-nil na serialização: o contrato do console declara
+// esses campos como array obrigatório — lista vazia vai como [], nunca null/
+// ausente (bug: params sem scoringStats quebrava a UI).
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 	if p == nil {
 		return nil
@@ -211,7 +221,7 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 				Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
 				TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
 				DurationSeconds: qa.DurationSeconds, MatchStructure: qa.MatchStructure,
-				RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: qa.ScoringStats,
+				RoundsToWin: qa.RoundsToWin, AllowDraw: qa.AllowDraw, ScoringStats: nonNil(qa.ScoringStats),
 			})
 			d.Params = raw
 		}
@@ -219,7 +229,7 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 		if p.HostWorldDropIn != nil {
 			hw := p.HostWorldDropIn
 			raw, _ := json.Marshal(hostWorldDropInParamsDTO{
-				EnabledRoles:      hw.EnabledRoles,
+				EnabledRoles:      nonNil(hw.EnabledRoles),
 				CoopSlots:         hw.CoopSlots,
 				InvaderSlots:      hw.InvaderSlots,
 				LevelRangeEnabled: hw.LevelRangeEnabled,
@@ -236,7 +246,7 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 				LobbySize:    br.LobbySize,
 				TeamSize:     br.TeamSize,
 				RespawnMode:  br.RespawnMode,
-				ScoringStats: br.ScoringStats,
+				ScoringStats: nonNil(br.ScoringStats),
 			})
 			d.Params = raw
 		}
@@ -245,10 +255,10 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 			cm := p.CoopMission
 			raw, _ := json.Marshal(coopMissionParamsDTO{
 				TeamSize:       cm.TeamSize,
-				Missions:       cm.Missions,
-				Difficulties:   cm.Difficulties,
+				Missions:       nonNil(cm.Missions),
+				Difficulties:   nonNil(cm.Difficulties),
 				BotfillEnabled: cm.BotfillEnabled,
-				ScoringStats:   cm.ScoringStats,
+				ScoringStats:   nonNil(cm.ScoringStats),
 			})
 			d.Params = raw
 		}
