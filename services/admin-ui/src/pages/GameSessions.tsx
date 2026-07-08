@@ -7,6 +7,7 @@ import {
   Group,
   Loader,
   SegmentedControl,
+  Select,
   Stack,
   Table,
   Text,
@@ -27,6 +28,7 @@ const POLL_MS = 5000;
 export function GameSessions({ gameId }: { gameId: string }) {
   const { data, loading, error, reload } = useAsync((s) => api.gameSessions(gameId, s), [gameId]);
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
+  const [modeFilter, setModeFilter] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -40,12 +42,22 @@ export function GameSessions({ gameId }: { gameId: string }) {
     if (data) setLastUpdate(new Date());
   }, [data]);
 
-  const rows = useMemo(() => {
+  // modo de cada sessão (ADR-0024, 028): ausente em sessões legadas = default.
+  const modeOf = (s: GameSession) => s.modeId || "default";
+
+  const allRows = useMemo(() => {
     if (!data) return [];
     const active = filter === "closed" ? [] : data.active;
     const closed = filter === "open" ? [] : data.closed;
     return [...active, ...closed];
   }, [data, filter]);
+
+  // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
+  const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
+  const rows = useMemo(
+    () => (modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows),
+    [allRows, modeFilter],
+  );
 
   return (
     <Stack>
@@ -63,6 +75,17 @@ export function GameSessions({ gameId }: { gameId: string }) {
             <Text size="xs" c="dimmed">
               atualizado {lastUpdate.toLocaleTimeString("pt-BR")}
             </Text>
+          )}
+          {distinctModes.length > 1 && (
+            <Select
+              size="xs"
+              w={170}
+              placeholder="Todos os modos"
+              clearable
+              value={modeFilter}
+              onChange={setModeFilter}
+              data={distinctModes}
+            />
           )}
           <SegmentedControl
             size="xs"
@@ -134,15 +157,20 @@ function SessionRow({
           </Text>
         </Table.Td>
         <Table.Td>
-          {s.state === "open" ? (
-            <Badge color="green" variant="light">
-              ao vivo
+          <Group gap={4} wrap="nowrap">
+            {s.state === "open" ? (
+              <Badge color="green" variant="light">
+                ao vivo
+              </Badge>
+            ) : (
+              <Badge color="gray" variant="light">
+                closed · {s.closeReason ?? "?"}
+              </Badge>
+            )}
+            <Badge variant="light" color="indigo">
+              {s.modeId || "default"}
             </Badge>
-          ) : (
-            <Badge color="gray" variant="light">
-              closed · {s.closeReason ?? "?"}
-            </Badge>
-          )}
+          </Group>
         </Table.Td>
         <Table.Td>
           <Group gap="xs" wrap="nowrap">
@@ -187,6 +215,10 @@ function SessionRow({
                     <Stack gap={2}>
                       <Text size="xs" c="dimmed" fw={600}>MATCH ID</Text>
                       <Text ff="monospace" size="xs">{s.matchId}</Text>
+                    </Stack>
+                    <Stack gap={2}>
+                      <Text size="xs" c="dimmed" fw={600}>MODO</Text>
+                      <Text ff="monospace" size="xs">{s.modeId || "default"}</Text>
                     </Stack>
                     <Stack gap={2}>
                       <Text size="xs" c="dimmed" fw={600}>SERVIDOR</Text>

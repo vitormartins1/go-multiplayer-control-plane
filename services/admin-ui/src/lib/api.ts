@@ -208,6 +208,7 @@ export interface GameSession {
   gameId?: string; // preenchido no board global (Rooms); vazio na aba por-jogo
   gameName?: string; // idem — resolvido pelo BFF
   state: "open" | "closed";
+  modeId?: string; // modo do jogo (ADR-0024, M1); ausente em sessões legadas = "default"
   players: SessionPlayer[];
   serverAddress: string;
   openedAt: string;
