@@ -25,7 +25,10 @@ de uma vez, com o modo atual preservado para investigação pontual (e edição)
     **2 colunas** (1 em telas menores), cada uma como mini-tabela com título.
   - Cada mini-tabela mostra o **top 5** (`limit=5`), sem paginação e sem o lápis
     de edição (ajuste de score é tarefa do modo Específica).
-  - Janela sem dados: "Sem partidas no período." dimmed no lugar da tabela.
+  - Toda mini-tabela tem **sempre 5 linhas**: as posições sem dado são
+    preenchidas com "–" dimmed (janela vazia = tabela toda de "–"), mantendo o
+    grid com altura uniforme. *(Refinado 2026-07-08: a 1ª versão mostrava um
+    texto "Sem partidas no período." no lugar da tabela, quebrando a coesão.)*
   - O botão Atualizar recarrega todas as mini-tabelas.
   - Os controles de janela (`SegmentedControl` Geral/Hoje/…) e o `Select` de
     board ficam ocultos (não se aplicam).

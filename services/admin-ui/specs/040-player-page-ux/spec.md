@@ -64,8 +64,16 @@ Quatro melhorias de UX, todas na mesma página (por isso uma spec só):
   das tabelas, dominava o layout.)*
 - As tabelas usam larguras de coluna **fixas e idênticas** nas duas visões
   (`tableLayout: fixed`), para a leitura não "pular" entre grupos; a visão
-  "Por estado" dispõe os grupos em **grid de 2 colunas** em telas largas
-  (1 coluna em telas menores). *(Refinado 2026-07-08.)*
+  "Por estado" empilha os grupos em **uma coluna**, cada um precedido por um
+  `Divider` rotulado (título + contagem). *(Refinado 2×: o grid de 2 colunas
+  foi testado e descartado a pedido do usuário — 1 coluna lê melhor.)*
+- Cada linha mostra o **ícone DiceBear** da conquista (`AchievementIcon`,
+  seed = id, como no catálogo do jogo) ao lado do nome. *(Refinado 2026-07-08.)*
+- THE SYSTEM SHALL oferecer **ordenação rápida** num `SegmentedControl`
+  ("A–Z" | "Progresso") junto aos demais controles. A–Z ordena pelo nome
+  (locale pt-BR); Progresso ordena pela fração concluída desc (nome como
+  desempate). Vale nas duas visões — na "Por estado", dentro de cada grupo.
+  Default: A–Z. *(Refinado 2026-07-08.)*
 - O percentual geral é **ponderado pelo alvo** de cada conquista:
   `Y = Σ min(progress, target) / Σ target` (unidades de progresso cumpridas sobre o
   total de unidades do catálogo). Um tooltip na barra explica o cálculo em uma frase.

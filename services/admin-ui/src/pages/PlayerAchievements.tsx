@@ -1,8 +1,9 @@
-import { Alert, Button, Group, Loader, Progress, SegmentedControl, SimpleGrid, Stack, Table, Text, Tooltip } from "@mantine/core";
+import { Alert, Button, Divider, Group, Loader, Progress, SegmentedControl, Stack, Table, Text, Tooltip } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { api, type PlayerAchievement } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { AchievementIcon } from "../components/AchievementIcon";
 
 // pctOf: fração concluída de uma conquista em [0, 1]. Desbloqueada conta como
 // inteira mesmo se o progresso registrado ficou aquém do alvo (dado antigo).
@@ -15,7 +16,14 @@ function pctOf(a: PlayerAchievement): number {
 function AchievementRow({ a }: { a: PlayerAchievement }) {
   return (
     <Table.Tr>
-      <Table.Td>{a.name}</Table.Td>
+      <Table.Td>
+        <Group gap="sm" wrap="nowrap">
+          <AchievementIcon seed={a.id} size={28} />
+          <Text size="sm" truncate>
+            {a.name}
+          </Text>
+        </Group>
+      </Table.Td>
       <Table.Td>
         <Group gap="sm" wrap="nowrap">
           <Text size="sm" w={70} style={{ whiteSpace: "nowrap" }}>
@@ -61,18 +69,23 @@ function AchievementsTable({ rows }: { rows: PlayerAchievement[] }) {
   );
 }
 
-// GroupSection: uma das três tabelas da visão "Por estado". Grupo vazio não
-// some — mostra o título com contagem 0 e "nenhuma" (o admin vê que a
-// categoria existe e está vazia).
+// GroupSection: uma das três seções da visão "Por estado", empilhadas em uma
+// coluna com um Divider rotulado separando cada uma. Grupo vazio não some —
+// mostra a contagem 0 e "nenhuma" (o admin vê que a categoria existe e está vazia).
 function GroupSection({ title, rows }: { title: string; rows: PlayerAchievement[] }) {
   return (
     <Stack gap="xs">
-      <Text fw={600}>
-        {title}{" "}
-        <Text span c="dimmed">
-          · {rows.length}
-        </Text>
-      </Text>
+      <Divider
+        labelPosition="left"
+        label={
+          <Text size="sm" fw={600}>
+            {title}{" "}
+            <Text span size="sm" c="dimmed">
+              · {rows.length}
+            </Text>
+          </Text>
+        }
+      />
       {rows.length > 0 ? <AchievementsTable rows={rows} /> : <Text c="dimmed">nenhuma</Text>}
     </Stack>
   );
@@ -115,17 +128,26 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
     [gameId, playerId],
   );
   const [view, setView] = useState<"table" | "grouped">("table");
+  const [order, setOrder] = useState<"name" | "progress">("name");
+
+  // Ordenação rápida (spec 040, refinada): A–Z ou % de progresso (desc, nome
+  // como desempate). Vale nas duas visões; na "Por estado", dentro de cada grupo.
+  const sorted = useMemo(() => {
+    const list = [...(data ?? [])];
+    if (order === "name") return list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    return list.sort((a, b) => pctOf(b) - pctOf(a) || a.name.localeCompare(b.name, "pt-BR"));
+  }, [data, order]);
 
   // Partição da visão "Por estado" (spec 040): conquistadas, em progresso
   // (progresso parcial) e bloqueadas (sem progresso), nesta ordem.
-  const groups = useMemo(() => {
-    const list = data ?? [];
-    return {
-      unlocked: list.filter((a) => a.unlocked),
-      inProgress: list.filter((a) => !a.unlocked && a.progress > 0),
-      locked: list.filter((a) => !a.unlocked && a.progress === 0),
-    };
-  }, [data]);
+  const groups = useMemo(
+    () => ({
+      unlocked: sorted.filter((a) => a.unlocked),
+      inProgress: sorted.filter((a) => !a.unlocked && a.progress > 0),
+      locked: sorted.filter((a) => !a.unlocked && a.progress === 0),
+    }),
+    [sorted],
+  );
 
   if (!gameId) return <Text c="dimmed">Selecione um jogo no topo para ver o progresso do jogador.</Text>;
 
@@ -134,6 +156,15 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
       <Group justify="space-between" gap="xs">
         {data && data.length > 0 ? <OverallProgress data={data} /> : <span />}
         <Group gap="xs">
+          <SegmentedControl
+            size="xs"
+            value={order}
+            onChange={(v) => setOrder(v as "name" | "progress")}
+            data={[
+              { value: "name", label: "A–Z" },
+              { value: "progress", label: "Progresso" },
+            ]}
+          />
           <SegmentedControl
             size="xs"
             value={view}
@@ -154,13 +185,13 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
       {data && data.length === 0 && <Text c="dimmed">Nenhum progresso para este jogador neste jogo.</Text>}
       {data && data.length > 0 &&
         (view === "table" ? (
-          <AchievementsTable rows={data} />
+          <AchievementsTable rows={sorted} />
         ) : (
-          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+          <>
             <GroupSection title="Conquistadas" rows={groups.unlocked} />
             <GroupSection title="Em progresso" rows={groups.inProgress} />
             <GroupSection title="Bloqueadas" rows={groups.locked} />
-          </SimpleGrid>
+          </>
         ))}
     </Stack>
   );

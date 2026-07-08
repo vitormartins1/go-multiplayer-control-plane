@@ -56,12 +56,7 @@ function WindowMiniTable({
           leaderboard indisponível.
         </Text>
       )}
-      {data && data.length === 0 && (
-        <Text size="sm" c="dimmed">
-          Sem partidas no período.
-        </Text>
-      )}
-      {data && data.length > 0 && (
+      {data && (
         <Table striped withTableBorder style={{ tableLayout: "fixed" }}>
           <Table.Thead>
             <Table.Tr>
@@ -84,6 +79,15 @@ function WindowMiniTable({
                   </Group>
                 </Table.Td>
                 <Table.Td>{e.score}</Table.Td>
+              </Table.Tr>
+            ))}
+            {/* completa até OVERVIEW_TOP com "–": todas as mini-tabelas ficam
+                com a mesma altura e o grid permanece visualmente coeso. */}
+            {Array.from({ length: Math.max(0, OVERVIEW_TOP - data.length) }, (_, i) => (
+              <Table.Tr key={`empty-${i}`}>
+                <Table.Td c="dimmed">–</Table.Td>
+                <Table.Td c="dimmed">–</Table.Td>
+                <Table.Td c="dimmed">–</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
