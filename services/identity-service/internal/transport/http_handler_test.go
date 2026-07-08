@@ -56,6 +56,12 @@ func (m *mockLister) ListPlayers(ctx context.Context, limit, offset int) ([]doma
 	return accs, args.Int(1), args.Error(2)
 }
 
+func (m *mockLister) GetPlayer(ctx context.Context, id string) (*domain.Account, error) {
+	args := m.Called(ctx, id)
+	acc, _ := args.Get(0).(*domain.Account)
+	return acc, args.Error(1)
+}
+
 func newServer(auth domain.AuthService, tokens domain.TokenIssuer) http.Handler {
 	return newServerWith(auth, tokens, nil)
 }
@@ -191,6 +197,35 @@ func TestAdminListPlayers_RepassaPaginacaoDaQuery(t *testing.T) {
 	rr := do(srv, http.MethodGet, "/admin/players?limit=5&offset=10", "")
 	require.Equal(t, http.StatusOK, rr.Code)
 	lister.AssertExpectations(t) // confirma que 5/10 foram repassados ao service
+}
+
+func TestAdminGetPlayer_Existente_200SemHash(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("GetPlayer", mock.Anything, "id-1").Return(
+		&domain.Account{ID: "id-1", Handle: "Alice", PasswordHash: "SEGREDO", CreatedAt: time.Now().UTC()}, nil)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players/id-1", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.NotContains(t, rr.Body.String(), "SEGREDO")
+
+	var resp struct {
+		ID     string `json:"id"`
+		Handle string `json:"handle"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, "id-1", resp.ID)
+	assert.Equal(t, "Alice", resp.Handle)
+}
+
+func TestAdminGetPlayer_Inexistente_404(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("GetPlayer", mock.Anything, "nope").Return(nil, domain.ErrAccountNotFound)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players/nope", "")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "player_not_found")
 }
 
 func TestAdminListPlayers_SemAuthorization_NaoBloqueia(t *testing.T) {

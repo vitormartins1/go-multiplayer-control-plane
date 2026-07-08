@@ -38,6 +38,12 @@ func (m *mockRepo) CountAccounts(ctx context.Context) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
+func (m *mockRepo) FindByID(ctx context.Context, id string) (*domain.Account, error) {
+	args := m.Called(ctx, id)
+	acc, _ := args.Get(0).(*domain.Account)
+	return acc, args.Error(1)
+}
+
 type mockTokens struct{ mock.Mock }
 
 func (m *mockTokens) Sign(ctx context.Context, subject string, claims map[string]any) (string, error) {

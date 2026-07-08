@@ -1185,3 +1185,36 @@ store.now = func() time.Time { return fixedNow.Add(24 * time.Hour) } // "amanhã
 **Contraste com C#:** o .NET moderno resolveu isso com uma abstração dedicada (`TimeProvider`, .NET 8) injetada via DI — antes disso, cada projeto inventava seu `IClock`. Em Go o campo-função dá o mesmo poder sem tipo novo, sem DI container e sem mock framework: o teste atribui uma closure e pronto. A regra geral: **dependência de um método só = campo-função; duas ou mais operações relacionadas = interface**.
 
 **Pegadinha / nuance:** o campo é minúsculo (não exportado) — só testes no **mesmo package** conseguem trocá-lo, o que aqui é proposital (é detalhe de teste, não API). Se o construtor esquecer o default (`now: time.Now`), o primeiro uso é um nil pointer dereference em produção; o teste de smoke pega, mas vale conferir no construtor. E capture o instante **uma vez por operação** (`t := s.now()` no topo) — chamar `s.now()` várias vezes na mesma operação pode cruzar uma virada no meio e espalhar o write em períodos diferentes.
+
+## 34 — `errors.As` + código de erro do Postgres: a classe do erro vira semântica de domínio na fronteira
+
+**O que é / por que importa:** o pgx devolve erros do servidor como `*pgconn.PgError`, que carrega o `Code` SQLSTATE (`23505` unique violation, `22P02` invalid text representation…). O adapter de repositório é o **único** lugar que deve conhecer esses códigos: ele os traduz para erros sentinela do domínio com `errors.As` (que desembrulha a cadeia até achar o tipo). A nuance que apareceu nesta feature: nem todo erro do banco é "erro" — buscar uma conta por um id que **nem é UUID válido** faz o Postgres reclamar do *tipo* (`22P02`), mas para o domínio isso significa apenas "essa conta não existe". Sem a tradução, um lookup com id lixo virava HTTP 500; com ela, 404 — o mesmo resultado de um UUID válido que não está na tabela.
+
+**Onde no projeto:** `identity-service/internal/repository/postgres_account.go` (`FindByID` mapeia `22P02` → `ErrAccountNotFound`; `Create` já mapeava `23505` → `ErrHandleTaken`)
+
+```mermaid
+flowchart LR
+    A["FindByID(ctx, \"nao-e-uuid\")"] --> B["Postgres: 22P02<br/>invalid input syntax for uuid"]
+    B --> C{"errors.As(err, &pgErr)?"}
+    C -->|"Code == 22P02"| D["domain.ErrAccountNotFound"]
+    C -->|outro código| E["fmt.Errorf(\"...: %w\", err)<br/>(erro interno de verdade)"]
+    D --> F["transport admin: 404<br/>transport login: 401 (não revela handle)"]
+```
+
+```go
+err := r.pool.QueryRow(ctx, q, id).Scan(&a.ID, &a.Handle, &a.CreatedAt)
+if errors.Is(err, pgx.ErrNoRows) { // linha não existe: not-found "clássico"
+	return nil, domain.ErrAccountNotFound
+}
+if err != nil {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "22P02" { // id nem é UUID
+		return nil, domain.ErrAccountNotFound // para o domínio, é a mesma coisa
+	}
+	return nil, fmt.Errorf("identity repository: find by id: %w", err)
+}
+```
+
+**Contraste com C#:** é o equivalente de capturar `PostgresException` e inspecionar `SqlState` — mas em Go isso acontece por *unwrapping* de uma cadeia de erros (`errors.As`), não por hierarquia de exceções, e o repositório converte para um erro sentinela seu em vez de deixar a exceção da Npgsql subir até o controller.
+
+**Pegadinha / nuance:** repare que o **mesmo sentinela** tem tratamento diferente por superfície: no fluxo de login o service traduz `ErrAccountNotFound` → `ErrInvalidCredentials` (não revelar se o handle existe — decisão de segurança); na superfície admin ele chega intacto ao transport e vira `404 player_not_found`. O sentinela descreve o **fato** ("não existe"); a **política** de como expor o fato é de cada consumidor. E cuidado para não generalizar demais: só mapeie os códigos que têm significado de domínio — engolir qualquer `PgError` como not-found esconderia erros reais (constraint, permissão, coluna).

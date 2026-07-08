@@ -10,8 +10,8 @@ var (
 	ErrWeakPassword       = errors.New("identity: senha fraca")
 	ErrInvalidCredentials = errors.New("identity: credenciais inválidas")
 
-	// ErrAccountNotFound é um sentinel interno (repository -> service).
-	// Nunca é exposto à API: o service o traduz para ErrInvalidCredentials,
-	// para não revelar se o handle existe.
+	// ErrAccountNotFound nasce no repository. No fluxo de login o service o
+	// traduz para ErrInvalidCredentials (não revelar se o handle existe); na
+	// superfície admin (feature 004) ele chega ao transport e vira 404.
 	ErrAccountNotFound = errors.New("identity: conta não encontrada")
 )

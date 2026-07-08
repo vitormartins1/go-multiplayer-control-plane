@@ -48,6 +48,24 @@ func TestListPlayers_ClampDeLimit(t *testing.T) {
 	}
 }
 
+func TestGetPlayer_Existente_DevolveConta(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByID", mock.Anything, "acc-1").Return(&domain.Account{ID: "acc-1", Handle: "Alice"}, nil)
+
+	acc, err := NewPlayerLister(repo).GetPlayer(context.Background(), "acc-1")
+	require.NoError(t, err)
+	assert.Equal(t, "Alice", acc.Handle)
+	repo.AssertExpectations(t)
+}
+
+func TestGetPlayer_Inexistente_ErrAccountNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByID", mock.Anything, "nope").Return(nil, domain.ErrAccountNotFound)
+
+	_, err := NewPlayerLister(repo).GetPlayer(context.Background(), "nope")
+	assert.ErrorIs(t, err, domain.ErrAccountNotFound)
+}
+
 func TestListPlayers_OffsetNegativo_ViraZero(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("ListAccounts", mock.Anything, defaultLimit, 0).Return([]domain.Account{}, nil)
