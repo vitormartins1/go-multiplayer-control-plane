@@ -58,8 +58,14 @@ Quatro melhorias de UX, todas na mesma página (por isso uma spec só):
 - THE SYSTEM SHALL exibir, em **ambas** as visões, uma barra de progresso
   (`Progress`) na coluna Progresso, **mantendo o numeral** `X/Y` ao lado.
   Conquistada = barra 100% verde; bloqueada = barra 0% (trilho vazio).
-- THE SYSTEM SHALL exibir, acima da(s) tabela(s), um **progresso geral** do jogador
-  no jogo: barra + texto `X de N desbloqueadas · Y% do progresso total`.
+- THE SYSTEM SHALL exibir um **progresso geral** compacto na mesma linha dos
+  controles (à esquerda do `SegmentedControl`/Atualizar): barra pequena (~180px)
+  + texto `X de N · Y%`. *(Refinado 2026-07-08: a 1ª versão, em bloco largo acima
+  das tabelas, dominava o layout.)*
+- As tabelas usam larguras de coluna **fixas e idênticas** nas duas visões
+  (`tableLayout: fixed`), para a leitura não "pular" entre grupos; a visão
+  "Por estado" dispõe os grupos em **grid de 2 colunas** em telas largas
+  (1 coluna em telas menores). *(Refinado 2026-07-08.)*
 - O percentual geral é **ponderado pelo alvo** de cada conquista:
   `Y = Σ min(progress, target) / Σ target` (unidades de progresso cumpridas sobre o
   total de unidades do catálogo). Um tooltip na barra explica o cálculo em uma frase.

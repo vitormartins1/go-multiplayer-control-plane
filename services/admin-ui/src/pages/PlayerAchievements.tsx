@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Loader, Progress, SegmentedControl, Stack, Table, Text, Tooltip } from "@mantine/core";
+import { Alert, Button, Group, Loader, Progress, SegmentedControl, SimpleGrid, Stack, Table, Text, Tooltip } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { api, type PlayerAchievement } from "../lib/api";
@@ -16,9 +16,9 @@ function AchievementRow({ a }: { a: PlayerAchievement }) {
   return (
     <Table.Tr>
       <Table.Td>{a.name}</Table.Td>
-      <Table.Td w={220}>
+      <Table.Td>
         <Group gap="sm" wrap="nowrap">
-          <Text size="sm" w={80} style={{ whiteSpace: "nowrap" }}>
+          <Text size="sm" w={70} style={{ whiteSpace: "nowrap" }}>
             {a.progress}/{a.target}
           </Text>
           <Progress value={pctOf(a) * 100} color={a.unlocked ? "green" : "blue"} size="sm" flex={1} />
@@ -26,12 +26,12 @@ function AchievementRow({ a }: { a: PlayerAchievement }) {
       </Table.Td>
       <Table.Td>
         {a.unlocked ? (
-          <Text span c="green">
+          <Text span size="sm" c="green">
             desbloqueada
             {a.unlockedAt ? ` · ${new Date(a.unlockedAt).toLocaleString("pt-BR")}` : ""}
           </Text>
         ) : (
-          <Text span c="dimmed">
+          <Text span size="sm" c="dimmed">
             {a.progress > 0 ? "em progresso" : "bloqueada"}
           </Text>
         )}
@@ -40,14 +40,16 @@ function AchievementRow({ a }: { a: PlayerAchievement }) {
   );
 }
 
+// Larguras fixas e idênticas em todas as tabelas (tableLayout: fixed): a leitura
+// não "pula" entre a visão única e os grupos da visão por estado (spec 040).
 function AchievementsTable({ rows }: { rows: PlayerAchievement[] }) {
   return (
-    <Table striped highlightOnHover withTableBorder>
+    <Table striped highlightOnHover withTableBorder style={{ tableLayout: "fixed" }}>
       <Table.Thead>
         <Table.Tr>
-          <Table.Th>Conquista</Table.Th>
-          <Table.Th>Progresso</Table.Th>
-          <Table.Th>Estado</Table.Th>
+          <Table.Th w="38%">Conquista</Table.Th>
+          <Table.Th w="32%">Progresso</Table.Th>
+          <Table.Th w="30%">Estado</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
@@ -76,9 +78,9 @@ function GroupSection({ title, rows }: { title: string; rows: PlayerAchievement[
   );
 }
 
-// OverallProgress: barra geral do jogador no jogo (spec 040). O percentual é
-// ponderado pelo alvo (Σ progresso / Σ target): 1/3600 pesa mais que 1/3. O
-// numeral "X de N desbloqueadas" fica junto como o fato bruto, sem ponderação.
+// OverallProgress: barra geral compacta, na linha dos controles (spec 040,
+// refinada). O percentual é ponderado pelo alvo (Σ progresso / Σ target):
+// 1/3600 pesa mais que 1/3. O numeral "X de N" é o fato bruto, sem ponderação.
 function OverallProgress({ data }: { data: PlayerAchievement[] }) {
   const { unlocked, pct } = useMemo(() => {
     const totalTarget = data.reduce((sum, a) => sum + Math.max(a.target, 0), 0);
@@ -91,19 +93,17 @@ function OverallProgress({ data }: { data: PlayerAchievement[] }) {
 
   const pctLabel = pct > 0 && pct < 0.1 ? "<0,1" : pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
   return (
-    <Stack gap={4}>
-      <Group justify="space-between">
-        <Text size="sm" fw={600}>
-          Progresso geral
-        </Text>
-        <Text size="sm" c="dimmed">
-          {unlocked} de {data.length} desbloqueadas · {pctLabel}% do progresso total
-        </Text>
-      </Group>
+    <Group gap="xs" wrap="nowrap">
+      <Text size="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
+        Progresso geral
+      </Text>
       <Tooltip label="Ponderado pelo alvo de cada conquista: unidades de progresso cumpridas sobre o total de unidades do catálogo.">
-        <Progress value={pct} color={unlocked === data.length ? "green" : "blue"} size="md" />
+        <Progress value={pct} color={unlocked === data.length ? "green" : "blue"} size="sm" w={180} />
       </Tooltip>
-    </Stack>
+      <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+        {unlocked} de {data.length} · {pctLabel}%
+      </Text>
+    </Group>
   );
 }
 
@@ -131,38 +131,37 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
 
   return (
     <Stack>
-      <Group justify="flex-end" gap="xs">
-        <SegmentedControl
-          size="xs"
-          value={view}
-          onChange={(v) => setView(v as "table" | "grouped")}
-          data={[
-            { value: "table", label: "Tabela" },
-            { value: "grouped", label: "Por estado" },
-          ]}
-        />
-        <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
-          Atualizar
-        </Button>
+      <Group justify="space-between" gap="xs">
+        {data && data.length > 0 ? <OverallProgress data={data} /> : <span />}
+        <Group gap="xs">
+          <SegmentedControl
+            size="xs"
+            value={view}
+            onChange={(v) => setView(v as "table" | "grouped")}
+            data={[
+              { value: "table", label: "Tabela" },
+              { value: "grouped", label: "Por estado" },
+            ]}
+          />
+          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+            Atualizar
+          </Button>
+        </Group>
       </Group>
 
       {loading && !data && <Loader />}
       {!!error && <Alert color="red">Falha ao carregar (achievements indisponível?).</Alert>}
       {data && data.length === 0 && <Text c="dimmed">Nenhum progresso para este jogador neste jogo.</Text>}
-      {data && data.length > 0 && (
-        <>
-          <OverallProgress data={data} />
-          {view === "table" ? (
-            <AchievementsTable rows={data} />
-          ) : (
-            <>
-              <GroupSection title="Conquistadas" rows={groups.unlocked} />
-              <GroupSection title="Em progresso" rows={groups.inProgress} />
-              <GroupSection title="Bloqueadas" rows={groups.locked} />
-            </>
-          )}
-        </>
-      )}
+      {data && data.length > 0 &&
+        (view === "table" ? (
+          <AchievementsTable rows={data} />
+        ) : (
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+            <GroupSection title="Conquistadas" rows={groups.unlocked} />
+            <GroupSection title="Em progresso" rows={groups.inProgress} />
+            <GroupSection title="Bloqueadas" rows={groups.locked} />
+          </SimpleGrid>
+        ))}
     </Stack>
   );
 }

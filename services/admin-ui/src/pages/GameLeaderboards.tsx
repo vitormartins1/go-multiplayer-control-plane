@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, Select, Stack, Table, Text } from "@mantine/core";
+import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
@@ -9,6 +9,7 @@ import { GuestBadge } from "../components/GuestBadge";
 
 const SCORE_BOARD = "score";
 const PAGE = 20;
+const OVERVIEW_TOP = 5;
 
 // Janelas de tempo (leaderboard/007): derivadas do relógio no serviço.
 const WINDOW_OPTIONS = [
@@ -18,9 +19,87 @@ const WINDOW_OPTIONS = [
   { value: "monthly", label: "Mês" },
 ];
 
+// WindowMiniTable: uma janela de um board na Visão geral (spec 041) — top 5,
+// sem paginação e sem edição (ajuste de score é tarefa do modo Específica).
+// tick força reload quando o Atualizar global é clicado.
+function WindowMiniTable({
+  gameId,
+  board,
+  label,
+  win,
+  tick,
+}: {
+  gameId: string;
+  board: string;
+  label: string;
+  win: string;
+  tick: number;
+}) {
+  const { data, loading, error } = useAsync(
+    (s) =>
+      api.gameLeaderboard(
+        gameId,
+        { board: board === SCORE_BOARD ? undefined : board, window: win, limit: OVERVIEW_TOP },
+        s,
+      ),
+    [gameId, board, win, tick],
+  );
+
+  return (
+    <Stack gap={6}>
+      <Text size="sm" fw={600}>
+        {WINDOW_OPTIONS.find((w) => w.value === win)?.label ?? win}
+      </Text>
+      {loading && !data && <Loader size="sm" />}
+      {!!error && (
+        <Text size="sm" c="red">
+          leaderboard indisponível.
+        </Text>
+      )}
+      {data && data.length === 0 && (
+        <Text size="sm" c="dimmed">
+          Sem partidas no período.
+        </Text>
+      )}
+      {data && data.length > 0 && (
+        <Table striped withTableBorder style={{ tableLayout: "fixed" }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th w={44}>#</Table.Th>
+              <Table.Th>Jogador</Table.Th>
+              <Table.Th w="28%">{label}</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {data.map((e) => (
+              <Table.Tr key={e.playerId}>
+                <Table.Td>{e.rank}</Table.Td>
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <PlayerAvatar seed={e.playerId} size={20} />
+                    <Text size="sm" c="dimmed" truncate>
+                      {e.playerId}
+                    </Text>
+                    <GuestBadge playerId={e.playerId} />
+                  </Group>
+                </Table.Td>
+                <Table.Td>{e.score}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+    </Stack>
+  );
+}
+
 export function GameLeaderboards({ gameId }: { gameId: string }) {
   const [board, setBoard] = useState(SCORE_BOARD);
   const [window, setWindow] = useState("alltime");
+  // Modo de exibição (spec 041): "single" = uma tabela com janela/board
+  // selecionáveis (e edição); "overview" = todas as janelas de todos os boards.
+  const [mode, setMode] = useState<"single" | "overview">("single");
+  const [overviewTick, setOverviewTick] = useState(0);
   // Paginação (spec 039): a 1ª página vem do useAsync; "Carregar mais" acumula
   // em extra (ranks contínuos vêm do serviço). Trocar board/janela reseta.
   const [extra, setExtra] = useState<LeaderEntry[]>([]);
@@ -113,14 +192,25 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
         <Group gap="xs">
           <SegmentedControl
             size="xs"
-            value={window}
-            onChange={(v) => {
-              resetPaging();
-              setWindow(v);
-            }}
-            data={WINDOW_OPTIONS}
+            value={mode}
+            onChange={(v) => setMode(v as "single" | "overview")}
+            data={[
+              { value: "single", label: "Específica" },
+              { value: "overview", label: "Visão geral" },
+            ]}
           />
-          {boardOptions.length > 1 && (
+          {mode === "single" && (
+            <SegmentedControl
+              size="xs"
+              value={window}
+              onChange={(v) => {
+                resetPaging();
+                setWindow(v);
+              }}
+              data={WINDOW_OPTIONS}
+            />
+          )}
+          {mode === "single" && boardOptions.length > 1 && (
             <Select
               size="xs"
               w={180}
@@ -140,6 +230,10 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             size="xs"
             leftSection={<IconRefresh size={14} />}
             onClick={() => {
+              if (mode === "overview") {
+                setOverviewTick((t) => t + 1);
+                return;
+              }
               resetPaging();
               reload();
             }}
@@ -149,16 +243,35 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
         </Group>
       </Group>
 
-      {loading && !rows && <Loader />}
-      {!!error && <Alert color="red">leaderboard indisponível.</Alert>}
-      {rows && rows.length === 0 && (
+      {mode === "overview" &&
+        boardOptions.map((b) => (
+          <Stack key={b.value} gap="sm">
+            <Divider label={b.label} labelPosition="left" />
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+              {WINDOW_OPTIONS.map((w) => (
+                <WindowMiniTable
+                  key={w.value}
+                  gameId={gameId}
+                  board={b.value}
+                  label={b.label}
+                  win={w.value}
+                  tick={overviewTick}
+                />
+              ))}
+            </SimpleGrid>
+          </Stack>
+        ))}
+
+      {mode === "single" && loading && !rows && <Loader />}
+      {mode === "single" && !!error && <Alert color="red">leaderboard indisponível.</Alert>}
+      {mode === "single" && rows && rows.length === 0 && (
         <Text c="dimmed">
           {window === "alltime"
             ? "Nenhum score ainda — as partidas reportadas (ReportResult) alimentam o ranking."
             : "Sem partidas no período."}
         </Text>
       )}
-      {rows && rows.length > 0 && (
+      {mode === "single" && rows && rows.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -192,7 +305,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
           </Table.Tbody>
         </Table>
       )}
-      {hasMore && (
+      {mode === "single" && hasMore && (
         <Group justify="center">
           <Button variant="default" size="xs" onClick={loadMore} loading={loadingMore}>
             Carregar mais
