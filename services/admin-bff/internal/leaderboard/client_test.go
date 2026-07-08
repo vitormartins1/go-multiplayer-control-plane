@@ -21,7 +21,7 @@ func TestTopForGame_200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "kills", 10)
+	got, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "kills", "", 10, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "/admin/games/game-1/leaderboard", gotPath)
 	assert.Equal(t, "board=kills&limit=10", gotQuery)
@@ -38,9 +38,22 @@ func TestTopForGame_BoardVazio_SemQuery(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "", 0)
+	_, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "", "", 0, 0)
 	require.NoError(t, err)
-	assert.Empty(t, gotQuery, "board e limit ausentes -> sem query (score é o default do serviço)")
+	assert.Empty(t, gotQuery, "board/limit/window/offset ausentes -> sem query (defaults do serviço)")
+}
+
+func TestTopForGame_WindowEOffset_NaQuery(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`{"entries":[]}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "kills", "weekly", 10, 20)
+	require.NoError(t, err)
+	assert.Equal(t, "board=kills&limit=10&offset=20&window=weekly", gotQuery)
 }
 
 func TestSetScore_PropagaBoard(t *testing.T) {
@@ -64,6 +77,6 @@ func TestTopForGame_Fora_ErrLeaderboardUnavailable(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "", 0)
+	_, err := New(srv.URL, srv.Client()).TopForGame(context.Background(), "game-1", "", "", 0, 0)
 	assert.True(t, errors.Is(err, domain.ErrLeaderboardUnavailable))
 }

@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, Select, Stack, Table, Text } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, Select, Stack, Table, Text } from "@mantine/core";
 import { IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
@@ -8,9 +8,29 @@ import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 
 const SCORE_BOARD = "score";
+const PAGE = 20;
+
+// Janelas de tempo (leaderboard/007): derivadas do relógio no serviço.
+const WINDOW_OPTIONS = [
+  { value: "alltime", label: "Geral" },
+  { value: "daily", label: "Hoje" },
+  { value: "weekly", label: "Semana" },
+  { value: "monthly", label: "Mês" },
+];
 
 export function GameLeaderboards({ gameId }: { gameId: string }) {
   const [board, setBoard] = useState(SCORE_BOARD);
+  const [window, setWindow] = useState("alltime");
+  // Paginação (spec 039): a 1ª página vem do useAsync; "Carregar mais" acumula
+  // em extra (ranks contínuos vêm do serviço). Trocar board/janela reseta.
+  const [extra, setExtra] = useState<LeaderEntry[]>([]);
+  const [noMore, setNoMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  function resetPaging() {
+    setExtra([]);
+    setNoMore(false);
+  }
   // Boards derivados do perfil de multiplayer (ADR-0023). Dois modos:
   //   highscore (melhor de uma partida): score + cada stat;
   //   cumulative (soma na temporada): vitórias + <stat>_total.
@@ -24,10 +44,33 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
   ];
   const boardLabel = boardOptions.find((o) => o.value === board)?.label ?? board;
 
+  const boardParam = board === SCORE_BOARD ? undefined : board;
   const { data, loading, error, reload } = useAsync(
-    (s) => api.gameLeaderboard(gameId, board === SCORE_BOARD ? undefined : board, 20, s),
-    [gameId, board],
+    (s) => api.gameLeaderboard(gameId, { board: boardParam, window, limit: PAGE }, s),
+    [gameId, board, window],
   );
+
+  const rows = data ? [...data, ...extra] : null;
+  const hasMore = !noMore && !!data && data.length === PAGE;
+
+  async function loadMore() {
+    if (!rows) return;
+    setLoadingMore(true);
+    try {
+      const batch = await api.gameLeaderboard(gameId, {
+        board: boardParam,
+        window,
+        limit: PAGE,
+        offset: rows.length,
+      });
+      if (batch.length < PAGE) setNoMore(true);
+      setExtra((prev) => [...prev, ...batch]);
+    } catch {
+      notifications.show({ color: "red", message: "Falha ao carregar a próxima página." });
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   const [editing, setEditing] = useState<LeaderEntry | null>(null);
   const [score, setScore] = useState<string | number>("");
   const [saving, setSaving] = useState(false);
@@ -54,6 +97,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       );
       notifications.show({ color: "green", message: `Score de ${editing.playerId.slice(0, 8)}… atualizado.` });
       closeEdit();
+      resetPaging();
       reload();
     } catch {
       notifications.show({ color: "red", message: "Falha ao atualizar o score." });
@@ -65,31 +109,56 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
   return (
     <Stack>
       <Group justify="space-between">
-        <Text fw={600}>Ranking do jogo (top 20)</Text>
+        <Text fw={600}>Ranking do jogo</Text>
         <Group gap="xs">
+          <SegmentedControl
+            size="xs"
+            value={window}
+            onChange={(v) => {
+              resetPaging();
+              setWindow(v);
+            }}
+            data={WINDOW_OPTIONS}
+          />
           {boardOptions.length > 1 && (
             <Select
               size="xs"
               w={180}
               aria-label="Board"
               value={board}
-              onChange={(v) => v && setBoard(v)}
+              onChange={(v) => {
+                if (!v) return;
+                resetPaging();
+                setBoard(v);
+              }}
               data={boardOptions}
               allowDeselect={false}
             />
           )}
-          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+          <Button
+            variant="default"
+            size="xs"
+            leftSection={<IconRefresh size={14} />}
+            onClick={() => {
+              resetPaging();
+              reload();
+            }}
+          >
             Atualizar
           </Button>
         </Group>
       </Group>
 
-      {loading && !data && <Loader />}
+      {loading && !rows && <Loader />}
       {!!error && <Alert color="red">leaderboard indisponível.</Alert>}
-      {data && data.length === 0 && (
-        <Text c="dimmed">Nenhum score ainda — as partidas reportadas (ReportResult) alimentam o ranking.</Text>
+      {rows && rows.length === 0 && (
+        <Text c="dimmed">
+          {window === "alltime"
+            ? "Nenhum score ainda — as partidas reportadas (ReportResult) alimentam o ranking."
+            : "Sem partidas no período."}
+        </Text>
       )}
-      {data && data.length > 0 && (
+      {rows && rows.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -100,7 +169,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.map((e) => (
+            {rows.map((e) => (
               <Table.Tr key={e.playerId}>
                 <Table.Td>{e.rank}</Table.Td>
                 <Table.Td>
@@ -122,6 +191,13 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             ))}
           </Table.Tbody>
         </Table>
+      )}
+      {hasMore && (
+        <Group justify="center">
+          <Button variant="default" size="xs" onClick={loadMore} loading={loadingMore}>
+            Carregar mais
+          </Button>
+        </Group>
       )}
 
       <Modal opened={!!editing} onClose={closeEdit} title="Ajustar score" size="xs">

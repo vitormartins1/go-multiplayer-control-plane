@@ -34,6 +34,30 @@ const BattleRoyaleTopNThreshold = 10
 // TotalBoard é o board cumulativo de um stat (ex.: "kills" -> "kills_total").
 func TotalBoard(stat string) string { return stat + "_total" }
 
+// Janelas de tempo de um ranking (spec 007): derivadas do relógio UTC no
+// momento do write — zero configuração. All-time é a janela default (e a única
+// que existia até a spec 007); as periódicas respondem "quem foi melhor
+// hoje/nesta semana/neste mês". Seasons nomeadas (rollover manual) ficam
+// adiadas por evidência.
+const (
+	WindowAllTime = "alltime"
+	WindowDaily   = "daily"
+	WindowWeekly  = "weekly"
+	WindowMonthly = "monthly"
+)
+
+// Windows lista todas as janelas (writes espalham em todas; leituras escolhem uma).
+var Windows = []string{WindowAllTime, WindowDaily, WindowWeekly, WindowMonthly}
+
+// ValidWindow diz se o nome de janela é aceitável.
+func ValidWindow(window string) bool {
+	switch window {
+	case WindowAllTime, WindowDaily, WindowWeekly, WindowMonthly:
+		return true
+	}
+	return false
+}
+
 // boardRE valida o nome de um board — mesmo identificador estável do scoringStats
 // no game-registry (`^[a-z][a-z0-9_]*$`).
 var boardRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -59,12 +83,16 @@ type Increment struct {
 // LeaderboardService é a Port de entrada do leaderboard-service. Tudo é escopado
 // por (gameID, board) — ranking por jogo (ADR-0017) e por métrica (ADR-0023).
 type LeaderboardService interface {
-	// Submit aplica highscore e retorna a entry do jogador após a submissão.
+	// Submit aplica highscore e retorna a entry do jogador após a submissão
+	// (rank do all-time — contrato pré-janelas preservado). O write espalha em
+	// todas as janelas (spec 007).
 	Submit(ctx context.Context, gameID, board, playerID string, score int64) (Entry, error)
 	// ForceSubmit substitui o score independente do valor atual (admin override).
 	ForceSubmit(ctx context.Context, gameID, board, playerID string, score int64) (Entry, error)
-	Top(ctx context.Context, gameID, board string, limit int) ([]Entry, error)
-	Around(ctx context.Context, gameID, board, playerID string, k int) ([]Entry, error)
+	// Top devolve a página [offset, offset+limit) da janela corrente pedida
+	// (rank 1-based contínuo). ErrInvalidWindow se a janela não existir.
+	Top(ctx context.Context, gameID, board, window string, limit, offset int) ([]Entry, error)
+	Around(ctx context.Context, gameID, board, window, playerID string, k int) ([]Entry, error)
 	// ApplyCumulative soma as parcelas nos boards cumulativos de uma partida, de
 	// forma atômica e idempotente por matchID (ZINCRBY não é idempotente de graça,
 	// diferente do ZADD GT). dup=true se a partida já havia sido aplicada (no-op).
@@ -72,19 +100,21 @@ type LeaderboardService interface {
 }
 
 // LeaderboardStore é a Port de saída (implementada por um adapter Redis). Cada
-// (jogo, board) é um sorted set próprio (key por gameID+board).
+// (jogo, board, janela) é um sorted set próprio; writes espalham em todas as
+// janelas (spec 007), leituras apontam para a janela corrente pedida.
 type LeaderboardStore interface {
-	Submit(ctx context.Context, gameID, board, playerID string, score int64) error // highscore (ZADD GT)
+	Submit(ctx context.Context, gameID, board, playerID string, score int64) error // highscore (ZADD GT, todas as janelas)
 	// ForceScore substitui o score independente do valor atual (ZADD sem GT).
 	ForceScore(ctx context.Context, gameID, board, playerID string, score int64) error
-	// Rank devolve a posição (0-based, ordem do Redis) e o score do jogador;
-	// ErrNotRanked se ele ainda não tem score.
-	Rank(ctx context.Context, gameID, board, playerID string) (rank int64, score int64, err error)
-	Top(ctx context.Context, gameID, board string, limit int) ([]Entry, error)
+	// Rank devolve a posição (0-based, ordem do Redis) e o score do jogador na
+	// janela corrente; ErrNotRanked se ele ainda não tem score nela.
+	Rank(ctx context.Context, gameID, board, window, playerID string) (rank int64, score int64, err error)
+	Top(ctx context.Context, gameID, board, window string, limit int) ([]Entry, error)
 	// Range devolve as entradas das posições [start, stop] (0-based, inclusivo).
-	Range(ctx context.Context, gameID, board string, start, stop int64) ([]Entry, error)
-	// ApplyCumulative aplica os ZINCRBY de uma partida sob uma guarda de
-	// idempotência por matchID, tudo atômico (script Lua). dup=true = já aplicada.
+	Range(ctx context.Context, gameID, board, window string, start, stop int64) ([]Entry, error)
+	// ApplyCumulative aplica os ZINCRBY de uma partida (em todas as janelas) sob
+	// uma guarda de idempotência ÚNICA por matchID, tudo atômico (script Lua):
+	// dup=true = já aplicada (no-op em todas as janelas).
 	ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []Increment) (dup bool, err error)
 }
 

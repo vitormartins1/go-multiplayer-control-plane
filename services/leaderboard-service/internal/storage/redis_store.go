@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -15,10 +16,24 @@ import (
 // garante em tempo de compilação que satisfazemos a Port.
 var _ domain.LeaderboardStore = (*RedisStore)(nil)
 
-// RedisStore guarda um sorted set por jogo: a key é prefix + ":" + gameID.
+// TTL das keys periódicas (spec 007): só limpeza de memória — a correção vem
+// do período no nome da key, então renovar a cada write (sliding) é inofensivo.
+// Retenção ≥ 1 período anterior deixa a porta aberta para consultas passadas.
+const (
+	dailyTTL   = 3 * 24 * time.Hour
+	weeklyTTL  = 15 * 24 * time.Hour
+	monthlyTTL = 45 * 24 * time.Hour
+)
+
+// RedisStore guarda um sorted set por (jogo, board, janela): a key all-time é
+// prefix + ":" + gameID + ":" + board (pré-janelas, intacta); as periódicas
+// ganham o período no sufixo (spec 007).
 type RedisStore struct {
 	client *redis.Client
 	prefix string
+	// now permite fixar o relógio nos testes (períodos determinísticos, virada
+	// de janela). Produção: time.Now.
+	now func() time.Time
 }
 
 // NewRedisStore cria o store a partir do endereço do Redis (host:port). O prefix
@@ -27,46 +42,91 @@ func NewRedisStore(addr, prefix string) *RedisStore {
 	return &RedisStore{
 		client: redis.NewClient(&redis.Options{Addr: addr}),
 		prefix: prefix,
+		now:    time.Now,
 	}
 }
 
-// key monta a key do sorted set do (jogo, board).
+// key monta a key do sorted set all-time do (jogo, board) — a key pré-janelas.
 func (s *RedisStore) key(gameID, board string) string {
 	return s.prefix + ":" + gameID + ":" + board
 }
 
+// windowKey monta a key do sorted set do (jogo, board, janela) para o instante
+// t (UTC): alltime = key existente; daily/weekly/monthly ganham o período no
+// sufixo (weekly usa a semana ISO). window deve ser válida (service valida).
+func (s *RedisStore) windowKey(gameID, board, window string, t time.Time) string {
+	base := s.key(gameID, board)
+	t = t.UTC()
+	switch window {
+	case domain.WindowDaily:
+		return base + ":d:" + t.Format("20060102")
+	case domain.WindowWeekly:
+		y, w := t.ISOWeek()
+		return fmt.Sprintf("%s:w:%04dW%02d", base, y, w)
+	case domain.WindowMonthly:
+		return base + ":m:" + t.Format("200601")
+	default: // domain.WindowAllTime
+		return base
+	}
+}
+
+// windowTTL é o TTL da key periódica da janela; 0 = sem TTL (all-time).
+func windowTTL(window string) time.Duration {
+	switch window {
+	case domain.WindowDaily:
+		return dailyTTL
+	case domain.WindowWeekly:
+		return weeklyTTL
+	case domain.WindowMonthly:
+		return monthlyTTL
+	default:
+		return 0
+	}
+}
+
 // processedKey é o SET de matchIDs já aplicados nos boards cumulativos do jogo
-// (guarda de idempotência do ZINCRBY, ADR-0023 A2).
+// (guarda de idempotência do ZINCRBY, ADR-0023 A2). Única para todas as
+// janelas: reprocessar é no-op em todas de uma vez.
 func (s *RedisStore) processedKey(gameID string) string {
 	return s.prefix + ":processed:" + gameID
 }
 
 // applyCumulativeScript aplica os ZINCRBY de uma partida sob uma guarda de
 // idempotência, atômico (o Redis executa o script inteiro sem interleaving).
-// KEYS[1] = SET processed; ARGV[1] = matchID; ARGV[2..] = trios (boardKey,
-// member, delta). Se o matchID já estava no SET (SADD devolve 0) -> no-op e
-// retorna 1 (dup); senão soma cada parcela e retorna 0. É o análogo Redis da tx
+// KEYS[1] = SET processed; ARGV[1] = matchID; ARGV[2..] = quádruplas (boardKey,
+// member, delta, ttlSeconds — 0 = sem EXPIRE). Se o matchID já estava no SET
+// (SADD devolve 0) -> no-op e retorna 1 (dup); senão soma cada parcela (e
+// renova o TTL das keys periódicas) e retorna 0. É o análogo Redis da tx
 // idempotente do achievements (Postgres): SADD+ZINCRBY num só passo indivisível.
 var applyCumulativeScript = redis.NewScript(`
 if redis.call('SADD', KEYS[1], ARGV[1]) == 0 then
   return 1
 end
-for i = 2, #ARGV, 3 do
+for i = 2, #ARGV, 4 do
   redis.call('ZINCRBY', ARGV[i], ARGV[i+2], ARGV[i+1])
+  local ttl = tonumber(ARGV[i+3])
+  if ttl > 0 then
+    redis.call('EXPIRE', ARGV[i], ttl)
+  end
 end
 return 0
 `)
 
-// ApplyCumulative soma as parcelas nos boards cumulativos de uma partida (ZINCRBY)
-// idempotente por matchID via applyCumulativeScript. Sem parcelas -> no-op.
+// ApplyCumulative soma as parcelas nos boards cumulativos de uma partida
+// (ZINCRBY em TODAS as janelas, spec 007) idempotente por matchID via
+// applyCumulativeScript. Sem parcelas -> no-op.
 func (s *RedisStore) ApplyCumulative(ctx context.Context, gameID, matchID string, incrs []domain.Increment) (bool, error) {
 	if len(incrs) == 0 {
 		return false, nil // nada a somar: não há o que deduplicar
 	}
-	argv := make([]any, 0, 1+len(incrs)*3)
+	t := s.now()
+	argv := make([]any, 0, 1+len(incrs)*len(domain.Windows)*4)
 	argv = append(argv, matchID)
 	for _, inc := range incrs {
-		argv = append(argv, s.key(gameID, inc.Board), inc.PlayerID, inc.Delta)
+		for _, w := range domain.Windows {
+			argv = append(argv, s.windowKey(gameID, inc.Board, w, t), inc.PlayerID, inc.Delta,
+				int64(windowTTL(w).Seconds()))
+		}
 	}
 	res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID)}, argv...).Int()
 	if err != nil {
@@ -80,13 +140,30 @@ func (s *RedisStore) Ping(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
 }
 
+// spreadScore aplica o score nas 4 janelas via pipeline (gt escolhe ZADD GT ou
+// ZADD puro) e renova o TTL das periódicas. Pipeline não é atômico entre keys,
+// mas cada ZADD é idempotente/convergente — retry é seguro.
+func (s *RedisStore) spreadScore(ctx context.Context, gameID, board, playerID string, score int64, gt bool) error {
+	t := s.now()
+	_, err := s.client.Pipelined(ctx, func(pipe redis.Pipeliner) error {
+		for _, w := range domain.Windows {
+			k := s.windowKey(gameID, board, w, t)
+			pipe.ZAddArgs(ctx, k, redis.ZAddArgs{
+				GT:      gt,
+				Members: []redis.Z{{Score: float64(score), Member: playerID}},
+			})
+			if ttl := windowTTL(w); ttl > 0 {
+				pipe.Expire(ctx, k, ttl)
+			}
+		}
+		return nil
+	})
+	return err
+}
+
 // Submit aplica highscore: ZADD GT só sobe o score se o novo for maior.
 func (s *RedisStore) Submit(ctx context.Context, gameID, board, playerID string, score int64) error {
-	err := s.client.ZAddArgs(ctx, s.key(gameID, board), redis.ZAddArgs{
-		GT:      true,
-		Members: []redis.Z{{Score: float64(score), Member: playerID}},
-	}).Err()
-	if err != nil {
+	if err := s.spreadScore(ctx, gameID, board, playerID, score, true); err != nil {
 		return fmt.Errorf("leaderboard storage: submit: %w", err)
 	}
 	return nil
@@ -94,16 +171,16 @@ func (s *RedisStore) Submit(ctx context.Context, gameID, board, playerID string,
 
 // ForceScore substitui o score independente do valor atual (admin override, ZADD sem GT).
 func (s *RedisStore) ForceScore(ctx context.Context, gameID, board, playerID string, score int64) error {
-	err := s.client.ZAdd(ctx, s.key(gameID, board), redis.Z{Score: float64(score), Member: playerID}).Err()
-	if err != nil {
+	if err := s.spreadScore(ctx, gameID, board, playerID, score, false); err != nil {
 		return fmt.Errorf("leaderboard storage: force score: %w", err)
 	}
 	return nil
 }
 
-// Rank devolve a posição (0-based) e o score do jogador; ErrNotRanked se ausente.
-func (s *RedisStore) Rank(ctx context.Context, gameID, board, playerID string) (int64, int64, error) {
-	res, err := s.client.ZRevRankWithScore(ctx, s.key(gameID, board), playerID).Result()
+// Rank devolve a posição (0-based) e o score do jogador na janela corrente;
+// ErrNotRanked se ausente.
+func (s *RedisStore) Rank(ctx context.Context, gameID, board, window, playerID string) (int64, int64, error) {
+	res, err := s.client.ZRevRankWithScore(ctx, s.windowKey(gameID, board, window, s.now()), playerID).Result()
 	if errors.Is(err, redis.Nil) {
 		return 0, 0, domain.ErrNotRanked
 	}
@@ -113,12 +190,12 @@ func (s *RedisStore) Rank(ctx context.Context, gameID, board, playerID string) (
 	return res.Rank, int64(res.Score), nil
 }
 
-func (s *RedisStore) Top(ctx context.Context, gameID, board string, limit int) ([]domain.Entry, error) {
-	return s.Range(ctx, gameID, board, 0, int64(limit-1))
+func (s *RedisStore) Top(ctx context.Context, gameID, board, window string, limit int) ([]domain.Entry, error) {
+	return s.Range(ctx, gameID, board, window, 0, int64(limit-1))
 }
 
-func (s *RedisStore) Range(ctx context.Context, gameID, board string, start, stop int64) ([]domain.Entry, error) {
-	zs, err := s.client.ZRevRangeWithScores(ctx, s.key(gameID, board), start, stop).Result()
+func (s *RedisStore) Range(ctx context.Context, gameID, board, window string, start, stop int64) ([]domain.Entry, error) {
+	zs, err := s.client.ZRevRangeWithScores(ctx, s.windowKey(gameID, board, window, s.now()), start, stop).Result()
 	if err != nil {
 		return nil, fmt.Errorf("leaderboard storage: range: %w", err)
 	}

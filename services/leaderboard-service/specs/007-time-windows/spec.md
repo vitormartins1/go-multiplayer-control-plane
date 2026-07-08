@@ -1,7 +1,7 @@
 # Spec: 007-time-windows
 
 **Serviço:** leaderboard-service
-**Status:** Rascunho
+**Status:** Aprovado (2026-07-08)
 **Data:** 2026-07-08
 
 ## Contexto

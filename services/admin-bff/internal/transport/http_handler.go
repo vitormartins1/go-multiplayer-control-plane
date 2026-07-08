@@ -36,7 +36,7 @@ type AdminService interface {
 	ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error)
 	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error)
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
-	GameLeaderboard(ctx context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error)
+	GameLeaderboard(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error)
 	SetLeaderboardScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error)
 	PlayerData(ctx context.Context, gameID, playerID string) ([]domain.PlayerDataEntry, error)
 	CloudSave(ctx context.Context, gameID, playerID string) (domain.CloudSave, error)
@@ -366,10 +366,13 @@ func (h *Handler) playerAchievements(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// gameLeaderboard lê o top-N do jogo (leaderboard).
+// gameLeaderboard lê o top-N do jogo (leaderboard; window/offset repassados
+// crus ao upstream, spec 019).
 func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
 	limit := atoiOr(r.URL.Query().Get("limit"), 0)
-	entries, err := h.svc.GameLeaderboard(r.Context(), r.PathValue("gameId"), r.URL.Query().Get("board"), limit)
+	offset := atoiOr(r.URL.Query().Get("offset"), 0)
+	entries, err := h.svc.GameLeaderboard(r.Context(), r.PathValue("gameId"),
+		r.URL.Query().Get("board"), r.URL.Query().Get("window"), limit, offset)
 	if err != nil {
 		writeUpstream(w, err)
 		return

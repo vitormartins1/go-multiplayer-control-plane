@@ -69,14 +69,20 @@ func (c *Client) SetScore(ctx context.Context, gameID, playerID, board string, s
 	return domain.LeaderboardEntry{Rank: e.Rank, PlayerID: e.PlayerID, Score: e.Score}, nil
 }
 
-// TopForGame lê o top-N do board do jogo.
-func (c *Client) TopForGame(ctx context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
+// TopForGame lê o top-N do board do jogo (janela/offset opcionais, spec 019).
+func (c *Client) TopForGame(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error) {
 	q := url.Values{}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))
 	}
 	if board != "" {
 		q.Set("board", board)
+	}
+	if window != "" {
+		q.Set("window", window)
+	}
+	if offset > 0 {
+		q.Set("offset", strconv.Itoa(offset))
 	}
 	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/leaderboard"
 	if len(q) > 0 {

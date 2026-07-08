@@ -161,9 +161,10 @@ func (s *Service) ImportAchievements(ctx context.Context, gameID string, items [
 	return s.reader.ImportAchievements(ctx, gameID, items)
 }
 
-// GameLeaderboard lê o top-N do board do jogo (leaderboard).
-func (s *Service) GameLeaderboard(ctx context.Context, gameID, board string, limit int) ([]domain.LeaderboardEntry, error) {
-	return s.leaderboard.TopForGame(ctx, gameID, board, limit)
+// GameLeaderboard lê o top-N do board do jogo (leaderboard; janela/offset
+// opcionais, spec 019).
+func (s *Service) GameLeaderboard(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error) {
+	return s.leaderboard.TopForGame(ctx, gameID, board, window, limit, offset)
 }
 
 // SetLeaderboardScore substitui o score do jogador no board (admin override, sem ZADD GT).

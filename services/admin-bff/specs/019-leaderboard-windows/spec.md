@@ -1,7 +1,7 @@
 # Spec: 019-leaderboard-windows
 
 **Serviço:** admin-bff
-**Status:** Rascunho
+**Status:** Aprovado (2026-07-08)
 **Data:** 2026-07-08
 **Companheira de:** `leaderboard/007-time-windows`
 
