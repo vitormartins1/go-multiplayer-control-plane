@@ -1,7 +1,7 @@
 # Spec: 029-catalog-consistency
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-insights. Continuação da 027 (mesmos dados, agora como diagnóstico).
 Decisão de design mantida: **detectar drift, não impedir** — aviso read-only, nunca bloqueio.
@@ -33,11 +33,11 @@ inconsistência sem tratá-la como erro.
 
 ## Casos de Teste / Verificação
 
-- [ ] conquista com stat declarado num modo → sem aviso; stat órfão → badge "não declarado"
-- [ ] conquista `score` → sem aviso (intrínseco)
-- [ ] evento do vocabulário de arquétipo cadastrado → sem aviso; fora dele → badge
-- [ ] jogo sem modos ou registry fora → nenhum badge
-- [ ] `npm run build` limpo
+- [x] conquista com stat declarado num modo → sem aviso; stat órfão → badge "não declarado"
+- [x] conquista `score` → sem aviso (intrínseco)
+- [x] evento do vocabulário de arquétipo cadastrado → sem aviso; fora dele → badge
+- [x] jogo sem modos ou registry fora → nenhum badge
+- [x] `npm run build` limpo
 
 ## Fora do escopo
 

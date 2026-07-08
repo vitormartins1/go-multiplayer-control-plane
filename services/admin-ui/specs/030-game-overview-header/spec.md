@@ -1,7 +1,7 @@
 # Spec: 030-game-overview-header
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Aprovado e implementado (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** lote console-insights. Mini-dashboard do jogo **no header do GameDetail** — não
 uma aba nova: as abas já carregam contagens nos badges; o header agrega a fotografia do jogo
@@ -34,10 +34,10 @@ os modos (hoje invisíveis fora de Configurações).
 
 ## Casos de Teste / Verificação
 
-- [ ] jogo com 2+ modos → badges com modeId e cor do arquétipo; sem modos → "sem multiplayer"
-- [ ] cards refletem os mesmos números dos badges das abas; serviço fora → "—" (sem quebrar)
-- [ ] capa + slug no header sem deslocar as tabs em telas estreitas
-- [ ] `npm run build` limpo
+- [x] jogo com 2+ modos → badges com modeId e cor do arquétipo; sem modos → "sem multiplayer"
+- [x] cards refletem os mesmos números dos badges das abas; serviço fora → "—" (sem quebrar)
+- [x] capa + slug no header sem deslocar as tabs em telas estreitas
+- [x] `npm run build` limpo
 
 ## Fora do escopo
 
