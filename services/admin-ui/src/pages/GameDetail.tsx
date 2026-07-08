@@ -1,9 +1,12 @@
-import { Anchor, Badge, Breadcrumbs, Group, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Anchor, Badge, Breadcrumbs, Group, SimpleGrid, Stack, Tabs, Text, Title } from "@mantine/core";
 import { IconChartBar, IconChartPie, IconServer2, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { useAsync } from "../lib/useAsync";
+import { GameCover } from "../components/GameCover";
+import { StatCard } from "../components/StatCard";
 import { GameAchievements } from "./GameAchievements";
 import { GameAnalytics } from "./GameAnalytics";
 import { GameLeaderboards } from "./GameLeaderboards";
@@ -26,6 +29,8 @@ export function GameDetail() {
   const { data: catalog } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
   const { data: gamePlayers } = useAsync((s) => api.gamePlayers(gameId, s), [gameId]);
   const { data: sessions } = useAsync((s) => api.gameSessions(gameId, s), [gameId]);
+  // modos do jogo p/ o header (030) — único fetch novo da página, sem polling.
+  const { data: gameModes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
 
   const game = games?.find((g) => g.id === gameId);
 
@@ -50,7 +55,39 @@ export function GameDetail() {
         </Anchor>
         <Text>{game?.name ?? gameId}</Text>
       </Breadcrumbs>
-      <Title order={3}>{game?.name ?? "Jogo"}</Title>
+      {/* Fotografia do jogo no primeiro olhar (030): capa + slug + modos + totais. */}
+      <Group gap="sm" align="center">
+        {game && <GameCover game={game} variant="mini" />}
+        <Title order={3}>{game?.name ?? "Jogo"}</Title>
+        {game && (
+          <Text size="sm" c="dimmed">
+            {game.slug}
+          </Text>
+        )}
+      </Group>
+
+      {gameModes && (
+        <Group gap={6}>
+          {gameModes.length === 0 ? (
+            <Badge variant="light" color="gray">
+              sem multiplayer
+            </Badge>
+          ) : (
+            gameModes.map((m) => (
+              <Badge key={m.modeId} variant="light" color={ARCHETYPE_META[m.archetype].color}>
+                {m.modeId}
+              </Badge>
+            ))
+          )}
+        </Group>
+      )}
+
+      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+        <StatCard label="Modos" value={gameModes ? String(gameModes.length) : "—"} />
+        <StatCard label="Salas abertas" value={sessions ? String(sessions.active.length) : "—"} />
+        <StatCard label="Jogadores" value={gamePlayers ? String(gamePlayers.length) : "—"} />
+        <StatCard label="Conquistas" value={catalog ? String(catalog.length) : "—"} />
+      </SimpleGrid>
 
       {/* keepMounted=false: painel desmontado ao trocar de aba — o polling da
           aba Sessions só roda com ela visível. */}
