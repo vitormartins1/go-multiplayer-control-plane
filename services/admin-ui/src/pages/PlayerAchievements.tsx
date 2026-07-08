@@ -128,14 +128,17 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
     [gameId, playerId],
   );
   const [view, setView] = useState<"table" | "grouped">("table");
-  const [order, setOrder] = useState<"name" | "progress">("name");
+  const [order, setOrder] = useState<"default" | "name" | "progress">("default");
 
-  // Ordenação rápida (spec 040, refinada): A–Z ou % de progresso (desc, nome
-  // como desempate). Vale nas duas visões; na "Por estado", dentro de cada grupo.
+  // Ordenação rápida (spec 040, refinada): Default (ordem do catálogo, como a
+  // API devolve), A–Z ou % de progresso (desc, nome como desempate). Vale nas
+  // duas visões; na "Por estado", dentro de cada grupo.
   const sorted = useMemo(() => {
     const list = [...(data ?? [])];
     if (order === "name") return list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-    return list.sort((a, b) => pctOf(b) - pctOf(a) || a.name.localeCompare(b.name, "pt-BR"));
+    if (order === "progress")
+      return list.sort((a, b) => pctOf(b) - pctOf(a) || a.name.localeCompare(b.name, "pt-BR"));
+    return list;
   }, [data, order]);
 
   // Partição da visão "Por estado" (spec 040): conquistadas, em progresso
@@ -159,8 +162,9 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
           <SegmentedControl
             size="xs"
             value={order}
-            onChange={(v) => setOrder(v as "name" | "progress")}
+            onChange={(v) => setOrder(v as "default" | "name" | "progress")}
             data={[
+              { value: "default", label: "Default" },
               { value: "name", label: "A–Z" },
               { value: "progress", label: "Progresso" },
             ]}

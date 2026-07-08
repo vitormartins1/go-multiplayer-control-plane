@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
@@ -8,6 +8,7 @@ import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 
 const SCORE_BOARD = "score";
+const ALL_BOARDS = "all"; // valor do switch de boards; nunca vai para a API
 const PAGE = 20;
 const OVERVIEW_TOP = 5;
 
@@ -19,19 +20,22 @@ const WINDOW_OPTIONS = [
   { value: "monthly", label: "Mês" },
 ];
 
-// WindowMiniTable: uma janela de um board na Visão geral (spec 041) — top 5,
-// sem paginação e sem edição (ajuste de score é tarefa do modo Específica).
-// tick força reload quando o Atualizar global é clicado.
-function WindowMiniTable({
+// MiniBoardTable: um card compacto (board × janela) — top 5, sem paginação e
+// sem edição (ajuste de score é tarefa da tabela específica). title é a
+// dimensão que varia no grid (janela na Visão geral; board no modo "Todas");
+// header é a dimensão fixa complementar. tick força reload no Atualizar global.
+function MiniBoardTable({
   gameId,
   board,
-  label,
+  title,
+  header,
   win,
   tick,
 }: {
   gameId: string;
   board: string;
-  label: string;
+  title: string;
+  header: string;
   win: string;
   tick: number;
 }) {
@@ -48,7 +52,7 @@ function WindowMiniTable({
   return (
     <Stack gap={6}>
       <Text size="sm" fw={600}>
-        {WINDOW_OPTIONS.find((w) => w.value === win)?.label ?? win}
+        {title}
       </Text>
       {loading && !data && <Loader size="sm" />}
       {!!error && (
@@ -62,7 +66,7 @@ function WindowMiniTable({
             <Table.Tr>
               <Table.Th w={44}>#</Table.Th>
               <Table.Th>Jogador</Table.Th>
-              <Table.Th w="28%">{label}</Table.Th>
+              <Table.Th w="28%">{header}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -100,8 +104,9 @@ function WindowMiniTable({
 export function GameLeaderboards({ gameId }: { gameId: string }) {
   const [board, setBoard] = useState(SCORE_BOARD);
   const [window, setWindow] = useState("alltime");
-  // Modo de exibição (spec 041): "single" = uma tabela com janela/board
-  // selecionáveis (e edição); "overview" = todas as janelas de todos os boards.
+  // Dois eixos independentes (spec 041): mode controla JANELAS ("single" = a
+  // janela escolhida; "overview" = as 4) e board controla RANKINGS (um board
+  // ou ALL_BOARDS = todos). Só single+board específico tem paginação/edição.
   const [mode, setMode] = useState<"single" | "overview">("single");
   const [overviewTick, setOverviewTick] = useState(0);
   // Paginação (spec 039): a 1ª página vem do useAsync; "Carregar mais" acumula
@@ -126,10 +131,18 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
     ...stats.map((s: string) => ({ value: `${s}_total`, label: `${s} (total)` })),
   ];
   const boardLabel = boardOptions.find((o) => o.value === board)?.label ?? board;
+  const windowLabel = WINDOW_OPTIONS.find((w) => w.value === window)?.label ?? window;
+  // Boards a exibir nas visões de mini-tabelas ("Todas" ou um só).
+  const shownBoards = board === ALL_BOARDS ? boardOptions : boardOptions.filter((o) => o.value === board);
+  // A tabela grande (paginada/editável) só existe em single + board específico.
+  const singleTable = mode === "single" && board !== ALL_BOARDS;
 
   const boardParam = board === SCORE_BOARD ? undefined : board;
   const { data, loading, error, reload } = useAsync(
-    (s) => api.gameLeaderboard(gameId, { board: boardParam, window, limit: PAGE }, s),
+    (s) =>
+      board === ALL_BOARDS
+        ? Promise.resolve<LeaderEntry[]>([])
+        : api.gameLeaderboard(gameId, { board: boardParam, window, limit: PAGE }, s),
     [gameId, board, window],
   );
 
@@ -214,19 +227,15 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
               data={WINDOW_OPTIONS}
             />
           )}
-          {mode === "single" && boardOptions.length > 1 && (
-            <Select
+          {boardOptions.length > 1 && (
+            <SegmentedControl
               size="xs"
-              w={180}
-              aria-label="Board"
               value={board}
               onChange={(v) => {
-                if (!v) return;
                 resetPaging();
                 setBoard(v);
               }}
-              data={boardOptions}
-              allowDeselect={false}
+              data={[{ value: ALL_BOARDS, label: "Todas" }, ...boardOptions]}
             />
           )}
           <Button
@@ -234,7 +243,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
             size="xs"
             leftSection={<IconRefresh size={14} />}
             onClick={() => {
-              if (mode === "overview") {
+              if (!singleTable) {
                 setOverviewTick((t) => t + 1);
                 return;
               }
@@ -248,16 +257,17 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       </Group>
 
       {mode === "overview" &&
-        boardOptions.map((b) => (
+        shownBoards.map((b) => (
           <Stack key={b.value} gap="sm">
             <Divider label={b.label} labelPosition="left" />
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               {WINDOW_OPTIONS.map((w) => (
-                <WindowMiniTable
+                <MiniBoardTable
                   key={w.value}
                   gameId={gameId}
                   board={b.value}
-                  label={b.label}
+                  title={w.label}
+                  header={b.label}
                   win={w.value}
                   tick={overviewTick}
                 />
@@ -266,16 +276,32 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
           </Stack>
         ))}
 
-      {mode === "single" && loading && !rows && <Loader />}
-      {mode === "single" && !!error && <Alert color="red">leaderboard indisponível.</Alert>}
-      {mode === "single" && rows && rows.length === 0 && (
+      {mode === "single" && board === ALL_BOARDS && (
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+          {shownBoards.map((b) => (
+            <MiniBoardTable
+              key={b.value}
+              gameId={gameId}
+              board={b.value}
+              title={b.label}
+              header={windowLabel}
+              win={window}
+              tick={overviewTick}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+
+      {singleTable && loading && !rows && <Loader />}
+      {singleTable && !!error && <Alert color="red">leaderboard indisponível.</Alert>}
+      {singleTable && rows && rows.length === 0 && (
         <Text c="dimmed">
           {window === "alltime"
             ? "Nenhum score ainda — as partidas reportadas (ReportResult) alimentam o ranking."
             : "Sem partidas no período."}
         </Text>
       )}
-      {mode === "single" && rows && rows.length > 0 && (
+      {singleTable && rows && rows.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -309,7 +335,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
           </Table.Tbody>
         </Table>
       )}
-      {mode === "single" && hasMore && (
+      {singleTable && hasMore && (
         <Group justify="center">
           <Button variant="default" size="xs" onClick={loadMore} loading={loadingMore}>
             Carregar mais
