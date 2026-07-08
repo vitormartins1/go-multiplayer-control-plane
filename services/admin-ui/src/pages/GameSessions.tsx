@@ -11,7 +11,6 @@ import {
   Stack,
   Table,
   Text,
-  Tooltip,
 } from "@mantine/core";
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
@@ -19,6 +18,7 @@ import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 import { SessionAvatar } from "../components/SessionAvatar";
+import { PlayersSummary } from "../components/PlayersSummary";
 
 const POLL_MS = 5000;
 
@@ -177,17 +177,8 @@ function SessionRow({
           </Group>
         </Table.Td>
         <Table.Td>
-          <Group gap="xs" wrap="nowrap">
-            {s.players.map((p) => (
-              <Tooltip key={p.id} label={p.handle ? `${p.handle} (${p.id})` : p.id}>
-                <Group gap={6} wrap="nowrap">
-                  <PlayerAvatar seed={p.id} />
-                  <Text size="sm">{p.handle || truncate(p.id)}</Text>
-                  <GuestBadge playerId={p.id} />
-                </Group>
-              </Tooltip>
-            ))}
-          </Group>
+          {/* resumo compacto (034): a lista completa vive no painel expandido. */}
+          <PlayersSummary players={s.players} />
         </Table.Td>
         <Table.Td>
           <Text ff="monospace" size="sm">

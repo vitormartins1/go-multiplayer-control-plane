@@ -1,45 +1,16 @@
-import { Alert, Button, Group, Loader, Modal, SimpleGrid, Stack, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
+import { Alert, Button, Group, Loader, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { useForm } from "@mantine/form";
-import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
-import { api, HttpError } from "../lib/api";
+import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { GameCover } from "../components/GameCover";
-
-const SLUG_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+import { GameCreateWizard } from "./GameCreateWizard";
 
 export function Games() {
   const nav = useNavigate();
   const { data: games, loading, error, reload } = useAsync((s) => api.games(s), []);
   const [opened, { open, close }] = useDisclosure(false);
-
-  const form = useForm({
-    initialValues: { slug: "", name: "" },
-    validate: {
-      slug: (v) => (SLUG_RE.test(v.trim()) ? null : "slug minúsculo, sem espaços (a-z 0-9 -)"),
-      name: (v) => (v.trim() ? null : "obrigatório"),
-    },
-  });
-
-  async function submit(values: { slug: string; name: string }) {
-    try {
-      await api.createGame(values.slug.trim(), values.name.trim());
-      notifications.show({ color: "green", message: "Jogo registrado." });
-      close();
-      form.reset();
-      reload();
-    } catch (e) {
-      const msg =
-        e instanceof HttpError && e.status === 409
-          ? "Slug já existe."
-          : e instanceof HttpError && e.status === 400
-            ? "Dados inválidos."
-            : "Falha ao registrar (serviço indisponível?).";
-      form.setErrors({ slug: msg });
-    }
-  }
 
   return (
     <Stack>
@@ -74,17 +45,8 @@ export function Games() {
         </SimpleGrid>
       )}
 
-      <Modal opened={opened} onClose={close} title="Registrar jogo">
-        <form onSubmit={form.onSubmit(submit)}>
-          <Stack>
-            <TextInput label="Slug" placeholder="meu-jogo" {...form.getInputProps("slug")} />
-            <TextInput label="Nome" placeholder="Meu Jogo" {...form.getInputProps("name")} />
-            <Group justify="flex-end">
-              <Button type="submit">Registrar</Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
+      {/* Jornada de cadastro em steps (035) — substitui o modal slug+nome. */}
+      <GameCreateWizard opened={opened} onClose={close} onCreated={reload} />
     </Stack>
   );
 }
