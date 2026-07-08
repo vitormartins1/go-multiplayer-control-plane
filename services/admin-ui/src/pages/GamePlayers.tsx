@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type GamePlayer } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { PlayerAvatar } from "../components/PlayerAvatar";
+import { GuestBadge } from "../components/GuestBadge";
 
 // Bolinha de presença sobreposta ao avatar — aparece apenas quando online.
 function PresenceDot() {
@@ -41,6 +42,7 @@ function PlayerRow({
             {online && <PresenceDot />}
           </Box>
           <span>{p.handle}</span>
+          <GuestBadge playerId={p.playerId} />
         </Group>
       </Table.Td>
       <Table.Td c="dimmed">{p.playerId.slice(0, 8)}…</Table.Td>

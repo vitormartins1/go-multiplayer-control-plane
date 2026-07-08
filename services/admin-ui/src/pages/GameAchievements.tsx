@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Autocomplete,
   Badge,
   Button,
   Group,
@@ -27,6 +28,8 @@ import {
   type AchievementProgressEntry,
   type CatalogAchievement,
   type ImportResponse,
+  type MultiplayerMode,
+  type MultiplayerProfile,
   type NewAchievement,
   type StatMode,
 } from "../lib/api";
@@ -36,6 +39,85 @@ import { AchievementIcon } from "../components/AchievementIcon";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
+
+// EVENT_VOCABULARY espelha os event types derivados pelos sinks do
+// achievements-service por arquétipo (internal/domain/{placement,collective,
+// participation}.go + service/achievement_service.go). Sugestão, não
+// validação: o campo continua aceitando texto livre (027).
+const EVENT_VOCABULARY: Record<MultiplayerProfile["archetype"], string[]> = {
+  queue_arena: ["match_played", "match_won", "match_lost", "match_drawn"],
+  battle_royale: ["battle_royale_played", "battle_royale_win", "battle_royale_top_n"],
+  coop_mission: ["coop_mission_played", "coop_mission_success", "coop_mission_failed"],
+  host_world_dropin: ["world_joined", "invasion_won", "coop_boss_helped"],
+};
+
+// Sugestões de um campo: os valores (data do Autocomplete) + a origem de cada
+// um, mostrada esmaecida na opção (ex.: kills → "modo tdm").
+type Suggestions = { values: string[]; origin: Map<string, string> };
+
+const NO_SUGGESTIONS: Suggestions = { values: [], origin: new Map() };
+
+// statSuggestions = união dos scoringStats dos modos do jogo + o intrínseco
+// score. Origem = os modos que declaram o stat.
+function statSuggestions(modes: MultiplayerMode[]): Suggestions {
+  const declaredBy = new Map<string, string[]>();
+  for (const m of modes) {
+    if (m.archetype === "host_world_dropin") continue; // não declara scoringStats
+    for (const s of m.params.scoringStats) {
+      declaredBy.set(s, [...(declaredBy.get(s) ?? []), m.modeId]);
+    }
+  }
+  const origin = new Map<string, string>([["score", "intrínseco (todo resultado)"]]);
+  for (const [s, ids] of declaredBy) {
+    origin.set(s, `modo${ids.length > 1 ? "s" : ""} ${ids.join(", ")}`);
+  }
+  return { values: [...origin.keys()], origin };
+}
+
+// eventSuggestions = vocabulário fixo dos arquétipos presentes nos modos do
+// jogo; sem modos cadastrados, a lista completa dos 4 arquétipos.
+function eventSuggestions(modes: MultiplayerMode[]): Suggestions {
+  const archetypes =
+    modes.length > 0
+      ? [...new Set(modes.map((m) => m.archetype))]
+      : (Object.keys(EVENT_VOCABULARY) as MultiplayerProfile["archetype"][]);
+  const origin = new Map<string, string>();
+  for (const a of archetypes) {
+    for (const ev of EVENT_VOCABULARY[a]) if (!origin.has(ev)) origin.set(ev, a);
+  }
+  return { values: [...origin.keys()], origin };
+}
+
+// SuggestInput é o Autocomplete com origem esmaecida por opção — texto fora da
+// lista continua aceito (creatable por natureza do Autocomplete).
+function SuggestInput({
+  label,
+  placeholder,
+  suggestions,
+  inputProps,
+}: {
+  label: string;
+  placeholder: string;
+  suggestions: Suggestions;
+  inputProps: object; // GetInputPropsReturnType do @mantine/form (spread direto)
+}) {
+  return (
+    <Autocomplete
+      label={label}
+      placeholder={placeholder}
+      data={suggestions.values}
+      renderOption={({ option }) => (
+        <Group gap="xs" justify="space-between" style={{ flex: 1 }} wrap="nowrap">
+          <Text size="sm">{option.value}</Text>
+          <Text size="xs" c="dimmed">
+            {suggestions.origin.get(option.value)}
+          </Text>
+        </Group>
+      )}
+      {...inputProps}
+    />
+  );
+}
 
 // Campos comuns do form de conquista: o critério é por evento OU por métrica.
 type CriterionValues = {
@@ -66,7 +148,17 @@ function buildCriterion(v: CriterionValues): Pick<NewAchievement, "eventType" | 
 
 // CriterionFields renderiza o seletor de critério + os campos condicionais.
 // Reutilizado nos forms de criar e editar (ambos incluem CriterionValues).
-function CriterionFields<T extends CriterionValues>({ form }: { form: UseFormReturnType<T> }) {
+// stats/events são sugestões derivadas dos modos do jogo (027) — opcionais:
+// sem elas o campo degrada para texto livre puro.
+function CriterionFields<T extends CriterionValues>({
+  form,
+  stats = NO_SUGGESTIONS,
+  events = NO_SUGGESTIONS,
+}: {
+  form: UseFormReturnType<T>;
+  stats?: Suggestions;
+  events?: Suggestions;
+}) {
   const isStat = form.values.criterion === "stat";
   return (
     <>
@@ -80,7 +172,12 @@ function CriterionFields<T extends CriterionValues>({ form }: { form: UseFormRet
       />
       {isStat ? (
         <>
-          <TextInput label="Stat" placeholder="kills" {...form.getInputProps("statKey")} />
+          <SuggestInput
+            label="Stat"
+            placeholder="kills"
+            suggestions={stats}
+            inputProps={form.getInputProps("statKey")}
+          />
           <Select
             label="Agregação"
             allowDeselect={false}
@@ -92,7 +189,12 @@ function CriterionFields<T extends CriterionValues>({ form }: { form: UseFormRet
           />
         </>
       ) : (
-        <TextInput label="Event type" placeholder="match_won" {...form.getInputProps("eventType")} />
+        <SuggestInput
+          label="Event type"
+          placeholder="match_won"
+          suggestions={events}
+          inputProps={form.getInputProps("eventType")}
+        />
       )}
       <NumberInput label={isStat ? "Meta (valor-alvo)" : "Meta (ocorrências)"} min={1} {...form.getInputProps("target")} />
     </>
@@ -101,6 +203,10 @@ function CriterionFields<T extends CriterionValues>({ form }: { form: UseFormRet
 
 export function GameAchievements({ gameId }: { gameId: string }) {
   const { data: catalog, loading, error, reload } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
+  // modos do jogo p/ sugestões de stat/evento (027); falha → sem sugestões.
+  const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
+  const stats = statSuggestions(modes ?? []);
+  const events = eventSuggestions(modes ?? []);
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<CatalogAchievement | null>(null);
   const [deleting, setDeleting] = useState<CatalogAchievement | null>(null);
@@ -383,7 +489,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             <TextInput label="Id (slug)" placeholder="first_win" {...form.getInputProps("id")} />
             <TextInput label="Nome" placeholder="Primeira Vitória" {...form.getInputProps("name")} />
             <Textarea label="Descrição" autosize minRows={2} {...form.getInputProps("description")} />
-            <CriterionFields form={form} />
+            <CriterionFields form={form} stats={stats} events={events} />
             <Group justify="flex-end">
               <Button type="submit">Adicionar</Button>
             </Group>
@@ -397,7 +503,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
           <Stack>
             <TextInput label="Nome" {...editForm.getInputProps("name")} />
             <Textarea label="Descrição" autosize minRows={2} {...editForm.getInputProps("description")} />
-            <CriterionFields form={editForm} />
+            <CriterionFields form={editForm} stats={stats} events={events} />
             <Group justify="flex-end">
               <Button type="submit">Salvar</Button>
             </Group>

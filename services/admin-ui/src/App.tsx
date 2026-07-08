@@ -1,4 +1,4 @@
-import { AppShell, Center, Group, Loader, NavLink, Title } from "@mantine/core";
+import { AppShell, Badge, Center, Group, Loader, NavLink, Text, ThemeIcon, Title } from "@mantine/core";
 import { lazy, Suspense } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
@@ -6,6 +6,7 @@ import {
   IconDeviceGamepad2,
   IconDoorEnter,
   IconServer,
+  IconTopologyStar3,
   IconUsers,
 } from "@tabler/icons-react";
 
@@ -35,8 +36,22 @@ export function App() {
   return (
     <AppShell header={{ height: 56 }} navbar={{ width: 230, breakpoint: "sm" }} padding="md">
       <AppShell.Header>
-        <Group h="100%" px="md">
-          <Title order={4}>🎮 Admin Console</Title>
+        {/* Marca do console (025): ecoa o nome do repo (go-multiplayer-control-plane). */}
+        <Group h="100%" px="md" justify="space-between">
+          <Group gap="sm">
+            <ThemeIcon variant="gradient" gradient={{ from: "indigo", to: "cyan" }} radius="md">
+              <IconTopologyStar3 size={18} />
+            </ThemeIcon>
+            <Group gap={6} align="baseline">
+              <Title order={4}>Multiplayer Control Plane</Title>
+              <Text size="sm" c="dimmed">
+                Console
+              </Text>
+            </Group>
+          </Group>
+          <Badge variant="light" color="gray">
+            local
+          </Badge>
         </Group>
       </AppShell.Header>
 

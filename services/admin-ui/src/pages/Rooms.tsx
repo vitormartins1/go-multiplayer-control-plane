@@ -9,6 +9,7 @@ import {
   Loader,
   Modal,
   SegmentedControl,
+  Select,
   Stack,
   Table,
   Text,
@@ -19,6 +20,7 @@ import { api, type GameSession, type RoleSlot, type MultiplayerProfile } from ".
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { PlayerAvatar } from "../components/PlayerAvatar";
+import { GuestBadge } from "../components/GuestBadge";
 
 const POLL_MS = 5000;
 
@@ -28,6 +30,7 @@ const POLL_MS = 5000;
 export function Rooms() {
   const { data, loading, error, reload } = useAsync((s) => api.rooms(s), []);
   const [filter, setFilter] = useState<"all" | "open" | "closed">("open");
+  const [modeFilter, setModeFilter] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [closing, setClosing] = useState<GameSession | null>(null);
@@ -89,12 +92,22 @@ export function Rooms() {
     return { teamSize: p.params.teamSize };
   }
 
-  const rows = useMemo(() => {
+  // modo de cada sessão (ADR-0024, 028): ausente em sessões legadas = default.
+  const modeOf = (s: GameSession) => s.modeId || "default";
+
+  const allRows = useMemo(() => {
     if (!data) return [];
     const active = filter === "closed" ? [] : data.active;
     const closed = filter === "open" ? [] : data.closed;
     return [...active, ...closed];
   }, [data, filter]);
+
+  // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
+  const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
+  const rows = useMemo(
+    () => (modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows),
+    [allRows, modeFilter],
+  );
 
   async function confirmClose() {
     if (!closing) return;
@@ -128,6 +141,17 @@ export function Rooms() {
             <Text size="xs" c="dimmed">
               atualizado {lastUpdate.toLocaleTimeString("pt-BR")}
             </Text>
+          )}
+          {distinctModes.length > 1 && (
+            <Select
+              size="xs"
+              w={170}
+              placeholder="Todos os modos"
+              clearable
+              value={modeFilter}
+              onChange={setModeFilter}
+              data={distinctModes}
+            />
           )}
           <SegmentedControl
             size="xs"
@@ -230,6 +254,9 @@ function RoomRow({
           <Text size="sm" fw={500}>
             {s.gameName || truncate(s.gameId || "—")}
           </Text>
+          <Badge size="xs" variant="light" color="indigo" mt={2} mr={4}>
+            {s.modeId || "default"}
+          </Badge>
           {br && (
             <Badge size="xs" variant="light" color="grape" mt={2}>
               lobby {s.players.length}/{br.lobbySize} · {br.mode}
@@ -267,6 +294,7 @@ function RoomRow({
                   <Group gap={6} wrap="nowrap">
                     <PlayerAvatar seed={p.id} />
                     <Text size="sm">{p.handle || truncate(p.id)}</Text>
+                    <GuestBadge playerId={p.id} />
                   </Group>
                 </Tooltip>
               ))}
@@ -303,6 +331,7 @@ function RoomRow({
                 <Stack gap="xs">
                   <Group gap="xl" wrap="wrap">
                     <Field label="JOGO" value={s.gameName || s.gameId || "—"} />
+                    <Field label="MODO" value={s.modeId || "default"} mono />
                     <Field label={s.origin === "host_world" ? "MUNDO" : "MATCH ID"} value={s.matchId || s.sessionId} mono />
                     <Field label="SESSION ID" value={s.sessionId} mono />
                     <Field label="SERVIDOR" value={s.serverAddress || "—"} mono />
@@ -329,9 +358,12 @@ function RoomRow({
                         <Group key={p.id} gap={6} wrap="nowrap">
                           <PlayerAvatar seed={p.id} size={24} />
                           <Stack gap={0}>
-                            <Text size="xs" fw={500}>
-                              {p.handle || "—"}
-                            </Text>
+                            <Group gap={4} wrap="nowrap">
+                              <Text size="xs" fw={500}>
+                                {p.handle || "—"}
+                              </Text>
+                              <GuestBadge playerId={p.id} />
+                            </Group>
                             <Text ff="monospace" size="xs" c="dimmed">
                               {p.id}
                             </Text>
