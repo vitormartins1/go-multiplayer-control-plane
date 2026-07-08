@@ -104,8 +104,9 @@ func TestAdminSessions_HostWorld_ExpoeOriginHostESlots(t *testing.T) {
 	assert.Equal(t, "host_world", s.Origin)
 	assert.Equal(t, "host-1", s.HostPlayerID)
 	require.Len(t, s.RoleSlots, 2)
-	// ordenado por role: coop antes de invader.
-	assert.Equal(t, roleSlotDTO{Role: "coop", Capacity: 2, Occupied: 1}, s.RoleSlots[0])
+	// ordenado por role: coop antes de invader. Occupants (spec 019) diz quem
+	// está em cada papel; slot vazio omite a lista.
+	assert.Equal(t, roleSlotDTO{Role: "coop", Capacity: 2, Occupied: 1, Occupants: []string{"coop-1"}}, s.RoleSlots[0])
 	assert.Equal(t, roleSlotDTO{Role: "invader", Capacity: 1, Occupied: 0}, s.RoleSlots[1])
 }
 

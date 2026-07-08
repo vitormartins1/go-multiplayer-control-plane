@@ -111,10 +111,13 @@ type collectivePlayerDTO struct {
 }
 
 // roleSlotDTO é a ocupação de um papel num mundo host_world (co-op X/2, etc.).
+// Occupants (spec 019) diz QUEM está em cada papel — o console monta os cards
+// por papel com os jogadores atribuídos, não só a contagem.
 type roleSlotDTO struct {
-	Role     string `json:"role"`
-	Capacity int    `json:"capacity"`
-	Occupied int    `json:"occupied"`
+	Role      string   `json:"role"`
+	Capacity  int      `json:"capacity"`
+	Occupied  int      `json:"occupied"`
+	Occupants []string `json:"occupants,omitempty"`
 }
 
 type sessionsResponse struct {
@@ -273,7 +276,7 @@ func roleSlotsDTO(slots map[string]*domain.RoleSlot) []roleSlotDTO {
 	}
 	out := make([]roleSlotDTO, 0, len(slots))
 	for role, slot := range slots {
-		out = append(out, roleSlotDTO{Role: role, Capacity: slot.Capacity, Occupied: len(slot.Occupants)})
+		out = append(out, roleSlotDTO{Role: role, Capacity: slot.Capacity, Occupied: len(slot.Occupants), Occupants: slot.Occupants})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Role < out[j].Role })
 	return out

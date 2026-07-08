@@ -42,7 +42,7 @@ func TestSessionsByGame_HostWorld_RepassaOriginESlots(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"active": [{"sessionId":"w1","state":"open","players":["host-1","coop-1"],"origin":"host_world","hostPlayerId":"host-1",
-				"roleSlots":[{"role":"coop","capacity":2,"occupied":1},{"role":"invader","capacity":1,"occupied":0}]}],
+				"roleSlots":[{"role":"coop","capacity":2,"occupied":1,"occupants":["coop-1"]},{"role":"invader","capacity":1,"occupied":0}]}],
 			"closed": []
 		}`))
 	}))
@@ -55,7 +55,8 @@ func TestSessionsByGame_HostWorld_RepassaOriginESlots(t *testing.T) {
 	assert.Equal(t, "host_world", s.Origin)
 	assert.Equal(t, "host-1", s.HostPlayerID)
 	require.Len(t, s.RoleSlots, 2)
-	assert.Equal(t, domain.RoleSlot{Role: "coop", Capacity: 2, Occupied: 1}, s.RoleSlots[0])
+	// occupants (session spec 019): quem está em cada papel, repassado 1:1.
+	assert.Equal(t, domain.RoleSlot{Role: "coop", Capacity: 2, Occupied: 1, Occupants: []string{"coop-1"}}, s.RoleSlots[0])
 }
 
 func TestSessionsByGame_UpstreamFora_ErrSessionsUnavailable(t *testing.T) {

@@ -97,11 +97,14 @@ type CollectivePlayer struct {
 	Stats    map[string]int64 `json:"stats,omitempty"`
 }
 
-// RoleSlot é a ocupação de um papel num mundo host_world (spec 014).
+// RoleSlot é a ocupação de um papel num mundo host_world (spec 014). Occupants
+// (session spec 019) lista quem está em cada papel — o console renderiza os
+// cards por papel com os jogadores atribuídos.
 type RoleSlot struct {
-	Role     string `json:"role"`
-	Capacity int    `json:"capacity"`
-	Occupied int    `json:"occupied"`
+	Role      string   `json:"role"`
+	Capacity  int      `json:"capacity"`
+	Occupied  int      `json:"occupied"`
+	Occupants []string `json:"occupants,omitempty"`
 }
 
 // GameSessions agrupa as sessões do jogo como o painel consome.

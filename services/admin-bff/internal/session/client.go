@@ -51,9 +51,10 @@ type sessionDTO struct {
 	Origin        string     `json:"origin"`
 	HostPlayerID  string     `json:"hostPlayerId"`
 	RoleSlots     []struct {
-		Role     string `json:"role"`
-		Capacity int    `json:"capacity"`
-		Occupied int    `json:"occupied"`
+		Role      string   `json:"role"`
+		Capacity  int      `json:"capacity"`
+		Occupied  int      `json:"occupied"`
+		Occupants []string `json:"occupants"`
 	} `json:"roleSlots"`
 
 	// Detalhe rico (session spec 018) — passthrough 1:1; os tipos do domain já
@@ -136,7 +137,7 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 		}
 		var slots []domain.RoleSlot
 		for _, s := range d.RoleSlots {
-			slots = append(slots, domain.RoleSlot{Role: s.Role, Capacity: s.Capacity, Occupied: s.Occupied})
+			slots = append(slots, domain.RoleSlot{Role: s.Role, Capacity: s.Capacity, Occupied: s.Occupied, Occupants: s.Occupants})
 		}
 		out = append(out, domain.GameSession{
 			SessionID:     d.SessionID,
