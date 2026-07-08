@@ -7,6 +7,7 @@ import {
   Checkbox,
   Code,
   Divider,
+  Drawer,
   Fieldset,
   Group,
   Loader,
@@ -21,12 +22,10 @@ import {
   TagsInput,
   Text,
   TextInput,
-  Title,
   Tooltip,
 } from "@mantine/core";
 import {
   IconAlertTriangle,
-  IconArrowLeft,
   IconInfoCircle,
   IconPencil,
   IconPlus,
@@ -665,7 +664,7 @@ function CoopMissionForm({
 
 // modeSummary resume os parâmetros de um modo numa linha escaneável (026) —
 // a coluna "Configuração" da lista. Função pura, narrowing por arquétipo.
-function modeSummary(m: MultiplayerMode): string {
+export function modeSummary(m: MultiplayerMode): string {
   switch (m.archetype) {
     case "queue_arena": {
       const p = m.params;
@@ -705,20 +704,28 @@ function modeSummary(m: MultiplayerMode): string {
 // Reusa o form por arquétipo como corpo; a moldura adiciona a identidade do
 // modo (modeId estável + displayName). modeId trava na edição (rename de
 // exibição = displayName) e no primeiro cadastro (CTA cria o "default").
-function ModeEditor({
+export function ModeEditor({
   gameId,
   mode,
   lockDefault,
   existingModeIds,
   onSaved,
   onCancel,
+  onSubmit,
+  submitLabel = "Salvar modo",
+  cancelLabel = "Cancelar",
 }: {
-  gameId: string;
+  gameId?: string; // obrigatório quando não há onSubmit (save default via API)
   mode: MultiplayerMode | null; // null = criar
   lockDefault: boolean; // primeiro cadastro: modeId = "default" travado
   existingModeIds: string[];
   onSaved: () => void;
   onCancel: () => void;
+  // submissão plugável (035): o caller decide o destino — Configurações salva
+  // na API (default), o wizard coleta em memória antes do jogo existir.
+  onSubmit?: (modeId: string, displayName: string, profile: MultiplayerProfile) => Promise<void>;
+  submitLabel?: string;
+  cancelLabel?: string;
 }) {
   const isEdit = mode !== null;
   const [modeId, setModeId] = useState(mode?.modeId ?? (lockDefault ? DEFAULT_MODE_ID : ""));
@@ -789,11 +796,15 @@ function ModeEditor({
               ? buildBattleRoyaleProfile(topology, br)
               : buildCoopMissionProfile(topology, cm);
       const name = displayName.trim();
-      await api.setMultiplayerMode(gameId, modeId, {
-        ...profile,
-        ...(name ? { displayName: name } : {}),
-      });
-      notifications.show({ color: "green", message: `Modo "${name || modeId}" salvo.` });
+      if (onSubmit) {
+        await onSubmit(modeId, name, profile);
+      } else {
+        await api.setMultiplayerMode(gameId ?? "", modeId, {
+          ...profile,
+          ...(name ? { displayName: name } : {}),
+        });
+        notifications.show({ color: "green", message: `Modo "${name || modeId}" salvo.` });
+      }
       onSaved();
     } catch (err) {
       const code = err instanceof HttpError ? err.code : undefined;
@@ -810,34 +821,10 @@ function ModeEditor({
 
   const archetypeChanged = isEdit && archetype !== mode.archetype;
 
+  // O cabeçalho próprio do editor (026: voltar + ações no topo) saiu na 037 —
+  // o container (Drawer nas Configurações, step no wizard) provê título/fechar.
   return (
     <Stack>
-      {/* Cabeçalho do editor (026): contexto + ações também no topo. */}
-      <Group justify="space-between">
-        <Group gap="xs">
-          <ActionIcon variant="subtle" aria-label="Voltar" onClick={onCancel} disabled={saving}>
-            <IconArrowLeft size={18} />
-          </ActionIcon>
-          <Title order={5}>
-            {isEdit ? (
-              <>
-                Editar <Code>{mode.modeId}</Code>
-              </>
-            ) : (
-              "Novo modo"
-            )}
-          </Title>
-        </Group>
-        <Group gap="xs">
-          <Button size="xs" variant="default" onClick={onCancel} disabled={saving}>
-            Cancelar
-          </Button>
-          <Button size="xs" onClick={save} disabled={!canSave} loading={saving}>
-            Salvar modo
-          </Button>
-        </Group>
-      </Group>
-
       <Fieldset legend="Identidade do modo">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <TextInput
@@ -935,10 +922,10 @@ function ModeEditor({
 
       <Group>
         <Button onClick={save} disabled={!canSave} loading={saving}>
-          Salvar modo
+          {submitLabel}
         </Button>
         <Button variant="default" onClick={onCancel} disabled={saving}>
-          Cancelar
+          {cancelLabel}
         </Button>
       </Group>
     </Stack>
@@ -946,15 +933,13 @@ function ModeEditor({
 }
 
 // --- Componente principal: coleção de modos do jogo (ADR-0024) ---
-type View =
-  | { kind: "list" }
-  | { kind: "create"; lockDefault: boolean }
-  | { kind: "edit"; mode: MultiplayerMode };
+// O editor abre num Drawer à direita (037): a lista fica visível ao fundo.
+type EditorTarget = { mode: MultiplayerMode | null; lockDefault: boolean };
 
 export function MultiplayerSettings({ gameId }: { gameId: string }) {
   const [loading, setLoading] = useState(true);
   const [modes, setModes] = useState<MultiplayerMode[]>([]);
-  const [view, setView] = useState<View>({ kind: "list" });
+  const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [deleting, setDeleting] = useState<MultiplayerMode | null>(null);
   const [removing, setRemoving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -976,8 +961,8 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
     return () => ctrl.abort();
   }, [gameId, reloadKey]);
 
-  function backToList() {
-    setView({ kind: "list" });
+  function closeEditorAndReload() {
+    setEditor(null);
     setReloadKey((k) => k + 1);
   }
 
@@ -1005,19 +990,36 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
 
   if (loading) return <Loader size="sm" />;
 
-  if (view.kind !== "list") {
-    return (
-      <ModeEditor
-        key={view.kind === "edit" ? view.mode.modeId : "new"}
-        gameId={gameId}
-        mode={view.kind === "edit" ? view.mode : null}
-        lockDefault={view.kind === "create" && view.lockDefault}
-        existingModeIds={modes.map((m) => m.modeId)}
-        onSaved={backToList}
-        onCancel={() => setView({ kind: "list" })}
-      />
-    );
-  }
+  // Drawer do editor (037): renderizado junto de qualquer estado da lista.
+  const editorDrawer = (
+    <Drawer
+      opened={!!editor}
+      onClose={() => setEditor(null)}
+      position="right"
+      size={560}
+      title={
+        editor?.mode ? (
+          <>
+            Editar <Code>{editor.mode.modeId}</Code>
+          </>
+        ) : (
+          "Novo modo"
+        )
+      }
+    >
+      {editor && (
+        <ModeEditor
+          key={editor.mode?.modeId ?? "new"}
+          gameId={gameId}
+          mode={editor.mode}
+          lockDefault={editor.lockDefault}
+          existingModeIds={modes.map((m) => m.modeId)}
+          onSaved={closeEditorAndReload}
+          onCancel={() => setEditor(null)}
+        />
+      )}
+    </Drawer>
+  );
 
   if (modes.length === 0) {
     return (
@@ -1027,10 +1029,11 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           modo <Code>default</Code> — o usado pelo matchmaking).
         </Alert>
         <Group>
-          <Button onClick={() => setView({ kind: "create", lockDefault: true })}>
+          <Button onClick={() => setEditor({ mode: null, lockDefault: true })}>
             Configurar multiplayer
           </Button>
         </Group>
+        {editorDrawer}
       </Stack>
     );
   }
@@ -1044,7 +1047,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
         <Button
           size="xs"
           leftSection={<IconPlus size={14} />}
-          onClick={() => setView({ kind: "create", lockDefault: false })}
+          onClick={() => setEditor({ mode: null, lockDefault: false })}
         >
           Novo modo
         </Button>
@@ -1088,7 +1091,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                     <ActionIcon
                       variant="subtle"
                       aria-label="Editar"
-                      onClick={() => setView({ kind: "edit", mode: m })}
+                      onClick={() => setEditor({ mode: m, lockDefault: false })}
                     >
                       <IconPencil size={16} />
                     </ActionIcon>
@@ -1130,6 +1133,8 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           </Group>
         </Stack>
       </Modal>
+
+      {editorDrawer}
     </Stack>
   );
 }
