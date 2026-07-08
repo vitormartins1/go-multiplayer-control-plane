@@ -18,11 +18,9 @@ import { notifications } from "@mantine/notifications";
 import { api, type GameSession, type RoleSlot, type MultiplayerProfile } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
-import { PlayerAvatar } from "../components/PlayerAvatar";
-import { GuestBadge } from "../components/GuestBadge";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
-import { SessionMatchDetail } from "../components/SessionMatchDetail";
+import { ROLE_META, SessionMatchDetail } from "../components/SessionMatchDetail";
 
 const POLL_MS = 5000;
 
@@ -337,39 +335,8 @@ function RoomRow({
                     )}
                   </Group>
 
-                  {s.origin === "host_world" && (s.roleSlots?.length ?? 0) > 0 && (
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>
-                        SLOTS POR PAPEL
-                      </Text>
-                      <RoleSlots slots={s.roleSlots ?? []} />
-                    </Stack>
-                  )}
-
-                  <Stack gap={2}>
-                    <Text size="xs" c="dimmed" fw={600}>
-                      PLAYERS
-                    </Text>
-                    <Group gap="md" wrap="wrap">
-                      {s.players.map((p) => (
-                        <Group key={p.id} gap={6} wrap="nowrap">
-                          <PlayerAvatar seed={p.id} size={24} />
-                          <Stack gap={0}>
-                            <Group gap={4} wrap="nowrap">
-                              <Text size="xs" fw={500}>
-                                {p.handle || "—"}
-                              </Text>
-                              <GuestBadge playerId={p.id} />
-                            </Group>
-                            <Text ff="monospace" size="xs" c="dimmed">
-                              {p.id}
-                            </Text>
-                          </Stack>
-                        </Group>
-                      ))}
-                    </Group>
-                  </Stack>
-
+                  {/* roster/slots/formação/resultado vivem no painel por
+                      arquétipo (spec 019) — host_world vira cards por papel. */}
                   <SessionMatchDetail session={s} />
 
                   <Group gap="xl" wrap="wrap">
@@ -389,15 +356,9 @@ function RoomRow({
   );
 }
 
-// rótulos e cores dos papéis do host_world_dropin.
-const ROLE_META: Record<string, { label: string; color: string }> = {
-  coop: { label: "co-op", color: "teal" },
-  invader: { label: "invasor", color: "red" },
-  host: { label: "host", color: "blue" },
-};
-
 // RoleSlots mostra a ocupação por papel (co-op X/2, invasor Y/1) — a leitura do
-// board para mundos host_world (spec 020). Slot cheio fica destacado.
+// board para mundos host_world (spec 020); ROLE_META compartilhado com o painel
+// expandido (SessionMatchDetail). Slot cheio fica destacado.
 function RoleSlots({ slots }: { slots: RoleSlot[] }) {
   if (slots.length === 0) return <Text size="sm" c="dimmed">—</Text>;
   return (

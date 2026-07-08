@@ -15,8 +15,6 @@ import {
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
-import { PlayerAvatar } from "../components/PlayerAvatar";
-import { GuestBadge } from "../components/GuestBadge";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { SessionMatchDetail } from "../components/SessionMatchDetail";
@@ -223,24 +221,8 @@ function SessionRow({
                     </Stack>
                   </Group>
 
-                  <Stack gap={2}>
-                    <Text size="xs" c="dimmed" fw={600}>PLAYERS</Text>
-                    <Group gap="md" wrap="wrap">
-                      {s.players.map((p) => (
-                        <Group key={p.id} gap={6} wrap="nowrap">
-                          <PlayerAvatar seed={p.id} size={24} />
-                          <Stack gap={0}>
-                            <Group gap={4} wrap="nowrap">
-                              <Text size="xs" fw={500}>{p.handle || "—"}</Text>
-                              <GuestBadge playerId={p.id} />
-                            </Group>
-                            <Text ff="monospace" size="xs" c="dimmed">{p.id}</Text>
-                          </Stack>
-                        </Group>
-                      ))}
-                    </Group>
-                  </Stack>
-
+                  {/* roster/formação/resultado vivem no painel por arquétipo
+                      (spec 019) — sem bloco PLAYERS duplicado. */}
                   <SessionMatchDetail session={s} />
 
                   <Group gap="xl" wrap="wrap">

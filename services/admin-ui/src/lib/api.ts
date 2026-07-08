@@ -196,10 +196,13 @@ export interface SessionPlayer {
 }
 
 // host_world_dropin (spec 020): ocupação de um papel num mundo (co-op X/2, etc.).
+// occupants (session spec 019): quem está em cada papel — alimenta os cards do
+// expand; ausente em payloads antigos (fallback: só contagem).
 export interface RoleSlot {
   role: string;
   capacity: number;
   occupied: number;
+  occupants?: string[];
 }
 
 export interface GameSession {
