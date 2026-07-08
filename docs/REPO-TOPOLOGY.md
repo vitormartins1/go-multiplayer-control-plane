@@ -1,6 +1,6 @@
 # Topologia de repositórios — control plane + data planes por arquétipo
 
-> **Status:** **nomes decididos (2026-07-07); rename do control plane executado (2026-07-07).** O module path Go, os protos (`go_package` + stubs regenerados via `buf`) e as referências em docs já usam `go-multiplayer-control-plane`; falta só o `mv` da pasta local (fazer entre sessões: `cd .. && mv go-game-backend go-multiplayer-control-plane`). O repo segue **local** (sem remote) por decisão do dono — quando for publicar, criar já com o nome novo. Data planes novos nascem com o nome do padrão; o `go-game-dataplane` (queue_arena) renomeia quando for tocado.
+> **Status:** **nomes decididos (2026-07-07); rename do control plane COMPLETO (2026-07-08).** Module path Go, protos (`go_package` + stubs regenerados via `buf`), docs **e a pasta local** (`mv` em 2026-07-08, compose recriado com dados preservados) já usam `go-multiplayer-control-plane`. O repo segue **local** (sem remote) por decisão do dono — quando for publicar, criar já com o nome novo. Data planes novos nascem com o nome do padrão; o `go-game-dataplane` (queue_arena) renomeia quando for tocado.
 >
 > **Motivação:** o ADR-0023 generalizou o multiplayer por **arquétipo** (`queue_arena`, `battle_royale`, `coop_mission`, `host_world_dropin`). A tese de validação (`docs/game-models/`) é ter **um data plane de referência por arquétipo** — cada um é um projeto Unity próprio, com um repo próprio, para testar e validar aquele tipo de jogo de forma isolada. Com N data planes chegando, o nome genérico atual (`go-game-dataplane`) deixa de escalar.
 
@@ -30,7 +30,7 @@ unity-<archetype>-data-plane        # um por arquétipo (Unity)
 | `battle_royale` | `unity-battle-royale-data-plane` | — | ⬜ planejado (criar quando atacar o arquétipo) |
 | `coop_mission` | `unity-coop-mission-data-plane` | — | ⬜ planejado |
 | `host_world_dropin` | `unity-host-world-dropin-data-plane` | — | ⬜ planejado |
-| — (control plane) | `go-multiplayer-control-plane` | `go-game-backend` | ✅ **renomeado** (module path + docs, 2026-07-07); falta o `mv` da pasta |
+| — (control plane) | `go-multiplayer-control-plane` | `go-game-backend` | ✅ **renomeado por completo** (module path + docs 2026-07-07; `mv` da pasta 2026-07-08) |
 
 > `go-game-unity` (repo vazio, órfão): resquício do plano antigo (memória "dataplane-repo"). Data plane real virou `go-game-dataplane`. **Arquivar/remover** no rename.
 
@@ -47,9 +47,9 @@ flowchart TB
   CP -- "perfil host_world_dropin" --> HW
 ```
 
-## Ao executar o rename (checklist futuro — não fazer agora)
+## Checklist do rename (backend ✅ concluído; resta o cross-repo)
 
-Renomear toca o module path Go e várias referências. Quando decidido:
+Renomear toca o module path Go e várias referências. Estado:
 
 1. **Repos GitHub:** renomear (GitHub redireciona o antigo por um tempo) e `git remote set-url`.
 2. ~~**Module path Go**~~ ✅ **feito (2026-07-07):** `go.mod` + 128 arquivos de imports + `go_package` dos 2 protos + stubs regenerados via `buf` (não usar `sed` no `.pb.go` — corrompe o `rawDesc`). 721 testes verdes com `-race`.
