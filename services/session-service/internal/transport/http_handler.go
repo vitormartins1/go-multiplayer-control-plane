@@ -57,6 +57,57 @@ type sessionDTO struct {
 	Origin       string        `json:"origin"`
 	HostPlayerID string        `json:"hostPlayerId,omitempty"`
 	RoleSlots    []roleSlotDTO `json:"roleSlots,omitempty"`
+
+	// Detalhe rico (spec 018): snapshot do modo (ADR-0024) + formação +
+	// resultado persistido. Aditivos; ausentes em sessões sem snapshot/result.
+	Archetype   string          `json:"archetype,omitempty"`
+	ProfileHash string          `json:"profileHash,omitempty"`
+	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
+	Teams       []teamDTO       `json:"teams,omitempty"`
+	Result      *resultDTO      `json:"result,omitempty"`
+}
+
+// teamDTO é um lado da formação registrada no Create (ADR-0023) — o rótulo
+// canônico e seus jogadores. Omitido em FFA/host_world (TeamByPlayer vazio).
+type teamDTO struct {
+	TeamID  string   `json:"teamId"`
+	Players []string `json:"players"`
+}
+
+// resultDTO espelha o domain.MatchOutcome (tagged union): só o kind reportado
+// tem payload. É o que foi publicado no fan-out, com team_id carimbado.
+type resultDTO struct {
+	Kind        string             `json:"kind"`
+	WinLossDraw []playerOutcomeDTO `json:"winLossDraw,omitempty"`
+	Placement   []placementDTO     `json:"placement,omitempty"`
+	Collective  *collectiveDTO     `json:"collective,omitempty"`
+}
+
+type playerOutcomeDTO struct {
+	PlayerID string           `json:"playerId"`
+	TeamID   string           `json:"teamId,omitempty"`
+	Outcome  string           `json:"outcome"`
+	Score    int64            `json:"score"`
+	Stats    map[string]int64 `json:"stats,omitempty"`
+}
+
+type placementDTO struct {
+	PlayerID   string           `json:"playerId"`
+	TeamID     string           `json:"teamId,omitempty"`
+	Placement  int              `json:"placement"`
+	SurvivedMs int64            `json:"survivedMs"`
+	Stats      map[string]int64 `json:"stats,omitempty"`
+}
+
+type collectiveDTO struct {
+	Outcome string                `json:"outcome"`
+	Players []collectivePlayerDTO `json:"players,omitempty"`
+}
+
+type collectivePlayerDTO struct {
+	PlayerID string           `json:"playerId"`
+	TeamID   string           `json:"teamId,omitempty"`
+	Stats    map[string]int64 `json:"stats,omitempty"`
 }
 
 // roleSlotDTO é a ocupação de um papel num mundo host_world (co-op X/2, etc.).
@@ -151,6 +202,65 @@ func toSessionDTO(s domain.Session) sessionDTO {
 	if !s.ClosedAt.IsZero() {
 		closedAt := s.ClosedAt
 		dto.ClosedAt = &closedAt
+	}
+	if s.Profile != nil {
+		dto.Archetype = s.Profile.Archetype
+		dto.ProfileHash = s.Profile.Hash
+		dto.ModeParams = json.RawMessage(s.Profile.ParamsJSON)
+	}
+	dto.Teams = teamsDTO(s.TeamByPlayer)
+	dto.Result = toResultDTO(s.Result)
+	return dto
+}
+
+// teamsDTO agrupa a formação por time em ordem estável (teamId, players). Nil
+// (campo omitido) em FFA/host_world (TeamByPlayer vazio).
+func teamsDTO(teamByPlayer map[string]string) []teamDTO {
+	if len(teamByPlayer) == 0 {
+		return nil
+	}
+	byTeam := map[string][]string{}
+	for player, team := range teamByPlayer {
+		byTeam[team] = append(byTeam[team], player)
+	}
+	out := make([]teamDTO, 0, len(byTeam))
+	for team, players := range byTeam {
+		sort.Strings(players)
+		out = append(out, teamDTO{TeamID: team, Players: players})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TeamID < out[j].TeamID })
+	return out
+}
+
+func toResultDTO(r *domain.MatchOutcome) *resultDTO {
+	if r == nil {
+		return nil
+	}
+	dto := &resultDTO{Kind: r.Kind}
+	if r.WinLossDraw != nil {
+		dto.WinLossDraw = make([]playerOutcomeDTO, 0, len(r.WinLossDraw.Players))
+		for _, p := range r.WinLossDraw.Players {
+			dto.WinLossDraw = append(dto.WinLossDraw, playerOutcomeDTO{
+				PlayerID: p.PlayerID, TeamID: p.TeamID, Outcome: p.Outcome,
+				Score: p.Score, Stats: p.Stats,
+			})
+		}
+	}
+	if r.Placement != nil {
+		dto.Placement = make([]placementDTO, 0, len(r.Placement.Entries))
+		for _, e := range r.Placement.Entries {
+			dto.Placement = append(dto.Placement, placementDTO{
+				PlayerID: e.PlayerID, TeamID: e.TeamID, Placement: e.Placement,
+				SurvivedMs: e.SurvivedMs, Stats: e.Stats,
+			})
+		}
+	}
+	if r.Collective != nil {
+		players := make([]collectivePlayerDTO, 0, len(r.Collective.Players))
+		for _, p := range r.Collective.Players {
+			players = append(players, collectivePlayerDTO{PlayerID: p.PlayerID, TeamID: p.TeamID, Stats: p.Stats})
+		}
+		dto.Collective = &collectiveDTO{Outcome: r.Collective.Outcome, Players: players}
 	}
 	return dto
 }

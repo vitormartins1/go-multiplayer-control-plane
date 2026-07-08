@@ -219,6 +219,48 @@ export interface GameSession {
   origin?: "match" | "host_world";
   hostPlayerId?: string;
   roleSlots?: RoleSlot[];
+  // Detalhe rico (session spec 018): snapshot do modo (params crus do
+  // arquétipo), formação por time e resultado persistido (fechadas por result).
+  archetype?: string;
+  profileHash?: string;
+  modeParams?: Record<string, unknown>;
+  teams?: SessionTeam[];
+  result?: MatchResult;
+}
+
+// Um lado da formação registrada no match (rótulo canônico do session).
+export interface SessionTeam {
+  teamId: string;
+  players: string[];
+}
+
+// Outcome polimórfico por arquétipo (tagged union: só o kind tem payload).
+export interface MatchResult {
+  kind: "win_loss_draw" | "placement" | "collective";
+  winLossDraw?: PlayerOutcome[];
+  placement?: PlacementEntry[];
+  collective?: CollectiveResult;
+}
+
+export interface PlayerOutcome {
+  playerId: string;
+  teamId?: string;
+  outcome: "win" | "loss" | "draw";
+  score: number;
+  stats?: Record<string, number>;
+}
+
+export interface PlacementEntry {
+  playerId: string;
+  teamId?: string;
+  placement: number;
+  survivedMs: number;
+  stats?: Record<string, number>;
+}
+
+export interface CollectiveResult {
+  outcome: string;
+  players?: { playerId: string; teamId?: string; stats?: Record<string, number> }[];
 }
 
 export interface GameSessions {

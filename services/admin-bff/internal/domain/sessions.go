@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -38,6 +39,62 @@ type GameSession struct {
 	Origin       string     `json:"origin,omitempty"`
 	HostPlayerID string     `json:"hostPlayerId,omitempty"`
 	RoleSlots    []RoleSlot `json:"roleSlots,omitempty"`
+
+	// Detalhe rico (session spec 018): snapshot do modo (params crus — o front
+	// lê as chaves que conhece), formação por time e resultado persistido.
+	// Passthrough 1:1 do session-service; handles do resultado se resolvem no
+	// front via Players.
+	Archetype   string          `json:"archetype,omitempty"`
+	ProfileHash string          `json:"profileHash,omitempty"`
+	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
+	Teams       []SessionTeam   `json:"teams,omitempty"`
+	Result      *MatchResult    `json:"result,omitempty"`
+}
+
+// SessionTeam é um lado da formação registrada (rótulo canônico + jogadores).
+type SessionTeam struct {
+	TeamID  string   `json:"teamId"`
+	Players []string `json:"players"`
+}
+
+// MatchResult espelha o outcome polimórfico do session (tagged union): só o
+// kind reportado tem payload.
+type MatchResult struct {
+	Kind        string            `json:"kind"`
+	WinLossDraw []PlayerOutcome   `json:"winLossDraw,omitempty"`
+	Placement   []PlacementEntry  `json:"placement,omitempty"`
+	Collective  *CollectiveResult `json:"collective,omitempty"`
+}
+
+// PlayerOutcome é o desfecho de um jogador (queue_arena, win_loss_draw).
+type PlayerOutcome struct {
+	PlayerID string           `json:"playerId"`
+	TeamID   string           `json:"teamId,omitempty"`
+	Outcome  string           `json:"outcome"`
+	Score    int64            `json:"score"`
+	Stats    map[string]int64 `json:"stats,omitempty"`
+}
+
+// PlacementEntry é a colocação de um participante (battle_royale, placement).
+type PlacementEntry struct {
+	PlayerID   string           `json:"playerId"`
+	TeamID     string           `json:"teamId,omitempty"`
+	Placement  int              `json:"placement"`
+	SurvivedMs int64            `json:"survivedMs"`
+	Stats      map[string]int64 `json:"stats,omitempty"`
+}
+
+// CollectiveResult é o desfecho coletivo (coop_mission, collective).
+type CollectiveResult struct {
+	Outcome string             `json:"outcome"`
+	Players []CollectivePlayer `json:"players,omitempty"`
+}
+
+// CollectivePlayer é a participação individual num desfecho coletivo.
+type CollectivePlayer struct {
+	PlayerID string           `json:"playerId"`
+	TeamID   string           `json:"teamId,omitempty"`
+	Stats    map[string]int64 `json:"stats,omitempty"`
 }
 
 // RoleSlot é a ocupação de um papel num mundo host_world (spec 014).
