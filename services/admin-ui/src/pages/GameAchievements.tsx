@@ -66,7 +66,8 @@ function statSuggestions(modes: MultiplayerMode[]): Suggestions {
   const declaredBy = new Map<string, string[]>();
   for (const m of modes) {
     if (m.archetype === "host_world_dropin") continue; // não declara scoringStats
-    for (const s of m.params.scoringStats) {
+    // defensivo: respostas antigas do registry omitiam o array vazio (omitempty)
+    for (const s of m.params.scoringStats ?? []) {
       declaredBy.set(s, [...(declaredBy.get(s) ?? []), m.modeId]);
     }
   }
