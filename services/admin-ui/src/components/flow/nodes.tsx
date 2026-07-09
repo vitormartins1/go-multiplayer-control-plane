@@ -16,6 +16,7 @@ import {
   IconDeviceGamepad2,
   IconFilter,
   IconGitBranch,
+  IconPencil,
   IconPlus,
   IconTrash,
   IconTrophy,
@@ -76,7 +77,7 @@ export function SourceNode({ data }: NodeProps) {
 // --- Regras (camada 2). ---
 
 export function RuleNode({ data }: NodeProps) {
-  const { rule } = data as unknown as RuleNodeData;
+  const { rule, onEdit } = data as unknown as RuleNodeData;
   const global = rule.scope === "global";
   const pairs = Object.entries(rule.match);
   return (
@@ -84,9 +85,28 @@ export function RuleNode({ data }: NodeProps) {
       <div className="flow-card__header">
         {global ? <IconWorld size={12} /> : <IconGitBranch size={12} />}
         {global ? "Regra global" : "Regra do jogo"}
-        <Badge size="xs" variant="outline" color={global ? "gray" : "teal"} ml="auto">
-          {global ? "read-only" : "editável"}
-        </Badge>
+        {global || !onEdit ? (
+          <Badge size="xs" variant="outline" color={global ? "gray" : "teal"} ml="auto">
+            {global ? "read-only" : "editável"}
+          </Badge>
+        ) : (
+          // hover troca o badge pela ação (spec 050) — swap via CSS.
+          <span className="flow-editswap nodrag">
+            <Badge size="xs" variant="outline" color="teal" className="flow-editswap__badge">
+              editável
+            </Badge>
+            <UnstyledButton
+              className="flow-editswap__btn"
+              onClick={(e) => {
+                e.stopPropagation(); // não seleciona o nó
+                onEdit();
+              }}
+              aria-label="Editar regra"
+            >
+              <IconPencil size={10} /> editar
+            </UnstyledButton>
+          </span>
+        )}
       </div>
       <div className="flow-card__body">
         {pairs.length === 0 ? (
@@ -113,6 +133,7 @@ export function RuleNode({ data }: NodeProps) {
 // --- Rascunho da regra (spec 048): edição DENTRO do nó. ---
 
 export type RuleDraftData = {
+  mode: "create" | "edit"; // edição reusa o MESMO form (spec 050)
   rows: MatchRow[];
   keySuggestions: string[];
   valueSuggestions: (row: MatchRow) => string[];
@@ -125,6 +146,10 @@ export type RuleDraftData = {
   onSave: () => void;
   onCancel: () => void;
 };
+
+// inputs do form in-canvas com a identidade do card (spec 050) — sem o visual
+// "form Mantine" cru que destoava do canvas.
+const FLOW_INPUT = { input: "flow-input" };
 
 // OpChip: operador como chip clicável com popover compacto — economiza a
 // largura que um Select ocuparia dentro do nó.
@@ -161,12 +186,14 @@ function OpChip({ op, onChange }: { op: MatchOp; onChange: (op: MatchOp) => void
 export function RuleDraftNode({ data }: NodeProps) {
   const d = data as unknown as RuleDraftData;
   if (!d.rows) return null; // data ainda não injetada pela página
+  const editing = d.mode === "edit";
   return (
     <div className="flow-card flow-card--rule-game flow-card--editing">
       <div className="flow-card__header" style={{ cursor: "grab" }}>
-        <IconGitBranch size={12} /> Nova regra
+        {editing ? <IconPencil size={12} /> : <IconGitBranch size={12} />}
+        {editing ? "Editar regra" : "Nova regra"}
         <Badge size="xs" variant="outline" color="yellow" ml="auto">
-          rascunho
+          {editing ? "editando" : "rascunho"}
         </Badge>
       </div>
       <div className="flow-card__body nodrag">
@@ -175,6 +202,7 @@ export function RuleDraftNode({ data }: NodeProps) {
             <Autocomplete
               size="xs"
               placeholder="chave"
+              classNames={FLOW_INPUT}
               data={d.keySuggestions}
               value={row.key}
               onChange={(v) => d.onRow(i, { key: v })}
@@ -185,6 +213,7 @@ export function RuleDraftNode({ data }: NodeProps) {
             <Autocomplete
               size="xs"
               placeholder={row.op === "in" ? "a, b" : row.op === "eq" || row.op === "ne" ? "valor" : "nº"}
+              classNames={FLOW_INPUT}
               data={d.valueSuggestions(row)}
               value={row.value}
               onChange={(v) => d.onRow(i, { value: v })}
@@ -204,7 +233,7 @@ export function RuleDraftNode({ data }: NodeProps) {
           </Group>
         ))}
         <Group gap={4}>
-          <ActionIcon variant="default" size="xs" onClick={d.onAddRow} aria-label="Adicionar condição" title="+ condição">
+          <ActionIcon variant="subtle" color="gray" size="xs" onClick={d.onAddRow} aria-label="Adicionar condição" title="+ condição">
             <IconPlus size={12} />
           </ActionIcon>
           <Text size="xs" c="dimmed">
@@ -222,7 +251,13 @@ export function RuleDraftNode({ data }: NodeProps) {
           <Button size="compact-xs" variant="subtle" color="gray" leftSection={<IconX size={12} />} onClick={d.onCancel}>
             Cancelar
           </Button>
-          <Button size="compact-xs" leftSection={<IconCheck size={12} />} loading={d.saving} onClick={d.onSave}>
+          <Button
+            size="compact-xs"
+            variant="light"
+            leftSection={<IconCheck size={12} />}
+            loading={d.saving}
+            onClick={d.onSave}
+          >
             Salvar regra
           </Button>
         </Group>
@@ -288,6 +323,7 @@ export function EventTypeDraftNode({ data }: NodeProps) {
         <Autocomplete
           size="xs"
           placeholder="nome_do_type"
+          classNames={FLOW_INPUT}
           data={d.suggestions}
           value={d.value}
           onChange={d.onChange}

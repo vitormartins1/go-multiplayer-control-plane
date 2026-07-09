@@ -1,6 +1,6 @@
 # Spec 050 — Polimento do nó de edição + edição de regra in-canvas
 
-> Status: **draft** (aguardando aprovação)
+> Status: **implementada** (aprovada em 2026-07-09)
 > Fatia: UI substancial (edição depende da spec achievements/016 — PUT).
 > Origem: feedback do Vitor testando a 049 (2026-07-09).
 

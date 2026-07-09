@@ -1,6 +1,6 @@
 # Spec 016 — Atualizar event rule do jogo (PUT)
 
-> Status: **draft** (aguardando aprovação)
+> Status: **implementada** (aprovada em 2026-07-09)
 > Fatia: pequena/aditiva — espelha o create existente (mesma validação, mesmo
 > DTO); sem decisão técnica nova além de PUT-substitui-tudo.
 
@@ -32,8 +32,12 @@ selecionado no canvas e qualquer referência futura).
 
 ## Critérios de aceite
 
-- [ ] PUT em regra do jogo altera match/eventTypes e mantém id (200).
-- [ ] PUT em regra global ou id de outro jogo → 404; body inválido → 400.
-- [ ] Testes de service+transport espelhando os do create; `-race` verde.
-- [ ] E2E: editar regra via API e confirmar que o consumer avalia a versão
-      nova (SQS/LocalStack).
+- [x] PUT em regra do jogo altera match/eventTypes e mantém id (200).
+- [x] PUT em regra global ou id de outro jogo → 404; body inválido → 400
+      (inclui archetype no payload — decodeStrict rejeita).
+- [x] Testes de service+transport espelhando os do create; `-race` verde
+      (294 no total).
+- [x] E2E: regra `stat.objectives ≥ 100` editada pra `≥ 40` via PUT no BFF;
+      envelope coletivo com objectives=50 via SQS destravou o achievement
+      de teste (só casa na versão editada); PUT em global → 404; dados de
+      teste removidos.
