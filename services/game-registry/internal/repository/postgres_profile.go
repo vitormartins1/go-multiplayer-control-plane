@@ -7,7 +7,22 @@ import (
 	"sort"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/jsonparams"
 )
+
+// hostWorldDropInKnownKeys é o vocabulário tipado do arquétipo (tags JSON de
+// storedHostWorldDropIn) — mesma lista do transport (DTO diferente, mesmas
+// chaves); qualquer chave fora daqui é preservada crua via jsonparams
+// (MultiplayerProfile.ExtraParams, follow-up #14).
+var hostWorldDropInKnownKeys = map[string]struct{}{
+	"enabledRoles":      {},
+	"coopSlots":         {},
+	"invaderSlots":      {},
+	"levelRangeEnabled": {},
+	"weaponTierEnabled": {},
+	"passwordEnabled":   {},
+	"invasionEnabled":   {},
+}
 
 // Persistência dos modos de multiplayer (ADR-0023 + ADR-0024, specs 006/009):
 // coluna JSONB multiplayer_profile na tabela games. Formato v2 (spec 009):
@@ -212,7 +227,7 @@ func encodeProfile(p *domain.MultiplayerProfile) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		sp.Params = params
+		sp.Params = jsonparams.Merge(params, p.ExtraParams)
 	case domain.ArchetypeBattleRoyale:
 		if p.BattleRoyale == nil {
 			return nil, fmt.Errorf("perfil %q sem params", p.Archetype)
@@ -298,6 +313,7 @@ func decodeProfile(raw []byte) (*domain.MultiplayerProfile, error) {
 			PasswordEnabled:   sh.PasswordEnabled,
 			InvasionEnabled:   sh.InvasionEnabled,
 		}
+		p.ExtraParams = jsonparams.Extract(sp.Params, hostWorldDropInKnownKeys)
 	case domain.ArchetypeBattleRoyale:
 		var sb storedBattleRoyale
 		if len(sp.Params) > 0 {

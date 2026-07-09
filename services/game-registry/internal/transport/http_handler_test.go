@@ -384,6 +384,49 @@ func TestSetProfile_BodyInvalido_400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
+// hostWorldWithExtra simula o que o service devolveria depois de persistir um
+// perfil host_world_dropin com uma chave fora do vocabulário tipado (follow-up
+// #14: ExtraParams preservado, não descartado).
+func hostWorldWithExtra() *domain.MultiplayerProfile {
+	return &domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeHostWorldDropIn, Topology: domain.TopologyDedicated,
+		HostWorldDropIn: &domain.HostWorldDropInParams{
+			EnabledRoles: []string{"coop"}, CoopSlots: 2, InvasionEnabled: false,
+		},
+		ExtraParams: map[string]string{"bossPowerScalingPerPhantom": "1.2"},
+	}
+}
+
+const validHostWorldExtraProfileBody = `{"archetype":"host_world_dropin","topology":"dedicated","params":{"enabledRoles":["coop"],"coopSlots":2,"bossPowerScalingPerPhantom":1.2}}`
+
+func TestSetProfile_HostWorldDropIn_PreservaChaveExtra(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, "id-1", mock.MatchedBy(func(p domain.MultiplayerProfile) bool {
+		return p.Archetype == domain.ArchetypeHostWorldDropIn &&
+			p.HostWorldDropIn != nil && p.HostWorldDropIn.CoopSlots == 2 &&
+			p.ExtraParams["bossPowerScalingPerPhantom"] == "1.2"
+	})).Return(hostWorldWithExtra(), nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/multiplayer-profile", validHostWorldExtraProfileBody)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	params, ok := resp["params"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(2), params["coopSlots"])
+	assert.Equal(t, 1.2, params["bossPowerScalingPerPhantom"])
+	svc.AssertExpectations(t)
+}
+
+func TestGetProfile_HostWorldDropIn_ExpoeChaveExtra(t *testing.T) {
+	svc := new(mockService)
+	svc.On("GetMultiplayerProfile", mock.Anything, "id-1").Return(hostWorldWithExtra(), nil)
+	rr := do(newServer(svc), http.MethodGet, "/games/id-1/multiplayer-profile", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"bossPowerScalingPerPhantom":1.2`)
+}
+
 func TestSetProfile_ArchetypeNaoSuportado_400(t *testing.T) {
 	svc := new(mockService)
 	svc.On("SetMultiplayerProfile", mock.Anything, mock.Anything, mock.Anything).
