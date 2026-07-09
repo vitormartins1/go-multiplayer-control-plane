@@ -123,6 +123,12 @@ type Session struct {
 	HostSoulLevel int
 	WeaponTier    int
 
+	// PasswordHash é o hash da senha do mundo (follow-up #1, spec 020): permite
+	// jogar com amigos ignorando a faixa. Vazio = mundo sem senha. A senha em
+	// texto puro nunca é persistida (só passa por WorldAttributes.Password na
+	// chamada de OpenWorld, já hasheada antes de chegar aqui).
+	PasswordHash string
+
 	State       SessionState
 	OpenedAt    time.Time
 	ClosedAt    time.Time // zero enquanto OPEN
@@ -142,6 +148,10 @@ type Session struct {
 type WorldAttributes struct {
 	SoulLevel  int
 	WeaponTier int
+	// Password é a senha em texto puro informada pelo host (follow-up #1, spec
+	// 020); vazia = sem senha. Só usada para computar PasswordHash no OpenWorld
+	// — não sobrevive além da chamada.
+	Password string
 }
 
 // InvadableWorld é a fotografia de um mundo aberto com vaga de invasor (spec
@@ -152,6 +162,9 @@ type InvadableWorld struct {
 	HostSoulLevel    int
 	WeaponTier       int
 	FreeInvaderSlots int
+	// PasswordHash espelha Session.PasswordHash (spec 020) — o matchmaking
+	// compara contra a senha que o invasor informou (matchmaking/011).
+	PasswordHash string
 }
 
 // Server é um game server do pool (mock no MVP; Agones no deploy — ADR-0011).

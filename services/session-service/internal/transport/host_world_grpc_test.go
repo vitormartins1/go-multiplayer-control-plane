@@ -165,6 +165,37 @@ func TestListInvadableWorlds_SemMundos_ListaVazia(t *testing.T) {
 	assert.Empty(t, list.GetWorlds())
 }
 
+// Senha (follow-up #1, spec 020): abrir com senha → o hash aparece no
+// diretório de invadíveis; sem senha, o hash vem vazio.
+func TestOpenWorld_ComSenha_HashApareceNoDiretorio(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	ctx := context.Background()
+
+	open, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw", Password: "abrepalavra"})
+	require.NoError(t, err)
+
+	list, err := client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	require.Len(t, list.GetWorlds(), 1)
+	w := list.GetWorlds()[0]
+	assert.Equal(t, open.GetSessionId(), w.GetSessionId())
+	assert.NotEmpty(t, w.GetPasswordHash())
+	assert.Equal(t, domain.HashWorldPassword("abrepalavra"), w.GetPasswordHash())
+}
+
+func TestOpenWorld_SemSenha_HashVazioNoDiretorio(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	ctx := context.Background()
+
+	_, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
+	require.NoError(t, err)
+
+	list, err := client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	require.Len(t, list.GetWorlds(), 1)
+	assert.Empty(t, list.GetWorlds()[0].GetPasswordHash())
+}
+
 // Eventos de participação (spec 013): LEFT libera o slot de invasor (o mundo
 // reaparece no diretório); HOST_KILLED encerra o mundo; evento inválido → 400.
 func TestReportParticipationEvent_FluxoDeSlotEEncerramento(t *testing.T) {

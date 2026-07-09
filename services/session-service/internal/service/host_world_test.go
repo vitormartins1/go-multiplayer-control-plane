@@ -248,6 +248,34 @@ func TestOpenWorld_SemAtributos_MundoComZeros(t *testing.T) {
 	assert.Zero(t, sess.WeaponTier)
 }
 
+func TestOpenWorld_ComSenha_GuardaHash(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
+	require.NoError(t, err)
+	assert.Equal(t, domain.HashWorldPassword("abrepalavra"), sess.PasswordHash)
+	assert.NotEmpty(t, sess.PasswordHash)
+}
+
+func TestOpenWorld_SemSenha_HashVazio(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	require.NoError(t, err)
+	assert.Empty(t, sess.PasswordHash)
+}
+
+func TestListInvadableWorlds_RefleteHashDaSenha(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	ctx := context.Background()
+	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
+	require.NoError(t, err)
+
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	require.NoError(t, err)
+	require.Len(t, worlds, 1)
+	assert.Equal(t, w.PasswordHash, worlds[0].PasswordHash)
+	assert.Equal(t, domain.HashWorldPassword("abrepalavra"), worlds[0].PasswordHash)
+}
+
 func TestListInvadableWorlds_SoMundosAbertosComInvasorLivre(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
 	ctx := context.Background()

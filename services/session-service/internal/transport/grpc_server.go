@@ -120,7 +120,7 @@ func (s *Server) GetSessionConfig(ctx context.Context, req *pb.GetSessionConfigR
 
 // OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011).
 func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.OpenWorldResponse, error) {
-	attrs := domain.WorldAttributes{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
+	attrs := domain.WorldAttributes{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier()), Password: req.GetPassword()}
 	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId(), normalizeMode(req.GetModeId()), attrs)
 	if err != nil {
 		return nil, worldError(err, "open world")
@@ -158,6 +158,7 @@ func (s *Server) ListInvadableWorlds(ctx context.Context, req *pb.ListInvadableW
 			HostSoulLevel:    int32(w.HostSoulLevel),
 			WeaponTier:       int32(w.WeaponTier),
 			FreeInvaderSlots: int32(w.FreeInvaderSlots),
+			PasswordHash:     w.PasswordHash,
 		}
 	}
 	return &pb.ListInvadableWorldsResponse{Worlds: pbWorlds}, nil

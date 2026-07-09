@@ -77,6 +77,7 @@ message OpenWorldRequest {
   int32 host_soul_level = 3;  // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
   int32 weapon_tier = 4;      // tier de arma do host (spec 012); 0 = sem faixa
   string mode_id = 5;         // modo do jogo (ADR-0024, spec 017); vazio = "default"
+  string password = 6;        // senha do mundo (follow-up #1, spec 020); vazio = sem senha
 }
 
 message OpenWorldResponse {
@@ -126,6 +127,7 @@ message InvadableWorld {
   int32 host_soul_level = 2;
   int32 weapon_tier = 3;
   int32 free_invader_slots = 4;
+  string password_hash = 5; // hash da senha do mundo (follow-up #1, spec 020); vazio = sem senha
 }
 
 // spec 013 — evento de participação (host_world_dropin). O server do mundo o
