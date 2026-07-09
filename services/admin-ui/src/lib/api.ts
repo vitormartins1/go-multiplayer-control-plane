@@ -536,6 +536,12 @@ export const api = {
     getJSON<EventRule[]>(`/api/games/${encodeURIComponent(gameId)}/event-rules`, signal),
   createEventRule: (gameId: string, r: NewEventRule) =>
     postJSON<EventRule>(`/api/games/${encodeURIComponent(gameId)}/event-rules`, r),
+  // archetype não é editável (spec achievements/016) — o PUT leva só o conteúdo.
+  updateEventRule: (gameId: string, id: string, r: Omit<NewEventRule, "archetype">) =>
+    putJSON<EventRule>(
+      `/api/games/${encodeURIComponent(gameId)}/event-rules/${encodeURIComponent(id)}`,
+      r,
+    ),
   deleteEventRule: (gameId: string, id: string) =>
     del(`/api/games/${encodeURIComponent(gameId)}/event-rules/${encodeURIComponent(id)}`),
   playerData: (gameId: string, playerID: string, signal?: AbortSignal) =>

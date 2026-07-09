@@ -84,10 +84,19 @@
   color: #ffa94d;
   background: rgba(255, 169, 77, 0.08);
 }
+/* fontes com largura FIXA (spec 050): warning/conteúdo não dita o tamanho —
+   todos os cards da coluna 1 iguais. */
+.flow-card--fact,
+.flow-card--stat {
+  width: 190px;
+  min-width: 190px;
+  max-width: 190px;
+}
 .flow-card__warn {
   color: #f85149;
   align-items: center;
-  font-size: 10px;
+  font-size: 9px;
+  line-height: 1.25;
 }
 /* consumers da vista de pipeline (spec 046) */
 .flow-card--consumer-ach .flow-card__header {
@@ -151,6 +160,53 @@
   right: -13px;
   top: calc(50% - 13px);
   z-index: 5;
+}
+
+/* --- form in-canvas com identidade do card (spec 050) --- */
+.flow-wrap .flow-input {
+  background: #131a24;
+  border: 1px solid #2a3340;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  min-height: 24px;
+  height: 24px;
+}
+.flow-wrap .flow-input:focus,
+.flow-wrap .flow-input:focus-within {
+  border-color: #4dabf7;
+}
+.flow-wrap .flow-input::placeholder {
+  color: #55606e;
+}
+/* hover troca o badge "editável" pela ação editar (regras do jogo) */
+.flow-editswap {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+.flow-editswap__btn {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border: 1px solid rgba(32, 201, 151, 0.55);
+  border-radius: 10px;
+  color: #20c997;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.flow-editswap__btn:hover {
+  background: rgba(32, 201, 151, 0.12);
+}
+.flow-card:hover .flow-editswap__badge {
+  display: none;
+}
+.flow-card:hover .flow-editswap__btn {
+  display: inline-flex;
 }
 
 /* --- agrupamento da coluna de fontes (spec 049) --- */

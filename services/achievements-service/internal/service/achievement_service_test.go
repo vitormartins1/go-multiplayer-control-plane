@@ -115,7 +115,66 @@ func (fakeEventRules) ListEffective(context.Context, string) ([]domain.EventRule
 	return nil, nil
 }
 func (fakeEventRules) CreateRule(context.Context, *domain.EventRule) error { return nil }
+func (fakeEventRules) UpdateRule(context.Context, *domain.EventRule) error { return nil }
 func (fakeEventRules) DeleteRule(context.Context, string, string) error   { return nil }
+
+// spyEventRules estende o fake capturando o que chega no UpdateRule (spec
+// 016) — valida a orquestração do service (id/gameID do path, validação de
+// conteúdo ANTES de tocar o repo).
+type spyEventRules struct {
+	fakeEventRules
+	updateErr error
+	gotUpdate *domain.EventRule
+}
+
+func (s *spyEventRules) UpdateRule(_ context.Context, r *domain.EventRule) error {
+	s.gotUpdate = r
+	if s.updateErr != nil {
+		return s.updateErr
+	}
+	r.Archetype = "coop_mission" // RETURNING do repo real preenche
+	return nil
+}
+
+func TestUpdateEventRule_SubstituiConteudoPreservandoID(t *testing.T) {
+	rules := &spyEventRules{}
+	svc := New(new(mockRepo), rules)
+
+	got, err := svc.UpdateEventRule(context.Background(), gameID, "r7", domain.EventRule{
+		Match:      map[string]domain.MatchCond{"stat.revives": {Op: domain.OpGte, Value: float64(6)}},
+		EventTypes: []string{"mestre_curativo"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "r7", got.ID)
+	require.NotNil(t, got.GameID)
+	assert.Equal(t, gameID, *got.GameID)
+	assert.Equal(t, "coop_mission", got.Archetype, "archetype vem do banco, não do payload")
+}
+
+func TestUpdateEventRule_ConteudoInvalido_NaoTocaRepo(t *testing.T) {
+	rules := &spyEventRules{}
+	svc := New(new(mockRepo), rules)
+
+	_, err := svc.UpdateEventRule(context.Background(), gameID, "r7", domain.EventRule{
+		Match:      map[string]domain.MatchCond{"placement": {Op: "entre", Value: float64(1)}}, // op desconhecido
+		EventTypes: []string{"x"},
+	})
+	require.ErrorIs(t, err, domain.ErrInvalidEventRule)
+	assert.Nil(t, rules.gotUpdate, "validação estrita acontece antes do repo")
+
+	_, err = svc.UpdateEventRule(context.Background(), gameID, "r7", domain.EventRule{EventTypes: nil})
+	require.ErrorIs(t, err, domain.ErrInvalidEventRule)
+}
+
+func TestUpdateEventRule_GlobalOuInexistente_PropagaNotFound(t *testing.T) {
+	rules := &spyEventRules{updateErr: domain.ErrEventRuleNotFound}
+	svc := New(new(mockRepo), rules)
+
+	_, err := svc.UpdateEventRule(context.Background(), gameID, "global-1", domain.EventRule{
+		EventTypes: []string{"x"},
+	})
+	require.ErrorIs(t, err, domain.ErrEventRuleNotFound)
+}
 
 // ApplyMatchResult traduz o resultado bruto em eventos: match_played p/ todos,
 // match_won só p/ quem venceu. A idempotência é do repo (tx + processed_matches);

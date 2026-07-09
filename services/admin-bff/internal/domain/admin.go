@@ -234,6 +234,10 @@ type AchievementsReader interface {
 	GameEventRules(ctx context.Context, gameID string) ([]EventRule, error)
 	// CreateEventRule cria uma regra escopada ao jogo. Validação -> UpstreamError.
 	CreateEventRule(ctx context.Context, gameID string, r EventRule) (*EventRule, error)
+	// UpdateEventRule substitui match/eventTypes de uma regra do jogo (spec
+	// 016 do achievements-service) — archetype não é editável. 400/404 ->
+	// UpstreamError.
+	UpdateEventRule(ctx context.Context, gameID, id string, r EventRule) (*EventRule, error)
 	// DeleteEventRule remove uma regra do jogo (nunca uma global — o
 	// achievements-service trata como 404 nos dois casos). 404 -> UpstreamError.
 	DeleteEventRule(ctx context.Context, gameID, id string) error

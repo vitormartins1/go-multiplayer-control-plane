@@ -99,6 +99,7 @@ func (seedRulesRepo) ListEffective(context.Context, string) ([]domain.EventRule,
 	return nil, nil
 }
 func (seedRulesRepo) CreateRule(context.Context, *domain.EventRule) error { return nil }
+func (seedRulesRepo) UpdateRule(context.Context, *domain.EventRule) error { return nil }
 func (seedRulesRepo) DeleteRule(context.Context, string, string) error   { return nil }
 
 func newHandler(t *testing.T) (*dispatchRepo, func(body []byte) (bool, error)) {

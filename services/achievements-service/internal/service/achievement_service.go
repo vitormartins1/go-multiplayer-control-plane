@@ -343,6 +343,13 @@ func validateEventRule(r *domain.EventRule) error {
 	if !validArchetypes[r.Archetype] {
 		return domain.ErrInvalidEventRule
 	}
+	return validateEventRuleContent(r)
+}
+
+// validateEventRuleContent valida só match+eventTypes — a parte que o UPDATE
+// (spec 016) compartilha com o create (archetype não é editável, então o
+// update não recebe/valida arquétipo).
+func validateEventRuleContent(r *domain.EventRule) error {
 	if len(r.EventTypes) == 0 {
 		return domain.ErrInvalidEventRule
 	}
@@ -381,6 +388,21 @@ func (s *Service) CreateEventRule(ctx context.Context, gameID string, r domain.E
 	r.GameID = &gameID
 	if err := s.rules.CreateRule(ctx, &r); err != nil {
 		return nil, fmt.Errorf("achievements service: create event rule: %w", err)
+	}
+	return &r, nil
+}
+
+// UpdateEventRule substitui match/eventTypes de uma regra do jogo (spec 016).
+// GameID e ID vêm do path (nunca do payload); archetype é preservado pelo
+// repositório (RETURNING) — não é editável.
+func (s *Service) UpdateEventRule(ctx context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error) {
+	if err := validateEventRuleContent(&r); err != nil {
+		return nil, err
+	}
+	r.ID = id
+	r.GameID = &gameID
+	if err := s.rules.UpdateRule(ctx, &r); err != nil {
+		return nil, fmt.Errorf("achievements service: update event rule: %w", err)
 	}
 	return &r, nil
 }

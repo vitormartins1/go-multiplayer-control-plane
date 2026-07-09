@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -65,6 +66,27 @@ func (r *PostgresEventRuleRepository) CreateRule(ctx context.Context, rule *doma
 	           VALUES ($1, $2, $3, $4) RETURNING id`
 	if err := r.pool.QueryRow(ctx, q, rule.GameID, rule.Archetype, matchJSON, rule.EventTypes).Scan(&rule.ID); err != nil {
 		return fmt.Errorf("event rule repository: create rule: %w", err)
+	}
+	return nil
+}
+
+// UpdateRule substitui match/event_types da regra (rule.ID, rule.GameID) —
+// nunca uma global (WHERE game_id = $ não casa NULL, mesma proteção do
+// delete). RETURNING preenche o archetype persistido (não editável) pro DTO
+// da resposta sair completo sem um SELECT extra.
+func (r *PostgresEventRuleRepository) UpdateRule(ctx context.Context, rule *domain.EventRule) error {
+	matchJSON, err := json.Marshal(rule.Match)
+	if err != nil {
+		return fmt.Errorf("event rule repository: marshal match: %w", err)
+	}
+	const q = `UPDATE event_rules SET match = $1, event_types = $2
+	           WHERE id = $3 AND game_id = $4 RETURNING archetype`
+	err = r.pool.QueryRow(ctx, q, matchJSON, rule.EventTypes, rule.ID, rule.GameID).Scan(&rule.Archetype)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrEventRuleNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("event rule repository: update rule: %w", err)
 	}
 	return nil
 }

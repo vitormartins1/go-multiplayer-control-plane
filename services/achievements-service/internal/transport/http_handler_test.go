@@ -93,9 +93,12 @@ func (f *fakeService) ProgressForAchievement(_ context.Context, gameID, _ string
 type fakeEventRuleService struct {
 	rules       []domain.EventRule
 	createErr   error
+	updateErr   error
 	deleteErr   error
 	gotGameID   string
 	gotCreate   domain.EventRule
+	gotUpdateID string
+	gotUpdate   domain.EventRule
 	gotDeleteID string
 }
 
@@ -111,6 +114,18 @@ func (f *fakeEventRuleService) CreateEventRule(_ context.Context, gameID string,
 	}
 	gid := gameID
 	r.GameID = &gid
+	return &r, nil
+}
+
+func (f *fakeEventRuleService) UpdateEventRule(_ context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error) {
+	f.gotGameID, f.gotUpdateID, f.gotUpdate = gameID, id, r
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	gid := gameID
+	r.ID = id
+	r.GameID = &gid
+	r.Archetype = "coop_mission" // o repo preenche via RETURNING; o fake fixa
 	return &r, nil
 }
 
@@ -445,6 +460,48 @@ func TestAdminCreateEventRule_Invalido_400(t *testing.T) {
 		`{"archetype":"arquetipo_invalido","match":{},"eventTypes":["x"]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminUpdateEventRule_200(t *testing.T) {
+	rules := &fakeEventRuleService{}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPut, "/admin/games/game-9/event-rules/r7", "", "",
+		`{"match":{"stat.revives":{"op":"gte","value":6}},"eventTypes":["mestre_curativo"]}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "game-9", rules.gotGameID)
+	assert.Equal(t, "r7", rules.gotUpdateID)
+	assert.Equal(t, []string{"mestre_curativo"}, rules.gotUpdate.EventTypes)
+
+	var body eventRuleDTO
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "r7", body.ID, "id preservado")
+	assert.Equal(t, "game", body.Scope)
+}
+
+func TestAdminUpdateEventRule_ArchetypeNoPayload_400(t *testing.T) {
+	rules := &fakeEventRuleService{}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	// archetype não é editável — decodeStrict rejeita o campo desconhecido.
+	resp := do(t, srv, http.MethodPut, "/admin/games/g/event-rules/r7", "", "",
+		`{"archetype":"coop_mission","match":{},"eventTypes":["x"]}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminUpdateEventRule_GlobalOuInexistente_404(t *testing.T) {
+	rules := &fakeEventRuleService{updateErr: domain.ErrEventRuleNotFound}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPut, "/admin/games/g/event-rules/global-1", "", "",
+		`{"match":{},"eventTypes":["x"]}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "global ou inexistente: mesma resposta")
 }
 
 func TestAdminDeleteEventRule_204(t *testing.T) {

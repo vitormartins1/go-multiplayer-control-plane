@@ -16,7 +16,11 @@ export type SourceNodeData = {
   drift?: boolean; // stat usada por achievement mas não declarada em nenhum modo
   conds: string[]; // condições em que aparece (painel)
 };
-export type RuleNodeData = { rule: EventRule; redundantTypes?: string[] };
+export type RuleNodeData = {
+  rule: EventRule;
+  redundantTypes?: string[];
+  onEdit?: () => void; // só regras do jogo, fora de criação/edição (spec 050)
+};
 export type EventTypeNodeData = { eventType: string; listeners: number };
 export type AchievementNodeData = {
   name: string;
@@ -47,15 +51,22 @@ export type DraftGraphInput = {
   linkedTypes: string[]; // event types existentes ligados
   newTypes: Array<{ id: string; value: string }>; // ghosts editáveis
   rows: number; // nº de linhas no editor (estimar altura)
+  // Edição (spec 050): id da regra em edição — o nó DELA vira o form, na
+  // posição original (não nasce nó extra), e o match/types persistidos são
+  // substituídos pelas edges ao vivo do form. undefined = criação.
+  editingRuleID?: string;
 };
 
+// Alturas ESTIMADAS pro layout (os nós renderizam depois do posicionamento).
+// CALIBRADAS com offsetHeight real via Playwright (spec 050 T5) — se os cards
+// mudarem de conteúdo/CSS, remedir, senão os gaps da coluna desandam.
 const SIZE = {
-  source: { h: 50 },
-  eventType: { h: 62 },
-  achievement: { h: 82 },
+  source: { h: 64 }, // drift +15 (linha do warning)
+  eventType: { h: 64 },
+  achievement: { h: 86 },
 };
-const ruleHeight = (r: EventRule) => 46 + 22 * Math.max(1, Object.entries(r.match).length) + 32;
-const draftHeight = (rows: number) => 46 + 40 * Math.max(1, rows) + 78;
+const ruleHeight = (r: EventRule) => 69 + 22 * Math.max(1, Object.entries(r.match).length);
+const draftHeight = (rows: number) => 98 + 33 * Math.max(1, rows);
 
 const COL_X = [0, 300, 640, 920];
 const GAP_Y = 18;
@@ -107,13 +118,22 @@ export function buildRulesGraph(
   const draft = opts?.draft;
 
   // --- Camada 2: regras (rascunho primeiro — fica no topo, visível). ---
+  // formNodeID: o nó-formulário ativo — o rascunho (criação) OU o nó da
+  // própria regra em edição (spec 050).
+  const formNodeID = draft ? (draft.editingRuleID ? `r:${draft.editingRuleID}` : DRAFT_RULE_ID) : null;
+  const editing = (r: EventRule) => draft?.editingRuleID === r.id;
   const ruleMetas: Meta[] = [];
-  if (draft) {
+  if (draft && !draft.editingRuleID) {
     ruleMetas.push({ id: DRAFT_RULE_ID, type: "ruleDraft", data: {}, h: draftHeight(draft.rows) });
   }
   const rank = (r: EventRule) => (r.scope === "global" ? 0 : 1);
   for (const r of [...rules].sort((a, b) => rank(a) - rank(b))) {
-    ruleMetas.push({ id: ruleId(r), type: "rule", data: { rule: r } satisfies RuleNodeData, h: ruleHeight(r) });
+    if (editing(r)) {
+      // vira o form NO LUGAR — mesma posição relativa na coluna.
+      ruleMetas.push({ id: ruleId(r), type: "ruleDraft", data: {}, h: draftHeight(draft!.rows) });
+    } else {
+      ruleMetas.push({ id: ruleId(r), type: "rule", data: { rule: r } satisfies RuleNodeData, h: ruleHeight(r) });
+    }
   }
   const ruleIdx = new Map(ruleMetas.map((m, i) => [m.id, i]));
 
@@ -130,6 +150,7 @@ export function buildRulesGraph(
   };
   const srcRuleEdges: Array<{ key: string; ruleID: string; label: string }> = [];
   for (const r of rules) {
+    if (editing(r)) continue; // o match persistido é substituído pelo do form
     for (const [key, v] of Object.entries(r.match)) {
       const s = touchSource(key);
       const label = condShort(v as MatchValue);
@@ -141,8 +162,8 @@ export function buildRulesGraph(
   if (draft) {
     for (const c of draft.conds) {
       const s = touchSource(c.key);
-      s.rules.push(ruleIdx.get(DRAFT_RULE_ID)!);
-      srcRuleEdges.push({ key: c.key, ruleID: DRAFT_RULE_ID, label: c.label });
+      s.rules.push(ruleIdx.get(formNodeID!)!);
+      srcRuleEdges.push({ key: c.key, ruleID: formNodeID!, label: c.label });
     }
   }
   // stats declaradas/drift entram como fonte mesmo sem uso em regra (toggle
@@ -167,7 +188,7 @@ export function buildRulesGraph(
     id: srcId(key),
     type: "source",
     data: { sourceKey: key, kind: s.kind, drift: s.drift || undefined, conds: s.conds } satisfies SourceNodeData,
-    h: SIZE.source.h + (s.drift ? 16 : 0),
+    h: SIZE.source.h + (s.drift ? 15 : 0),
   }));
   const sourceNeighbor = new Map([...sources.entries()].map(([key, s]) => [srcId(key), s.rules]));
   // Agrupamento fixo por kind (spec 049): facts → mode → stats, com rótulo de
@@ -196,10 +217,11 @@ export function buildRulesGraph(
     typeSources.set(et, [...(typeSources.get(et) ?? []), ruleI]);
   };
   for (const r of rules) {
+    if (editing(r)) continue; // os types persistidos são substituídos pelos do form
     for (const et of r.eventTypes) touchType(et, ruleIdx.get(ruleId(r))!);
   }
   if (draft) {
-    for (const et of draft.linkedTypes) touchType(et, ruleIdx.get(DRAFT_RULE_ID)!);
+    for (const et of draft.linkedTypes) touchType(et, ruleIdx.get(formNodeID!)!);
   }
   const listeners = new Map<string, CatalogAchievement[]>();
   for (const a of catalog) {
@@ -216,13 +238,16 @@ export function buildRulesGraph(
   // ghosts de type NOVO (editáveis) — data injetada pela página.
   if (draft) {
     for (const g of draft.newTypes) {
-      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: 66 });
+      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: 73 });
     }
   }
-  typeMetas = barycenter(
-    typeMetas,
-    new Map([...typeSources.entries()].map(([et, idx]) => [typeId(et), idx])),
-  );
+  const typeNeighbor = new Map([...typeSources.entries()].map(([et, idx]) => [typeId(et), idx]));
+  // Ghosts entram no baricentro como vizinhos do form (spec 050) — sem isso
+  // caem no MAX_SAFE_INTEGER e afundam pro fim da coluna, longe do rascunho.
+  if (draft) {
+    for (const g of draft.newTypes) typeNeighbor.set(draftTypeId(g.id), [ruleIdx.get(formNodeID!)!]);
+  }
+  typeMetas = barycenter(typeMetas, typeNeighbor);
   const typeIdx = new Map(typeMetas.map((m, i) => [m.id, i]));
 
   // --- Camada 4: achievements (por evento + por métrica). ---
@@ -258,7 +283,7 @@ export function buildRulesGraph(
   const colHeights = columns.map((c) => stackColumn(c, yByID));
   const maxH = Math.max(...colHeights, 0);
 
-  const isGhost = (id: string) => id === DRAFT_RULE_ID || id.startsWith("t:__new__:");
+  const isGhost = (id: string) => id === formNodeID || id.startsWith("t:__new__:");
 
   const nodes: Node[] = columns.flatMap((col, li) =>
     col.map((m) => ({
@@ -293,7 +318,7 @@ export function buildRulesGraph(
     for (const ri of idx) push(ruleMetas[ri].id, typeId(et));
   }
   if (draft) {
-    for (const g of draft.newTypes) push(DRAFT_RULE_ID, draftTypeId(g.id));
+    for (const g of draft.newTypes) push(formNodeID!, draftTypeId(g.id));
   }
   for (const [et, achs] of listeners) {
     for (const a of achs) push(typeId(et), achId(a.id));

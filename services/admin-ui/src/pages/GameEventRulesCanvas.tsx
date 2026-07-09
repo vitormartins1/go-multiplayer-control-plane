@@ -42,6 +42,8 @@ import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import {
   buildMatchValue,
   condLabel,
+  condOp,
+  condRaw,
   condShort,
   EMPTY_ROW,
   type MatchRow,
@@ -50,7 +52,6 @@ import {
 import {
   buildRulesGraph,
   pathHighlight,
-  DRAFT_RULE_ID,
   STAT_PREFIX,
   type AchievementNodeData,
   type DraftGraphInput,
@@ -78,8 +79,11 @@ function modeStats(m: MultiplayerMode): string[] {
   return "scoringStats" in m.params ? m.params.scoringStats : [];
 }
 
-// Estado do rascunho em edição IN-CANVAS (spec 048).
+// Estado do form in-canvas (spec 048; edição na 050). editingRuleID null =
+// criação (nó rascunho novo); setado = o nó da própria regra vira o form —
+// um único estado garante criação e edição mutuamente exclusivas.
 type DraftState = {
+  editingRuleID: string | null;
   rows: MatchRow[];
   linked: string[]; // event types existentes ligados
   news: Array<{ id: string; value: string }>; // types novos, editáveis inline
@@ -183,7 +187,13 @@ export function GameEventRulesCanvas({
       const v = buildMatchValue(row.op, row.value);
       if (v !== null) conds.push({ key: row.key.trim(), label: condShort(v) });
     }
-    return { conds, linkedTypes: draft.linked, newTypes: draft.news, rows: draft.rows.length };
+    return {
+      conds,
+      linkedTypes: draft.linked,
+      newTypes: draft.news,
+      rows: draft.rows.length,
+      editingRuleID: draft.editingRuleID ?? undefined,
+    };
   }, [draft]);
 
   const graph = useMemo(
@@ -224,6 +234,26 @@ export function GameEventRulesCanvas({
     setDraft(null);
   }
 
+  // startEdit transforma o nó da regra no form (spec 050) — mesmo estado da
+  // criação, pré-carregado do match/types persistidos. Abrir edição descarta
+  // rascunho aberto (e vice-versa): um form por vez.
+  function startEdit(rule: EventRule) {
+    setSelectedId(null);
+    const rows: MatchRow[] = Object.entries(rule.match).map(([key, v]) => ({
+      key,
+      op: condOp(v),
+      value: condRaw(v),
+    }));
+    setDraft({
+      editingRuleID: rule.id,
+      rows: rows.length > 0 ? rows : [EMPTY_ROW],
+      linked: [...rule.eventTypes],
+      news: [],
+      error: null,
+      saving: false,
+    });
+  }
+
   async function saveDraft() {
     if (!draft) return;
     const invalid = draft.rows.some((r) => r.key.trim() && buildMatchValue(r.op, r.value) === null);
@@ -243,8 +273,14 @@ export function GameEventRulesCanvas({
     }
     patchDraft({ saving: true });
     try {
-      await api.createEventRule(gameId, { archetype: arch, match, eventTypes });
-      notifications.show({ color: "green", message: "Regra adicionada." });
+      if (draft.editingRuleID) {
+        // archetype não é editável (spec 016) — o PUT leva só o conteúdo.
+        await api.updateEventRule(gameId, draft.editingRuleID, { match, eventTypes });
+        notifications.show({ color: "green", message: "Regra atualizada." });
+      } else {
+        await api.createEventRule(gameId, { archetype: arch, match, eventTypes });
+        notifications.show({ color: "green", message: "Regra adicionada." });
+      }
       setDraft(null);
       reload();
     } catch (e) {
@@ -275,6 +311,7 @@ export function GameEventRulesCanvas({
 
     const draftData: RuleDraftData | null = draft
       ? {
+          mode: draft.editingRuleID ? "edit" : "create",
           rows: draft.rows,
           keySuggestions,
           valueSuggestions: (row) =>
@@ -305,8 +342,20 @@ export function GameEventRulesCanvas({
 
     const nodes: Node[] = graph.nodes.map((n) => {
       let node = n;
-      if (draftData && n.id === DRAFT_RULE_ID) {
+      if (draftData && n.type === "ruleDraft") {
+        // cobre o rascunho de criação (r:__draft__) E a regra em edição
+        // (nó dela vira ruleDraft no build) — só existe um form por vez.
         node = { ...n, data: draftData as unknown as Record<string, unknown> };
+      } else if (!draft && n.type === "rule") {
+        // fora de um form ativo, regras do JOGO ganham a ação de editar
+        // (hover no header, spec 050).
+        const { rule } = n.data as unknown as RuleNodeData;
+        if (rule.scope === "game") {
+          node = {
+            ...n,
+            data: { ...n.data, onEdit: () => startEdit(rule) } as unknown as Record<string, unknown>,
+          };
+        }
       } else if (draft && n.id.startsWith("t:__new__:")) {
         const gid = n.id.slice("t:__new__:".length);
         const entry = draft.news.find((g) => g.id === gid);
@@ -431,7 +480,7 @@ export function GameEventRulesCanvas({
           disabled={!!draft}
           onClick={() => {
             setSelectedId(null);
-            setDraft({ rows: [EMPTY_ROW], linked: [], news: [], error: null, saving: false });
+            setDraft({ editingRuleID: null, rows: [EMPTY_ROW], linked: [], news: [], error: null, saving: false });
           }}
         >
           Nova regra

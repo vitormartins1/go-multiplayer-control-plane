@@ -230,6 +230,14 @@ func (f *fakeService) CreateEventRule(_ context.Context, gameID string, r domain
 	return &r, nil
 }
 
+func (f *fakeService) UpdateEventRule(_ context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error) {
+	f.gotGameID, f.gotEventRuleID, f.gotEventRule = gameID, id, r
+	if f.eventRulesErr != nil {
+		return nil, f.eventRulesErr
+	}
+	return &r, nil
+}
+
 func (f *fakeService) DeleteEventRule(_ context.Context, gameID, id string) error {
 	f.gotGameID, f.gotEventRuleID = gameID, id
 	return f.eventRulesErr
