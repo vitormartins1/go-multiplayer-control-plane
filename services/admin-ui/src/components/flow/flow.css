@@ -121,6 +121,38 @@
   opacity: 0.12;
 }
 
+/* --- edição in-canvas (spec 048) --- */
+.flow-card--editing {
+  width: 340px;
+  max-width: 340px;
+}
+.flow-card--editing .flow-card__body {
+  gap: 6px;
+}
+.flow-card--editing-type {
+  width: 210px;
+}
+.flow-opchip {
+  min-width: 26px;
+  padding: 3px 6px;
+  border: 1px solid #2a3340;
+  border-radius: 6px;
+  background: #131a24;
+  color: #e6edf3;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  text-align: center;
+}
+.flow-opchip:hover {
+  border-color: #4dabf7;
+}
+.flow-addtype {
+  position: absolute;
+  right: -13px;
+  top: calc(50% - 13px);
+  z-index: 5;
+}
+
 /* --- rascunho (regra em criação, spec 044) --- */
 .react-flow__node.is-draft .flow-card {
   border-style: dashed;

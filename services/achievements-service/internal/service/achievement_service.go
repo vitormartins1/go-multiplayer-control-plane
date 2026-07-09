@@ -140,7 +140,8 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID, modeID 
 			// fallback retrocompat: envelope sem outcome (v1) -> trata como win.
 			outcome = outcomeWin
 		}
-		events := domain.EvaluateRules(rules, gameID, domain.WinLossDrawFacts(outcome).WithMode(modeID))
+		events := domain.EvaluateRules(rules, gameID,
+			domain.WinLossDrawFacts(outcome).WithMode(modeID).WithStats(r.Stats))
 		players = append(players, domain.PlayerMatchInput{PlayerID: r.PlayerID, EventTypes: events, Stats: r.Stats})
 	}
 	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
@@ -163,10 +164,14 @@ func (s *Service) ApplyPlacementResult(ctx context.Context, gameID, matchID, mod
 	}
 	players := make([]domain.PlayerMatchInput, 0, len(entries))
 	for _, e := range entries {
+		// o mesmo mapa (com survived_ms injetado) alimenta o critério por
+		// métrica E os facts stat.* — regra `stat.survived_ms >= N` funciona.
+		stats := withSurvivedMs(e.Stats, e.SurvivedMs)
 		players = append(players, domain.PlayerMatchInput{
-			PlayerID:   e.PlayerID,
-			EventTypes: domain.EvaluateRules(rules, gameID, domain.PlacementFacts(e.Placement).WithMode(modeID)),
-			Stats:      withSurvivedMs(e.Stats, e.SurvivedMs),
+			PlayerID: e.PlayerID,
+			EventTypes: domain.EvaluateRules(rules, gameID,
+				domain.PlacementFacts(e.Placement).WithMode(modeID).WithStats(stats)),
+			Stats: stats,
 		})
 	}
 	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
@@ -201,13 +206,17 @@ func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, mo
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply collective result: rules: %w", err)
 	}
-	events := domain.EvaluateRules(rules, gameID, domain.CollectiveFacts(outcome).WithMode(modeID)) // igual para todos (desfecho coletivo)
+	// Avaliação POR JOGADOR (spec 015): o desfecho é coletivo, mas os stats
+	// são individuais — uma regra com stat.<x> pode casar só pro MVP da
+	// missão. Sem stat.* nas regras, o resultado é idêntico ao de antes
+	// (facts iguais por jogador), só que uniforme com os outros kinds.
 	inputs := make([]domain.PlayerMatchInput, 0, len(players))
 	for _, p := range players {
 		inputs = append(inputs, domain.PlayerMatchInput{
-			PlayerID:   p.PlayerID,
-			EventTypes: events,
-			Stats:      p.Stats,
+			PlayerID: p.PlayerID,
+			EventTypes: domain.EvaluateRules(rules, gameID,
+				domain.CollectiveFacts(outcome).WithMode(modeID).WithStats(p.Stats)),
+			Stats: p.Stats,
 		})
 	}
 	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, inputs, s.now().UTC())
