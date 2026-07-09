@@ -57,7 +57,13 @@ export function GameEventRules({ gameId }: { gameId: string }) {
   // realmente usa (evita listar/oferecer arquétipos que o jogo não tem).
   const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
   // catálogo de achievements — 4ª camada do canvas (quem escuta cada type).
-  const { data: catalog } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
+  const { data: catalog, reload: reloadCatalog } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
+  // Atualizar recarrega as DUAS fontes do canvas — um achievement recém-criado
+  // na aba Achievements precisa aparecer na camada 4 sem trocar de aba.
+  function reloadAll() {
+    reload();
+    reloadCatalog();
+  }
   const archetypes = gameArchetypes(modes ?? []);
   // Sem nenhum modo cadastrado ainda: cai pra lista fixa (dropdown não pode
   // ficar vazio) — ver filterRulesForGame pro mesmo raciocínio na listagem.
@@ -144,7 +150,7 @@ export function GameEventRules({ gameId }: { gameId: string }) {
               { value: "table", label: "Tabela" },
             ]}
           />
-          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reloadAll}>
             Atualizar
           </Button>
           {view === "table" && (
