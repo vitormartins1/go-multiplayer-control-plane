@@ -247,11 +247,12 @@ func handleParticipation(ctx context.Context, svc *service.Service, log *slog.Lo
 		Role      string `json:"role"`
 		Event     string `json:"event"`
 		Outcome   string `json:"outcome"`
+		EventID   string `json:"eventId"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		return false, fmt.Errorf("unmarshal participation envelope: %w", err)
 	}
-	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.Role, env.Event, env.Outcome)
+	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.Role, env.Event, env.Outcome, env.EventID)
 	if err != nil {
 		return false, err
 	}

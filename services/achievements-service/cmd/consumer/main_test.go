@@ -20,6 +20,7 @@ type dispatchRepo struct {
 	matchCalled         bool
 	participationCalled bool
 	gotEvent            string
+	gotEventID          string
 	gotPlayers          []domain.PlayerMatchInput
 }
 
@@ -29,9 +30,10 @@ func (r *dispatchRepo) ApplyMatchResult(_ context.Context, _, _ string, players 
 	return false, nil
 }
 
-func (r *dispatchRepo) ApplyParticipationEvent(_ context.Context, _, _, _, event string, _ []string, _ time.Time) (bool, error) {
+func (r *dispatchRepo) ApplyParticipationEvent(_ context.Context, _, _, _, event, eventID string, _ []string, _ time.Time) (bool, error) {
 	r.participationCalled = true
 	r.gotEvent = event
+	r.gotEventID = eventID
 	return false, nil
 }
 
@@ -71,6 +73,20 @@ func TestMakeHandler_ParticipationEvent_RoteiaParaParticipation(t *testing.T) {
 	assert.True(t, repo.participationCalled)
 	assert.False(t, repo.matchCalled)
 	assert.Equal(t, "HOST_KILLED", repo.gotEvent)
+}
+
+func TestMakeHandler_ParticipationEvent_RepassaEventID(t *testing.T) {
+	repo, handle := newHandler(t)
+	_, err := handle([]byte(`{"kind":"participation_event","gameId":"g","sessionId":"w1","playerId":"inv-1","role":"invader","event":"HOST_KILLED","outcome":"SUCCESS","eventId":"33333333-3333-3333-3333-333333333333"}`))
+	require.NoError(t, err)
+	assert.Equal(t, "33333333-3333-3333-3333-333333333333", repo.gotEventID)
+}
+
+func TestMakeHandler_ParticipationEvent_SemEventID_ChegaVazio(t *testing.T) {
+	repo, handle := newHandler(t)
+	_, err := handle([]byte(`{"kind":"participation_event","gameId":"g","sessionId":"w1","playerId":"inv-1","role":"invader","event":"HOST_KILLED","outcome":"SUCCESS"}`))
+	require.NoError(t, err)
+	assert.Empty(t, repo.gotEventID)
 }
 
 func TestMakeHandler_WinLossDraw_RoteiaParaMatchResult(t *testing.T) {

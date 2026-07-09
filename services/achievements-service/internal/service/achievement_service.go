@@ -212,11 +212,11 @@ func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, ou
 
 // ApplyParticipationEvent traduz um evento de participação do host_world_dropin
 // (spec 013/009) nos event types de gameplay por papel e delega ao repo a
-// aplicação idempotente por (sessionID, playerID, event). Consumido pelo fan-out
-// durável (SQS). dup=true quando o evento já havia sido processado (no-op).
-func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, role, event, outcome string) (bool, error) {
+// aplicação idempotente por eventID (follow-up #4, spec 012). Consumido pelo
+// fan-out durável (SQS). dup=true quando o evento já havia sido processado.
+func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, role, event, outcome, eventID string) (bool, error) {
 	eventTypes := domain.ParticipationEventTypes(role, event, outcome)
-	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventTypes, s.now().UTC())
+	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, s.now().UTC())
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply participation event: %w", err)
 	}
