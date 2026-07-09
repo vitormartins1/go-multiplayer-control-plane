@@ -29,6 +29,7 @@ const MINIMAP_COLOR: Record<string, string> = {
   fact: "#4dabf7",
   rule: "#20c997",
   eventType: "#b197fc",
+  stat: "#ffa94d",
   achievement: "#fab005",
 };
 

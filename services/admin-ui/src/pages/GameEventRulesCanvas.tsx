@@ -10,6 +10,7 @@ import {
   Paper,
   Select,
   Stack,
+  Switch,
   TagsInput,
   Text,
 } from "@mantine/core";
@@ -18,8 +19,15 @@ import { IconPlus, IconTrash } from "@tabler/icons-react";
 import type { Edge, Node, NodeTypes } from "@xyflow/react";
 import { useMemo, useState, type DragEvent } from "react";
 import { FlowCanvas } from "../components/flow/FlowCanvas";
-import { AchievementNode, EventTypeNode, FactNode, RuleNode } from "../components/flow/nodes";
-import { api, HttpError, type CatalogAchievement, type EventRule, type MultiplayerProfile } from "../lib/api";
+import { AchievementNode, EventTypeNode, FactNode, RuleNode, StatNode } from "../components/flow/nodes";
+import {
+  api,
+  HttpError,
+  type CatalogAchievement,
+  type EventRule,
+  type MultiplayerMode,
+  type MultiplayerProfile,
+} from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import {
   buildRulesGraph,
@@ -29,6 +37,8 @@ import {
   type DraftRule,
   type EventTypeNodeData,
   type FactNodeData,
+  type StatInfo,
+  type StatNodeData,
 } from "../lib/rulesGraph";
 
 // Referência estável (module-level) — ver FlowCanvas: nodeTypes recriado por
@@ -37,8 +47,15 @@ const NODE_TYPES: NodeTypes = {
   fact: FactNode,
   rule: RuleNode,
   eventType: EventTypeNode,
+  stat: StatNode,
   achievement: AchievementNode,
 };
+
+// scoringStats mora em params e nem todo arquétipo declara (host_world_dropin
+// não tem o conceito) — daí o helper defensivo.
+function modeStats(m: MultiplayerMode): string[] {
+  return "scoringStats" in m.params ? m.params.scoringStats : [];
+}
 
 const DND_MIME = "application/x-rules-fact";
 
@@ -55,12 +72,14 @@ export function GameEventRulesCanvas({
   rules,
   catalog,
   archetypeOptions,
+  modes,
   reload,
 }: {
   gameId: string;
   rules: EventRule[];
   catalog: CatalogAchievement[];
   archetypeOptions: MultiplayerProfile["archetype"][];
+  modes: MultiplayerMode[];
   reload: () => void;
 }) {
   const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(archetypeOptions[0]);
@@ -77,6 +96,24 @@ export function GameEventRulesCanvas({
 
   const archRules = useMemo(() => rules.filter((r) => r.archetype === arch), [rules, arch]);
 
+  // Stats do arquétipo (spec 045): scoringStats dos modos deste arquétipo +
+  // statKeys de achievements sem declaração em NENHUM modo (drift — melhor
+  // visível com aviso do que invisível). Stat de outro arquétipo não entra
+  // aqui (aparece no canvas dele).
+  const [showStats, setShowStats] = useState(true);
+  const statsForArch = useMemo<StatInfo[]>(() => {
+    const declaredHere = new Set(modes.filter((m) => m.archetype === arch).flatMap(modeStats));
+    const declaredAnywhere = new Set(modes.flatMap(modeStats));
+    const out: StatInfo[] = [...declaredHere].sort().map((key) => ({ key, declared: true }));
+    const drift = new Set(
+      catalog
+        .map((a) => a.statKey)
+        .filter((k): k is string => !!k && !declaredAnywhere.has(k)),
+    );
+    for (const key of [...drift].sort()) out.push({ key, declared: false });
+    return out;
+  }, [modes, arch, catalog]);
+
   // Rascunho ao vivo (R2 da spec 044): só os pares preenchidos entram no nó.
   const draft: DraftRule | undefined = useMemo(() => {
     if (!drawerOpen) return undefined;
@@ -87,7 +124,10 @@ export function GameEventRulesCanvas({
     return { match, eventTypes };
   }, [drawerOpen, matchPairs, eventTypes]);
 
-  const graph = useMemo(() => buildRulesGraph(archRules, catalog, draft), [archRules, catalog, draft]);
+  const graph = useMemo(
+    () => buildRulesGraph(archRules, catalog, draft, showStats ? statsForArch : undefined),
+    [archRules, catalog, draft, showStats, statsForArch],
+  );
 
   // Vocabulário conhecido do arquétipo (chips do drawer + sugestões) — sempre
   // derivado do dado real, nunca hardcoded (princípio do ADR-0027).
@@ -236,6 +276,12 @@ export function GameEventRulesCanvas({
         <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => openCreate()} disabled={drawerOpen}>
           Nova regra
         </Button>
+        <Switch
+          size="xs"
+          label="Stats"
+          checked={showStats}
+          onChange={(e) => setShowStats(e.currentTarget.checked)}
+        />
         {drawerOpen && (
           <Text size="xs" c="dimmed">
             Montando rascunho — clique num fact/event type do canvas pra adicioná-lo à regra.
@@ -472,6 +518,35 @@ function NodeDetails({ node, onDelete }: { node: Node; onDelete: (r: EventRule) 
       </Stack>
     );
   }
+  if (node.type === "stat") {
+    const d = node.data as unknown as StatNodeData;
+    return (
+      <Stack gap="xs">
+        <Text fw={600} size="sm">
+          Stat (métrica)
+        </Text>
+        <Badge variant="light" color="orange" tt="none" style={{ alignSelf: "flex-start" }}>
+          {d.statKey}
+        </Badge>
+        {d.declared ? (
+          <Text size="xs" c="dimmed">
+            Declarada no scoringStats dos modos deste arquétipo. O progresso é aplicado direto pela
+            métrica da partida — <b>não passa</b> pelas event rules.
+          </Text>
+        ) : (
+          <Text size="xs" c="red">
+            Nenhum modo deste jogo declara esta stat — os achievements que progridem por ela podem
+            nunca avançar (drift entre catálogo e modos).
+          </Text>
+        )}
+        <Text size="xs" c="dimmed">
+          {d.listeners === 0
+            ? "Nenhum achievement progride por esta stat ainda."
+            : `${d.listeners} achievement${d.listeners === 1 ? "" : "s"} progride${d.listeners === 1 ? "" : "m"} por esta stat.`}
+        </Text>
+      </Stack>
+    );
+  }
   if (node.type === "eventType") {
     const d = node.data as unknown as EventTypeNodeData;
     return (
@@ -498,7 +573,17 @@ function NodeDetails({ node, onDelete }: { node: Node; onDelete: (r: EventRule) 
       </Text>
       <Text size="sm">{d.name}</Text>
       <Text size="xs" c="dimmed">
-        Escuta <code>{d.eventType}</code> · target {d.target}. Gerenciado na aba Achievements.
+        {d.statKey ? (
+          <>
+            Progride pela stat <code>{d.statKey}</code> (
+            {d.statMode === "per_match" ? "por partida" : "acumulada"}) — direto, sem regra
+          </>
+        ) : (
+          <>
+            Escuta <code>{d.eventType}</code>
+          </>
+        )}{" "}
+        · target {d.target}. Gerenciado na aba Achievements.
       </Text>
     </Stack>
   );

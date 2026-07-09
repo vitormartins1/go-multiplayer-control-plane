@@ -10,12 +10,26 @@ import type { CatalogAchievement, EventRule } from "./api";
 export type FactNodeData = { factKey: string; factValue: string };
 export type RuleNodeData = { rule: EventRule; draft?: boolean };
 export type EventTypeNodeData = { eventType: string; listeners: number };
-export type AchievementNodeData = { name: string; target: number; eventType: string };
+// Achievement é disparado por event type OU progride por stat (ADR-0023 A1,
+// mutuamente exclusivos) — o painel mostra o gatilho que existir.
+export type AchievementNodeData = {
+  name: string;
+  target: number;
+  eventType?: string;
+  statKey?: string;
+  statMode?: string;
+};
+// Stat (spec 045): métrica declarada em scoringStats dos modos (ou usada por
+// achievement sem declaração — drift). Read-only: progresso é aplicado direto
+// pelo consumer, NÃO passa por event rules.
+export type StatNodeData = { statKey: string; declared: boolean; listeners: number };
+export type StatInfo = { key: string; declared: boolean };
 
 export const factId = (k: string, v: string) => `f:${k}=${v}`;
 export const ruleId = (r: EventRule) => `r:${r.id}`;
 export const typeId = (et: string) => `t:${et}`;
 export const achId = (id: string) => `a:${id}`;
+export const statId = (k: string) => `s:${k}`;
 
 // Larguras/alturas ESTIMADAS por tipo de nó — o layout roda antes do render,
 // então não dá pra medir o DOM; estimativa conservadora pelo conteúdo.
@@ -67,6 +81,7 @@ export function buildRulesGraph(
   rules: EventRule[],
   catalog: CatalogAchievement[],
   draft?: DraftRule,
+  stats?: StatInfo[],
 ): { nodes: Node[]; edges: Edge[] } {
   // Facts/types que existem nas regras REAIS — o que só aparecer via draft é
   // ghost (some sem resíduo no cancelar, R3 da spec).
@@ -145,7 +160,32 @@ export function buildRulesGraph(
     typeMetas,
     new Map([...typeSources.entries()].map(([et, idx]) => [typeId(et), idx])),
   );
-  const typeIdx = new Map(typeMetas.map((m, i) => [m.id, i]));
+
+  // Stats (spec 045): entram na MESMA coluna dos event types (coluna de
+  // "gatilhos"), abaixo deles — read-only, edge direta stat -> achievement.
+  const statAchs = new Map<string, CatalogAchievement[]>();
+  if (stats) {
+    const known = new Set(stats.map((s) => s.key));
+    for (const a of catalog) {
+      if (a.statKey && known.has(a.statKey)) {
+        statAchs.set(a.statKey, [...(statAchs.get(a.statKey) ?? []), a]);
+      }
+    }
+  }
+  const statMetas: Meta[] = (stats ?? []).map((s) => ({
+    id: statId(s.key),
+    type: "stat",
+    data: {
+      statKey: s.key,
+      declared: s.declared,
+      listeners: statAchs.get(s.key)?.length ?? 0,
+    } satisfies StatNodeData,
+    // stat sem declaração ganha uma linha de aviso (drift) — card mais alto.
+    h: s.declared ? SIZE.eventType.h : SIZE.eventType.h + 18,
+    layer: 2,
+  }));
+  const triggerMetas = [...typeMetas, ...statMetas];
+  const triggerIdx = new Map(triggerMetas.map((m, i) => [m.id, i]));
 
   let achMetas: Meta[] = [];
   const achNeighbor = new Map<string, number[]>();
@@ -158,13 +198,30 @@ export function buildRulesGraph(
         h: SIZE.achievement.h,
         layer: 3,
       });
-      achNeighbor.set(achId(a.id), [typeIdx.get(typeId(et))!]);
+      achNeighbor.set(achId(a.id), [triggerIdx.get(typeId(et))!]);
+    }
+  }
+  for (const [key, achs] of statAchs) {
+    for (const a of achs) {
+      achMetas.push({
+        id: achId(a.id),
+        type: "achievement",
+        data: {
+          name: a.name,
+          target: a.target,
+          statKey: key,
+          statMode: a.statMode,
+        } satisfies AchievementNodeData,
+        h: SIZE.achievement.h,
+        layer: 3,
+      });
+      achNeighbor.set(achId(a.id), [triggerIdx.get(statId(key))!]);
     }
   }
   achMetas = barycenter(achMetas, achNeighbor);
 
   // Posições: empilha cada coluna e centraliza verticalmente pela mais alta.
-  const columns = [factMetas, ruleMetas, typeMetas, achMetas];
+  const columns = [factMetas, ruleMetas, triggerMetas, achMetas];
   const yByID = new Map<string, number>();
   const colHeights = columns.map((c) => stackColumn(c, yByID));
   const maxH = Math.max(...colHeights, 0);
@@ -203,6 +260,9 @@ export function buildRulesGraph(
   }
   for (const [et, achs] of listeners) {
     for (const a of achs) push(typeId(et), achId(a.id));
+  }
+  for (const [key, achs] of statAchs) {
+    for (const a of achs) push(statId(key), achId(a.id));
   }
 
   return { nodes, edges };

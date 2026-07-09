@@ -1,11 +1,20 @@
 import { Badge } from "@mantine/core";
-import { IconBolt, IconFilter, IconGitBranch, IconTrophy, IconWorld } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconBolt,
+  IconChartBar,
+  IconFilter,
+  IconGitBranch,
+  IconTrophy,
+  IconWorld,
+} from "@tabler/icons-react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type {
   AchievementNodeData,
   EventTypeNodeData,
   FactNodeData,
   RuleNodeData,
+  StatNodeData,
 } from "../../lib/rulesGraph";
 
 // Nós custom do kit de fluxo (spec 043 R7): componentes React puros — recebem
@@ -80,6 +89,30 @@ export function EventTypeNode({ data }: NodeProps) {
         </div>
       </div>
       <Handle type="target" position={Position.Left} isConnectable={false} />
+      {d.listeners > 0 && <Handle type="source" position={Position.Right} isConnectable={false} />}
+    </div>
+  );
+}
+
+// StatNode (spec 045): métrica que alimenta achievements DIRETO (sem passar
+// por event rules) — read-only; sem declaração em nenhum modo = drift.
+export function StatNode({ data }: NodeProps) {
+  const d = data as unknown as StatNodeData;
+  return (
+    <div className="flow-card flow-card--stat">
+      <div className="flow-card__header">
+        <IconChartBar size={12} /> Stat
+      </div>
+      <div className="flow-card__body">
+        <div className="flow-card__row">
+          <span>{d.statKey}</span>
+        </div>
+        {!d.declared && (
+          <div className="flow-card__row flow-card__warn">
+            <IconAlertTriangle size={11} /> não declarada nos modos
+          </div>
+        )}
+      </div>
       {d.listeners > 0 && <Handle type="source" position={Position.Right} isConnectable={false} />}
     </div>
   );

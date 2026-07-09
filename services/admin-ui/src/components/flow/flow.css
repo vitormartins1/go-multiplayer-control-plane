@@ -80,6 +80,15 @@
   color: #fab005;
   background: rgba(250, 176, 5, 0.08);
 }
+.flow-card--stat .flow-card__header {
+  color: #ffa94d;
+  background: rgba(255, 169, 77, 0.08);
+}
+.flow-card__warn {
+  color: #f85149;
+  align-items: center;
+  font-size: 10px;
+}
 
 /* --- seleção / caminho destacado --- */
 .react-flow__node {
