@@ -9,7 +9,21 @@ import (
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/jsonparams"
 )
+
+// hostWorldDropInKnownKeys é o vocabulário tipado do arquétipo (tags JSON de
+// hostWorldDropInParamsDTO) — qualquer outra chave em `params` é preservada
+// crua via jsonparams (follow-up #14, MultiplayerProfile.ExtraParams).
+var hostWorldDropInKnownKeys = map[string]struct{}{
+	"enabledRoles":      {},
+	"coopSlots":         {},
+	"invaderSlots":      {},
+	"levelRangeEnabled": {},
+	"weaponTierEnabled": {},
+	"passwordEnabled":   {},
+	"invasionEnabled":   {},
+}
 
 // Handler expõe os endpoints HTTP do game-registry. É control plane interno
 // (consumido pelo painel admin e por serviços), atrás da internal key (ADR-0018).
@@ -176,6 +190,7 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			PasswordEnabled:   hw.PasswordEnabled,
 			InvasionEnabled:   hw.InvasionEnabled,
 		}
+		p.ExtraParams = jsonparams.Extract(d.Params, hostWorldDropInKnownKeys)
 	case domain.ArchetypeBattleRoyale:
 		var br battleRoyaleParamsDTO
 		_ = json.Unmarshal(d.Params, &br)
@@ -238,7 +253,7 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 				PasswordEnabled:   hw.PasswordEnabled,
 				InvasionEnabled:   hw.InvasionEnabled,
 			})
-			d.Params = raw
+			d.Params = jsonparams.Merge(raw, p.ExtraParams)
 		}
 	case domain.ArchetypeBattleRoyale:
 		if p.BattleRoyale != nil {

@@ -81,6 +81,13 @@ type MultiplayerProfile struct {
 	HostWorldDropIn *HostWorldDropInParams
 	BattleRoyale    *BattleRoyaleParams
 	CoopMission     *CoopMissionParams
+	// ExtraParams são chaves de `params` fora do vocabulário tipado do
+	// arquétipo (chave → valor JSON cru), preservadas sem validação
+	// (follow-up #14 do arquétipo host_world_dropin — decodificar num struct
+	// tipado por arquétipo descartava em silêncio qualquer chave que o
+	// registry ainda não conhecesse). Repassadas ao data plane via
+	// `params_json`/manifest tal como vieram; nil/vazio = nenhuma.
+	ExtraParams map[string]string
 }
 
 // QueueArenaParams são os parâmetros do arquétipo "queue_arena": sessão

@@ -118,12 +118,13 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
 - **Onde mexe:** `HostWorldDropInParams` (game-registry) + consumidores conforme o dono (control plane: diretório/matchmaking; data plane: só declaração no blob).
 - **Destrava:** os dials de risco/social que diferenciam os Souls reais; adotar **por evidência**, um por vez.
 
-## 14. Bloco passthrough `worldParams` no perfil (registry descarta chaves desconhecidas)
+## 14. Bloco passthrough `worldParams` no perfil (registry descarta chaves desconhecidas) — ✅ FEITO (2026-07-08)
 
 - **O quê:** o registry decodifica `params` num struct tipado — **chave desconhecida é descartada em silêncio** no PUT. O data plane não tem como declarar params próprios por modo (o princípio do manifest "leia só o que conhece" vale na leitura, mas a escrita filtra tudo).
 - **Onde mexe:** game-registry (DTO/validação/persistência): um bloco livre `worldParams` (JSON cru, sem validação de schema) preservado no snapshot/manifest; ou, no mínimo, **rejeitar** chave desconhecida em vez de descartar (surpresa silenciosa de operador).
 - **Destrava:** params de gameplay por modo sem mudança de schema no registry (ex.: os do item 13 com dono "data plane").
 - **Fonte:** descoberta operacional de 2026-07-08 (cadastro dos modos do Capoeira Souls).
+- **Implementado (branch `feat/game-registry/worldparams-passthrough`):** escolhida a opção do **passthrough** (não a rejeição) — chave fora do vocabulário tipado de `host_world_dropin` some do struct decodificado mas sobrevive crua em `MultiplayerProfile.ExtraParams` (novo pacote `internal/jsonparams`, `Extract`/`Merge`) e é reinjetada no `params` de volta na leitura (HTTP GET e persistência JSONB) — chave tipada sempre manda, extra nunca sobrescreve. **Zero mudança no session-service ou no contrato do data plane**: `ParamsJSON`/`params_json` já eram bytes crus repassados verbatim (`registryclient.ModeProfile`), então a chave extra já chega ao Unity dentro do `params_json` de sempre — é só ler quando alguma spec precisar (ex.: item 13). Escopo só `host_world_dropin` por ora (outros arquétipos têm o mesmo problema, mas sem evidência de demanda ainda — replicar por evidência, mesmo princípio deste doc).
 
 ---
 
