@@ -35,6 +35,21 @@ type EventRule struct {
 // vem decodificado do JSONB).
 type Facts map[string]string
 
+// FactMode é a chave do fact de modo de jogo (spec 013, F1 do ADR-0028) —
+// cross-kind: todo envelope carrega modeId (ADR-0024, aditivo).
+const FactMode = "mode"
+
+// WithMode devolve os facts com o fact `mode` somado — decorator cross-kind
+// (o modo vem do envelope, não da forma de resultado de cada arquétipo, por
+// isso não mora nas normalizadoras). modeID vazio (envelope antigo) não gera
+// a chave: regra com `mode=` simplesmente não casa, nunca casa com vazio.
+func (f Facts) WithMode(modeID string) Facts {
+	if modeID != "" {
+		f[FactMode] = modeID
+	}
+	return f
+}
+
 // BattleRoyaleTopNThreshold é o limiar do "top N" — parâmetro numérico do
 // arquétipo, não vocabulário de evento; permanece hardcoded na normalização
 // (fora do escopo da generalização: adotar configurável só por evidência

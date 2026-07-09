@@ -128,7 +128,7 @@ func (s *Service) RecordEvent(ctx context.Context, gameID, playerID string, even
 // delega ao repo a aplicação idempotente por matchID. Consumido pelo fan-out
 // durável (SQS, ADR-0020). dup=true quando a partida já havia sido processada
 // (no-op).
-func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, results []domain.MatchResult) (bool, error) {
+func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID, modeID string, results []domain.MatchResult) (bool, error) {
 	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeQueueArena)
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply match result: rules: %w", err)
@@ -140,7 +140,7 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 			// fallback retrocompat: envelope sem outcome (v1) -> trata como win.
 			outcome = outcomeWin
 		}
-		events := domain.EvaluateRules(rules, gameID, domain.WinLossDrawFacts(outcome))
+		events := domain.EvaluateRules(rules, gameID, domain.WinLossDrawFacts(outcome).WithMode(modeID))
 		players = append(players, domain.PlayerMatchInput{PlayerID: r.PlayerID, EventTypes: events, Stats: r.Stats})
 	}
 	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
@@ -156,7 +156,7 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 // aplicação idempotente por matchID. Consumido pelo fan-out durável
 // (kind=placement, session/015). dup=true quando a partida já havia sido
 // processada (no-op).
-func (s *Service) ApplyPlacementResult(ctx context.Context, gameID, matchID string, entries []domain.PlacementEntry) (bool, error) {
+func (s *Service) ApplyPlacementResult(ctx context.Context, gameID, matchID, modeID string, entries []domain.PlacementEntry) (bool, error) {
 	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeBattleRoyale)
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply placement result: rules: %w", err)
@@ -165,7 +165,7 @@ func (s *Service) ApplyPlacementResult(ctx context.Context, gameID, matchID stri
 	for _, e := range entries {
 		players = append(players, domain.PlayerMatchInput{
 			PlayerID:   e.PlayerID,
-			EventTypes: domain.EvaluateRules(rules, gameID, domain.PlacementFacts(e.Placement)),
+			EventTypes: domain.EvaluateRules(rules, gameID, domain.PlacementFacts(e.Placement).WithMode(modeID)),
 			Stats:      withSurvivedMs(e.Stats, e.SurvivedMs),
 		})
 	}
@@ -196,12 +196,12 @@ func withSurvivedMs(stats map[string]int64, survivedMs int64) map[string]int64 {
 // aplicação idempotente por matchID. Consumido pelo fan-out durável
 // (kind=collective, session/016). dup=true quando a partida já havia sido
 // processada (no-op). Espelha ApplyPlacementResult.
-func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, outcome string, players []domain.CollectivePlayer) (bool, error) {
+func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, modeID, outcome string, players []domain.CollectivePlayer) (bool, error) {
 	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeCoopMission)
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply collective result: rules: %w", err)
 	}
-	events := domain.EvaluateRules(rules, gameID, domain.CollectiveFacts(outcome)) // igual para todos (desfecho coletivo)
+	events := domain.EvaluateRules(rules, gameID, domain.CollectiveFacts(outcome).WithMode(modeID)) // igual para todos (desfecho coletivo)
 	inputs := make([]domain.PlayerMatchInput, 0, len(players))
 	for _, p := range players {
 		inputs = append(inputs, domain.PlayerMatchInput{
@@ -221,12 +221,12 @@ func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, ou
 // (spec 013/009) nos event types de gameplay por papel e delega ao repo a
 // aplicação idempotente por eventID (follow-up #4, spec 012). Consumido pelo
 // fan-out durável (SQS). dup=true quando o evento já havia sido processado.
-func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, role, event, outcome, eventID string) (bool, error) {
+func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, modeID, role, event, outcome, eventID string) (bool, error) {
 	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeHostWorldDropIn)
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply participation event: rules: %w", err)
 	}
-	eventTypes := domain.EvaluateRules(rules, gameID, domain.ParticipationFacts(role, event, outcome))
+	eventTypes := domain.EvaluateRules(rules, gameID, domain.ParticipationFacts(role, event, outcome).WithMode(modeID))
 	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, s.now().UTC())
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply participation event: %w", err)

@@ -106,6 +106,37 @@ Center* do Foblex Flow (trigger → condição → ação, paleta lateral, nós 
 - A visão em tabela da aba Event Rules permanece como view alternativa do
   mesmo dado (toggle Tabela/Canvas).
 
+## Adendo (2026-07-09) — dimensão de FACTS e fronteira entre consumers
+
+Revisão do pipeline (session publisher → envelopes → consumers) a pedido do
+usuário, após constatar que as seeds esgotam o espaço útil de regras nos
+arquétipos de 1 fact (coop/queue: só `outcome`). Diagnóstico: o motor é
+genérico, mas o **vocabulário de facts** é o gargalo. O roadmap V2 ganha a
+dimensão "facts" (dado), complementar à dimensão "motor" (V2a–V2c):
+
+1. **F1 — fact `mode`** (zero mudança de contrato): `modeId` já viaja em TODOS
+   os envelopes (ADR-0024, aditivo) e o consumer do achievements o ignorava.
+   Passa a virar fact (`mode=<modeId>`) — destrava regras por modo (ex.:
+   "vitória no ranked"). Spec `achievements-service/013-mode-fact`.
+2. **Stats-as-facts** (depende de V2a): stats por partida como facts numéricos
+   com comparadores — destrava condição composta (ex.: *flawless victory* =
+   `outcome=win` + `deaths <= 0`), inexpressável hoje.
+3. **Mission/difficulty** (contrato cross-repo): os catálogos do perfil do
+   coop são só declaração — o session-service não sabe qual missão/dificuldade
+   foi jogada (o resultado gRPC não carrega). Facts desse tipo exigem o data
+   plane reportar no resultado (aditivo). Adiado até a fatia cross-repo.
+
+**Decisão de fronteira (registrada para não re-litigar):** as event rules são
+política **exclusiva** do contexto achievements. Leaderboard e analytics
+continuam traduzindo o envelope bruto para as línguas deles (boards/agregados)
+— compartilhar a tabela de regras vazaria política entre contextos (um rename
+de event type de conquista mudaria rankings) e corromperia o valor de auditoria
+do analytics (regra muda com o tempo; história não pode mudar junto). O que se
+reutiliza entre consumers é o **contrato** (envelope), o **padrão** (política
+data-driven por serviço — ex. futuro: `scoring_rules` do leaderboard para a
+política placement→pontos, hoje hardcoded) e a **ferramenta** (canvas kit; a
+vista de pipeline — spec `admin-ui/046` — torna a fronteira visível).
+
 ## Referências
 - Spec da fase 1: `services/admin-ui/specs/043-visual-rules-editor/spec.md`.
 - React Flow: https://reactflow.dev/ — template Workflow Editor

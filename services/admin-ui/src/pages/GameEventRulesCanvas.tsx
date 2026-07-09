@@ -138,7 +138,16 @@ export function GameEventRulesCanvas({
     }
     return [...seen.values()];
   }, [archRules]);
-  const keySuggestions = useMemo(() => [...new Set(knownFacts.map((f) => f.key))], [knownFacts]);
+  // `mode` é fact cross-kind (spec achievements/013): sugerido sempre, com os
+  // modeIds cadastrados no arquétipo como valores.
+  const keySuggestions = useMemo(
+    () => [...new Set([...knownFacts.map((f) => f.key), "mode"])],
+    [knownFacts],
+  );
+  const modeIdSuggestions = useMemo(
+    () => modes.filter((m) => m.archetype === arch).map((m) => m.modeId),
+    [modes, arch],
+  );
   const typeSuggestions = useMemo(
     () => [...new Set(archRules.flatMap((r) => r.eventTypes))],
     [archRules],
@@ -350,7 +359,12 @@ export function GameEventRulesCanvas({
                   <Autocomplete
                     size="xs"
                     placeholder="valor"
-                    data={[...new Set(knownFacts.filter((f) => f.key === row.key).map((f) => f.value))]}
+                    data={[
+                      ...new Set([
+                        ...knownFacts.filter((f) => f.key === row.key).map((f) => f.value),
+                        ...(row.key === "mode" ? modeIdSuggestions : []),
+                      ]),
+                    ]}
                     value={row.value}
                     onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, value: v } : r)))}
                     style={{ flex: 1 }}
