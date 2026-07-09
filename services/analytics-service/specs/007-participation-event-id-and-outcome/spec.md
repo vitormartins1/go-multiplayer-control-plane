@@ -1,7 +1,7 @@
 # Spec: 007-participation-event-id-and-outcome
 
 **Serviço:** analytics-service
-**Status:** Proposta (2026-07-09)
+**Status:** Done (2026-07-09)
 **Data:** 2026-07-09
 **ADR:** 0023 — **arquétipo `host_world_dropin`, follow-ups #4 e #5** (lado analytics: idempotência por `eventId` + dimensão `outcome`)
 **Roadmap:** `docs/game-models/host_world_dropin-follow-ups.md` → itens 4 e 5
@@ -62,9 +62,9 @@ Dois follow-ups do mesmo arquétipo tocam a **mesma tabela** (`game_participatio
 
 ## Critérios de Aceite
 
-- [ ] Dois `BOSS_DEFEATED` do mesmo `(game,session,player)` com `eventId` diferentes → contam **duas vezes** no `participation_events_total`/rollup relacionado.
-- [ ] `HOST_KILLED`·`SUCCESS` e `HOST_KILLED`·`FAIL` (mesmo jogo/papel/evento, outcome diferente) → linhas **separadas** no rollup, cada uma com sua própria contagem.
-- [ ] `eventId` vazio → fallback determinístico, comportamento idêntico ao pré-migration.
-- [ ] Migration não apaga dados existentes; totais antigos aparecem sob `outcome=''`.
-- [ ] `RoleParticipations`/`GameAnalytics` expõem `outcome` em cada linha.
-- [ ] Testes com `-race`, cobertura mantida no baseline atual do serviço.
+- [x] Dois `BOSS_DEFEATED` do mesmo `(game,session,player)` com `eventId` diferentes → contam **duas vezes** no `participation_events_total`/rollup relacionado.
+- [x] `HOST_KILLED`·`SUCCESS` e `HOST_KILLED`·`FAIL` (mesmo jogo/papel/evento, outcome diferente) → linhas **separadas** no rollup, cada uma com sua própria contagem.
+- [x] `eventId` vazio → fallback determinístico, comportamento idêntico ao pré-migration.
+- [x] Migration não apaga dados existentes; totais antigos aparecem sob `outcome=''`.
+- [x] `RoleParticipations`/`GameAnalytics` expõem `outcome` em cada linha.
+- [x] Testes com `-race`, cobertura mantida no baseline atual do serviço.

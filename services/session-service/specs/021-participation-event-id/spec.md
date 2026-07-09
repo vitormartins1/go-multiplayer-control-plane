@@ -1,7 +1,7 @@
 # Spec: 021-participation-event-id
 
 **Serviço:** session-service
-**Status:** Proposta (2026-07-09)
+**Status:** Done (2026-07-09)
 **Data:** 2026-07-09
 **ADR:** 0023 — **arquétipo `host_world_dropin`, follow-up #4** (lado session: campo `eventId` no envelope)
 **Roadmap:** `docs/game-models/host_world_dropin-follow-ups.md` → item 4 (`eventId` único por ocorrência)
@@ -48,7 +48,7 @@ Sem mudança de schema no session (não persiste eventos de participação, só 
 
 ## Critérios de Aceite
 
-- [ ] `ReportParticipationEvent` com `event_id` preenchido → aparece idêntico no envelope publicado.
-- [ ] `ReportParticipationEvent` sem `event_id` (vazio) → publica igual, campo vazio no envelope (sem erro).
-- [ ] Nenhuma mudança observável no comportamento de fechamento/slot (`HOST_KILLED`/`DIED`/`LEFT`) — o `event_id` não entra em nenhuma decisão do session.
-- [ ] Testes com `-race`; `host_world_dropin` (specs 011–013) sem regressão.
+- [x] `ReportParticipationEvent` com `event_id` preenchido → aparece idêntico no envelope publicado.
+- [x] `ReportParticipationEvent` sem `event_id` (vazio) → publica igual, campo vazio no envelope (sem erro).
+- [x] Nenhuma mudança observável no comportamento de fechamento/slot (`HOST_KILLED`/`DIED`/`LEFT`) — o `event_id` não entra em nenhuma decisão do session.
+- [x] Testes com `-race`; `host_world_dropin` (specs 011–013) sem regressão.

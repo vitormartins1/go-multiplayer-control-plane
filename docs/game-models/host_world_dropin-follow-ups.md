@@ -44,21 +44,23 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
 - **Nota de design:** ver GO-LEARNINGS #29 (por que o canal fechado-vs-enviado prende o modelo à memória).
 - **Fonte:** "Fora de escopo" de `matchmaking/007`; decisão registrada no `plan.md` D1.
 
-## 4. `eventId` único por ocorrência (contar N bosses na mesma sessão)
+## 4. `eventId` único por ocorrência (contar N bosses na mesma sessão) — ✅ FEITO (2026-07-09)
 
 - **O quê:** o produtor (`session/013`) publica `participation_event` **sem** um id único por ocorrência. Consequência: os sinks (`achievements/009`, `analytics/004`) fazem idempotência por `(sessionId, playerId, event)` → **uma contagem por tipo de evento por sessão**. "Ajudou N bosses como co-op" hoje = **N sessões**, não N bosses numa sessão.
 - **Por que adiado:** o combinado da H2 (o roadmap escolheu essa chave); cobre os casos-alvo (venceu como invasor = um `HOST_KILLED`).
 - **Onde mexe:** adicionar `eventId` (uuid) ao envelope em `session/013` (publisher) → os sinks trocam a chave de idempotência para `eventId` (migrations `processed_participations` ganham a coluna/chave).
 - **Destrava:** contagem fiel de ocorrências múltiplas do mesmo evento numa sessão.
 - **Fonte:** "Fora de escopo"/OBSERVAÇÃO de `session/013`, `achievements/009`, `analytics/004`.
+- **Implementado (`session/021`, `achievements/012`, `analytics/007`):** o `eventId` é gerado pelo **data plane** (Unity, spec 004), não pelo session — gerar na recepção quebraria a garantia de retry (um retry do client criaria um `eventId` diferente pra mesma ocorrência, achado durante o design desta fatia). `session/021` só repassa o campo pro envelope. `achievements/012`/`analytics/007` trocam a PK de `processed_participations` pra `event_id`, com backfill determinístico (`session_id:player_id:event`) nas linhas existentes e fallback pra quem ainda não manda o campo. Migrations 007 (achievements) e 006 (analytics).
 
-## 5. Dimensão `outcome` na agregação de analytics
+## 5. Dimensão `outcome` na agregação de analytics — ✅ FEITO (2026-07-09)
 
 - **O quê:** `analytics/004` agrega participações por `(role, event)` — **sem** `outcome`. Não distingue "invasões bem-sucedidas vs. falhas" (`HOST_KILLED`+SUCCESS vs. FAIL).
 - **Por que adiado:** conter cardinalidade até o funil pedir.
 - **Onde mexe:** `game_participation_rollup` ganha a coluna `outcome` na PK; `ApplyParticipation` e o read (`RoleParticipations`) propagam.
 - **Destrava:** funil de invasão com taxa de sucesso por papel (H3).
 - **Fonte:** "Fora de escopo" de `analytics/004`.
+- **Implementado (`analytics/007`, mesma migration 006 do item 4):** `game_participation_rollup` ganha `outcome` na PK (`game_id, role, event, outcome`); linhas antigas ficam sob `outcome=''` (não reconstituível sem os eventos originais). Evidência real: a spec 004 do Unity introduz `HOST_KILLED`·`FAIL` (o boss mata o host sem invasor por perto) — sem esta dimensão, ficaria indistinguível de um `HOST_KILLED` normal no rollup.
 
 ## 6. Critério de conquista por **stat** para participação
 

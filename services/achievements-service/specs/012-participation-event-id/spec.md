@@ -1,7 +1,7 @@
 # Spec: 012-participation-event-id
 
 **Serviço:** achievements-service
-**Status:** Proposta (2026-07-09)
+**Status:** Done (2026-07-09)
 **Data:** 2026-07-09
 **ADR:** 0023 — **arquétipo `host_world_dropin`, follow-up #4** (lado achievements: idempotência por `eventId`)
 **Roadmap:** `docs/game-models/host_world_dropin-follow-ups.md` → item 4
@@ -48,8 +48,8 @@ Com `session/021` entregando um `event_id` único por ocorrência (gerado no dat
 
 ## Critérios de Aceite
 
-- [ ] `participation_event` com `eventId` → dedupe por `eventId`; reenviar o **mesmo** `eventId` (retry) → no-op idempotente, igual a hoje.
-- [ ] Dois `BOSS_DEFEATED` do mesmo `(session,player)` com `eventId` **diferentes** → contam **duas vezes** (o cenário que este follow-up destrava).
-- [ ] `participation_event` sem `eventId` (vazio) → cai no fallback determinístico, comportamento idêntico ao pré-migration (uma vez por `(session,player,event)`).
-- [ ] Migration não apaga/reprocessa dados existentes; `processed_participations` histórico consultável igual.
-- [ ] Testes com `-race`, ≥80% em `service/`/`repository/` (o que já é medido hoje).
+- [x] `participation_event` com `eventId` → dedupe por `eventId`; reenviar o **mesmo** `eventId` (retry) → no-op idempotente, igual a hoje.
+- [x] Dois `BOSS_DEFEATED` do mesmo `(session,player)` com `eventId` **diferentes** → contam **duas vezes** (o cenário que este follow-up destrava).
+- [x] `participation_event` sem `eventId` (vazio) → cai no fallback determinístico, comportamento idêntico ao pré-migration (uma vez por `(session,player,event)`).
+- [x] Migration não apaga/reprocessa dados existentes; `processed_participations` histórico consultável igual.
+- [x] Testes com `-race`, ≥80% em `service/`/`repository/` (o que já é medido hoje).
