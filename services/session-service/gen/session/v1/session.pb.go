@@ -175,6 +175,7 @@ type OpenWorldRequest struct {
 	HostSoulLevel int32                  `protobuf:"varint,3,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"` // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
 	WeaponTier    int32                  `protobuf:"varint,4,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"`            // tier de arma do host (spec 012); 0 = sem faixa
 	ModeId        string                 `protobuf:"bytes,5,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`                         // modo do jogo (ADR-0024, spec 017); vazio = "default"
+	Password      string                 `protobuf:"bytes,6,opt,name=password,proto3" json:"password,omitempty"`                                   // senha do mundo (follow-up #1, spec 020); vazio = sem senha
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -240,6 +241,13 @@ func (x *OpenWorldRequest) GetWeaponTier() int32 {
 func (x *OpenWorldRequest) GetModeId() string {
 	if x != nil {
 		return x.ModeId
+	}
+	return ""
+}
+
+func (x *OpenWorldRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
 	}
 	return ""
 }
@@ -682,6 +690,7 @@ type InvadableWorld struct {
 	HostSoulLevel    int32                  `protobuf:"varint,2,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"`
 	WeaponTier       int32                  `protobuf:"varint,3,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"`
 	FreeInvaderSlots int32                  `protobuf:"varint,4,opt,name=free_invader_slots,json=freeInvaderSlots,proto3" json:"free_invader_slots,omitempty"`
+	PasswordHash     string                 `protobuf:"bytes,5,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"` // hash da senha do mundo (follow-up #1, spec 020); vazio = sem senha
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -742,6 +751,13 @@ func (x *InvadableWorld) GetFreeInvaderSlots() int32 {
 		return x.FreeInvaderSlots
 	}
 	return 0
+}
+
+func (x *InvadableWorld) GetPasswordHash() string {
+	if x != nil {
+		return x.PasswordHash
+	}
+	return ""
 }
 
 // spec 013 — evento de participação (host_world_dropin). O server do mundo o
@@ -1635,14 +1651,15 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\btopology\x18\x06 \x01(\tR\btopology\x12\x1f\n" +
 	"\vparams_json\x18\a \x01(\tR\n" +
 	"paramsJson\x12!\n" +
-	"\fprofile_hash\x18\b \x01(\tR\vprofileHash\"\xb3\x01\n" +
+	"\fprofile_hash\x18\b \x01(\tR\vprofileHash\"\xcf\x01\n" +
 	"\x10OpenWorldRequest\x12$\n" +
 	"\x0ehost_player_id\x18\x01 \x01(\tR\fhostPlayerId\x12\x17\n" +
 	"\agame_id\x18\x02 \x01(\tR\x06gameId\x12&\n" +
 	"\x0fhost_soul_level\x18\x03 \x01(\x05R\rhostSoulLevel\x12\x1f\n" +
 	"\vweapon_tier\x18\x04 \x01(\x05R\n" +
 	"weaponTier\x12\x17\n" +
-	"\amode_id\x18\x05 \x01(\tR\x06modeId\"\x92\x01\n" +
+	"\amode_id\x18\x05 \x01(\tR\x06modeId\x12\x1a\n" +
+	"\bpassword\x18\x06 \x01(\tR\bpassword\"\x92\x01\n" +
 	"\x11OpenWorldResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
@@ -1669,14 +1686,15 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x1aListInvadableWorldsRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\"Q\n" +
 	"\x1bListInvadableWorldsResponse\x122\n" +
-	"\x06worlds\x18\x01 \x03(\v2\x1a.session.v1.InvadableWorldR\x06worlds\"\xa6\x01\n" +
+	"\x06worlds\x18\x01 \x03(\v2\x1a.session.v1.InvadableWorldR\x06worlds\"\xcb\x01\n" +
 	"\x0eInvadableWorld\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12&\n" +
 	"\x0fhost_soul_level\x18\x02 \x01(\x05R\rhostSoulLevel\x12\x1f\n" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
 	"weaponTier\x12,\n" +
-	"\x12free_invader_slots\x18\x04 \x01(\x05R\x10freeInvaderSlots\"\xa1\x01\n" +
+	"\x12free_invader_slots\x18\x04 \x01(\x05R\x10freeInvaderSlots\x12#\n" +
+	"\rpassword_hash\x18\x05 \x01(\tR\fpasswordHash\"\xa1\x01\n" +
 	"\x1fReportParticipationEventRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +

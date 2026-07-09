@@ -1,7 +1,7 @@
 # Spec: 020-password-world-matching
 
 **Serviço:** session-service
-**Status:** Proposta (2026-07-09)
+**Status:** Done (2026-07-09)
 **Data:** 2026-07-09
 **ADR:** 0023 (perfil de multiplayer por jogo) — **arquétipo `host_world_dropin`, follow-up #1** (lado session: senha do mundo)
 **Roadmap:** `docs/game-models/host_world_dropin-follow-ups.md` → item 1 (play-with-friends por senha)
@@ -71,7 +71,7 @@ Sessão continua em memória (H0/H1a). `PasswordHash` entra na mesma struct `Ses
 
 ## Critérios de Aceite
 
-- [ ] `OpenWorld` com senha guarda o hash na sessão; sem senha, abre igual (hash vazio).
-- [ ] `ListInvadableWorlds` inclui `password_hash` de cada mundo (vazio quando não há senha).
-- [ ] `HashWorldPassword("")` não é igual a `HashWorldPassword` de nenhuma senha real (mundo sem senha nunca "bate" por acidente com um invasor que não informou senha).
-- [ ] `queue_arena` e H0/H1a sem regressão; testes com `-race`, ≥80% em `service/`/`domain/`.
+- [x] `OpenWorld` com senha guarda o hash na sessão; sem senha, abre igual (hash vazio).
+- [x] `ListInvadableWorlds` inclui `password_hash` de cada mundo (vazio quando não há senha).
+- [x] `HashWorldPassword("")` não é igual a `HashWorldPassword` de nenhuma senha real (mundo sem senha nunca "bate" por acidente com um invasor que não informou senha).
+- [x] `queue_arena` e H0/H1a sem regressão; testes com `-race` (155 verdes), 94.1%/100% em `service/`/`domain/`.

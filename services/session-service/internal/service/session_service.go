@@ -606,6 +606,7 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID st
 		RoleSlots:     roleSlotsFromProfile(snap),
 		HostSoulLevel: attrs.SoulLevel,
 		WeaponTier:    attrs.WeaponTier,
+		PasswordHash:  domain.HashWorldPassword(attrs.Password),
 		State:         domain.SessionOpen,
 		OpenedAt:      s.now(),
 	}
@@ -708,6 +709,7 @@ func (s *Service) ListInvadableWorlds(_ context.Context, gameID string) ([]domai
 			HostSoulLevel:    sess.HostSoulLevel,
 			WeaponTier:       sess.WeaponTier,
 			FreeInvaderSlots: slot.Capacity - len(slot.Occupants),
+			PasswordHash:     sess.PasswordHash,
 		})
 	}
 	return out, nil
