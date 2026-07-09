@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 )
 
@@ -16,23 +17,126 @@ const (
 	ArchetypeCoopMission     = "coop_mission"
 )
 
-// EventRule é uma regra de mapeamento fact-match -> event types (substitui as
-// funções hardcoded ParticipationEventTypes/PlacementEventTypes/
-// CollectiveEventTypes e a lógica inline de win_loss_draw). GameID nil = regra
-// global do arquétipo (aplica a todo jogo que usa esse arquétipo); GameID
-// setado = override/adição específica de um jogo.
+// Operadores do match (spec 014, V2a do ADR-0028). OpEq é o default — a forma
+// string do JSON ("chave": "valor") decodifica pra ele.
+const (
+	OpEq  = "eq"
+	OpNe  = "ne"
+	OpLt  = "lt"
+	OpLte = "lte"
+	OpGt  = "gt"
+	OpGte = "gte"
+	OpIn  = "in"
+)
+
+// MatchCond é UMA condição do match: operador + valor. No JSON aceita duas
+// formas — string pura (igualdade, formato do ADR-0027, 100% retrocompatível)
+// ou objeto {"op": "lte", "value": 10}. O decode é LENIENTE (op desconhecido
+// ou value de tipo errado viram Value nil — condição que nunca casa, nunca
+// erro): linha antiga/futura no banco não pode derrubar a avaliação de um
+// envelope. A validação ESTRITA acontece na criação (validateEventRule).
+type MatchCond struct {
+	Op    string
+	Value any // string (eq/ne) | float64 (lt/lte/gt/gte) | []string (in)
+}
+
+// Eq é o atalho pra condição de igualdade (a forma clássica do ADR-0027).
+func Eq(v string) MatchCond { return MatchCond{Op: OpEq, Value: v} }
+
+// EqMatch monta um match só de igualdades — açúcar pra testes e seeds no
+// formato antigo (mapa de strings).
+func EqMatch(pairs map[string]string) map[string]MatchCond {
+	m := make(map[string]MatchCond, len(pairs))
+	for k, v := range pairs {
+		m[k] = Eq(v)
+	}
+	return m
+}
+
+func (c *MatchCond) UnmarshalJSON(b []byte) error {
+	// forma string: igualdade exata (formato original).
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*c = Eq(s)
+		return nil
+	}
+	// forma objeto: {op, value} — decode leniente por tipo do op.
+	var raw struct {
+		Op    string          `json:"op"`
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	c.Op = raw.Op
+	c.Value = nil
+	switch raw.Op {
+	case OpEq, OpNe:
+		var v string
+		if json.Unmarshal(raw.Value, &v) == nil {
+			c.Value = v
+		}
+	case OpLt, OpLte, OpGt, OpGte:
+		var v float64
+		if json.Unmarshal(raw.Value, &v) == nil {
+			c.Value = v
+		}
+	case OpIn:
+		var v []string
+		if json.Unmarshal(raw.Value, &v) == nil && len(v) > 0 {
+			c.Value = v
+		}
+	}
+	return nil
+}
+
+func (c MatchCond) MarshalJSON() ([]byte, error) {
+	// eq serializa como string pura — mantém o JSONB compacto e idêntico ao
+	// formato do ADR-0027 pras regras de igualdade.
+	if c.Op == OpEq {
+		if s, ok := c.Value.(string); ok {
+			return json.Marshal(s)
+		}
+	}
+	return json.Marshal(struct {
+		Op    string `json:"op"`
+		Value any    `json:"value"`
+	}{c.Op, c.Value})
+}
+
+// Valid diz se a condição é bem formada (op conhecido + value do tipo certo)
+// — usada na validação estrita de criação.
+func (c MatchCond) Valid() bool {
+	switch c.Op {
+	case OpEq, OpNe:
+		_, ok := c.Value.(string)
+		return ok
+	case OpLt, OpLte, OpGt, OpGte:
+		_, ok := c.Value.(float64)
+		return ok
+	case OpIn:
+		v, ok := c.Value.([]string)
+		return ok && len(v) > 0
+	default:
+		return false
+	}
+}
+
+// EventRule é uma regra de mapeamento condições -> event types (ADR-0027 +
+// V2a). GameID nil = regra global do arquétipo (aplica a todo jogo que usa
+// esse arquétipo); GameID setado = override/adição específica de um jogo.
 type EventRule struct {
 	ID         string
 	GameID     *string // nil = global
 	Archetype  string
-	Match      map[string]string
+	Match      map[string]MatchCond
 	EventTypes []string
 }
 
 // Facts é o mapa normalizado de um envelope recebido, independente do kind —
 // a mesma forma que EvaluateRules casa contra o Match de cada regra. Todos os
 // valores são strings (evita ambiguidade float64/int na comparação com o que
-// vem decodificado do JSONB).
+// vem decodificado do JSONB); ops numéricos parseiam o fact na hora.
 type Facts map[string]string
 
 // FactMode é a chave do fact de modo de jogo (spec 013, F1 do ADR-0028) —
@@ -50,17 +154,62 @@ func (f Facts) WithMode(modeID string) Facts {
 	return f
 }
 
-// BattleRoyaleTopNThreshold é o limiar do "top N" — parâmetro numérico do
-// arquétipo, não vocabulário de evento; permanece hardcoded na normalização
-// (fora do escopo da generalização: adotar configurável só por evidência
-// futura, mesmo espírito de outras decisões deste repo).
-const BattleRoyaleTopNThreshold = 10
+// condMatches avalia UMA condição contra o valor do fact. Fact ausente nunca
+// casa (nem no ne — desigualdade exige a chave presente); fact não-numérico
+// nunca casa op numérico; op desconhecido/value nil nunca casa (defensivo —
+// o warning fica na camada que carrega do banco, o domain é puro).
+func condMatches(c MatchCond, factVal string, present bool) bool {
+	if !present {
+		return false
+	}
+	switch c.Op {
+	case OpEq:
+		v, ok := c.Value.(string)
+		return ok && factVal == v
+	case OpNe:
+		v, ok := c.Value.(string)
+		return ok && factVal != v
+	case OpLt, OpLte, OpGt, OpGte:
+		want, ok := c.Value.(float64)
+		if !ok {
+			return false
+		}
+		got, err := strconv.ParseFloat(factVal, 64)
+		if err != nil {
+			return false
+		}
+		switch c.Op {
+		case OpLt:
+			return got < want
+		case OpLte:
+			return got <= want
+		case OpGt:
+			return got > want
+		default:
+			return got >= want
+		}
+	case OpIn:
+		list, ok := c.Value.([]string)
+		if !ok {
+			return false
+		}
+		for _, v := range list {
+			if factVal == v {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
 
-// matchSubset diz se m é subconjunto exato de facts (toda chave de m existe
-// em facts com o mesmo valor). m vazio sempre bate (ex.: "played").
-func matchSubset(m map[string]string, facts Facts) bool {
-	for k, v := range m {
-		if facts[k] != v {
+// matchSubset diz se TODAS as condições de m casam contra facts. m vazio
+// sempre bate (ex.: "played").
+func matchSubset(m map[string]MatchCond, facts Facts) bool {
+	for k, c := range m {
+		v, present := facts[k]
+		if !condMatches(c, v, present) {
 			return false
 		}
 	}
@@ -68,9 +217,9 @@ func matchSubset(m map[string]string, facts Facts) bool {
 }
 
 // EvaluateRules casa TODAS as regras aplicáveis (Archetype bate E (GameID nil
-// OU == gameID do evento)) cujo Match é subconjunto exato de facts, unindo
-// (sem duplicar) os EventTypes das que baterem. Função pura e testável — a
-// política do sink, agora data-driven em vez de hardcoded por arquétipo.
+// OU == gameID do evento)) cujo Match casa inteiro contra facts, unindo (sem
+// duplicar) os EventTypes das que baterem. Função pura e testável — a
+// política do sink, data-driven (ADR-0027 + V2a).
 func EvaluateRules(rules []EventRule, gameID string, facts Facts) []string {
 	seen := make(map[string]struct{})
 	var out []string
@@ -99,14 +248,11 @@ func ParticipationFacts(role, event, outcome string) Facts {
 	return Facts{"role": role, "event": event, "outcome": outcome}
 }
 
-// PlacementFacts normaliza uma colocação (battle_royale). O tier "top_n" é
-// derivado aqui (não é vocabulário, é o limiar numérico do arquétipo).
+// PlacementFacts normaliza uma colocação (battle_royale). O limiar do top-N
+// deixou de ser derivado aqui (spec 014): virou a regra editável
+// `placement lte N` na migration 009 — parâmetro por dado, não por código.
 func PlacementFacts(placement int) Facts {
-	f := Facts{"placement": strconv.Itoa(placement)}
-	if placement <= BattleRoyaleTopNThreshold {
-		f["tier"] = "top_n"
-	}
-	return f
+	return Facts{"placement": strconv.Itoa(placement)}
 }
 
 // CollectiveFacts normaliza o desfecho coletivo (coop_mission).
@@ -126,7 +272,8 @@ type EventRuleService interface {
 	ListEffectiveRules(ctx context.Context, gameID string) ([]EventRule, error)
 	// CreateEventRule cria uma regra escopada ao jogo (GameID sempre setado
 	// pelo service, nunca aceito do payload). ErrInvalidEventRule em entrada
-	// inválida (archetype desconhecido, match ou eventTypes vazios).
+	// inválida (archetype desconhecido, condição malformada, eventTypes
+	// vazios).
 	CreateEventRule(ctx context.Context, gameID string, r EventRule) (*EventRule, error)
 	// DeleteEventRule remove uma regra do jogo. ErrEventRuleNotFound se não
 	// existir OU se for uma regra global (não editável por este endpoint —

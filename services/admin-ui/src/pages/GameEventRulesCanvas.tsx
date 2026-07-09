@@ -30,6 +30,15 @@ import {
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import {
+  buildMatchValue,
+  condLabel,
+  condOp,
+  condRaw,
+  OP_OPTIONS,
+  type MatchOp,
+  type MatchValue,
+} from "../lib/matchCond";
+import {
   buildRulesGraph,
   pathHighlight,
   DRAFT_RULE_ID,
@@ -59,7 +68,12 @@ function modeStats(m: MultiplayerMode): string[] {
 
 const DND_MIME = "application/x-rules-fact";
 
-type MatchPair = { key: string; value: string };
+// Uma linha do form de match (spec 014): chave + operador + valor cru (o
+// texto vira o MatchValue da API via buildMatchValue — lista por vírgula no
+// `in`, número nos ops numéricos).
+type MatchRow = { key: string; op: MatchOp; value: string };
+
+const EMPTY_ROW: MatchRow = { key: "", op: "eq", value: "" };
 
 // GameEventRulesCanvas (specs 043+044 / ADR-0028): grafo de 4 camadas sobre o
 // MESMO CRUD da tabela. Layout 044: toolbar em cima (arquétipo + nova regra),
@@ -89,7 +103,7 @@ export function GameEventRulesCanvas({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [matchPairs, setMatchPairs] = useState<MatchPair[]>([{ key: "", value: "" }]);
+  const [matchRows, setMatchRows] = useState<MatchRow[]>([EMPTY_ROW]);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<EventRule | null>(null);
@@ -114,15 +128,18 @@ export function GameEventRulesCanvas({
     return out;
   }, [modes, arch, catalog]);
 
-  // Rascunho ao vivo (R2 da spec 044): só os pares preenchidos entram no nó.
+  // Rascunho ao vivo (R2 da spec 044): só linhas preenchidas E válidas pro
+  // operador entram no nó (linha inválida não desenha ligação fantasma).
   const draft: DraftRule | undefined = useMemo(() => {
     if (!drawerOpen) return undefined;
-    const match: Record<string, string> = {};
-    for (const { key, value } of matchPairs) {
-      if (key.trim()) match[key.trim()] = value.trim();
+    const match: Record<string, MatchValue> = {};
+    for (const { key, op, value } of matchRows) {
+      if (!key.trim()) continue;
+      const v = buildMatchValue(op, value);
+      if (v !== null) match[key.trim()] = v;
     }
     return { match, eventTypes };
-  }, [drawerOpen, matchPairs, eventTypes]);
+  }, [drawerOpen, matchRows, eventTypes]);
 
   const graph = useMemo(
     () => buildRulesGraph(archRules, catalog, draft, showStats ? statsForArch : undefined),
@@ -130,11 +147,15 @@ export function GameEventRulesCanvas({
   );
 
   // Vocabulário conhecido do arquétipo (chips do drawer + sugestões) — sempre
-  // derivado do dado real, nunca hardcoded (princípio do ADR-0027).
+  // derivado do dado real, nunca hardcoded (princípio do ADR-0027). Cada
+  // entrada é uma CONDIÇÃO distinta (spec 014).
   const knownFacts = useMemo(() => {
-    const seen = new Map<string, MatchPair>();
+    const seen = new Map<string, { key: string; cond: MatchValue; label: string }>();
     for (const r of archRules) {
-      for (const [key, value] of Object.entries(r.match)) seen.set(`${key}=${value}`, { key, value });
+      for (const [key, cond] of Object.entries(r.match)) {
+        const label = condLabel(key, cond);
+        seen.set(label, { key, cond, label });
+      }
     }
     return [...seen.values()];
   }, [archRules]);
@@ -179,11 +200,11 @@ export function GameEventRulesCanvas({
     [graph, selectedId],
   );
 
-  function openCreate(prefill?: MatchPair) {
+  function openCreate(prefill?: MatchRow) {
     setDrawerOpen(true);
     setSelectedId(null);
     setFormError(null);
-    setMatchPairs(prefill ? [prefill, { key: "", value: "" }] : [{ key: "", value: "" }]);
+    setMatchRows(prefill ? [prefill, EMPTY_ROW] : [EMPTY_ROW]);
     setEventTypes([]);
   }
 
@@ -194,13 +215,13 @@ export function GameEventRulesCanvas({
     setFormError(null);
   }
 
-  // addFactToDraft soma um par ao draft sem duplicar, mantendo uma linha vazia
-  // no fim pro próximo par manual.
-  function addFactToDraft(fact: MatchPair) {
-    setMatchPairs((p) => {
+  // addFactToDraft soma uma condição ao draft sem duplicar, mantendo uma
+  // linha vazia no fim pra próxima condição manual.
+  function addFactToDraft(row: MatchRow) {
+    setMatchRows((p) => {
       const filled = p.filter((r) => r.key.trim());
-      if (filled.some((r) => r.key === fact.key && r.value === fact.value)) return p;
-      return [...filled, fact, { key: "", value: "" }];
+      if (filled.some((r) => r.key === row.key && r.op === row.op && r.value === row.value)) return p;
+      return [...filled, row, EMPTY_ROW];
     });
   }
 
@@ -208,9 +229,9 @@ export function GameEventRulesCanvas({
     const raw = e.dataTransfer.getData(DND_MIME);
     if (!raw) return;
     e.preventDefault();
-    const fact = JSON.parse(raw) as MatchPair;
-    if (drawerOpen) addFactToDraft(fact);
-    else openCreate(fact);
+    const row = JSON.parse(raw) as MatchRow;
+    if (drawerOpen) addFactToDraft(row);
+    else openCreate(row);
   }
 
   // Com o drawer aberto o canvas vira superfície de montagem (R4): clicar num
@@ -224,7 +245,7 @@ export function GameEventRulesCanvas({
     const node = graph.nodes.find((n) => n.id === id);
     if (node?.type === "fact") {
       const d = node.data as unknown as FactNodeData;
-      addFactToDraft({ key: d.factKey, value: d.factValue });
+      addFactToDraft({ key: d.factKey, op: condOp(d.cond), value: condRaw(d.cond) });
     } else if (node?.type === "eventType") {
       const d = node.data as unknown as EventTypeNodeData;
       setEventTypes((ts) => (ts.includes(d.eventType) ? ts : [...ts, d.eventType]));
@@ -232,8 +253,15 @@ export function GameEventRulesCanvas({
   }
 
   async function submit() {
+    // linha preenchida mas inválida pro operador (ex.: "abc" num ≤) não pode
+    // ser silenciosamente ignorada no salvar — só no rascunho ao vivo.
+    const invalid = matchRows.some((r) => r.key.trim() && buildMatchValue(r.op, r.value) === null);
+    if (invalid) {
+      setFormError("Valor inválido pro operador (numérico exige número; `in` exige lista).");
+      return;
+    }
     if (!draft || Object.keys(draft.match).length === 0 || draft.eventTypes.length === 0) {
-      setFormError("Preencha ao menos um par do match e um event type.");
+      setFormError("Preencha ao menos uma condição do match e um event type.");
       return;
     }
     try {
@@ -310,6 +338,8 @@ export function GameEventRulesCanvas({
         // tamanho com o drawer (feedback 044): o rascunho fica no TOPO da
         // coluna de regras (ver rulesGraph), longe da faixa coberta.
         fitKey={`${arch}|${graph.nodes.length}`}
+        // canvas ocupa a altura disponível da aba (spec 047), não 580px fixos.
+        height="calc(100vh - 345px)"
         overlay={
           selectedNode && !drawerOpen ? (
             <Paper withBorder p="sm" w={280} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
@@ -325,99 +355,113 @@ export function GameEventRulesCanvas({
         }
       />
 
-      {/* Criação visual (spec 044): drawer de baixo, canvas segue interativo
-          (sem overlay/trap de foco) e o rascunho reflete ao vivo. */}
+      {/* Criação visual (specs 044+047): drawer à direita (mesmo padrão do
+          editor de modos, spec 037), SEM overlay/trap de foco — o canvas
+          segue interativo e o rascunho (topo da coluna de regras, à
+          esquerda) reflete ao vivo. */}
       <Drawer
         opened={drawerOpen}
         onClose={closeDrawer}
-        position="bottom"
-        size={270}
-        padding="sm"
+        position="right"
+        size={560}
         withOverlay={false}
         trapFocus={false}
         lockScroll={false}
         title={`Nova regra — ${ARCHETYPE_META[arch].label}`}
       >
-        <Stack gap="xs">
-          {/* Duas colunas fluidas (quebram em janela estreita), ações no
-              rodapé — layout anterior de 3 colunas fixas estourava. */}
-          <Group align="flex-start" gap="xl" wrap="wrap">
-            <Stack gap={6} style={{ flex: "1 1 320px", maxWidth: 480 }}>
+        <Stack gap="md">
+            <Stack gap={6}>
               <Text size="xs" c="dimmed">
-                Match (todos os pares precisam bater no evento)
+                Match (todas as condições precisam bater no evento)
               </Text>
-              {matchPairs.map((row, i) => (
+              {matchRows.map((row, i) => (
                 <Group key={i} gap={4} wrap="nowrap">
                   <Autocomplete
                     size="xs"
                     placeholder="chave"
                     data={keySuggestions}
                     value={row.key}
-                    onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, key: v } : r)))}
+                    onChange={(v) => setMatchRows((p) => p.map((r, idx) => (idx === i ? { ...r, key: v } : r)))}
                     style={{ flex: 1 }}
+                  />
+                  <Select
+                    size="xs"
+                    w={68}
+                    data={OP_OPTIONS}
+                    value={row.op}
+                    onChange={(v) =>
+                      v && setMatchRows((p) => p.map((r, idx) => (idx === i ? { ...r, op: v as MatchOp } : r)))
+                    }
+                    allowDeselect={false}
+                    comboboxProps={{ width: 90 }}
+                    aria-label="Operador"
                   />
                   <Autocomplete
                     size="xs"
-                    placeholder="valor"
-                    data={[
-                      ...new Set([
-                        ...knownFacts.filter((f) => f.key === row.key).map((f) => f.value),
-                        ...(row.key === "mode" ? modeIdSuggestions : []),
-                      ]),
-                    ]}
+                    placeholder={row.op === "in" ? "a, b, c" : row.op === "eq" || row.op === "ne" ? "valor" : "número"}
+                    data={
+                      row.op === "eq" || row.op === "ne"
+                        ? [
+                            ...new Set([
+                              ...knownFacts
+                                .filter((f) => f.key === row.key && typeof f.cond === "string")
+                                .map((f) => f.cond as string),
+                              ...(row.key === "mode" ? modeIdSuggestions : []),
+                            ]),
+                          ]
+                        : []
+                    }
                     value={row.value}
-                    onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, value: v } : r)))}
+                    onChange={(v) => setMatchRows((p) => p.map((r, idx) => (idx === i ? { ...r, value: v } : r)))}
                     style={{ flex: 1 }}
                   />
                   <ActionIcon
                     variant="subtle"
                     color="red"
                     size="sm"
-                    disabled={matchPairs.length === 1}
-                    onClick={() => setMatchPairs((p) => p.filter((_, idx) => idx !== i))}
-                    aria-label="Remover par"
+                    disabled={matchRows.length === 1}
+                    onClick={() => setMatchRows((p) => p.filter((_, idx) => idx !== i))}
+                    aria-label="Remover condição"
                   >
                     <IconTrash size={14} />
                   </ActionIcon>
                 </Group>
               ))}
               <Group gap={4}>
-                <Button
-                  variant="default"
-                  size="xs"
-                  onClick={() => setMatchPairs((p) => [...p, { key: "", value: "" }])}
-                >
-                  + par chave/valor
+                <Button variant="default" size="xs" onClick={() => setMatchRows((p) => [...p, EMPTY_ROW])}>
+                  + condição
                 </Button>
                 {knownFacts.map((f) => (
                   <Badge
-                    key={`${f.key}=${f.value}`}
+                    key={f.label}
                     className="flow-palette-item"
                     variant="light"
                     color="blue"
                     tt="none"
                     draggable
-                    onDragStart={(e) => e.dataTransfer.setData(DND_MIME, JSON.stringify(f))}
-                    onClick={() => addFactToDraft(f)}
+                    onDragStart={(e) =>
+                      e.dataTransfer.setData(
+                        DND_MIME,
+                        JSON.stringify({ key: f.key, op: condOp(f.cond), value: condRaw(f.cond) }),
+                      )
+                    }
+                    onClick={() => addFactToDraft({ key: f.key, op: condOp(f.cond), value: condRaw(f.cond) })}
                     style={{ cursor: "pointer" }}
                   >
-                    {f.key}={f.value}
+                    {f.label}
                   </Badge>
                 ))}
               </Group>
             </Stack>
 
-            <Stack gap={6} style={{ flex: "1 1 280px", maxWidth: 420 }}>
-              <TagsInput
-                size="xs"
-                label="Event types"
-                description="Enter adiciona; clique num event type do canvas também."
-                data={typeSuggestions}
-                value={eventTypes}
-                onChange={setEventTypes}
-              />
-            </Stack>
-          </Group>
+            <TagsInput
+              size="xs"
+              label="Event types"
+              description="Enter adiciona; clique num event type do canvas também."
+              data={typeSuggestions}
+              value={eventTypes}
+              onChange={setEventTypes}
+            />
 
           <Group justify="flex-end" gap="xs">
             {formError && (
@@ -472,7 +516,7 @@ function NodeDetails({ node, onDelete }: { node: Node; onDelete: (r: EventRule) 
           </Badge>
         </Group>
         <Text size="xs" c="dimmed">
-          Match (subconjunto exato dos facts do evento):
+          Match (todas as condições precisam bater nos facts do evento):
         </Text>
         <Group gap={4}>
           {Object.entries(rule.match).length === 0 ? (
@@ -482,7 +526,7 @@ function NodeDetails({ node, onDelete }: { node: Node; onDelete: (r: EventRule) 
           ) : (
             Object.entries(rule.match).map(([k, v]) => (
               <Badge key={k} size="xs" variant="light" color="gray" tt="none">
-                {k}={v}
+                {condLabel(k, v)}
               </Badge>
             ))
           )}
@@ -520,14 +564,14 @@ function NodeDetails({ node, onDelete }: { node: Node; onDelete: (r: EventRule) 
     return (
       <Stack gap="xs">
         <Text fw={600} size="sm">
-          Fact
+          Condição
         </Text>
         <Badge variant="light" color="blue" tt="none" style={{ alignSelf: "flex-start" }}>
-          {d.factKey}={d.factValue}
+          {condLabel(d.factKey, d.cond)}
         </Badge>
         <Text size="xs" c="dimmed">
-          Par chave/valor normalizado do evento recebido — o caminho destacado mostra quais regras o
-          usam.
+          Condição sobre os facts normalizados do evento recebido — o caminho destacado mostra quais
+          regras a usam.
         </Text>
       </Stack>
     );

@@ -244,11 +244,13 @@ type AchievementsReader interface {
 // arquétipo (read-only neste painel); "game" = override específico deste
 // jogo (editável/removível).
 type EventRule struct {
-	ID         string            `json:"id"`
-	Scope      string            `json:"scope"`
-	Archetype  string            `json:"archetype"`
-	Match      map[string]string `json:"match"`
-	EventTypes []string          `json:"eventTypes"`
+	ID         string                     `json:"id"`
+	Scope      string                     `json:"scope"`
+	Archetype  string                     `json:"archetype"`
+	// Match é opaco (string OU objeto de comparador, spec achievements/014) —
+	// o BFF repassa sem interpretar, como o PlayerDataEntry.Value abaixo.
+	Match      map[string]json.RawMessage `json:"match"`
+	EventTypes []string                   `json:"eventTypes"`
 }
 
 // PlayerDataEntry é uma linha de dado de gameplay do jogador (player-data). O

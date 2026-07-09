@@ -20,6 +20,7 @@ import { notifications } from "@mantine/notifications";
 import { IconPlus, IconRefresh, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { api, HttpError, type EventRule, type MultiplayerProfile } from "../lib/api";
+import { condLabel } from "../lib/matchCond";
 import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
 import { useAsync } from "../lib/useAsync";
 import { GameEventRulesCanvas } from "./GameEventRulesCanvas";
@@ -41,9 +42,9 @@ const ALL_ARCHETYPES: MultiplayerProfile["archetype"][] = [
 // hardcodar campos fixos como no form de achievements.
 type MatchPair = { key: string; value: string };
 
-function matchLabel(match: Record<string, string>): string {
+function matchLabel(match: EventRule["match"]): string {
   const entries = Object.entries(match);
-  return entries.length === 0 ? "(sempre)" : entries.map(([k, v]) => `${k}=${v}`).join(", ");
+  return entries.length === 0 ? "(sempre)" : entries.map(([k, v]) => condLabel(k, v)).join(", ");
 }
 
 // GameEventRules é o CRUD das regras de mapeamento evento->achievement-event-
@@ -214,8 +215,8 @@ export function GameEventRules({ gameId }: { gameId: string }) {
                   ) : (
                     <Group gap={4} wrap="wrap">
                       {Object.entries(r.match).map(([k, v]) => (
-                        <Badge key={k} variant="light" color="gray">
-                          {k}={v}
+                        <Badge key={k} variant="light" color="gray" tt="none">
+                          {condLabel(k, v)}
                         </Badge>
                       ))}
                     </Group>

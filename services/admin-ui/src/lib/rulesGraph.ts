@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { CatalogAchievement, EventRule } from "./api";
+import { condLabel, type MatchValue } from "./matchCond";
 
 // rulesGraph monta o grafo de 4 camadas do editor visual de event rules
 // (spec 043 / ADR-0028): facts -> regras -> event types -> achievements.
@@ -7,7 +8,9 @@ import type { CatalogAchievement, EventRule } from "./api";
 // sai nodes/edges com posição — nenhum estado de canvas persiste, o desenho é
 // sempre derivado das regras.
 
-export type FactNodeData = { factKey: string; factValue: string };
+// Um nó de fact é UMA CONDIÇÃO distinta (spec 014): "role = invader",
+// "placement ≤ 10" — o label vem de condLabel.
+export type FactNodeData = { factKey: string; cond: MatchValue };
 export type RuleNodeData = { rule: EventRule; draft?: boolean };
 export type EventTypeNodeData = { eventType: string; listeners: number };
 // Achievement é disparado por event type OU progride por stat (ADR-0023 A1,
@@ -25,7 +28,7 @@ export type AchievementNodeData = {
 export type StatNodeData = { statKey: string; declared: boolean; listeners: number };
 export type StatInfo = { key: string; declared: boolean };
 
-export const factId = (k: string, v: string) => `f:${k}=${v}`;
+export const factId = (k: string, v: MatchValue) => `f:${condLabel(k, v)}`;
 export const ruleId = (r: EventRule) => `r:${r.id}`;
 export const typeId = (et: string) => `t:${et}`;
 export const achId = (id: string) => `a:${id}`;
@@ -73,7 +76,7 @@ function barycenter(items: Meta[], neighborIdx: Map<string, number[]>): Meta[] {
 // DraftRule é a regra EM CRIAÇÃO (drawer aberto, spec 044): entra no layout
 // como pseudo-regra "__draft__" — mesmas ligações das regras reais, só que
 // marcada como rascunho (nós/edges ghost) até o admin salvar.
-export type DraftRule = { match: Record<string, string>; eventTypes: string[] };
+export type DraftRule = { match: Record<string, MatchValue>; eventTypes: string[] };
 
 export const DRAFT_RULE_ID = "r:__draft__";
 
@@ -109,12 +112,12 @@ export function buildRulesGraph(
     }));
   const ruleIdx = new Map(ruleMetas.map((m, i) => [m.id, i]));
 
-  // Camada 1 — facts distintos (pares chave=valor dos matches).
-  const factUses = new Map<string, { key: string; value: string; rules: number[] }>();
+  // Camada 1 — condições distintas dos matches (um nó por condição).
+  const factUses = new Map<string, { key: string; cond: MatchValue; rules: number[] }>();
   for (const r of allRules) {
     for (const [k, v] of Object.entries(r.match)) {
       const id = factId(k, v);
-      const u = factUses.get(id) ?? { key: k, value: v, rules: [] };
+      const u = factUses.get(id) ?? { key: k, cond: v, rules: [] };
       u.rules.push(ruleIdx.get(ruleId(r))!);
       factUses.set(id, u);
     }
@@ -122,7 +125,7 @@ export function buildRulesGraph(
   let factMetas: Meta[] = [...factUses.entries()].map(([id, u]) => ({
     id,
     type: "fact",
-    data: { factKey: u.key, factValue: u.value } satisfies FactNodeData,
+    data: { factKey: u.key, cond: u.cond } satisfies FactNodeData,
     h: SIZE.fact.h,
     layer: 0,
   }));

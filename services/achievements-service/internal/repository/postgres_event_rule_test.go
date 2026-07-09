@@ -41,7 +41,7 @@ func TestRulesForArchetype_OverrideDoJogoSomaAsGlobais(t *testing.T) {
 
 	created := &domain.EventRule{
 		GameID: &gameID, Archetype: domain.ArchetypeBattleRoyale,
-		Match: map[string]string{"placement": "2"}, EventTypes: []string{"custom_runner_up"},
+		Match: domain.EqMatch(map[string]string{"placement": "2"}), EventTypes: []string{"custom_runner_up"},
 	}
 	require.NoError(t, repo.CreateRule(ctx, created))
 	require.NotEmpty(t, created.ID, "CreateRule preenche o ID gerado")
@@ -64,7 +64,7 @@ func TestListEffective_TodosArquetipos(t *testing.T) {
 
 	require.NoError(t, repo.CreateRule(ctx, &domain.EventRule{
 		GameID: &gameID, Archetype: domain.ArchetypeCoopMission,
-		Match: map[string]string{"outcome": "MISSION_SUCCESS"}, EventTypes: []string{"custom_mission_medal"},
+		Match: domain.EqMatch(map[string]string{"outcome": "MISSION_SUCCESS"}), EventTypes: []string{"custom_mission_medal"},
 	}))
 
 	all, err := repo.ListEffective(ctx, gameID)
@@ -82,7 +82,7 @@ func TestDeleteRule_SoRemoveDoJogo_GlobalDaErrEventRuleNotFound(t *testing.T) {
 
 	created := &domain.EventRule{
 		GameID: &gameID, Archetype: domain.ArchetypeQueueArena,
-		Match: map[string]string{"outcome": "win"}, EventTypes: []string{"custom_win_badge"},
+		Match: domain.EqMatch(map[string]string{"outcome": "win"}), EventTypes: []string{"custom_win_badge"},
 	}
 	require.NoError(t, repo.CreateRule(ctx, created))
 

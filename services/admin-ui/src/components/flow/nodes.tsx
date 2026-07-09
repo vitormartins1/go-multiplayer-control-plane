@@ -9,6 +9,7 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { condLabel } from "../../lib/matchCond";
 import type {
   AchievementNodeData,
   EventTypeNodeData,
@@ -31,8 +32,7 @@ export function FactNode({ data }: NodeProps) {
       </div>
       <div className="flow-card__body">
         <div className="flow-card__row">
-          <span className="flow-card__key">{d.factKey} =</span>
-          <span>{d.factValue}</span>
+          <span>{condLabel(d.factKey, d.cond)}</span>
         </div>
       </div>
       <Handle type="source" position={Position.Right} isConnectable={false} />
@@ -61,8 +61,7 @@ export function RuleNode({ data }: NodeProps) {
         ) : (
           pairs.map(([k, v]) => (
             <div key={k} className="flow-card__row">
-              <span className="flow-card__key">{k} =</span>
-              <span>{v}</span>
+              <span>{condLabel(k, v)}</span>
             </div>
           ))
         )}

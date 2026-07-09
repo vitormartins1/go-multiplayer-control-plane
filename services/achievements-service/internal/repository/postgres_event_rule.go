@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -96,6 +97,15 @@ func scanEventRules(rows pgx.Rows) ([]domain.EventRule, error) {
 		e.GameID = gameID
 		if err := json.Unmarshal(matchJSON, &e.Match); err != nil {
 			return nil, fmt.Errorf("event rule repository: unmarshal match: %w", err)
+		}
+		// Decode leniente (spec 014): condição malformada/op desconhecido no
+		// banco nunca casa — mas nunca silenciosamente sem rastro. O warning
+		// mora aqui (o domain é puro, sem I/O).
+		for k, c := range e.Match {
+			if !c.Valid() {
+				slog.Warn("event rule com condição inválida (nunca casa)",
+					slog.String("rule_id", e.ID), slog.String("key", k), slog.String("op", c.Op))
+			}
 		}
 		out = append(out, e)
 	}

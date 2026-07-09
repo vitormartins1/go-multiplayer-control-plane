@@ -1248,3 +1248,51 @@ events := domain.EvaluateRules(rules, gameID,
 Por que **não** virou um parâmetro `mode` em cada normalizadora: o modo vem do *envelope* (é cross-kind, todo kind carrega `modeId`), não da forma de resultado de cada arquétipo. O decorator mantém cada normalizadora conhecendo só o seu kind, e a composição acontece no chamador — mesma separação de responsabilidades da arquitetura hexagonal, em miniatura.
 
 **Gotcha (vs C#):** o receiver `f Facts` é "por valor", mas o *header* do map copiado aponta pros mesmos buckets — a mutação é visível fora. Isso NÃO vale pra `nil` map (escrever em map nil = panic): aqui é seguro porque as normalizadoras sempre devolvem map inicializado.
+
+## 36 — `UnmarshalJSON` custom: um campo que aceita DUAS formas no wire
+
+**O que é / por que importa:** implementar `json.Unmarshaler`/`json.Marshaler` num tipo próprio permite que UM campo JSON aceite formas diferentes (string OU objeto) mantendo o tipo Go único — o jeito idiomático de evoluir um contrato JSON **sem quebrar o formato antigo**. Em C# você registraria um `JsonConverter<T>`; em Go o comportamento mora nos métodos do próprio tipo, e o `encoding/json` os usa automaticamente em qualquer lugar que o tipo apareça (map, slice, struct aninhada).
+
+**Onde no projeto:** `achievements-service/internal/domain/event_rule.go` (`MatchCond`, spec 014 — o match das event rules aceita `"outcome": "win"` E `"placement": {"op": "lte", "value": 10}`).
+
+```go
+type MatchCond struct {
+	Op    string
+	Value any // string | float64 | []string conforme o op
+}
+
+func (c *MatchCond) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil { // 1ª forma: string pura
+		*c = Eq(s) // = igualdade (o formato antigo continua válido)
+		return nil
+	}
+	var raw struct { // 2ª forma: objeto {op, value}
+		Op    string          `json:"op"`
+		Value json.RawMessage `json:"value"` // decode adiado: o tipo depende do op
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	// ... switch raw.Op: parseia Value no tipo certo; desconhecido -> Value nil
+}
+
+func (c MatchCond) MarshalJSON() ([]byte, error) {
+	if c.Op == OpEq { // igualdade volta a serializar como string pura:
+		if s, ok := c.Value.(string); ok { // o JSONB no banco fica idêntico
+			return json.Marshal(s) // ao formato pré-014
+		}
+	}
+	return json.Marshal(struct {
+		Op    string `json:"op"`
+		Value any    `json:"value"`
+	}{c.Op, c.Value})
+}
+```
+
+Dois detalhes de design que valem guardar:
+
+1. **Decode leniente + validação estrita separados.** O `UnmarshalJSON` nunca falha por op desconhecido (linha antiga/futura no banco não pode derrubar o consumo de um envelope) — ele deixa `Value nil`, e uma condição com `Value nil` *nunca casa*. Quem exige forma perfeita é a validação de criação (`MatchCond.Valid()` → 400). O mesmo tipo serve os dois caminhos com políticas diferentes.
+2. **Receiver pointer no Unmarshal, value no Marshal** — `*MatchCond` porque o decode escreve no receiver; `MatchCond` no encode porque só lê. O `encoding/json` acha os dois via interface, inclusive pra valores dentro de `map[string]MatchCond`.
+
+**Gotcha (vs C#):** números JSON viram `float64` no `any` — a comparação numérica do avaliador converte o fact com `strconv.ParseFloat` pro mesmo domínio antes de comparar, nunca compara string com número.

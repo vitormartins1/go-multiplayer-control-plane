@@ -4,6 +4,7 @@ import {
   Autocomplete,
   Badge,
   Button,
+  Drawer,
   Group,
   List,
   Loader,
@@ -632,12 +633,14 @@ export function GameAchievements({ gameId }: { gameId: string }) {
         )}
       </Modal>
 
-      {/* Progresso da conquista (todos os jogadores) */}
-      <Modal
+      {/* Progresso da conquista (todos os jogadores) — Drawer à direita
+          (spec 047, mesmo padrão do editor de modos), lista visível ao fundo. */}
+      <Drawer
         opened={!!progressAchievement}
         onClose={() => { setProgressAchievement(null); setProgressEntries([]); }}
+        position="right"
+        size={560}
         title={progressAchievement ? `Progresso — ${progressAchievement.name}` : "Progresso"}
-        size="lg"
       >
         <Stack>
           {progressLoading && <Loader />}
@@ -700,7 +703,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </Drawer>
 
       {/* Confirmar remoção */}
       <Modal opened={!!deleting} onClose={() => setDeleting(null)} title="Remover conquista">

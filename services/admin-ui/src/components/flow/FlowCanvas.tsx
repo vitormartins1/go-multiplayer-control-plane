@@ -63,13 +63,14 @@ export function FlowCanvas({
   overlay?: ReactNode;
   // fitKey: qualquer mudança re-enquadra o grafo (ver AutoFit).
   fitKey?: unknown;
-  // height sobrescreve os 580px do CSS (ex.: canvas encolhe com o drawer aberto).
-  height?: number;
+  // height sobrescreve os 580px do CSS — número (px) ou expressão CSS
+  // (ex.: "calc(100vh - 340px)" pro canvas ocupar a altura da aba, spec 047).
+  height?: number | string;
 }) {
   return (
     <div
       className="flow-wrap"
-      style={height ? { height, transition: "height .2s ease" } : undefined}
+      style={height ? { height, minHeight: 460 } : undefined}
       onDragOver={onDrop ? (e) => e.preventDefault() : undefined}
       onDrop={onDrop}
     >
