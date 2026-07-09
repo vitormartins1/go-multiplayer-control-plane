@@ -87,9 +87,47 @@ func (f *fakeService) ProgressForAchievement(_ context.Context, gameID, _ string
 	return nil, nil
 }
 
+// fakeEventRuleService é o fake de domain.EventRuleService — usado direto
+// pelos testes das rotas /event-rules; os demais testes (achievements) não se
+// importam com ele, então newServer injeta um vazio.
+type fakeEventRuleService struct {
+	rules       []domain.EventRule
+	createErr   error
+	deleteErr   error
+	gotGameID   string
+	gotCreate   domain.EventRule
+	gotDeleteID string
+}
+
+func (f *fakeEventRuleService) ListEffectiveRules(_ context.Context, gameID string) ([]domain.EventRule, error) {
+	f.gotGameID = gameID
+	return f.rules, nil
+}
+
+func (f *fakeEventRuleService) CreateEventRule(_ context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error) {
+	f.gotGameID, f.gotCreate = gameID, r
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
+	gid := gameID
+	r.GameID = &gid
+	return &r, nil
+}
+
+func (f *fakeEventRuleService) DeleteEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotDeleteID = gameID, id
+	return f.deleteErr
+}
+
 func newServer(svc domain.AchievementService, v domain.TokenVerifier) *httptest.Server {
 	mux := http.NewServeMux()
-	NewHandler(svc, v).Register(mux)
+	NewHandler(svc, &fakeEventRuleService{}, v).Register(mux)
+	return httptest.NewServer(mux)
+}
+
+func newServerWithRules(svc domain.AchievementService, rules domain.EventRuleService, v domain.TokenVerifier) *httptest.Server {
+	mux := http.NewServeMux()
+	NewHandler(svc, rules, v).Register(mux)
 	return httptest.NewServer(mux)
 }
 
@@ -357,4 +395,76 @@ func TestAdminRecordEvent_TypeVazio_400(t *testing.T) {
 	resp := do(t, srv, http.MethodPost, "/admin/games/g/players/p/events", "", "", `{"type":""}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminListEventRules_200(t *testing.T) {
+	global := domain.EventRule{ID: "r1", GameID: nil, Archetype: "host_world_dropin",
+		Match: map[string]string{"event": "JOINED"}, EventTypes: []string{"world_joined"}}
+	rules := &fakeEventRuleService{rules: []domain.EventRule{global}}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/games/g/event-rules", "", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g", rules.gotGameID)
+
+	var body struct {
+		Rules []eventRuleDTO `json:"rules"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Rules, 1)
+	assert.Equal(t, "global", body.Rules[0].Scope)
+	assert.Equal(t, []string{"world_joined"}, body.Rules[0].EventTypes)
+}
+
+func TestAdminCreateEventRule_201(t *testing.T) {
+	rules := &fakeEventRuleService{}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/game-9/event-rules", "", "",
+		`{"archetype":"battle_royale","match":{"placement":"1"},"eventTypes":["custom_win_badge"]}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	assert.Equal(t, "game-9", rules.gotGameID)
+	assert.Equal(t, "battle_royale", rules.gotCreate.Archetype)
+	assert.Equal(t, []string{"custom_win_badge"}, rules.gotCreate.EventTypes)
+
+	var body eventRuleDTO
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "game", body.Scope)
+}
+
+func TestAdminCreateEventRule_Invalido_400(t *testing.T) {
+	rules := &fakeEventRuleService{createErr: domain.ErrInvalidEventRule}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/g/event-rules", "", "",
+		`{"archetype":"arquetipo_invalido","match":{},"eventTypes":["x"]}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAdminDeleteEventRule_204(t *testing.T) {
+	rules := &fakeEventRuleService{}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodDelete, "/admin/games/g/event-rules/r1", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "g", rules.gotGameID)
+	assert.Equal(t, "r1", rules.gotDeleteID)
+}
+
+func TestAdminDeleteEventRule_Inexistente_404(t *testing.T) {
+	rules := &fakeEventRuleService{deleteErr: domain.ErrEventRuleNotFound}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodDelete, "/admin/games/g/event-rules/global-1", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "global ou inexistente: mesma resposta")
 }

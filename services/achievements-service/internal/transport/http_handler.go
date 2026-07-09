@@ -16,12 +16,16 @@ import (
 // Handler expõe os endpoints HTTP do achievements-service.
 type Handler struct {
 	svc      domain.AchievementService
+	rules    domain.EventRuleService
 	verifier domain.TokenVerifier
 }
 
-// NewHandler cria o handler a partir das Ports do domínio.
-func NewHandler(svc domain.AchievementService, verifier domain.TokenVerifier) *Handler {
-	return &Handler{svc: svc, verifier: verifier}
+// NewHandler cria o handler a partir das Ports do domínio. svc e rules
+// tipicamente apontam pro mesmo *service.Service (que implementa as duas
+// Ports), passados separados aqui pra manter o Handler dependendo só das
+// interfaces que de fato usa (ADR-0002).
+func NewHandler(svc domain.AchievementService, rules domain.EventRuleService, verifier domain.TokenVerifier) *Handler {
+	return &Handler{svc: svc, rules: rules, verifier: verifier}
 }
 
 type ctxKey int
@@ -48,6 +52,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/games/{gameId}/players/{playerID}/events", h.adminRecordEvent)
 	// Progresso de todos os jogadores em uma conquista (painel admin).
 	mux.HandleFunc("GET /admin/games/{gameId}/achievements/{id}/progress", h.adminAchievementProgress)
+
+	// Regras de mapeamento evento->achievement-event-type (migration 008):
+	// globais do arquétipo (read-only por aqui) + overrides do jogo (CRUD).
+	mux.HandleFunc("GET /admin/games/{gameId}/event-rules", h.adminListEventRules)
+	mux.HandleFunc("POST /admin/games/{gameId}/event-rules", h.adminCreateEventRule)
+	mux.HandleFunc("DELETE /admin/games/{gameId}/event-rules/{id}", h.adminDeleteEventRule)
 }
 
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
@@ -228,6 +238,50 @@ func (h *Handler) adminAchievementProgress(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"progress": dtos})
 }
 
+// adminListEventRules devolve as regras EFETIVAS do jogo {gameId}: globais de
+// cada arquétipo (scope="global") + overrides específicos do jogo
+// (scope="game").
+func (h *Handler) adminListEventRules(w http.ResponseWriter, r *http.Request) {
+	rules, err := h.rules.ListEffectiveRules(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rules": toEventRuleDTOs(rules)})
+}
+
+// adminCreateEventRule cria uma regra escopada ao jogo {gameId} (nunca uma
+// global — gameId/scope vêm do path/servidor, não do payload).
+func (h *Handler) adminCreateEventRule(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Archetype  string            `json:"archetype"`
+		Match      map[string]string `json:"match"`
+		EventTypes []string          `json:"eventTypes"`
+	}
+	if err := decodeStrict(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	rule, err := h.rules.CreateEventRule(r.Context(), r.PathValue("gameId"), domain.EventRule{
+		Archetype: req.Archetype, Match: req.Match, EventTypes: req.EventTypes,
+	})
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toEventRuleDTO(*rule))
+}
+
+// adminDeleteEventRule remove uma regra do jogo {gameId} (globais são
+// protegidas — DeleteEventRule/ErrEventRuleNotFound trata como 404).
+func (h *Handler) adminDeleteEventRule(w http.ResponseWriter, r *http.Request) {
+	if err := h.rules.DeleteEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // adminListCatalog devolve o catálogo de conquistas do jogo {gameId} (sem JWT).
 func (h *Handler) adminListCatalog(w http.ResponseWriter, r *http.Request) {
 	cat, err := h.svc.ListCatalog(r.Context(), r.PathValue("gameId"))
@@ -274,6 +328,34 @@ type achievementDTO struct {
 	StatKey     string `json:"statKey,omitempty"`  // critério por stat (ADR-0023 A1)
 	StatMode    string `json:"statMode,omitempty"` // cumulative | per_match
 	Target      int    `json:"target"`
+}
+
+type eventRuleDTO struct {
+	ID         string            `json:"id"`
+	Scope      string            `json:"scope"` // "global" | "game"
+	Archetype  string            `json:"archetype"`
+	Match      map[string]string `json:"match"`
+	EventTypes []string          `json:"eventTypes"`
+}
+
+func toEventRuleDTO(r domain.EventRule) eventRuleDTO {
+	scope := "game"
+	if r.GameID == nil {
+		scope = "global"
+	}
+	match := r.Match
+	if match == nil {
+		match = map[string]string{}
+	}
+	return eventRuleDTO{ID: r.ID, Scope: scope, Archetype: r.Archetype, Match: match, EventTypes: r.EventTypes}
+}
+
+func toEventRuleDTOs(in []domain.EventRule) []eventRuleDTO {
+	out := make([]eventRuleDTO, 0, len(in))
+	for _, r := range in {
+		out = append(out, toEventRuleDTO(r))
+	}
+	return out
 }
 
 type achievementProgressDTO struct {
@@ -345,6 +427,10 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "achievement_exists")
 	case errors.Is(err, domain.ErrAchievementNotFound):
 		writeError(w, http.StatusNotFound, "achievement_not_found")
+	case errors.Is(err, domain.ErrInvalidEventRule):
+		writeError(w, http.StatusBadRequest, "invalid_event_rule")
+	case errors.Is(err, domain.ErrEventRuleNotFound):
+		writeError(w, http.StatusNotFound, "event_rule_not_found")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

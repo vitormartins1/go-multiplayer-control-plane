@@ -182,6 +182,22 @@ func (s *Service) AchievementProgress(ctx context.Context, gameID, achievementID
 	return s.reader.AchievementProgress(ctx, gameID, achievementID)
 }
 
+// GameEventRules lê as regras efetivas do jogo (globais do arquétipo +
+// overrides do jogo, migration 008 do achievements-service).
+func (s *Service) GameEventRules(ctx context.Context, gameID string) ([]domain.EventRule, error) {
+	return s.reader.GameEventRules(ctx, gameID)
+}
+
+// CreateEventRule cria uma regra de mapeamento evento->achievement escopada ao jogo.
+func (s *Service) CreateEventRule(ctx context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error) {
+	return s.reader.CreateEventRule(ctx, gameID, r)
+}
+
+// DeleteEventRule remove uma regra do jogo (nunca uma global).
+func (s *Service) DeleteEventRule(ctx context.Context, gameID, id string) error {
+	return s.reader.DeleteEventRule(ctx, gameID, id)
+}
+
 // GamePlayers lê a player base do jogo (presença, ADR-0019).
 func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	return s.registry.PlayersOf(ctx, gameID)

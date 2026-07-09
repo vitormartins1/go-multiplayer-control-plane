@@ -24,18 +24,6 @@ type CollectivePlayer struct {
 	Stats    map[string]int64
 }
 
-// CollectiveEventTypes traduz o desfecho COLETIVO da sessão nos event types de
-// gameplay que o catálogo casa (C3). Função pura (política do sink), espelha
-// PlacementEventTypes. Todo jogador gera "played"; o desfecho da sessão soma
-// "success" ou "failed" — igual para todos (não é por jogador). Desfecho fora do
-// vocabulário: só "played" (rede de segurança; o session já validou).
-func CollectiveEventTypes(outcome string) []string {
-	events := []string{EventCoopMissionPlayed}
-	switch outcome {
-	case MissionSuccess:
-		events = append(events, EventCoopMissionSuccess)
-	case MissionFailure:
-		events = append(events, EventCoopMissionFailed)
-	}
-	return events
-}
+// O mapeamento outcome coletivo -> event types (played/success/failed) virou
+// dado (migration 008, tabela event_rules, EvaluateRules + CollectiveFacts em
+// event_rule.go) — estas consts só nomeiam o vocabulário de saída.

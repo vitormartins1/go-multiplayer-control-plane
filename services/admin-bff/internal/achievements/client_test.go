@@ -252,3 +252,76 @@ func TestImportAchievements_OrdemPreservada(t *testing.T) {
 	assert.Equal(t, 2, resp.Results[1].Row)
 	assert.Equal(t, 3, resp.Results[2].Row)
 }
+
+func TestGameEventRules_Mapeia(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/admin/games/g1/event-rules", r.URL.Path)
+		_, _ = w.Write([]byte(`{"rules":[{"id":"r1","scope":"global","archetype":"host_world_dropin","match":{"event":"JOINED"},"eventTypes":["world_joined"]}]}`))
+	}))
+	defer srv.Close()
+
+	rules, err := New(srv.URL, srv.Client()).GameEventRules(context.Background(), "g1")
+	require.NoError(t, err)
+	require.Len(t, rules, 1)
+	assert.Equal(t, "global", rules[0].Scope)
+	assert.Equal(t, []string{"world_joined"}, rules[0].EventTypes)
+}
+
+func TestCreateEventRule_201(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"r2","scope":"game","archetype":"battle_royale","match":{"placement":"1"},"eventTypes":["custom_win_badge"]}`))
+	}))
+	defer srv.Close()
+
+	created, err := New(srv.URL, srv.Client()).CreateEventRule(context.Background(), "g1", domain.EventRule{
+		Archetype: "battle_royale", Match: map[string]string{"placement": "1"}, EventTypes: []string{"custom_win_badge"},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, gotBody, `"archetype":"battle_royale"`)
+	assert.Equal(t, "game", created.Scope)
+	assert.Equal(t, "r2", created.ID)
+}
+
+func TestCreateEventRule_400_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_event_rule"}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).CreateEventRule(context.Background(), "g1", domain.EventRule{Archetype: "x"})
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusBadRequest, ue.Status)
+}
+
+func TestDeleteEventRule_DELETE_204(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).DeleteEventRule(context.Background(), "g1", "r1")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodDelete, gotMethod)
+	assert.Equal(t, "/admin/games/g1/event-rules/r1", gotPath)
+}
+
+func TestDeleteEventRule_404_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"event_rule_not_found"}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, srv.Client()).DeleteEventRule(context.Background(), "g1", "global-1")
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusNotFound, ue.Status, "global ou inexistente: mesma resposta")
+}

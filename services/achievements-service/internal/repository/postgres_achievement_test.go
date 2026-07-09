@@ -38,6 +38,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/005_stat_criteria.sql",
 			"../../migrations/006_processed_participations.sql",
 			"../../migrations/007_participation_event_id.sql",
+			"../../migrations/008_event_rules.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -283,7 +284,7 @@ func TestApplyParticipationEvent_Reprocessado_NaoDobra(t *testing.T) {
 		EventType: domain.EventInvasionWon, Target: 1,
 	}))
 
-	types := domain.ParticipationEventTypes("invader", "HOST_KILLED", "SUCCESS")
+	types := []string{domain.EventInvasionWon}
 	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, at)
 	require.NoError(t, err)
 	assert.False(t, dup)
@@ -307,7 +308,7 @@ func TestApplyParticipationEvent_EventIDsDiferentes_ContaDuasVezes(t *testing.T)
 		GameID: sandbox, ID: "boss_slayer", Name: "Caçador de chefes", Description: "d",
 		EventType: domain.EventCoopBossHelped, Target: 5,
 	}))
-	types := domain.ParticipationEventTypes("coop", "BOSS_DEFEATED", "SUCCESS")
+	types := []string{domain.EventCoopBossHelped}
 
 	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-a", types, at)
 	require.NoError(t, err)
@@ -328,7 +329,7 @@ func TestApplyParticipationEvent_MesmoEventID_NaoDobra(t *testing.T) {
 		GameID: sandbox, ID: "boss_slayer2", Name: "Caçador de chefes 2", Description: "d",
 		EventType: domain.EventCoopBossHelped, Target: 5,
 	}))
-	types := domain.ParticipationEventTypes("coop", "BOSS_DEFEATED", "SUCCESS")
+	types := []string{domain.EventCoopBossHelped}
 
 	dup1, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, at)
 	require.NoError(t, err)
@@ -350,7 +351,7 @@ func TestApplyParticipationEvent_SessoesDistintas_Acumulam(t *testing.T) {
 		GameID: sandbox, ID: "social_butterfly", Name: "Sociável", Description: "d",
 		EventType: domain.EventWorldJoined, Target: 5,
 	}))
-	types := domain.ParticipationEventTypes("coop", "JOINED", "NEUTRAL")
+	types := []string{domain.EventWorldJoined}
 
 	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "JOINED", "", types, at)
 	require.NoError(t, err)

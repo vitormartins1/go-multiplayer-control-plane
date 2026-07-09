@@ -171,6 +171,26 @@ export interface AchievementProgressEntry {
   unlockedAt?: string;
 }
 
+// EventRule é uma regra de mapeamento evento->achievement-event-type
+// (migration 008 do achievements-service). scope "global" = regra do
+// arquétipo (read-only no painel); "game" = override específico deste jogo
+// (editável/removível). match varia por arquétipo (role/event/outcome pro
+// host_world_dropin; placement/tier pro battle_royale; outcome pros demais) —
+// por isso é um mapa livre, não um shape fixo.
+export interface EventRule {
+  id: string;
+  scope: "global" | "game";
+  archetype: MultiplayerProfile["archetype"];
+  match: Record<string, string>;
+  eventTypes: string[];
+}
+
+export interface NewEventRule {
+  archetype: MultiplayerProfile["archetype"];
+  match: Record<string, string>;
+  eventTypes: string[];
+}
+
 export interface PlayerDataEntry {
   namespace: string;
   key: string;
@@ -506,6 +526,14 @@ export const api = {
       `/api/games/${encodeURIComponent(gameId)}/achievements/${encodeURIComponent(achievementId)}/progress`,
       signal,
     ),
+  // Regras de mapeamento evento->achievement (migration 008): globais do
+  // arquétipo (read-only) + overrides do jogo (CRUD).
+  gameEventRules: (gameId: string, signal?: AbortSignal) =>
+    getJSON<EventRule[]>(`/api/games/${encodeURIComponent(gameId)}/event-rules`, signal),
+  createEventRule: (gameId: string, r: NewEventRule) =>
+    postJSON<EventRule>(`/api/games/${encodeURIComponent(gameId)}/event-rules`, r),
+  deleteEventRule: (gameId: string, id: string) =>
+    del(`/api/games/${encodeURIComponent(gameId)}/event-rules/${encodeURIComponent(id)}`),
   playerData: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerDataEntry[]>(
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/data`,
