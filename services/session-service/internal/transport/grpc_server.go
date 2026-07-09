@@ -208,6 +208,7 @@ func (s *Server) ReportParticipationEvent(ctx context.Context, req *pb.ReportPar
 		Role:     req.GetRole(),
 		Event:    req.GetEvent(),
 		Outcome:  req.GetOutcome(),
+		EventID:  req.GetEventId(),
 	}
 	if err := s.svc.ReportParticipationEvent(ctx, req.GetSessionId(), evt); err != nil {
 		return nil, worldError(err, "report participation event")

@@ -80,6 +80,9 @@ type participationEnvelope struct {
 	Role          string `json:"role"`
 	Event         string `json:"event"`
 	Outcome       string `json:"outcome"`
+	// EventID identifica a ocorrência (follow-up #4, spec 021); vazio = data
+	// plane antigo, os sinks caem no fallback deles.
+	EventID string `json:"eventId,omitempty"`
 }
 
 // placementEnvelope é o envelope do battle_royale (BR2) no mesmo tópico
@@ -111,7 +114,7 @@ type collectiveEnvelope struct {
 	MatchID       string                `json:"matchId"`
 	GameID        string                `json:"gameId"`
 	ModeID        string                `json:"modeId,omitempty"` // ADR-0024, aditivo
-	Outcome       string                `json:"outcome"` // MISSION_SUCCESS | MISSION_FAILURE (da sessão)
+	Outcome       string                `json:"outcome"`          // MISSION_SUCCESS | MISSION_FAILURE (da sessão)
 	Players       []collectivePlayerDTO `json:"players"`
 }
 
@@ -297,6 +300,7 @@ func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID, modeI
 		Role:          evt.Role,
 		Event:         evt.Event,
 		Outcome:       evt.Outcome,
+		EventID:       evt.EventID,
 	}
 	body, err := json.Marshal(env)
 	if err != nil {

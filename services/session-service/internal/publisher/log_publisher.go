@@ -92,6 +92,7 @@ func (l *Log) PublishParticipation(_ context.Context, gameID, sessionID, modeID 
 		slog.String("role", evt.Role),
 		slog.String("event", evt.Event),
 		slog.String("outcome", evt.Outcome),
+		slog.String("event_id", evt.EventID),
 	)
 	return nil
 }

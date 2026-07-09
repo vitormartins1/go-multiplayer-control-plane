@@ -83,6 +83,14 @@ type ParticipationEvent struct {
 	Role     string
 	Event    string // um de Event*
 	Outcome  string // um de Outcome*
+	// EventID identifica a ocorrência (follow-up #4, spec 021) — gerado pelo
+	// data plane, ANTES do loop de retry do client (nunca aqui): repassado tal
+	// como chega, sem gerar/validar. Vazio = data plane antigo (fallback dos
+	// sinks). Só existe pros sinks (achievements/analytics) contarem certo
+	// ocorrências repetidas do mesmo evento na mesma sessão (ex.: boss que
+	// respawna); o session não usa isto pra nada (seus efeitos já são
+	// idempotentes por natureza).
+	EventID string
 }
 
 // TeamAssignment é um lado da partida NvN: um rótulo estável no match e seus
@@ -103,9 +111,9 @@ type Session struct {
 	// (ADR-0024, spec 017): mudar o perfil no registry não afeta a sessão em voo.
 	// O snapshot alimenta o manifest (GetSessionConfig) e a validação
 	// kind×arquétipo do ReportResult.
-	ModeID  string
-	Profile *ProfileSnapshot
-	Players []string
+	ModeID        string
+	Profile       *ProfileSnapshot
+	Players       []string
 	TeamByPlayer  map[string]string // playerID -> teamID; nil/vazio em FFA (ADR-0023)
 	ServerID      string
 	ServerAddress string
