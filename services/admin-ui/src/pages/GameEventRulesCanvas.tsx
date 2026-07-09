@@ -338,6 +338,8 @@ export function GameEventRulesCanvas({
         // tamanho com o drawer (feedback 044): o rascunho fica no TOPO da
         // coluna de regras (ver rulesGraph), longe da faixa coberta.
         fitKey={`${arch}|${graph.nodes.length}`}
+        // canvas ocupa a altura disponível da aba (spec 047), não 580px fixos.
+        height="calc(100vh - 345px)"
         overlay={
           selectedNode && !drawerOpen ? (
             <Paper withBorder p="sm" w={280} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
@@ -353,24 +355,22 @@ export function GameEventRulesCanvas({
         }
       />
 
-      {/* Criação visual (spec 044): drawer de baixo, canvas segue interativo
-          (sem overlay/trap de foco) e o rascunho reflete ao vivo. */}
+      {/* Criação visual (specs 044+047): drawer à direita (mesmo padrão do
+          editor de modos, spec 037), SEM overlay/trap de foco — o canvas
+          segue interativo e o rascunho (topo da coluna de regras, à
+          esquerda) reflete ao vivo. */}
       <Drawer
         opened={drawerOpen}
         onClose={closeDrawer}
-        position="bottom"
-        size={270}
-        padding="sm"
+        position="right"
+        size={560}
         withOverlay={false}
         trapFocus={false}
         lockScroll={false}
         title={`Nova regra — ${ARCHETYPE_META[arch].label}`}
       >
-        <Stack gap="xs">
-          {/* Duas colunas fluidas (quebram em janela estreita), ações no
-              rodapé — layout anterior de 3 colunas fixas estourava. */}
-          <Group align="flex-start" gap="xl" wrap="wrap">
-            <Stack gap={6} style={{ flex: "1 1 380px", maxWidth: 540 }}>
+        <Stack gap="md">
+            <Stack gap={6}>
               <Text size="xs" c="dimmed">
                 Match (todas as condições precisam bater no evento)
               </Text>
@@ -454,17 +454,14 @@ export function GameEventRulesCanvas({
               </Group>
             </Stack>
 
-            <Stack gap={6} style={{ flex: "1 1 280px", maxWidth: 420 }}>
-              <TagsInput
-                size="xs"
-                label="Event types"
-                description="Enter adiciona; clique num event type do canvas também."
-                data={typeSuggestions}
-                value={eventTypes}
-                onChange={setEventTypes}
-              />
-            </Stack>
-          </Group>
+            <TagsInput
+              size="xs"
+              label="Event types"
+              description="Enter adiciona; clique num event type do canvas também."
+              data={typeSuggestions}
+              value={eventTypes}
+              onChange={setEventTypes}
+            />
 
           <Group justify="flex-end" gap="xs">
             {formError && (
