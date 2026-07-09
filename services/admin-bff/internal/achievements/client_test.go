@@ -278,7 +278,7 @@ func TestCreateEventRule_201(t *testing.T) {
 	defer srv.Close()
 
 	created, err := New(srv.URL, srv.Client()).CreateEventRule(context.Background(), "g1", domain.EventRule{
-		Archetype: "battle_royale", Match: map[string]string{"placement": "1"}, EventTypes: []string{"custom_win_badge"},
+		Archetype: "battle_royale", Match: map[string]json.RawMessage{"placement": json.RawMessage(`"1"`)}, EventTypes: []string{"custom_win_badge"},
 	})
 	require.NoError(t, err)
 	assert.Contains(t, gotBody, `"archetype":"battle_royale"`)

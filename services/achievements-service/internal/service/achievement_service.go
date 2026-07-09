@@ -326,8 +326,10 @@ var eventTypeRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // validateEventRule normaliza e valida uma regra (admin). Match nil vira mapa
 // vazio (regra "sempre bate", ex.: o "played" do seed) — não é erro, só um
-// caso legítimo. ErrInvalidEventRule em archetype desconhecido ou eventTypes
-// vazio/malformado.
+// caso legítimo. ErrInvalidEventRule em archetype desconhecido, eventTypes
+// vazio/malformado ou condição malformada (spec 014: op desconhecido, value
+// de tipo errado ou lista vazia no `in` — a validação ESTRITA que o decode
+// leniente do MatchCond delega pra cá).
 func validateEventRule(r *domain.EventRule) error {
 	if !validArchetypes[r.Archetype] {
 		return domain.ErrInvalidEventRule
@@ -341,7 +343,12 @@ func validateEventRule(r *domain.EventRule) error {
 		}
 	}
 	if r.Match == nil {
-		r.Match = map[string]string{}
+		r.Match = map[string]domain.MatchCond{}
+	}
+	for k, c := range r.Match {
+		if strings.TrimSpace(k) == "" || !c.Valid() {
+			return domain.ErrInvalidEventRule
+		}
 	}
 	return nil
 }

@@ -84,28 +84,28 @@ func (fakeEventRules) RulesForArchetype(_ context.Context, _, archetype string) 
 	switch archetype {
 	case domain.ArchetypeQueueArena:
 		return []domain.EventRule{
-			{Archetype: archetype, Match: map[string]string{}, EventTypes: []string{"match_played"}},
-			{Archetype: archetype, Match: map[string]string{"outcome": "win"}, EventTypes: []string{"match_won"}},
-			{Archetype: archetype, Match: map[string]string{"outcome": "loss"}, EventTypes: []string{"match_lost"}},
-			{Archetype: archetype, Match: map[string]string{"outcome": "draw"}, EventTypes: []string{"match_drawn"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{}), EventTypes: []string{"match_played"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"outcome": "win"}), EventTypes: []string{"match_won"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"outcome": "loss"}), EventTypes: []string{"match_lost"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"outcome": "draw"}), EventTypes: []string{"match_drawn"}},
 		}, nil
 	case domain.ArchetypeBattleRoyale:
 		return []domain.EventRule{
-			{Archetype: archetype, Match: map[string]string{}, EventTypes: []string{"battle_royale_played"}},
-			{Archetype: archetype, Match: map[string]string{"placement": "1"}, EventTypes: []string{"battle_royale_win"}},
-			{Archetype: archetype, Match: map[string]string{"tier": "top_n"}, EventTypes: []string{"battle_royale_top_n"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{}), EventTypes: []string{"battle_royale_played"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"placement": "1"}), EventTypes: []string{"battle_royale_win"}},
+			{Archetype: archetype, Match: map[string]domain.MatchCond{"placement": {Op: domain.OpLte, Value: float64(10)}}, EventTypes: []string{"battle_royale_top_n"}},
 		}, nil
 	case domain.ArchetypeCoopMission:
 		return []domain.EventRule{
-			{Archetype: archetype, Match: map[string]string{}, EventTypes: []string{"coop_mission_played"}},
-			{Archetype: archetype, Match: map[string]string{"outcome": domain.MissionSuccess}, EventTypes: []string{"coop_mission_success"}},
-			{Archetype: archetype, Match: map[string]string{"outcome": domain.MissionFailure}, EventTypes: []string{"coop_mission_failed"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{}), EventTypes: []string{"coop_mission_played"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"outcome": domain.MissionSuccess}), EventTypes: []string{"coop_mission_success"}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"outcome": domain.MissionFailure}), EventTypes: []string{"coop_mission_failed"}},
 		}, nil
 	case domain.ArchetypeHostWorldDropIn:
 		return []domain.EventRule{
-			{Archetype: archetype, Match: map[string]string{"event": "JOINED"}, EventTypes: []string{domain.EventWorldJoined}},
-			{Archetype: archetype, Match: map[string]string{"role": "coop", "event": "BOSS_DEFEATED", "outcome": "SUCCESS"}, EventTypes: []string{domain.EventCoopBossHelped}},
-			{Archetype: archetype, Match: map[string]string{"role": "invader", "event": "HOST_KILLED", "outcome": "SUCCESS"}, EventTypes: []string{domain.EventInvasionWon}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"event": "JOINED"}), EventTypes: []string{domain.EventWorldJoined}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"role": "coop", "event": "BOSS_DEFEATED", "outcome": "SUCCESS"}), EventTypes: []string{domain.EventCoopBossHelped}},
+			{Archetype: archetype, Match: domain.EqMatch(map[string]string{"role": "invader", "event": "HOST_KILLED", "outcome": "SUCCESS"}), EventTypes: []string{domain.EventInvasionWon}},
 		}, nil
 	}
 	return nil, nil

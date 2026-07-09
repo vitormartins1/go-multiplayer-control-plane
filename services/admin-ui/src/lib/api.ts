@@ -2,6 +2,8 @@
 // proxy do Vite ao BFF (:8088). Foco em features de produto — observabilidade
 // detalhada fica no Grafana (ADR-0016/0006).
 
+import type { MatchValue } from "./matchCond";
+
 export interface ServiceNode {
   id: string;
   label: string;
@@ -181,13 +183,15 @@ export interface EventRule {
   id: string;
   scope: "global" | "game";
   archetype: MultiplayerProfile["archetype"];
-  match: Record<string, string>;
+  // valor string = igualdade (formato clássico); objeto = comparador
+  // (spec achievements/014) — ver lib/matchCond.ts.
+  match: Record<string, MatchValue>;
   eventTypes: string[];
 }
 
 export interface NewEventRule {
   archetype: MultiplayerProfile["archetype"];
-  match: Record<string, string>;
+  match: Record<string, MatchValue>;
   eventTypes: string[];
 }
 

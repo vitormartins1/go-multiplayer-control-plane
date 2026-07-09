@@ -206,7 +206,7 @@ type eventRulesResponse struct {
 		ID         string            `json:"id"`
 		Scope      string            `json:"scope"`
 		Archetype  string            `json:"archetype"`
-		Match      map[string]string `json:"match"`
+		Match      map[string]json.RawMessage `json:"match"` // condições opacas (spec 014) — o BFF não interpreta
 		EventTypes []string          `json:"eventTypes"`
 	} `json:"rules"`
 }

@@ -254,9 +254,9 @@ func (h *Handler) adminListEventRules(w http.ResponseWriter, r *http.Request) {
 // global — gameId/scope vêm do path/servidor, não do payload).
 func (h *Handler) adminCreateEventRule(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Archetype  string            `json:"archetype"`
-		Match      map[string]string `json:"match"`
-		EventTypes []string          `json:"eventTypes"`
+		Archetype  string                      `json:"archetype"`
+		Match      map[string]domain.MatchCond `json:"match"` // string ou {op,value} (spec 014)
+		EventTypes []string                    `json:"eventTypes"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request")
@@ -331,11 +331,11 @@ type achievementDTO struct {
 }
 
 type eventRuleDTO struct {
-	ID         string            `json:"id"`
-	Scope      string            `json:"scope"` // "global" | "game"
-	Archetype  string            `json:"archetype"`
-	Match      map[string]string `json:"match"`
-	EventTypes []string          `json:"eventTypes"`
+	ID         string                      `json:"id"`
+	Scope      string                      `json:"scope"` // "global" | "game"
+	Archetype  string                      `json:"archetype"`
+	Match      map[string]domain.MatchCond `json:"match"` // eq serializa como string (compat ADR-0027)
+	EventTypes []string                    `json:"eventTypes"`
 }
 
 func toEventRuleDTO(r domain.EventRule) eventRuleDTO {
@@ -345,7 +345,7 @@ func toEventRuleDTO(r domain.EventRule) eventRuleDTO {
 	}
 	match := r.Match
 	if match == nil {
-		match = map[string]string{}
+		match = map[string]domain.MatchCond{}
 	}
 	return eventRuleDTO{ID: r.ID, Scope: scope, Archetype: r.Archetype, Match: match, EventTypes: r.EventTypes}
 }

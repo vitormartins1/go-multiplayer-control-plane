@@ -399,7 +399,7 @@ func TestAdminRecordEvent_TypeVazio_400(t *testing.T) {
 
 func TestAdminListEventRules_200(t *testing.T) {
 	global := domain.EventRule{ID: "r1", GameID: nil, Archetype: "host_world_dropin",
-		Match: map[string]string{"event": "JOINED"}, EventTypes: []string{"world_joined"}}
+		Match: domain.EqMatch(map[string]string{"event": "JOINED"}), EventTypes: []string{"world_joined"}}
 	rules := &fakeEventRuleService{rules: []domain.EventRule{global}}
 	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
 	defer srv.Close()
