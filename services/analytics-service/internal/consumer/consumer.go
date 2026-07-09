@@ -153,13 +153,14 @@ func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
 		Role      string `json:"role"`
 		Event     string `json:"event"`
 		Outcome   string `json:"outcome"`
+		EventID   string `json:"eventId"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		return domain.ParticipationEvent{}, fmt.Errorf("unmarshal participation: %w", err)
 	}
 	return domain.ParticipationEvent{
 		GameID: env.GameID, SessionID: env.SessionID, PlayerID: env.PlayerID,
-		Role: env.Role, Event: env.Event, Outcome: env.Outcome,
+		Role: env.Role, Event: env.Event, Outcome: env.Outcome, EventID: env.EventID,
 	}, nil
 }
 

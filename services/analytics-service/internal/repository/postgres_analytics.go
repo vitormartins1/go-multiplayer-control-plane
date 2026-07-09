@@ -99,9 +99,9 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
 
 	tag, err := tx.Exec(ctx,
-		`INSERT INTO processed_participations (session_id, player_id, event, game_id)
-		 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-		evt.SessionID, evt.PlayerID, evt.Event, evt.GameID)
+		`INSERT INTO processed_participations (event_id, session_id, player_id, event, game_id)
+		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (event_id) DO NOTHING`,
+		effectiveEventID(evt.EventID, evt.SessionID, evt.PlayerID, evt.Event), evt.SessionID, evt.PlayerID, evt.Event, evt.GameID)
 	if err != nil {
 		return false, fmt.Errorf("analytics repository: apply participation: mark: %w", err)
 	}
@@ -110,10 +110,10 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO game_participation_rollup (game_id, role, event, count)
-		VALUES ($1, $2, $3, 1)
-		ON CONFLICT (game_id, role, event) DO UPDATE SET count = game_participation_rollup.count + 1`,
-		evt.GameID, evt.Role, evt.Event); err != nil {
+		INSERT INTO game_participation_rollup (game_id, role, event, outcome, count)
+		VALUES ($1, $2, $3, $4, 1)
+		ON CONFLICT (game_id, role, event, outcome) DO UPDATE SET count = game_participation_rollup.count + 1`,
+		evt.GameID, evt.Role, evt.Event, evt.Outcome); err != nil {
 		return false, fmt.Errorf("analytics repository: apply participation: rollup: %w", err)
 	}
 	return false, tx.Commit(ctx)
@@ -302,18 +302,18 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		return domain.GameAnalytics{}, err
 	}
 
-	// participações por papel/evento (host_world_dropin, spec 004). Aditivo:
-	// queue_arena não tem linhas aqui -> lista vazia.
+	// participações por papel/evento/outcome (host_world_dropin, spec 004/007).
+	// Aditivo: queue_arena não tem linhas aqui -> lista vazia.
 	prows, err := r.pool.Query(ctx, `
-		SELECT role, event, count FROM game_participation_rollup
-		WHERE game_id = $1 ORDER BY role, event`, gameID)
+		SELECT role, event, outcome, count FROM game_participation_rollup
+		WHERE game_id = $1 ORDER BY role, event, outcome`, gameID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: participations: %w", err)
 	}
 	defer prows.Close()
 	for prows.Next() {
 		var p domain.ParticipationStat
-		if err := prows.Scan(&p.Role, &p.Event, &p.Count); err != nil {
+		if err := prows.Scan(&p.Role, &p.Event, &p.Outcome, &p.Count); err != nil {
 			return domain.GameAnalytics{}, fmt.Errorf("analytics repository: scan participation: %w", err)
 		}
 		out.RoleParticipations = append(out.RoleParticipations, p)
