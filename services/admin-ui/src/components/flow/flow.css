@@ -89,6 +89,19 @@
   align-items: center;
   font-size: 10px;
 }
+/* consumers da vista de pipeline (spec 046) */
+.flow-card--consumer-ach .flow-card__header {
+  color: #fab005;
+  background: rgba(250, 176, 5, 0.08);
+}
+.flow-card--consumer-lb .flow-card__header {
+  color: #51cf66;
+  background: rgba(81, 207, 102, 0.08);
+}
+.flow-card--consumer-an .flow-card__header {
+  color: #74c0fc;
+  background: rgba(116, 192, 252, 0.08);
+}
 
 /* --- seleção / caminho destacado --- */
 .react-flow__node {

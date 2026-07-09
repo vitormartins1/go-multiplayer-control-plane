@@ -1218,3 +1218,33 @@ if err != nil {
 **Contraste com C#:** é o equivalente de capturar `PostgresException` e inspecionar `SqlState` — mas em Go isso acontece por *unwrapping* de uma cadeia de erros (`errors.As`), não por hierarquia de exceções, e o repositório converte para um erro sentinela seu em vez de deixar a exceção da Npgsql subir até o controller.
 
 **Pegadinha / nuance:** repare que o **mesmo sentinela** tem tratamento diferente por superfície: no fluxo de login o service traduz `ErrAccountNotFound` → `ErrInvalidCredentials` (não revelar se o handle existe — decisão de segurança); na superfície admin ele chega intacto ao transport e vira `404 player_not_found`. O sentinela descreve o **fato** ("não existe"); a **política** de como expor o fato é de cada consumidor. E cuidado para não generalizar demais: só mapeie os códigos que têm significado de domínio — engolir qualquer `PgError` como not-found esconderia erros reais (constraint, permissão, coluna).
+
+## 35 — Método em named type de map: decorator fluente sem classe
+
+**O que é / por que importa:** em Go, qualquer *named type* pode ter métodos — inclusive um tipo cujo underlying é `map`. Isso permite dar comportamento a um "dicionário" sem criar uma struct wrapper. Em C#, você faria uma classe envolvendo o `Dictionary` ou um extension method; em Go, o método mora direto no tipo, e como map é um *reference type* (o header aponta pros mesmos buckets), o método pode mutar o conteúdo e devolver o próprio valor — habilitando encadeamento fluente.
+
+**Onde no projeto:** `achievements-service/internal/domain/event_rule.go` (`Facts.WithMode`, spec 013 — o fact cross-kind `mode` sobre as normalizadoras por arquétipo).
+
+```go
+// Facts é um named type de map — pode ter métodos como qualquer tipo.
+type Facts map[string]string
+
+// WithMode soma o fact `mode` e devolve o PRÓPRIO map (mesmos buckets),
+// permitindo encadear: WinLossDrawFacts(outcome).WithMode(modeID).
+// modeID vazio não cria a chave — ausência ≠ valor vazio (a regra com
+// mode=... simplesmente não casa com envelope antigo).
+func (f Facts) WithMode(modeID string) Facts {
+	if modeID != "" {
+		f[FactMode] = modeID
+	}
+	return f
+}
+
+// Uso no service — normalizadora do arquétipo + decorator cross-kind:
+events := domain.EvaluateRules(rules, gameID,
+	domain.WinLossDrawFacts(outcome).WithMode(modeID))
+```
+
+Por que **não** virou um parâmetro `mode` em cada normalizadora: o modo vem do *envelope* (é cross-kind, todo kind carrega `modeId`), não da forma de resultado de cada arquétipo. O decorator mantém cada normalizadora conhecendo só o seu kind, e a composição acontece no chamador — mesma separação de responsabilidades da arquitetura hexagonal, em miniatura.
+
+**Gotcha (vs C#):** o receiver `f Facts` é "por valor", mas o *header* do map copiado aponta pros mesmos buckets — a mutação é visível fora. Isso NÃO vale pra `nil` map (escrever em map nil = panic): aqui é seguro porque as normalizadoras sempre devolvem map inicializado.

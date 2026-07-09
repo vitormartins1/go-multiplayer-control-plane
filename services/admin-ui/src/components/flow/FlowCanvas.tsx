@@ -31,6 +31,9 @@ const MINIMAP_COLOR: Record<string, string> = {
   eventType: "#b197fc",
   stat: "#ffa94d",
   achievement: "#fab005",
+  pipelineMode: "#4dabf7",
+  pipelineKind: "#b197fc",
+  pipelineConsumer: "#51cf66",
 };
 
 // FlowCanvas é o wrapper tematizado do React Flow (kit da spec 043 R7):
