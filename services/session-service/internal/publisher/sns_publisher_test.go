@@ -89,6 +89,33 @@ func TestSNSPublishParticipation_EnvelopeDiscriminadoPorKind(t *testing.T) {
 	assert.NotContains(t, raw, "matchId")
 }
 
+func TestSNSPublishParticipation_EventIDPassaParaOEnvelope(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	evt := domain.ParticipationEvent{
+		PlayerID: "coop-1", Role: domain.RoleCoop, Event: domain.EventBossDefeated, Outcome: domain.OutcomeSuccess,
+		EventID: "11111111-1111-1111-1111-111111111111",
+	}
+	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", "default", evt))
+
+	var got participationEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", got.EventID)
+}
+
+func TestSNSPublishParticipation_EventIDVazio_OmiteDoEnvelope(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	evt := domain.ParticipationEvent{PlayerID: "coop-1", Role: domain.RoleCoop, Event: domain.EventBossDefeated, Outcome: domain.OutcomeSuccess}
+	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", "default", evt))
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &raw))
+	assert.NotContains(t, raw, "eventId", "omitempty: data plane antigo não manda o campo")
+}
+
 func TestSNSPublishParticipation_ErroDoSNS_Propaga(t *testing.T) {
 	fake := &fakeSNS{err: errors.New("topic indisponível")}
 	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}

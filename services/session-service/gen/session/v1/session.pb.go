@@ -766,9 +766,10 @@ type ReportParticipationEventRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	PlayerId      string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`       // "host" | "coop" | "invader"
-	Event         string                 `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`     // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
-	Outcome       string                 `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"` // "SUCCESS" | "FAIL" | "NEUTRAL"
+	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`                      // "host" | "coop" | "invader"
+	Event         string                 `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`                    // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
+	Outcome       string                 `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`                // "SUCCESS" | "FAIL" | "NEUTRAL"
+	EventId       string                 `protobuf:"bytes,6,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // identifica a ocorrência (follow-up #4, spec 021); vazio = ok, sinks caem no fallback
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -834,6 +835,13 @@ func (x *ReportParticipationEventRequest) GetEvent() string {
 func (x *ReportParticipationEventRequest) GetOutcome() string {
 	if x != nil {
 		return x.Outcome
+	}
+	return ""
+}
+
+func (x *ReportParticipationEventRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
 	}
 	return ""
 }
@@ -1694,14 +1702,15 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
 	"weaponTier\x12,\n" +
 	"\x12free_invader_slots\x18\x04 \x01(\x05R\x10freeInvaderSlots\x12#\n" +
-	"\rpassword_hash\x18\x05 \x01(\tR\fpasswordHash\"\xa1\x01\n" +
+	"\rpassword_hash\x18\x05 \x01(\tR\fpasswordHash\"\xbc\x01\n" +
 	"\x1fReportParticipationEventRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12\x14\n" +
 	"\x05event\x18\x04 \x01(\tR\x05event\x12\x18\n" +
-	"\aoutcome\x18\x05 \x01(\tR\aoutcome\"\"\n" +
+	"\aoutcome\x18\x05 \x01(\tR\aoutcome\x12\x19\n" +
+	"\bevent_id\x18\x06 \x01(\tR\aeventId\"\"\n" +
 	" ReportParticipationEventResponse\"\xa5\x01\n" +
 	"\x14CreateSessionRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12\x18\n" +

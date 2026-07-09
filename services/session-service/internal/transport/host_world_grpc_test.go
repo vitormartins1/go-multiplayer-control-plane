@@ -231,6 +231,25 @@ func TestReportParticipationEvent_FluxoDeSlotEEncerramento(t *testing.T) {
 	assert.Equal(t, codes.NotFound, status.Code(err), "mundo encerrado")
 }
 
+// event_id (follow-up #4, spec 021) é passthrough puro: o gRPC aceita o campo
+// sem erro; o repasse pro envelope é coberto no nível do publisher
+// (sns_publisher_test.go), que tem acesso direto ao envelope serializado.
+func TestReportParticipationEvent_ComEventID_Aceita(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	ctx := context.Background()
+
+	open, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
+	require.NoError(t, err)
+	_, err = client.JoinWorld(ctx, &pb.JoinWorldRequest{SessionId: open.GetSessionId(), PlayerId: "coop-1", Role: "coop"})
+	require.NoError(t, err)
+
+	_, err = client.ReportParticipationEvent(ctx, &pb.ReportParticipationEventRequest{
+		SessionId: open.GetSessionId(), PlayerId: "coop-1", Role: "coop",
+		Event: "BOSS_DEFEATED", Outcome: "SUCCESS", EventId: "22222222-2222-2222-2222-222222222222",
+	})
+	require.NoError(t, err)
+}
+
 func TestReportParticipationEvent_EventoInvalido_InvalidArgument(t *testing.T) {
 	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
 	open, err := client.OpenWorld(context.Background(), &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
