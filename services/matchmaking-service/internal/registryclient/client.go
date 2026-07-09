@@ -67,6 +67,7 @@ type profileResponse struct {
 		InvasionEnabled   bool     `json:"invasionEnabled"`
 		LevelRangeEnabled bool     `json:"levelRangeEnabled"`
 		WeaponTierEnabled bool     `json:"weaponTierEnabled"`
+		PasswordEnabled   bool     `json:"passwordEnabled"`
 		EnabledRoles      []string `json:"enabledRoles"`
 	} `json:"params"`
 }
@@ -109,6 +110,7 @@ func (c *Client) InvasionPolicy(ctx context.Context, gameID, modeID string) (dom
 		InvasionEnabled:   p.Params.InvasionEnabled,
 		LevelRangeEnabled: p.Params.LevelRangeEnabled,
 		WeaponTierEnabled: p.Params.WeaponTierEnabled,
+		PasswordEnabled:   p.Params.PasswordEnabled,
 	}, nil
 }
 
@@ -133,6 +135,7 @@ func (c *Client) CoopPolicy(ctx context.Context, gameID, modeID string) (domain.
 		CoopEnabled:       coopEnabled,
 		LevelRangeEnabled: p.Params.LevelRangeEnabled,
 		WeaponTierEnabled: p.Params.WeaponTierEnabled,
+		PasswordEnabled:   p.Params.PasswordEnabled,
 	}, nil
 }
 

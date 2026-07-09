@@ -323,7 +323,7 @@ func TestSummonSigns_FluxoCompleto(t *testing.T) {
 // Senha (follow-up #1, matchmaking/011): aliado fora da faixa simétrica de
 // co-op aparece pro host que informa a mesma senha.
 func TestListSigns_SenhaBateForaDaFaixa_AparecePeloBufconn(t *testing.T) {
-	client, _ := setupCoop(t, domain.CoopPolicy{Archetype: "host_world_dropin", CoopEnabled: true, LevelRangeEnabled: true})
+	client, _ := setupCoop(t, domain.CoopPolicy{Archetype: "host_world_dropin", CoopEnabled: true, LevelRangeEnabled: true, PasswordEnabled: true})
 
 	stream, err := client.PostSummonSign(authCtx("ally-1"), &pb.PostSummonSignRequest{GameId: "hw", SoulLevel: 300, Password: "abrepalavra"})
 	require.NoError(t, err)

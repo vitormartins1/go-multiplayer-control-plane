@@ -71,7 +71,7 @@ func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, 
 	for _, w := range worlds {
 		// Bypass por senha (follow-up #1, matchmaking/011): senha bate → elegível
 		// independente da faixa. Eligible continua só faixa, inalterada.
-		matchesPassword := crit.Password != "" && w.PasswordHash != "" &&
+		matchesPassword := policy.PasswordEnabled && crit.Password != "" && w.PasswordHash != "" &&
 			domain.HashWorldPassword(crit.Password) == w.PasswordHash
 		if !matchesPassword && !domain.Eligible(crit, w, policy) {
 			continue

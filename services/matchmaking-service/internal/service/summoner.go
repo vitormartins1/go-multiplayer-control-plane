@@ -118,7 +118,7 @@ func (s *Summoner) ListSigns(ctx context.Context, gameID, modeID string, host do
 		// Bypass por senha (follow-up #1, matchmaking/011): a mesma senha que o
 		// host definiu no OpenWorld do seu mundo, comparada plaintext-contra-
 		// plaintext com a do sinal (nunca atravessa o session-service).
-		matchesPassword := host.Password != "" && sg.Password != "" && host.Password == sg.Password
+		matchesPassword := policy.PasswordEnabled && host.Password != "" && sg.Password != "" && host.Password == sg.Password
 		if matchesPassword || domain.CoopEligible(ally, host.SoulLevel, host.WeaponTier, policy) {
 			out = append(out, sg.Sign)
 		}

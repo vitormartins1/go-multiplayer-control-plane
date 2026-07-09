@@ -51,6 +51,9 @@ type CoopPolicy struct {
 	CoopEnabled       bool
 	LevelRangeEnabled bool
 	WeaponTierEnabled bool
+	// PasswordEnabled (follow-up #1, matchmaking/011): portão de entrada do
+	// bypass por senha no ListSigns — irmã do InvasionPolicy.PasswordEnabled.
+	PasswordEnabled bool
 }
 
 // SupportsCoop indica se o jogo aceita co-op: é host_world_dropin com o papel
