@@ -120,13 +120,14 @@ func TestMatchSize_TamanhoZero_ErrProfileUnavailable(t *testing.T) {
 
 func TestInvasionPolicy_LeFlagsDoPerfil(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
-		`{"archetype":"host_world_dropin","params":{"invasionEnabled":true,"levelRangeEnabled":true,"weaponTierEnabled":false}}`, nil)
+		`{"archetype":"host_world_dropin","params":{"invasionEnabled":true,"levelRangeEnabled":true,"weaponTierEnabled":false,"passwordEnabled":true}}`, nil)
 	policy, err := New(srv.URL, srv.Client()).InvasionPolicy(t.Context(), "g1", "default")
 	require.NoError(t, err)
 	assert.Equal(t, "host_world_dropin", policy.Archetype)
 	assert.True(t, policy.InvasionEnabled)
 	assert.True(t, policy.LevelRangeEnabled)
 	assert.False(t, policy.WeaponTierEnabled)
+	assert.True(t, policy.PasswordEnabled)
 	assert.True(t, policy.SupportsInvasion())
 }
 
@@ -147,12 +148,13 @@ func TestInvasionPolicy_404_ErrProfileUnavailable(t *testing.T) {
 
 func TestCoopPolicy_EnabledRolesComCoop_SuportaCoop(t *testing.T) {
 	srv := serverReturning(t, http.StatusOK,
-		`{"archetype":"host_world_dropin","params":{"enabledRoles":["coop","invader"],"levelRangeEnabled":true,"weaponTierEnabled":true}}`, nil)
+		`{"archetype":"host_world_dropin","params":{"enabledRoles":["coop","invader"],"levelRangeEnabled":true,"weaponTierEnabled":true,"passwordEnabled":true}}`, nil)
 	policy, err := New(srv.URL, srv.Client()).CoopPolicy(t.Context(), "g1", "default")
 	require.NoError(t, err)
 	assert.True(t, policy.CoopEnabled)
 	assert.True(t, policy.LevelRangeEnabled)
 	assert.True(t, policy.WeaponTierEnabled)
+	assert.True(t, policy.PasswordEnabled)
 	assert.True(t, policy.SupportsCoop())
 }
 

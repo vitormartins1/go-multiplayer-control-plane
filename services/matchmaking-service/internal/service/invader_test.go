@@ -104,7 +104,7 @@ func TestInvade_NenhumNaFaixa_ErrNoEligibleWorld(t *testing.T) {
 
 func TestInvade_SenhaBateForaDaFaixa_InjetaMesmoAssim(t *testing.T) {
 	// faixa ligada, invasor L=100 fora da banda do host L=500 — só a senha salva.
-	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true}}
+	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true, PasswordEnabled: true}}
 	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
 		{SessionID: "w1", HostSoulLevel: 500, FreeInvaderSlots: 1, PasswordHash: domain.HashWorldPassword("abrepalavra")},
 	}}
@@ -118,7 +118,7 @@ func TestInvade_SenhaBateForaDaFaixa_InjetaMesmoAssim(t *testing.T) {
 }
 
 func TestInvade_SenhaErrada_CaiNoCaminhoNormalDeFaixa(t *testing.T) {
-	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true}}
+	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true, PasswordEnabled: true}}
 	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
 		{SessionID: "w1", HostSoulLevel: 500, FreeInvaderSlots: 1, PasswordHash: domain.HashWorldPassword("abrepalavra")},
 	}}
@@ -127,6 +127,21 @@ func TestInvade_SenhaErrada_CaiNoCaminhoNormalDeFaixa(t *testing.T) {
 
 	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1",
 		domain.InvaderCriteria{SoulLevel: 100, Password: "senhaerrada"})
+	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
+	assert.Empty(t, inj.calls)
+}
+
+func TestInvade_SenhaCertaMasPasswordEnabledFalso_NaoBypassa(t *testing.T) {
+	// modo não declarou PasswordEnabled — a senha certa não deve isentar a faixa.
+	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true, PasswordEnabled: false}}
+	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
+		{SessionID: "w1", HostSoulLevel: 500, FreeInvaderSlots: 1, PasswordHash: domain.HashWorldPassword("abrepalavra")},
+	}}
+	inj := &fakeInjector{byWorld: map[string]error{}}
+	in := NewInvader(pol, dir, inj)
+
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1",
+		domain.InvaderCriteria{SoulLevel: 100, Password: "abrepalavra"})
 	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
 	assert.Empty(t, inj.calls)
 }

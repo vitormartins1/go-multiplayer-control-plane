@@ -39,6 +39,11 @@ type InvasionPolicy struct {
 	InvasionEnabled   bool
 	LevelRangeEnabled bool
 	WeaponTierEnabled bool
+	// PasswordEnabled (follow-up #1, matchmaking/011): sem isto, o bypass por
+	// senha nunca é considerado — mesmo com uma senha certa, o modo precisa
+	// ter declarado que aceita esse caminho social (mesmo espírito de
+	// InvasionEnabled como portão de entrada).
+	PasswordEnabled bool
 }
 
 // SupportsInvasion indica se o jogo aceita invasão: é host_world_dropin com a

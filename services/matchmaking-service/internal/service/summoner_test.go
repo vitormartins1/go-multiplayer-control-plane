@@ -78,8 +78,15 @@ func TestListSigns_FiltraPorFaixa(t *testing.T) {
 	assert.Equal(t, "ally-a", signs[0].PlayerID)
 }
 
+// coopRangeWithPassword: faixa ligada + PasswordEnabled (portão do bypass).
+func coopRangeWithPassword() domain.CoopPolicy {
+	p := coopRange()
+	p.PasswordEnabled = true
+	return p
+}
+
 func TestListSigns_SenhaBateForaDaFaixa_Aparece(t *testing.T) {
-	s := NewSummoner(&fakeCoopPolicies{policy: coopRange()}, &fakeInjector{byWorld: map[string]error{}})
+	s := NewSummoner(&fakeCoopPolicies{policy: coopRangeWithPassword()}, &fakeInjector{byWorld: map[string]error{}})
 	ctx := context.Background()
 	// aliado B=300 fora da banda do host 100, mas com a senha certa.
 	_, _, err := s.PostSign(ctx, "game-1", "default", "ally-b", domain.CoopCriteria{SoulLevel: 300, Password: "abrepalavra"})
@@ -91,8 +98,19 @@ func TestListSigns_SenhaBateForaDaFaixa_Aparece(t *testing.T) {
 	assert.Equal(t, "ally-b", signs[0].PlayerID)
 }
 
+func TestListSigns_SenhaCertaMasPasswordEnabledFalso_NaoBypassa(t *testing.T) {
+	s := NewSummoner(&fakeCoopPolicies{policy: coopRange()}, &fakeInjector{byWorld: map[string]error{}}) // PasswordEnabled=false
+	ctx := context.Background()
+	_, _, err := s.PostSign(ctx, "game-1", "default", "ally-b", domain.CoopCriteria{SoulLevel: 300, Password: "abrepalavra"})
+	require.NoError(t, err)
+
+	signs, err := s.ListSigns(ctx, "game-1", "default", domain.CoopCriteria{SoulLevel: 100, Password: "abrepalavra"})
+	require.NoError(t, err)
+	assert.Empty(t, signs, "modo sem PasswordEnabled não deve bypassar a faixa")
+}
+
 func TestListSigns_SenhaErrada_CaiNoCaminhoNormalDeFaixa(t *testing.T) {
-	s := NewSummoner(&fakeCoopPolicies{policy: coopRange()}, &fakeInjector{byWorld: map[string]error{}})
+	s := NewSummoner(&fakeCoopPolicies{policy: coopRangeWithPassword()}, &fakeInjector{byWorld: map[string]error{}})
 	ctx := context.Background()
 	_, _, err := s.PostSign(ctx, "game-1", "default", "ally-b", domain.CoopCriteria{SoulLevel: 300, Password: "abrepalavra"})
 	require.NoError(t, err)
