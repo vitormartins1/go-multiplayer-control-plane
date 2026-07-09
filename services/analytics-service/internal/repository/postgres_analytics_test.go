@@ -32,6 +32,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/003_participation_rollup.sql",
 			"../../migrations/004_placement_rollup.sql",
 			"../../migrations/005_mission_rollup.sql",
+			"../../migrations/006_participation_event_id_and_outcome.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -68,9 +69,9 @@ func TestApplyParticipation_AgregaPorPapelEEvento(t *testing.T) {
 	ga, err := repo.GameAnalytics(ctx, "g1", 30)
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 2)
-	// ordenado por role, event: coop/BOSS_DEFEATED, invader/HOST_KILLED.
-	assert.Equal(t, domain.ParticipationStat{Role: "coop", Event: "BOSS_DEFEATED", Count: 1}, ga.RoleParticipations[0])
-	assert.Equal(t, domain.ParticipationStat{Role: "invader", Event: "HOST_KILLED", Count: 2}, ga.RoleParticipations[1])
+	// ordenado por role, event, outcome: coop/BOSS_DEFEATED, invader/HOST_KILLED.
+	assert.Equal(t, domain.ParticipationStat{Role: "coop", Event: "BOSS_DEFEATED", Outcome: "NEUTRAL", Count: 1}, ga.RoleParticipations[0])
+	assert.Equal(t, domain.ParticipationStat{Role: "invader", Event: "HOST_KILLED", Outcome: "NEUTRAL", Count: 2}, ga.RoleParticipations[1])
 }
 
 // placement monta um PlacementResult a partir de pares (placement, survivedMs).
@@ -188,6 +189,55 @@ func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 1)
 	assert.Equal(t, int64(1), ga.RoleParticipations[0].Count, "reentrega não dobra")
+}
+
+// Dois eventId diferentes (mesma sessão/jogador/evento) contam duas vezes —
+// o cenário do follow-up #4 (ex.: boss que respawna).
+func TestApplyParticipation_EventIDsDiferentes_ContaDuasVezes(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	evtA := pevt("g1", "w1", "coop-1", "coop", "BOSS_DEFEATED")
+	evtA.EventID = "evt-a"
+	evtB := pevt("g1", "w1", "coop-1", "coop", "BOSS_DEFEATED")
+	evtB.EventID = "evt-b"
+
+	_, err := repo.ApplyParticipation(ctx, evtA)
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, evtB)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.RoleParticipations, 1)
+	assert.Equal(t, int64(2), ga.RoleParticipations[0].Count, "eventId diferente -> conta as duas ocorrências")
+}
+
+// Mesmo (role, event), outcome diferente -> linhas separadas no rollup
+// (follow-up #5). Sintético (mesmo papel/evento com dois outcomes não é o
+// caso real de HOST_KILLED, mas é exatamente o que a mudança de schema
+// precisa suportar — o teste isola a dimensão outcome de role/event).
+func TestApplyParticipation_MesmoRoleEvento_OutcomesDiferentes_LinhasSeparadas(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	success := domain.ParticipationEvent{GameID: "g1", SessionID: "w1", PlayerID: "inv-1", Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS"}
+	fail := domain.ParticipationEvent{GameID: "g1", SessionID: "w2", PlayerID: "inv-2", Role: "invader", Event: "HOST_KILLED", Outcome: "FAIL"}
+
+	_, err := repo.ApplyParticipation(ctx, success)
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, fail)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.RoleParticipations, 2, "mesmo role/event, outcome diferente -> linhas separadas")
+	byOutcome := map[string]domain.ParticipationStat{}
+	for _, p := range ga.RoleParticipations {
+		byOutcome[p.Outcome] = p
+	}
+	assert.Equal(t, int64(1), byOutcome["SUCCESS"].Count)
+	assert.Equal(t, int64(1), byOutcome["FAIL"].Count)
 }
 
 func TestGameAnalytics_QueueArena_SemParticipacoes(t *testing.T) {

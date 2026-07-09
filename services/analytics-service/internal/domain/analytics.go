@@ -142,13 +142,18 @@ type ParticipationEvent struct {
 	Role      string
 	Event     string
 	Outcome   string
+	// EventID identifica a ocorrência (follow-up #4, spec 007); vazio = data
+	// plane antigo, cai no fallback determinístico (ver effectiveEventID).
+	EventID string
 }
 
-// ParticipationStat é a contagem agregada de um (papel, evento) num jogo.
+// ParticipationStat é a contagem agregada de um (papel, evento, outcome) num
+// jogo (follow-up #5, spec 007: outcome entra na chave, não só um campo solto).
 type ParticipationStat struct {
-	Role  string
-	Event string
-	Count int64
+	Role    string
+	Event   string
+	Outcome string
+	Count   int64
 }
 
 // MatchRepository é a Port de saída de persistência (rollups em Postgres).
