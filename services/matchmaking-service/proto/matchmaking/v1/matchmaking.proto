@@ -58,6 +58,7 @@ message InvadeRequest {
   int32 soul_level = 2;    // nível do invasor (faixa assimétrica); 0 = sem faixa
   int32 weapon_tier = 3;   // tier de arma do invasor (se o perfil exigir)
   string mode_id = 4;      // modo do jogo (ADR-0024); vazio = "default"
+  string password = 5;     // senha do mundo (follow-up #1, matchmaking/011); vazio = sem senha
 }
 
 message InvadeResponse {
@@ -73,6 +74,7 @@ message PostSummonSignRequest {
   int32 soul_level = 2;  // nível do aliado (faixa simétrica de co-op)
   int32 weapon_tier = 3; // tier de arma do aliado (se o perfil exigir)
   string mode_id = 4;    // modo do jogo (ADR-0024); o sinal só aparece p/ hosts do mesmo modo
+  string password = 5;   // senha do aliado (follow-up #1, matchmaking/011); vazio = sem senha
 }
 
 // SummonStatus é o ciclo do sinal no stream do aliado (spec 007).
@@ -96,6 +98,7 @@ message ListSignsRequest {
   int32 host_soul_level = 2;   // faixa do mundo do host (filtra os sinais compatíveis)
   int32 host_weapon_tier = 3;
   string mode_id = 4;          // modo do mundo do host (ADR-0024); vazio = "default"
+  string password = 5;         // senha do host (follow-up #1, matchmaking/011); vazio = sem senha
 }
 
 message ListSignsResponse {

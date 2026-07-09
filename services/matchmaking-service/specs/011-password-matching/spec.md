@@ -1,7 +1,7 @@
 # Spec: 011-password-matching
 
 **Serviço:** matchmaking-service
-**Status:** Proposta (2026-07-09)
+**Status:** Done (2026-07-09)
 **Data:** 2026-07-09
 **ADR:** 0023 (perfil de multiplayer por jogo) — **arquétipo `host_world_dropin`, follow-up #1** (lado matchmaking: bypass por senha)
 **Roadmap:** `docs/game-models/host_world_dropin-follow-ups.md` → item 1 (play-with-friends por senha)
@@ -52,7 +52,7 @@ A flag `PasswordEnabled` do perfil (`HostWorldDropInParams`, ADR-0023) já exist
 - `InvaderCriteria` (spec 006) ganha `Password string` (plaintext do invasor).
 - `InvadableWorld` (espelho do session, spec 006/020) ganha `PasswordHash string`.
 - `Sign` (spec 007) ganha `Password string` (plaintext do aliado, em memória).
-- `CoopCriteria`/`ListSigns` — o `password` do host **não** entra em `CoopCriteria` (que é a faixa do aliado); é um parâmetro à parte na chamada de listagem, comparado contra `Sign.Password`.
+- `CoopCriteria` ganha `Password string` (decisão de implementação, ajustada do desenho original: em vez de um parâmetro à parte, a senha entra direto na struct já reusada nos dois call sites — em `PostSign` representa a senha do aliado, em `ListSigns` a senha do host; comparada contra `Sign.Password`).
 - **`WorldDirectory`** (spec 006, adapter `sessionclient`) passa a mapear também `password_hash` do `ListInvadableWorldsResponse` pro `InvadableWorld.PasswordHash`.
 
 ### Erros de domínio
@@ -76,10 +76,10 @@ Sem estado persistente novo. `Sign.Password` vive no mesmo store em memória do 
 
 ## Critérios de Aceite
 
-- [ ] `Invade` com senha que bate um mundo **fora** da faixa → injeta mesmo assim (bypass confirmado).
-- [ ] `Invade` com senha vazia ou que não bate nenhum mundo → comportamento idêntico ao `matchmaking/006` (regressão zero).
-- [ ] `Invade` num jogo/modo sem `InvasionEnabled` → `ErrInvasionNotSupported` mesmo com senha certa (portão de entrada não é isento).
-- [ ] `PostSummonSign` com senha + `ListSigns` do host com a mesma senha → sinal aparece **mesmo fora** da faixa simétrica de co-op.
-- [ ] `ListSigns` sem senha (ou senha errada) → comportamento idêntico ao `matchmaking/007` (regressão zero); sinal com senha ainda pode aparecer pelo caminho de faixa normal se `CoopEligible` bater sozinho.
-- [ ] `Eligible`/`CoopEligible` sem nenhuma mudança de assinatura ou comportamento interno — só o call site ganha o OR.
-- [ ] `FindMatch` (queue-form) sem regressão; testes com `-race`, ≥80% em `service/`/`domain/`.
+- [x] `Invade` com senha que bate um mundo **fora** da faixa → injeta mesmo assim (bypass confirmado).
+- [x] `Invade` com senha vazia ou que não bate nenhum mundo → comportamento idêntico ao `matchmaking/006` (regressão zero).
+- [x] `Invade` num jogo/modo sem `InvasionEnabled` → `ErrInvasionNotSupported` mesmo com senha certa (portão de entrada não é isento).
+- [x] `PostSummonSign` com senha + `ListSigns` do host com a mesma senha → sinal aparece **mesmo fora** da faixa simétrica de co-op.
+- [x] `ListSigns` sem senha (ou senha errada) → comportamento idêntico ao `matchmaking/007` (regressão zero); sinal com senha ainda pode aparecer pelo caminho de faixa normal se `CoopEligible` bater sozinho.
+- [x] `Eligible`/`CoopEligible` sem nenhuma mudança de assinatura ou comportamento interno — só o call site ganha o OR.
+- [x] `FindMatch` (queue-form) sem regressão; testes com `-race`, ≥80% em `service/`/`domain/`.

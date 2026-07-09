@@ -102,6 +102,47 @@ func TestInvade_NenhumNaFaixa_ErrNoEligibleWorld(t *testing.T) {
 	assert.Empty(t, inj.calls, "mundo fora da faixa nem é tentado")
 }
 
+func TestInvade_SenhaBateForaDaFaixa_InjetaMesmoAssim(t *testing.T) {
+	// faixa ligada, invasor L=100 fora da banda do host L=500 — só a senha salva.
+	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true}}
+	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
+		{SessionID: "w1", HostSoulLevel: 500, FreeInvaderSlots: 1, PasswordHash: domain.HashWorldPassword("abrepalavra")},
+	}}
+	inj := &fakeInjector{byWorld: map[string]error{}}
+	in := NewInvader(pol, dir, inj)
+
+	got, err := in.Invade(context.Background(), "game-1", "default", "invader-1",
+		domain.InvaderCriteria{SoulLevel: 100, Password: "abrepalavra"})
+	require.NoError(t, err)
+	assert.Equal(t, "w1", got.SessionID)
+}
+
+func TestInvade_SenhaErrada_CaiNoCaminhoNormalDeFaixa(t *testing.T) {
+	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: true, LevelRangeEnabled: true}}
+	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
+		{SessionID: "w1", HostSoulLevel: 500, FreeInvaderSlots: 1, PasswordHash: domain.HashWorldPassword("abrepalavra")},
+	}}
+	inj := &fakeInjector{byWorld: map[string]error{}}
+	in := NewInvader(pol, dir, inj)
+
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1",
+		domain.InvaderCriteria{SoulLevel: 100, Password: "senhaerrada"})
+	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
+	assert.Empty(t, inj.calls)
+}
+
+func TestInvade_InvasaoDesligada_SenhaCertaNaoIsentaOPortao(t *testing.T) {
+	pol := &fakePolicies{policy: domain.InvasionPolicy{Archetype: "host_world_dropin", InvasionEnabled: false}}
+	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
+		{SessionID: "w1", FreeInvaderSlots: 1, PasswordHash: domain.HashWorldPassword("abrepalavra")},
+	}}
+	in := NewInvader(pol, dir, &fakeInjector{})
+
+	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1",
+		domain.InvaderCriteria{Password: "abrepalavra"})
+	assert.ErrorIs(t, err, domain.ErrInvasionNotSupported)
+}
+
 func TestInvade_PrimeiroEncheNaCorrida_TentaOProximo(t *testing.T) {
 	pol := &fakePolicies{policy: invasionOn()}
 	dir := &fakeDirectory{worlds: []domain.InvadableWorld{
