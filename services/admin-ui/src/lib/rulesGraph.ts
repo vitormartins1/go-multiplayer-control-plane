@@ -79,9 +79,12 @@ export function buildRulesGraph(
       ]
     : rules;
 
-  // Camada 2 — regras (ordem: globais primeiro, depois do jogo; estável).
+  // Camada 2 — regras. Ordem: RASCUNHO primeiro (fica no topo da coluna,
+  // visível mesmo com o drawer aberto cobrindo o pé da janela), depois
+  // globais, depois do jogo (estável).
+  const rank = (r: EventRule) => (r.id === "__draft__" ? 0 : r.scope === "global" ? 1 : 2);
   const ruleMetas: Meta[] = [...allRules]
-    .sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "global" ? -1 : 1))
+    .sort((a, b) => rank(a) - rank(b))
     .map((r) => ({
       id: ruleId(r),
       type: "rule",

@@ -251,11 +251,10 @@ export function GameEventRulesCanvas({
         onPaneClick={() => setSelectedId(null)}
         onDrop={onDrop}
         // re-enquadra quando o grafo muda de forma (arquétipo, nós do
-        // rascunho, resize com o drawer) — senão o ghost nasce fora da vista.
-        fitKey={`${arch}|${drawerOpen}|${graph.nodes.length}`}
-        // canvas encolhe enquanto o drawer de baixo está aberto, pra
-        // continuar inteiro visível como superfície de montagem (R4).
-        height={drawerOpen ? 280 : undefined}
+        // rascunho) — senão o ghost nasce fora da vista. O canvas NÃO muda de
+        // tamanho com o drawer (feedback 044): o rascunho fica no TOPO da
+        // coluna de regras (ver rulesGraph), longe da faixa coberta.
+        fitKey={`${arch}|${graph.nodes.length}`}
         overlay={
           selectedNode && !drawerOpen ? (
             <Paper withBorder p="sm" w={280} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
@@ -277,109 +276,103 @@ export function GameEventRulesCanvas({
         opened={drawerOpen}
         onClose={closeDrawer}
         position="bottom"
-        size={300}
+        size={270}
+        padding="sm"
         withOverlay={false}
         trapFocus={false}
         lockScroll={false}
         title={`Nova regra — ${ARCHETYPE_META[arch].label}`}
       >
-        <Group align="flex-start" gap="xl" wrap="nowrap">
-          <Stack gap={6} style={{ flex: 1, maxWidth: 420 }}>
-            <Text size="xs" c="dimmed">
-              Match (todos os pares precisam bater no evento)
-            </Text>
-            {matchPairs.map((row, i) => (
-              <Group key={i} gap={4} wrap="nowrap">
-                <Autocomplete
-                  size="xs"
-                  placeholder="chave"
-                  data={keySuggestions}
-                  value={row.key}
-                  onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, key: v } : r)))}
-                  style={{ flex: 1 }}
-                />
-                <Autocomplete
-                  size="xs"
-                  placeholder="valor"
-                  data={[...new Set(knownFacts.filter((f) => f.key === row.key).map((f) => f.value))]}
-                  value={row.value}
-                  onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, value: v } : r)))}
-                  style={{ flex: 1 }}
-                />
-                <ActionIcon
-                  variant="subtle"
-                  color="red"
-                  size="sm"
-                  disabled={matchPairs.length === 1}
-                  onClick={() => setMatchPairs((p) => p.filter((_, idx) => idx !== i))}
-                  aria-label="Remover par"
-                >
-                  <IconTrash size={14} />
-                </ActionIcon>
-              </Group>
-            ))}
-            <Button
-              variant="default"
-              size="xs"
-              onClick={() => setMatchPairs((p) => [...p, { key: "", value: "" }])}
-              style={{ alignSelf: "flex-start" }}
-            >
-              + par chave/valor
-            </Button>
-          </Stack>
-
-          <Stack gap={6} w={280}>
-            <Text size="xs" c="dimmed">
-              Facts conhecidos (clique pra adicionar)
-            </Text>
-            <Group gap={4}>
-              {knownFacts.length === 0 && (
-                <Text size="xs" c="dimmed">
-                  Nenhum ainda neste arquétipo.
-                </Text>
-              )}
-              {knownFacts.map((f) => (
-                <Badge
-                  key={`${f.key}=${f.value}`}
-                  className="flow-palette-item"
-                  variant="light"
-                  color="blue"
-                  tt="none"
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData(DND_MIME, JSON.stringify(f))}
-                  onClick={() => addFactToDraft(f)}
-                  style={{ cursor: "pointer" }}
-                >
-                  {f.key}={f.value}
-                </Badge>
+        <Stack gap="xs">
+          {/* Duas colunas fluidas (quebram em janela estreita), ações no
+              rodapé — layout anterior de 3 colunas fixas estourava. */}
+          <Group align="flex-start" gap="xl" wrap="wrap">
+            <Stack gap={6} style={{ flex: "1 1 320px", maxWidth: 480 }}>
+              <Text size="xs" c="dimmed">
+                Match (todos os pares precisam bater no evento)
+              </Text>
+              {matchPairs.map((row, i) => (
+                <Group key={i} gap={4} wrap="nowrap">
+                  <Autocomplete
+                    size="xs"
+                    placeholder="chave"
+                    data={keySuggestions}
+                    value={row.key}
+                    onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, key: v } : r)))}
+                    style={{ flex: 1 }}
+                  />
+                  <Autocomplete
+                    size="xs"
+                    placeholder="valor"
+                    data={[...new Set(knownFacts.filter((f) => f.key === row.key).map((f) => f.value))]}
+                    value={row.value}
+                    onChange={(v) => setMatchPairs((p) => p.map((r, idx) => (idx === i ? { ...r, value: v } : r)))}
+                    style={{ flex: 1 }}
+                  />
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="sm"
+                    disabled={matchPairs.length === 1}
+                    onClick={() => setMatchPairs((p) => p.filter((_, idx) => idx !== i))}
+                    aria-label="Remover par"
+                  >
+                    <IconTrash size={14} />
+                  </ActionIcon>
+                </Group>
               ))}
-            </Group>
-          </Stack>
+              <Group gap={4}>
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={() => setMatchPairs((p) => [...p, { key: "", value: "" }])}
+                >
+                  + par chave/valor
+                </Button>
+                {knownFacts.map((f) => (
+                  <Badge
+                    key={`${f.key}=${f.value}`}
+                    className="flow-palette-item"
+                    variant="light"
+                    color="blue"
+                    tt="none"
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData(DND_MIME, JSON.stringify(f))}
+                    onClick={() => addFactToDraft(f)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    {f.key}={f.value}
+                  </Badge>
+                ))}
+              </Group>
+            </Stack>
 
-          <Stack gap={6} w={300}>
-            <TagsInput
-              size="xs"
-              label="Event types"
-              description="Enter adiciona; clique num event type do canvas também."
-              data={typeSuggestions}
-              value={eventTypes}
-              onChange={setEventTypes}
-            />
+            <Stack gap={6} style={{ flex: "1 1 280px", maxWidth: 420 }}>
+              <TagsInput
+                size="xs"
+                label="Event types"
+                description="Enter adiciona; clique num event type do canvas também."
+                data={typeSuggestions}
+                value={eventTypes}
+                onChange={setEventTypes}
+              />
+            </Stack>
+          </Group>
+
+          <Group justify="flex-end" gap="xs">
             {formError && (
               <Text size="xs" c="red">
                 {formError}
               </Text>
             )}
-            <Group justify="flex-end" gap="xs">
-              <Button variant="default" size="xs" onClick={closeDrawer}>
-                Cancelar
-              </Button>
-              <Button size="xs" onClick={submit}>
-                Salvar regra
-              </Button>
-            </Group>
-          </Stack>
-        </Group>
+            <Button variant="default" size="xs" onClick={closeDrawer}>
+              Cancelar
+            </Button>
+            <Button size="xs" onClick={submit}>
+              Salvar regra
+            </Button>
+          </Group>
+        </Stack>
       </Drawer>
 
       {/* Confirmar remoção */}
