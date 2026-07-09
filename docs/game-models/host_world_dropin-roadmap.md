@@ -102,7 +102,7 @@ O `unity-host-world-dropin-data-plane` (Unity) é **⬜ planejado** ([REPO-TOPOL
 
 ---
 
-## H3 — Surfacing no console
+## H3 — Surfacing no console ✅ (2026-07-07)
 
 **Objetivo:** o painel mostra o arquétipo host-cêntrico — mundos abertos com papéis/slots ocupados, sinais no quadro, participações por papel.
 
@@ -125,7 +125,7 @@ O `unity-host-world-dropin-data-plane` (Unity) é **⬜ planejado** ([REPO-TOPOL
 | H1a — injeção (invasão) | session/012 + matchmaking/006 | L | H0 |
 | H1b — sinais (co-op) | matchmaking/007 | L | H0, H1a |
 | H2 — evento/papel + contrato | session/013 (+consumers) | L–XL | H0 |
-| H3 — console | admin-bff + admin-ui | M | H0, H2 |
+| H3 — console ✅ | admin-bff + admin-ui | M | H0, H2 |
 
 Concluídas H0–H3, o `host_world_dropin` está **completo no control plane** (declarar → abrir mundo → descobrir/injetar por papel → reportar eventos → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-host-world-dropin-data-plane` (Unity) encarnando o mundo de verdade, consumindo o contrato de H2.
 
