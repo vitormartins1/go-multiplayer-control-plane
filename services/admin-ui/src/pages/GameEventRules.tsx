@@ -19,9 +19,14 @@ import { notifications } from "@mantine/notifications";
 import { IconPlus, IconRefresh, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { api, HttpError, type EventRule, type MultiplayerProfile } from "../lib/api";
+import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
 import { useAsync } from "../lib/useAsync";
 
-const ARCHETYPES: MultiplayerProfile["archetype"][] = [
+// Fallback só pro caso raro de o jogo ainda não ter NENHUM modo/perfil
+// multiplayer cadastrado (dropdown não pode ficar vazio) — no caminho normal
+// o Select do form usa os arquétipos REAIS do jogo (gameArchetypes), não esta
+// lista fixa, pra não deixar cadastrar regra pra arquétipo que o jogo não tem.
+const ALL_ARCHETYPES: MultiplayerProfile["archetype"][] = [
   "host_world_dropin",
   "queue_arena",
   "battle_royale",
@@ -46,6 +51,15 @@ function matchLabel(match: Record<string, string>): string {
 // migration) são read-only aqui; só overrides do jogo são criáveis/removíveis.
 export function GameEventRules({ gameId }: { gameId: string }) {
   const { data: rules, loading, error, reload } = useAsync((s) => api.gameEventRules(gameId, s), [gameId]);
+  // modos/perfis do jogo — a fonte de verdade de quais arquétipos ele
+  // realmente usa (evita listar/oferecer arquétipos que o jogo não tem).
+  const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
+  const archetypes = gameArchetypes(modes ?? []);
+  // Sem nenhum modo cadastrado ainda: cai pra lista fixa (dropdown não pode
+  // ficar vazio) — ver filterRulesForGame pro mesmo raciocínio na listagem.
+  const archetypeOptions = archetypes.size > 0 ? [...archetypes] : ALL_ARCHETYPES;
+  const visibleRules = filterRulesForGame(rules ?? [], archetypes);
+
   const [opened, { open, close }] = useDisclosure(false);
   const [deleting, setDeleting] = useState<EventRule | null>(null);
   const [matchPairs, setMatchPairs] = useState<MatchPair[]>([{ key: "", value: "" }]);
@@ -62,6 +76,7 @@ export function GameEventRules({ gameId }: { gameId: string }) {
 
   function openCreate() {
     form.reset();
+    form.setFieldValue("archetype", archetypeOptions[0]);
     setMatchPairs([{ key: "", value: "" }]);
     open();
   }
@@ -126,13 +141,16 @@ export function GameEventRules({ gameId }: { gameId: string }) {
         Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome no
         host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event types listados
         ao progresso das conquistas cadastradas na aba Achievements. Regras <b>globais</b> valem pra todo jogo
-        com o arquétipo (semeadas por padrão, não editáveis aqui); regras do <b>jogo</b> só valem pra este jogo.
+        com o arquétipo (semeadas por padrão, não editáveis aqui) — só as dos arquétipos que <b>este jogo</b>{" "}
+        tem cadastrado aparecem abaixo; regras do <b>jogo</b> só valem pra este jogo.
       </Text>
 
       {loading && !rules && <Loader />}
       {!!error && <Alert color="red">achievements indisponível.</Alert>}
-      {rules && rules.length === 0 && <Text c="dimmed">Nenhuma regra cadastrada.</Text>}
-      {rules && rules.length > 0 && (
+      {rules && visibleRules.length === 0 && (
+        <Text c="dimmed">Nenhuma regra cadastrada para os arquétipos deste jogo.</Text>
+      )}
+      {rules && visibleRules.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -144,7 +162,7 @@ export function GameEventRules({ gameId }: { gameId: string }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rules.map((r) => (
+            {visibleRules.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td>
                   <Badge variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
@@ -193,7 +211,13 @@ export function GameEventRules({ gameId }: { gameId: string }) {
       <Modal opened={opened} onClose={close} title="Nova regra" size="lg">
         <form onSubmit={form.onSubmit(submit)}>
           <Stack>
-            <Select label="Arquétipo" data={ARCHETYPES} allowDeselect={false} {...form.getInputProps("archetype")} />
+            <Select
+              label="Arquétipo"
+              description="Só os arquétipos cadastrados neste jogo"
+              data={archetypeOptions}
+              allowDeselect={false}
+              {...form.getInputProps("archetype")}
+            />
             <Stack gap={4}>
               <Text size="sm" fw={500}>
                 Match (facts do evento; vazio = sempre bate)

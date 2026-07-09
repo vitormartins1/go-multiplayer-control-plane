@@ -35,6 +35,7 @@ import {
   type StatMode,
 } from "../lib/api";
 import { CSV_TEMPLATE, parseCSV, type ParseError } from "../lib/csv";
+import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
 import { useAsync } from "../lib/useAsync";
 import { AchievementIcon } from "../components/AchievementIcon";
 import { PlayerAvatar } from "../components/PlayerAvatar";
@@ -213,10 +214,15 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   // do arquétipo + overrides do jogo, substitui o antigo vocabulário hardcoded.
   const { data: eventRules } = useAsync((s) => api.gameEventRules(gameId, s), [gameId]);
   const stats = statSuggestions(modes ?? []);
-  const events = eventSuggestions(eventRules ?? []);
+  // Regras globais só entram na sugestão/validação se o arquétipo delas está
+  // cadastrado no jogo (senão um jogo só host_world_dropin sugeriria/aceitaria
+  // como "conhecido" vocabulário de queue_arena/battle_royale/coop_mission).
+  const archetypes = gameArchetypes(modes ?? []);
+  const relevantEventRules = filterRulesForGame(eventRules ?? [], archetypes);
+  const events = eventSuggestions(relevantEventRules);
   // Check de drift (029) só com dados carregados E existentes — sem falso alarme.
   const canCheckStats = (modes?.length ?? 0) > 0;
-  const canCheckEvents = (eventRules?.length ?? 0) > 0;
+  const canCheckEvents = relevantEventRules.length > 0;
   const statDeclared = (key: string) => !canCheckStats || stats.origin.has(key);
   const eventKnown = (type: string) => !canCheckEvents || events.origin.has(type);
   const [opened, { open, close }] = useDisclosure(false);
