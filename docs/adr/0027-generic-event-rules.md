@@ -34,6 +34,12 @@ Isso contradiz o princípio já estabelecido pelo ADR-0023 (§ "novos jogos entr
 - **Prós:** cobriria casos como "colocação <= N" sem hardcode do limiar.
 - **Contras:** over-engineering — nenhuma evidência hoje pede operadores além de igualdade exata; o único caso com limiar numérico (`battle_royale`'s top-N) é resolvido normalizando um fact derivado (`tier=top_n`) na camada fina de conversão, sem precisar de um operador `<=` no motor. Descartada por ora — mesmo princípio do ADR-0023 (evitar DSL sem evidência).
 
+> **Adendo (2026-07-09):** reaberta deliberadamente pelo ADR-0028 como decisão
+> de direção do produto (control plane genérico para regras avançadas) — a
+> evolução acontece de forma incremental (V2a comparadores → V2b supressão →
+> V2c prioridade), preservando compatibilidade com o formato de `match` deste
+> ADR (valor string = igualdade). Ver `0028-visual-rules-editor-and-rich-engine.md`.
+
 ### Opção D: Mover o vocabulário pro perfil de multiplayer (game-registry), não pro achievements-service
 - **Prós:** ficaria ao lado de `scoringStats`, no mesmo lugar conceitual.
 - **Contras:** o achievements-service já é quem *consome* e *aplica* o vocabulário (é o dono do conceito "event type que desbloqueia conquista"); colocar no game-registry criaria uma dependência síncrona nova entre os dois serviços (o achievements-service nunca chamou o game-registry) só pra buscar dado que só ele usa. Descartada — mantém o acoplamento em zero, igual era antes.

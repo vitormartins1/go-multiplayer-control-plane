@@ -158,3 +158,37 @@ func TestMatchSubset_VazioSempreBate(t *testing.T) {
 func TestMatchSubset_ChaveAusenteNaoBate(t *testing.T) {
 	assert.False(t, matchSubset(map[string]string{"a": "1"}, Facts{"b": "1"}))
 }
+
+// --- Fact `mode` (spec 013, F1 do ADR-0028) ---
+
+// WithMode soma o fact `mode` quando o envelope traz modeId; vazio (envelope
+// antigo/data plane sem ADR-0024) NÃO gera a chave — regra com mode nunca
+// casa com vazio.
+func TestFactsWithMode_VazioNaoGeraChave(t *testing.T) {
+	f := WinLossDrawFacts("win").WithMode("")
+	_, ok := f[FactMode]
+	assert.False(t, ok, "modeID vazio não pode criar a chave mode")
+
+	f = WinLossDrawFacts("win").WithMode("ranked")
+	assert.Equal(t, "ranked", f[FactMode])
+	assert.Equal(t, "win", f["outcome"], "facts do kind preservados")
+}
+
+// Regra do jogo com `mode` só casa quando o envelope traz aquele modo — a
+// global (sem mode) segue casando nos dois casos (zero regressão).
+func TestEvaluateRules_RegraPorModo(t *testing.T) {
+	gameA := "game-a"
+	rules := []EventRule{
+		{Archetype: ArchetypeQueueArena, GameID: nil, Match: map[string]string{"outcome": "win"}, EventTypes: []string{"match_won"}},
+		{Archetype: ArchetypeQueueArena, GameID: &gameA, Match: map[string]string{"outcome": "win", FactMode: "ranked"}, EventTypes: []string{"ranked_won"}},
+	}
+
+	got := EvaluateRules(rules, gameA, WinLossDrawFacts("win").WithMode("ranked"))
+	assert.Equal(t, []string{"match_won", "ranked_won"}, got, "modo ranked: global + regra do modo")
+
+	got = EvaluateRules(rules, gameA, WinLossDrawFacts("win").WithMode("casual"))
+	assert.Equal(t, []string{"match_won"}, got, "outro modo: só a global")
+
+	got = EvaluateRules(rules, gameA, WinLossDrawFacts("win").WithMode(""))
+	assert.Equal(t, []string{"match_won"}, got, "envelope sem modeId: só a global")
+}

@@ -154,6 +154,7 @@ func handleMatchResult(ctx context.Context, svc *service.Service, log *slog.Logg
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
+		ModeID  string `json:"modeId"` // ADR-0024; vira o fact `mode` (spec 013)
 		Results []struct {
 			PlayerID string           `json:"playerId"`
 			Won      bool             `json:"won"`
@@ -168,7 +169,7 @@ func handleMatchResult(ctx context.Context, svc *service.Service, log *slog.Logg
 	for _, r := range env.Results {
 		results = append(results, domain.MatchResult{PlayerID: r.PlayerID, Won: r.Won, Outcome: r.Outcome, Stats: r.Stats})
 	}
-	dup, err := svc.ApplyMatchResult(ctx, env.GameID, env.MatchID, results)
+	dup, err := svc.ApplyMatchResult(ctx, env.GameID, env.MatchID, env.ModeID, results)
 	if err != nil {
 		return false, err
 	}
@@ -184,6 +185,7 @@ func handlePlacement(ctx context.Context, svc *service.Service, log *slog.Logger
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
+		ModeID  string `json:"modeId"` // ADR-0024; vira o fact `mode` (spec 013)
 		Entries []struct {
 			PlayerID   string           `json:"playerId"`
 			Placement  int              `json:"placement"`
@@ -200,7 +202,7 @@ func handlePlacement(ctx context.Context, svc *service.Service, log *slog.Logger
 			PlayerID: e.PlayerID, Placement: e.Placement, SurvivedMs: e.SurvivedMs, Stats: e.Stats,
 		})
 	}
-	dup, err := svc.ApplyPlacementResult(ctx, env.GameID, env.MatchID, entries)
+	dup, err := svc.ApplyPlacementResult(ctx, env.GameID, env.MatchID, env.ModeID, entries)
 	if err != nil {
 		return false, err
 	}
@@ -217,6 +219,7 @@ func handleCollective(ctx context.Context, svc *service.Service, log *slog.Logge
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
+		ModeID  string `json:"modeId"` // ADR-0024; vira o fact `mode` (spec 013)
 		Outcome string `json:"outcome"`
 		Players []struct {
 			PlayerID string           `json:"playerId"`
@@ -230,7 +233,7 @@ func handleCollective(ctx context.Context, svc *service.Service, log *slog.Logge
 	for _, p := range env.Players {
 		players = append(players, domain.CollectivePlayer{PlayerID: p.PlayerID, Stats: p.Stats})
 	}
-	dup, err := svc.ApplyCollectiveResult(ctx, env.GameID, env.MatchID, env.Outcome, players)
+	dup, err := svc.ApplyCollectiveResult(ctx, env.GameID, env.MatchID, env.ModeID, env.Outcome, players)
 	if err != nil {
 		return false, err
 	}
@@ -247,6 +250,7 @@ func handleParticipation(ctx context.Context, svc *service.Service, log *slog.Lo
 		GameID    string `json:"gameId"`
 		SessionID string `json:"sessionId"`
 		PlayerID  string `json:"playerId"`
+		ModeID    string `json:"modeId"` // ADR-0024; vira o fact `mode` (spec 013)
 		Role      string `json:"role"`
 		Event     string `json:"event"`
 		Outcome   string `json:"outcome"`
@@ -255,7 +259,7 @@ func handleParticipation(ctx context.Context, svc *service.Service, log *slog.Lo
 	if err := json.Unmarshal(body, &env); err != nil {
 		return false, fmt.Errorf("unmarshal participation envelope: %w", err)
 	}
-	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.Role, env.Event, env.Outcome, env.EventID)
+	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.ModeID, env.Role, env.Event, env.Outcome, env.EventID)
 	if err != nil {
 		return false, err
 	}

@@ -6,6 +6,7 @@ import {
   Group,
   Loader,
   Modal,
+  SegmentedControl,
   Select,
   Stack,
   Table,
@@ -21,6 +22,7 @@ import { useState } from "react";
 import { api, HttpError, type EventRule, type MultiplayerProfile } from "../lib/api";
 import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
 import { useAsync } from "../lib/useAsync";
+import { GameEventRulesCanvas } from "./GameEventRulesCanvas";
 
 // Fallback só pro caso raro de o jogo ainda não ter NENHUM modo/perfil
 // multiplayer cadastrado (dropdown não pode ficar vazio) — no caminho normal
@@ -54,11 +56,22 @@ export function GameEventRules({ gameId }: { gameId: string }) {
   // modos/perfis do jogo — a fonte de verdade de quais arquétipos ele
   // realmente usa (evita listar/oferecer arquétipos que o jogo não tem).
   const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
+  // catálogo de achievements — 4ª camada do canvas (quem escuta cada type).
+  const { data: catalog, reload: reloadCatalog } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
+  // Atualizar recarrega as DUAS fontes do canvas — um achievement recém-criado
+  // na aba Achievements precisa aparecer na camada 4 sem trocar de aba.
+  function reloadAll() {
+    reload();
+    reloadCatalog();
+  }
   const archetypes = gameArchetypes(modes ?? []);
   // Sem nenhum modo cadastrado ainda: cai pra lista fixa (dropdown não pode
   // ficar vazio) — ver filterRulesForGame pro mesmo raciocínio na listagem.
   const archetypeOptions = archetypes.size > 0 ? [...archetypes] : ALL_ARCHETYPES;
   const visibleRules = filterRulesForGame(rules ?? [], archetypes);
+
+  // Canvas (spec 043) é a view principal; a tabela permanece como alternativa.
+  const [view, setView] = useState<"canvas" | "table">("canvas");
 
   const [opened, { open, close }] = useDisclosure(false);
   const [deleting, setDeleting] = useState<EventRule | null>(null);
@@ -128,29 +141,52 @@ export function GameEventRules({ gameId }: { gameId: string }) {
       <Group justify="space-between">
         <Text fw={600}>Regras de mapeamento evento → conquista</Text>
         <Group>
-          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reload}>
+          <SegmentedControl
+            size="xs"
+            value={view}
+            onChange={(v) => setView(v as "canvas" | "table")}
+            data={[
+              { value: "canvas", label: "Canvas" },
+              { value: "table", label: "Tabela" },
+            ]}
+          />
+          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reloadAll}>
             Atualizar
           </Button>
-          <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openCreate}>
-            Nova regra
-          </Button>
+          {view === "table" && (
+            <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openCreate}>
+              Nova regra
+            </Button>
+          )}
         </Group>
       </Group>
 
-      <Text size="sm" c="dimmed">
-        Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome no
-        host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event types listados
-        ao progresso das conquistas cadastradas na aba Achievements. Regras <b>globais</b> valem pra todo jogo
-        com o arquétipo (semeadas por padrão, não editáveis aqui) — só as dos arquétipos que <b>este jogo</b>{" "}
-        tem cadastrado aparecem abaixo; regras do <b>jogo</b> só valem pra este jogo.
-      </Text>
+      {view === "table" && (
+        <Text size="sm" c="dimmed">
+          Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome no
+          host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event types listados
+          ao progresso das conquistas cadastradas na aba Achievements. Regras <b>globais</b> valem pra todo jogo
+          com o arquétipo (semeadas por padrão, não editáveis aqui) — só as dos arquétipos que <b>este jogo</b>{" "}
+          tem cadastrado aparecem abaixo; regras do <b>jogo</b> só valem pra este jogo.
+        </Text>
+      )}
 
       {loading && !rules && <Loader />}
       {!!error && <Alert color="red">achievements indisponível.</Alert>}
       {rules && visibleRules.length === 0 && (
         <Text c="dimmed">Nenhuma regra cadastrada para os arquétipos deste jogo.</Text>
       )}
-      {rules && visibleRules.length > 0 && (
+      {view === "canvas" && rules && visibleRules.length > 0 && (
+        <GameEventRulesCanvas
+          gameId={gameId}
+          rules={visibleRules}
+          catalog={catalog ?? []}
+          archetypeOptions={archetypeOptions}
+          modes={modes ?? []}
+          reload={reload}
+        />
+      )}
+      {view === "table" && rules && visibleRules.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>

@@ -134,7 +134,7 @@ func TestApplyMatchResult_TraduzEventosPorVitoria(t *testing.T) {
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-1", want, mock.Anything).Return(false, nil)
 
-	dup, err := svc.ApplyMatchResult(context.Background(), gameID, "match-1", results)
+	dup, err := svc.ApplyMatchResult(context.Background(), gameID, "match-1", "", results)
 	require.NoError(t, err)
 	assert.False(t, dup)
 	repo.AssertExpectations(t)
@@ -161,7 +161,7 @@ func TestApplyMatchResult_OutcomeParaEventos(t *testing.T) {
 			want := []domain.PlayerMatchInput{{PlayerID: "p", EventTypes: c.want}}
 			repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
 
-			_, err := svc.ApplyMatchResult(context.Background(), gameID, "m", []domain.MatchResult{c.result})
+			_, err := svc.ApplyMatchResult(context.Background(), gameID, "m", "", []domain.MatchResult{c.result})
 			require.NoError(t, err)
 			repo.AssertExpectations(t)
 		})
@@ -184,7 +184,7 @@ func TestApplyPlacementResult_TraduzEventTypesEInjetaSurvival(t *testing.T) {
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-br", want, mock.Anything).Return(false, nil)
 
-	dup, err := svc.ApplyPlacementResult(context.Background(), gameID, "match-br", entries)
+	dup, err := svc.ApplyPlacementResult(context.Background(), gameID, "match-br", "", entries)
 	require.NoError(t, err)
 	assert.False(t, dup)
 	repo.AssertExpectations(t)
@@ -203,7 +203,7 @@ func TestApplyPlacementResult_SurvivedMsExplicito_NaoSobrescreve(t *testing.T) {
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
 
-	_, err := svc.ApplyPlacementResult(context.Background(), gameID, "m", entries)
+	_, err := svc.ApplyPlacementResult(context.Background(), gameID, "m", "", entries)
 	require.NoError(t, err)
 	repo.AssertExpectations(t)
 }
@@ -224,7 +224,7 @@ func TestApplyCollectiveResult_DesfechoColetivoParaTodos(t *testing.T) {
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-coop", want, mock.Anything).Return(false, nil)
 
-	dup, err := svc.ApplyCollectiveResult(context.Background(), gameID, "match-coop", domain.MissionSuccess, players)
+	dup, err := svc.ApplyCollectiveResult(context.Background(), gameID, "match-coop", "", domain.MissionSuccess, players)
 	require.NoError(t, err)
 	assert.False(t, dup)
 	repo.AssertExpectations(t)
@@ -241,7 +241,7 @@ func TestApplyCollectiveResult_Falha(t *testing.T) {
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(true, nil)
 
-	dup, err := svc.ApplyCollectiveResult(context.Background(), gameID, "m", domain.MissionFailure, players)
+	dup, err := svc.ApplyCollectiveResult(context.Background(), gameID, "m", "", domain.MissionFailure, players)
 	require.NoError(t, err)
 	assert.True(t, dup, "reprocessar mesmo matchId é no-op")
 	repo.AssertExpectations(t)
@@ -263,7 +263,7 @@ func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 			svc := New(repo, fakeEventRules{})
 			repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", c.event, mock.Anything, c.want, mock.Anything).Return(false, nil)
 
-			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", c.role, c.event, c.outcome, "evt-1")
+			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "", c.role, c.event, c.outcome, "evt-1")
 			require.NoError(t, err)
 			assert.False(t, dup)
 			repo.AssertExpectations(t)
@@ -276,7 +276,7 @@ func TestApplyParticipationEvent_Duplicado_PropagaDup(t *testing.T) {
 	svc := New(repo, fakeEventRules{})
 	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 
-	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "invader", "HOST_KILLED", "SUCCESS", "evt-2")
+	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "", "invader", "HOST_KILLED", "SUCCESS", "evt-2")
 	require.NoError(t, err)
 	assert.True(t, dup)
 }
@@ -287,7 +287,7 @@ func TestApplyMatchResult_Duplicada_PropagaDup(t *testing.T) {
 	svc := New(repo, fakeEventRules{})
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-1", mock.Anything, mock.Anything).Return(true, nil)
 
-	dup, err := svc.ApplyMatchResult(context.Background(), gameID, "match-1", []domain.MatchResult{{PlayerID: "p1", Won: true}})
+	dup, err := svc.ApplyMatchResult(context.Background(), gameID, "match-1", "", []domain.MatchResult{{PlayerID: "p1", Won: true}})
 	require.NoError(t, err)
 	assert.True(t, dup)
 	repo.AssertExpectations(t)
@@ -481,7 +481,7 @@ func TestApplyMatchResult_PropagaStats(t *testing.T) {
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "m", want, mock.Anything).Return(false, nil)
 
-	_, err := New(repo, fakeEventRules{}).ApplyMatchResult(context.Background(), gameID, "m",
+	_, err := New(repo, fakeEventRules{}).ApplyMatchResult(context.Background(), gameID, "m", "",
 		[]domain.MatchResult{{PlayerID: "p1", Outcome: "win", Stats: map[string]int64{"kills": 7}}})
 	require.NoError(t, err)
 	repo.AssertExpectations(t)
