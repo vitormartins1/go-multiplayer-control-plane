@@ -30,6 +30,7 @@ import {
   type AchievementNodeData,
   type EventTypeNodeData,
   type RuleNodeData,
+  type SectionLabelData,
   type SourceNodeData,
 } from "../../lib/rulesGraph";
 
@@ -37,6 +38,13 @@ import {
 // via node.data. Os nós de RASCUNHO têm formulário DENTRO do nó (spec 048):
 // inputs com className="nodrag" (não disparam drag do canvas) e o nó só
 // arrasta pelo header (dragHandle) — padrão oficial de custom nodes.
+
+// --- Rótulo de seção da coluna de fontes (spec 049): não interativo. ---
+
+export function SectionLabelNode({ data }: NodeProps) {
+  const d = data as unknown as SectionLabelData;
+  return <div className="flow-section-label">{d.label}</div>;
+}
 
 // --- Fontes (camada 1): um nó por CHAVE; condições ficam nas edges. ---
 
@@ -307,10 +315,20 @@ export function AchievementNode({ data }: NodeProps) {
       </div>
       <div className="flow-card__body">
         <div>{d.name}</div>
-        <div className="flow-card__row">
-          <span className="flow-card__key">target:</span>
-          <span>{d.target}</span>
-        </div>
+        {/* Métrica: o critério mora no nó (spec 049) — a edge stat→achievement
+            é discreta por padrão e o dado não pode depender dela. */}
+        {d.statKey ? (
+          <div className="flow-card__row">
+            <span>
+              {d.statKey} {d.statMode === "per_match" ? "por partida" : "acum."} ≥ {d.target}
+            </span>
+          </div>
+        ) : (
+          <div className="flow-card__row">
+            <span className="flow-card__key">target:</span>
+            <span>{d.target}</span>
+          </div>
+        )}
       </div>
       <Handle type="target" position={Position.Left} isConnectable={false} />
     </div>

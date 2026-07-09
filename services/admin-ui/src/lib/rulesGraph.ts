@@ -26,6 +26,7 @@ export type AchievementNodeData = {
   statMode?: string;
 };
 export type StatInfo = { key: string; declared: boolean };
+export type SectionLabelData = { label: string };
 
 export const srcId = (k: string) => `src:${k}`;
 export const ruleId = (r: EventRule) => `r:${r.id}`;
@@ -58,12 +59,21 @@ const draftHeight = (rows: number) => 46 + 40 * Math.max(1, rows) + 78;
 
 const COL_X = [0, 300, 640, 920];
 const GAP_Y = 18;
+const LABEL_H = 14;
 
-type Meta = { id: string; type: string; data: Record<string, unknown>; h: number };
+// Ordem fixa dos grupos da coluna de fontes (spec 049).
+const SOURCE_GROUPS: Array<{ kind: SourceKind; label: string }> = [
+  { kind: "structural", label: "facts da partida" },
+  { kind: "mode", label: "modo" },
+  { kind: "stat", label: "métricas" },
+];
+
+type Meta = { id: string; type: string; data: Record<string, unknown>; h: number; gapBefore?: number };
 
 function stackColumn(items: Meta[], yByID: Map<string, number>): number {
   let y = 0;
   for (const m of items) {
+    y += m.gapBefore ?? 0;
     yByID.set(m.id, y);
     y += m.h + GAP_Y;
   }
@@ -153,16 +163,32 @@ export function buildRulesGraph(
   // `mode` é fonte universal (todo envelope carrega) — sempre disponível.
   touchSource("mode");
 
-  let sourceMetas: Meta[] = [...sources.entries()].map(([key, s]) => ({
+  const allSourceMetas: Meta[] = [...sources.entries()].map(([key, s]) => ({
     id: srcId(key),
     type: "source",
     data: { sourceKey: key, kind: s.kind, drift: s.drift || undefined, conds: s.conds } satisfies SourceNodeData,
     h: SIZE.source.h + (s.drift ? 16 : 0),
   }));
-  sourceMetas = barycenter(
-    sourceMetas,
-    new Map([...sources.entries()].map(([key, s]) => [srcId(key), s.rules])),
-  );
+  const sourceNeighbor = new Map([...sources.entries()].map(([key, s]) => [srcId(key), s.rules]));
+  // Agrupamento fixo por kind (spec 049): facts → mode → stats, com rótulo de
+  // seção não interativo por grupo. O baricentro só reordena DENTRO do grupo —
+  // é o que impede o intercalado fact/stat que confundia a coluna.
+  const sourceMetas: Meta[] = [];
+  for (const g of SOURCE_GROUPS) {
+    const items = barycenter(
+      allSourceMetas.filter((m) => (m.data as SourceNodeData).kind === g.kind),
+      sourceNeighbor,
+    );
+    if (items.length === 0) continue;
+    sourceMetas.push({
+      id: `lbl:${g.kind}`,
+      type: "sectionLabel",
+      data: { label: g.label } satisfies SectionLabelData,
+      h: LABEL_H,
+      gapBefore: sourceMetas.length > 0 ? GAP_Y : 0,
+    });
+    sourceMetas.push(...items);
+  }
 
   // --- Camada 3: event types. ---
   const typeSources = new Map<string, number[]>();
@@ -241,6 +267,8 @@ export function buildRulesGraph(
       position: { x: COL_X[li], y: (yByID.get(m.id) ?? 0) + (maxH - colHeights[li]) / 2 },
       data: m.data,
       connectable: false,
+      selectable: m.type !== "sectionLabel",
+      draggable: m.type !== "sectionLabel",
       className: isGhost(m.id) ? "is-draft" : undefined,
       // draft: arrasta só pelo header (inputs dentro do nó, padrão nodrag).
       dragHandle: m.type === "ruleDraft" ? ".flow-card__header" : undefined,
@@ -248,13 +276,13 @@ export function buildRulesGraph(
   );
 
   const edges: Edge[] = [];
-  const push = (source: string, target: string, label?: string) =>
+  const push = (source: string, target: string, label?: string, cls?: string) =>
     edges.push({
       id: `${source}->${target}${label ? `|${label}` : ""}`,
       source,
       target,
       label,
-      className: isGhost(source) || isGhost(target) ? "is-draft-edge" : undefined,
+      className: isGhost(source) || isGhost(target) ? "is-draft-edge" : cls,
       labelStyle: { fill: "#9aa7b4", fontSize: 10, fontFamily: "ui-monospace, monospace" },
       labelBgStyle: { fill: "#0f141b", fillOpacity: 0.9 },
       labelBgPadding: [3, 2] as [number, number],
@@ -270,12 +298,16 @@ export function buildRulesGraph(
   for (const [et, achs] of listeners) {
     for (const a of achs) push(typeId(et), achId(a.id));
   }
+  // Edges de métrica (stat→achievement, coluna 1→4) cruzam o canvas inteiro —
+  // nascem discretas (spec 049): o critério mora no NÓ do achievement e a
+  // edge só acende quando a fonte/achievement entra no caminho destacado.
   for (const [key, achs] of metricAchs) {
     for (const a of achs) {
       push(
         srcId(STAT_PREFIX + key),
         achId(a.id),
         `${a.statMode === "per_match" ? "por partida" : "acumulada"} ≥ ${a.target}`,
+        "is-metric-edge",
       );
     }
   }
