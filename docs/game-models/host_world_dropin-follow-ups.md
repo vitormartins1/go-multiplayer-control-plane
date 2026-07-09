@@ -25,6 +25,7 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
   - Decidir armazenamento da senha (hash vs plaintext efêmero) e se vira um pool/quadro separado.
 - **Destrava:** jogar com amigos ignorando o range — o caso de uso social nº 1 do arquétipo.
 - **Fonte:** "Fora de escopo" de `session/012`, `matchmaking/006`, `matchmaking/007`.
+- **Evidência (2026-07-08):** o Capoeira Souls tem o modo `batizado` cadastrado com `passwordEnabled=true` e faixas desligadas (catálogo em `unity-host-world-dropin-data-plane/docs/MODES.md`) — o modo existe e espera este follow-up para funcionar de verdade.
 
 ## 2. Pools / área / região no quadro de sinais
 
@@ -110,6 +111,19 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
 - **Por que adiado:** confiar no server (autoridade neutra); regra de papel é refinamento.
 - **Onde mexe:** `validateParticipation` no service do session, se o modelo de confiança mudar.
 - **Fonte:** "Fora de escopo" de `session/013`.
+
+## 13. Params novos para o arquétipo (propostos pelo catálogo de modos do Capoeira Souls)
+
+- **O quê:** o exercício de multi-modo no data plane (2026-07-08, `unity-host-world-dropin-data-plane/docs/MODES.md`) propôs params colhidos dos jogos de referência: `invasionRequiresCoop` (ER: host solo não é invadível), `hostDeathPolicy` (`close_world`|`respawn` — Seamless Co-op), `invasionCooldownSeconds`, `bossPowerScalingPerPhantom` e `passwordScaling` (data plane, declaráveis por modo), papel "cinza"/`extraRoles` (Mound-Maker; `invaderAsBoss` do Old Monk), `worldScene`/`mapId`.
+- **Onde mexe:** `HostWorldDropInParams` (game-registry) + consumidores conforme o dono (control plane: diretório/matchmaking; data plane: só declaração no blob).
+- **Destrava:** os dials de risco/social que diferenciam os Souls reais; adotar **por evidência**, um por vez.
+
+## 14. Bloco passthrough `worldParams` no perfil (registry descarta chaves desconhecidas)
+
+- **O quê:** o registry decodifica `params` num struct tipado — **chave desconhecida é descartada em silêncio** no PUT. O data plane não tem como declarar params próprios por modo (o princípio do manifest "leia só o que conhece" vale na leitura, mas a escrita filtra tudo).
+- **Onde mexe:** game-registry (DTO/validação/persistência): um bloco livre `worldParams` (JSON cru, sem validação de schema) preservado no snapshot/manifest; ou, no mínimo, **rejeitar** chave desconhecida em vez de descartar (surpresa silenciosa de operador).
+- **Destrava:** params de gameplay por modo sem mudança de schema no registry (ex.: os do item 13 com dono "data plane").
+- **Fonte:** descoberta operacional de 2026-07-08 (cadastro dos modos do Capoeira Souls).
 
 ---
 
