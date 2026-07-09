@@ -76,6 +76,13 @@ func (f *fakeReader) CreateEventRule(_ context.Context, gameID string, r domain.
 	}
 	return &r, nil
 }
+func (f *fakeReader) UpdateEventRule(_ context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error) {
+	f.gotGameID, f.gotID, f.gotEventRule = gameID, id, r
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &r, nil
+}
 func (f *fakeReader) DeleteEventRule(_ context.Context, gameID, id string) error {
 	f.gotGameID, f.gotID = gameID, id
 	return f.err

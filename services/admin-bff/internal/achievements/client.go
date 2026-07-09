@@ -253,6 +253,29 @@ func (c *Client) CreateEventRule(ctx context.Context, gameID string, r domain.Ev
 	return &created, nil
 }
 
+// UpdateEventRule substitui match/eventTypes de uma regra do jogo (spec 016).
+// Archetype não vai no payload (não editável no upstream); match segue opaco
+// (json.RawMessage) — o BFF não interpreta condições.
+func (c *Client) UpdateEventRule(ctx context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error) {
+	body, _ := json.Marshal(map[string]any{
+		"match": r.Match, "eventTypes": r.EventTypes,
+	})
+	u := c.gamePath(gameID, "/event-rules/"+url.PathEscape(id))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var updated domain.EventRule
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		return nil, fmt.Errorf("achievements: decode updated event rule: %w", err)
+	}
+	return &updated, nil
+}
+
 // DeleteEventRule remove uma regra do jogo (nunca uma global). 404 -> UpstreamError.
 func (c *Client) DeleteEventRule(ctx context.Context, gameID, id string) error {
 	u := c.gamePath(gameID, "/event-rules/"+url.PathEscape(id))

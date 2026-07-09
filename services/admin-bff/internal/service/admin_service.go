@@ -193,6 +193,11 @@ func (s *Service) CreateEventRule(ctx context.Context, gameID string, r domain.E
 	return s.reader.CreateEventRule(ctx, gameID, r)
 }
 
+// UpdateEventRule substitui match/eventTypes de uma regra do jogo (spec 016).
+func (s *Service) UpdateEventRule(ctx context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error) {
+	return s.reader.UpdateEventRule(ctx, gameID, id, r)
+}
+
 // DeleteEventRule remove uma regra do jogo (nunca uma global).
 func (s *Service) DeleteEventRule(ctx context.Context, gameID, id string) error {
 	return s.reader.DeleteEventRule(ctx, gameID, id)

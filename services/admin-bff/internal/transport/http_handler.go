@@ -38,6 +38,7 @@ type AdminService interface {
 	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error)
 	GameEventRules(ctx context.Context, gameID string) ([]domain.EventRule, error)
 	CreateEventRule(ctx context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error)
+	UpdateEventRule(ctx context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error)
 	DeleteEventRule(ctx context.Context, gameID, id string) error
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error)
@@ -90,6 +91,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
 	mux.HandleFunc("GET /api/games/{gameId}/event-rules", h.gameEventRules)
 	mux.HandleFunc("POST /api/games/{gameId}/event-rules", h.createEventRule)
+	mux.HandleFunc("PUT /api/games/{gameId}/event-rules/{id}", h.updateEventRule)
 	mux.HandleFunc("DELETE /api/games/{gameId}/event-rules/{id}", h.deleteEventRule)
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
 	mux.HandleFunc("PUT /api/games/{gameId}/leaderboard/{playerID}/score", h.setLeaderboardScore)
@@ -406,6 +408,22 @@ func (h *Handler) createEventRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, rule)
+}
+
+// updateEventRule substitui match/eventTypes de uma regra do jogo (spec 016);
+// repassa 400 (conteúdo inválido) e 404 (global/inexistente) do upstream.
+func (h *Handler) updateEventRule(w http.ResponseWriter, r *http.Request) {
+	var req domain.EventRule
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	rule, err := h.svc.UpdateEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id"), req)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rule)
 }
 
 // deleteEventRule remove uma regra do jogo (nunca uma global); repassa 404.

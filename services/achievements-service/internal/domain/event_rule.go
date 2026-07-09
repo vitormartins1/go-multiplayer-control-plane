@@ -291,6 +291,12 @@ type EventRuleService interface {
 	// inválida (archetype desconhecido, condição malformada, eventTypes
 	// vazios).
 	CreateEventRule(ctx context.Context, gameID string, r EventRule) (*EventRule, error)
+	// UpdateEventRule substitui match e eventTypes de uma regra DO JOGO,
+	// preservando id e archetype (spec 016 — arquétipo não é editável).
+	// ErrInvalidEventRule em conteúdo inválido; ErrEventRuleNotFound se a
+	// regra não existir, for de outro jogo OU for global (mesma proteção do
+	// delete).
+	UpdateEventRule(ctx context.Context, gameID, id string, r EventRule) (*EventRule, error)
 	// DeleteEventRule remove uma regra do jogo. ErrEventRuleNotFound se não
 	// existir OU se for uma regra global (não editável por este endpoint —
 	// mesma resposta pras duas situações, não vaza a distinção).
@@ -307,6 +313,10 @@ type EventRuleRepository interface {
 	ListEffective(ctx context.Context, gameID string) ([]EventRule, error)
 	// CreateRule persiste uma regra sempre com GameID não-nil (escopada).
 	CreateRule(ctx context.Context, r *EventRule) error
+	// UpdateRule substitui match/event_types da regra (r.ID, r.GameID) e
+	// preenche r.Archetype com o valor persistido. ErrEventRuleNotFound se
+	// não existir ou for global (WHERE game_id = $ nunca casa NULL).
+	UpdateRule(ctx context.Context, r *EventRule) error
 	// DeleteRule remove a regra (gameID, ruleID). ErrEventRuleNotFound se não
 	// existir ou se for global (WHERE game_id = $2 nunca casa NULL).
 	DeleteRule(ctx context.Context, gameID, ruleID string) error

@@ -57,6 +57,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// globais do arquétipo (read-only por aqui) + overrides do jogo (CRUD).
 	mux.HandleFunc("GET /admin/games/{gameId}/event-rules", h.adminListEventRules)
 	mux.HandleFunc("POST /admin/games/{gameId}/event-rules", h.adminCreateEventRule)
+	mux.HandleFunc("PUT /admin/games/{gameId}/event-rules/{id}", h.adminUpdateEventRule)
 	mux.HandleFunc("DELETE /admin/games/{gameId}/event-rules/{id}", h.adminDeleteEventRule)
 }
 
@@ -270,6 +271,28 @@ func (h *Handler) adminCreateEventRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toEventRuleDTO(*rule))
+}
+
+// adminUpdateEventRule substitui match/eventTypes de uma regra do jogo
+// {gameId} (spec 016). Archetype não é aceito no payload (não editável) —
+// decodeStrict rejeita campo desconhecido com 400.
+func (h *Handler) adminUpdateEventRule(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Match      map[string]domain.MatchCond `json:"match"` // string ou {op,value} (spec 014)
+		EventTypes []string                    `json:"eventTypes"`
+	}
+	if err := decodeStrict(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	rule, err := h.rules.UpdateEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.EventRule{
+		Match: req.Match, EventTypes: req.EventTypes,
+	})
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toEventRuleDTO(*rule))
 }
 
 // adminDeleteEventRule remove uma regra do jogo {gameId} (globais são
