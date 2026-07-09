@@ -1,7 +1,7 @@
 # Spec: 020-host-world-console
 
 **Serviço:** admin-ui
-**Status:** Aprovada (2026-07-07)
+**Status:** Done (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0023 — **arquétipo `host_world_dropin`, fatia H3** (surfacing — lado UI)
 **Par de:** `session-service/014`, `admin-bff/014`

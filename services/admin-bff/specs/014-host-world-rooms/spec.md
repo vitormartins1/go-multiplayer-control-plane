@@ -1,7 +1,7 @@
 # Spec: 014-host-world-rooms
 
 **Serviço:** admin-bff
-**Status:** Aprovada (2026-07-07)
+**Status:** Done (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0023 — **arquétipo `host_world_dropin`, fatia H3** (surfacing — lado BFF)
 **Par de:** `session-service/014-host-world-board-fields`, `admin-ui/020-host-world-console`

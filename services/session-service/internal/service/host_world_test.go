@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -313,6 +314,43 @@ func TestListInvadableWorlds_ExcluiQueueArena(t *testing.T) {
 	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "sessão queue_arena (Origin=match) não é invadível")
+}
+
+// TestListInvadableWorlds_OrdenaPorOpenedAtAsc prova o follow-up #11 do
+// arquétipo: a iteração do mapa de sessões é aleatória, então sem ordenação
+// explícita a ordem de saída variaria a cada chamada. Os mundos são abertos
+// fora de ordem cronológica (C, A, B) para garantir que a saída reflita
+// OpenedAt e não a ordem de criação.
+func TestListInvadableWorlds_OrdenaPorOpenedAtAsc(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	prof := &mockProfile{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
+
+	base := time.Now()
+	times := []time.Time{base.Add(3 * time.Hour), base.Add(1 * time.Hour), base.Add(2 * time.Hour)}
+	i := 0
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithClock(func() time.Time {
+		tm := times[i]
+		i++
+		return tm
+	}))
+
+	ctx := context.Background()
+	wC, _, err := svc.OpenWorld(ctx, "host-c", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+3h
+	require.NoError(t, err)
+	wA, _, err := svc.OpenWorld(ctx, "host-a", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+1h
+	require.NoError(t, err)
+	wB, _, err := svc.OpenWorld(ctx, "host-b", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+2h
+	require.NoError(t, err)
+
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	require.NoError(t, err)
+	require.Len(t, worlds, 3)
+	got := []string{worlds[0].SessionID, worlds[1].SessionID, worlds[2].SessionID}
+	assert.Equal(t, []string{wA.ID, wB.ID, wC.ID}, got, "mundo mais antigo (menor OpenedAt) primeiro")
 }
 
 func TestListInvadableWorlds_NenhumElegivel_ListaVaziaSemErro(t *testing.T) {

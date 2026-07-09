@@ -1,7 +1,7 @@
 # Spec: 014-host-world-board-fields
 
 **Serviço:** session-service
-**Status:** Aprovada (2026-07-07)
+**Status:** Done (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0023 — **arquétipo `host_world_dropin`, fatia H3** (surfacing no console — lado session)
 **Roadmap:** `docs/game-models/host_world_dropin-roadmap.md` → H3

@@ -680,7 +680,7 @@ func (s *Service) ListInvadableWorlds(_ context.Context, gameID string) ([]domai
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var out []domain.InvadableWorld
+	var matches []*domain.Session
 	for _, sess := range s.sessions {
 		if sess.Origin != domain.OriginHostWorld || sess.GameID != gameID {
 			continue
@@ -689,15 +689,25 @@ func (s *Service) ListInvadableWorlds(_ context.Context, gameID string) ([]domai
 		if !ok {
 			continue // papel invasor não habilitado neste mundo
 		}
-		free := slot.Capacity - len(slot.Occupants)
-		if free <= 0 {
+		if slot.Capacity-len(slot.Occupants) <= 0 {
 			continue // slot de invasor cheio
 		}
+		matches = append(matches, sess)
+	}
+	// Ordena por OpenedAt asc (mundo mais antigo primeiro): iteração de mapa Go
+	// é aleatória, e o matchmaking (006) tenta os mundos na ordem devolvida
+	// aqui — sem isto, dois JoinWorld concorrentes na mesma faixa podiam
+	// escolher mundos diferentes a cada chamada (follow-up #11 do arquétipo).
+	sort.Slice(matches, func(i, j int) bool { return matches[i].OpenedAt.Before(matches[j].OpenedAt) })
+
+	out := make([]domain.InvadableWorld, 0, len(matches))
+	for _, sess := range matches {
+		slot := sess.RoleSlots[domain.RoleInvader]
 		out = append(out, domain.InvadableWorld{
 			SessionID:        sess.ID,
 			HostSoulLevel:    sess.HostSoulLevel,
 			WeaponTier:       sess.WeaponTier,
-			FreeInvaderSlots: free,
+			FreeInvaderSlots: slot.Capacity - len(slot.Occupants),
 		})
 	}
 	return out, nil

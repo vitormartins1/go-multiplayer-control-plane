@@ -98,12 +98,13 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
 - **Destrava:** custo viável de mundos solo-online em escala (a tese econômica, ADR-0008).
 - **Fonte:** roadmap "Aberturas", decisão de modelagem #2.
 
-## 11. Ordenação estável do diretório de invadíveis
+## 11. Ordenação estável do diretório de invadíveis — ✅ FEITO (2026-07-08)
 
 - **O quê:** `session/012` `ListInvadableWorlds` **não garante ordem** (iteração de mapa Go é aleatória). O matchmaking filtra e tenta em ordem de retorno.
 - **Por que adiado:** o `matchmaking/006` não depende de ordem.
 - **Onde mexe:** ordenar por `OpenedAt` no `ListInvadableWorlds` se quisermos estabilidade/fairness.
 - **Fonte:** `plan.md` de `session/012` (D2).
+- **Implementado (branch `chore/host-world-dropin-h3-docs-e-ordenacao`):** `ListInvadableWorlds` agora ordena por `OpenedAt` asc (mundo mais antigo primeiro) antes de montar a resposta — dois `JoinWorld` concorrentes na mesma faixa passam a tentar os mundos na mesma ordem determinística. Teste novo (`TestListInvadableWorlds_OrdenaPorOpenedAtAsc`) abre 3 mundos fora de ordem cronológica via `WithClock` e prova que a saída reflete `OpenedAt`, não a ordem de criação/iteração do mapa.
 
 ## 12. Revalidar `role`/`outcome` contra a semântica de papel
 
