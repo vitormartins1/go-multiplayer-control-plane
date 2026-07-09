@@ -99,6 +99,16 @@
   opacity: 0.12;
 }
 
+/* --- rascunho (regra em criação, spec 044) --- */
+.react-flow__node.is-draft .flow-card {
+  border-style: dashed;
+  border-color: #fab005;
+  opacity: 0.92;
+}
+.react-flow__edge.is-draft-edge .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+}
+
 /* --- handles --- */
 .flow-wrap .react-flow__handle {
   width: 8px;

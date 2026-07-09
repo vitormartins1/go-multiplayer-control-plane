@@ -32,16 +32,16 @@ export function FactNode({ data }: NodeProps) {
 }
 
 export function RuleNode({ data }: NodeProps) {
-  const { rule } = data as unknown as RuleNodeData;
+  const { rule, draft } = data as unknown as RuleNodeData;
   const global = rule.scope === "global";
   const pairs = Object.entries(rule.match);
   return (
     <div className={`flow-card ${global ? "flow-card--rule-global" : "flow-card--rule-game"}`}>
       <div className="flow-card__header">
         {global ? <IconWorld size={12} /> : <IconGitBranch size={12} />}
-        {global ? "Regra global" : "Regra do jogo"}
-        <Badge size="xs" variant="outline" color={global ? "gray" : "teal"} ml="auto">
-          {global ? "read-only" : "editável"}
+        {draft ? "Nova regra" : global ? "Regra global" : "Regra do jogo"}
+        <Badge size="xs" variant="outline" color={draft ? "yellow" : global ? "gray" : "teal"} ml="auto">
+          {draft ? "rascunho" : global ? "read-only" : "editável"}
         </Badge>
       </div>
       <div className="flow-card__body">

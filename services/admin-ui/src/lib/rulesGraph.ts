@@ -8,7 +8,7 @@ import type { CatalogAchievement, EventRule } from "./api";
 // sempre derivado das regras.
 
 export type FactNodeData = { factKey: string; factValue: string };
-export type RuleNodeData = { rule: EventRule };
+export type RuleNodeData = { rule: EventRule; draft?: boolean };
 export type EventTypeNodeData = { eventType: string; listeners: number };
 export type AchievementNodeData = { name: string; target: number; eventType: string };
 
@@ -56,17 +56,36 @@ function barycenter(items: Meta[], neighborIdx: Map<string, number[]>): Meta[] {
   });
 }
 
+// DraftRule é a regra EM CRIAÇÃO (drawer aberto, spec 044): entra no layout
+// como pseudo-regra "__draft__" — mesmas ligações das regras reais, só que
+// marcada como rascunho (nós/edges ghost) até o admin salvar.
+export type DraftRule = { match: Record<string, string>; eventTypes: string[] };
+
+export const DRAFT_RULE_ID = "r:__draft__";
+
 export function buildRulesGraph(
   rules: EventRule[],
   catalog: CatalogAchievement[],
+  draft?: DraftRule,
 ): { nodes: Node[]; edges: Edge[] } {
+  // Facts/types que existem nas regras REAIS — o que só aparecer via draft é
+  // ghost (some sem resíduo no cancelar, R3 da spec).
+  const realFacts = new Set(rules.flatMap((r) => Object.entries(r.match).map(([k, v]) => factId(k, v))));
+  const realTypes = new Set(rules.flatMap((r) => r.eventTypes.map((et) => typeId(et))));
+  const allRules: EventRule[] = draft
+    ? [
+        ...rules,
+        { id: "__draft__", scope: "game", archetype: rules[0]?.archetype ?? "queue_arena", ...draft },
+      ]
+    : rules;
+
   // Camada 2 — regras (ordem: globais primeiro, depois do jogo; estável).
-  const ruleMetas: Meta[] = [...rules]
+  const ruleMetas: Meta[] = [...allRules]
     .sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "global" ? -1 : 1))
     .map((r) => ({
       id: ruleId(r),
       type: "rule",
-      data: { rule: r } satisfies RuleNodeData,
+      data: { rule: r, draft: r.id === "__draft__" || undefined } satisfies RuleNodeData,
       h: ruleHeight(r),
       layer: 1,
     }));
@@ -74,7 +93,7 @@ export function buildRulesGraph(
 
   // Camada 1 — facts distintos (pares chave=valor dos matches).
   const factUses = new Map<string, { key: string; value: string; rules: number[] }>();
-  for (const r of rules) {
+  for (const r of allRules) {
     for (const [k, v] of Object.entries(r.match)) {
       const id = factId(k, v);
       const u = factUses.get(id) ?? { key: k, value: v, rules: [] };
@@ -96,7 +115,7 @@ export function buildRulesGraph(
 
   // Camada 3 — event types distintos emitidos pelas regras.
   const typeSources = new Map<string, number[]>();
-  for (const r of rules) {
+  for (const r of allRules) {
     for (const et of r.eventTypes) {
       const list = typeSources.get(et) ?? [];
       list.push(ruleIdx.get(ruleId(r))!);
@@ -147,6 +166,13 @@ export function buildRulesGraph(
   const colHeights = columns.map((c) => stackColumn(c, yByID));
   const maxH = Math.max(...colHeights, 0);
 
+  // Ghost = só existe por causa do draft (regra rascunho + facts/types
+  // inéditos dela) — estilo tracejado, some sem resíduo no cancelar.
+  const isGhost = (id: string) =>
+    id === DRAFT_RULE_ID ||
+    (id.startsWith("f:") && !realFacts.has(id)) ||
+    (id.startsWith("t:") && !realTypes.has(id));
+
   const nodes: Node[] = columns.flatMap((col, li) =>
     col.map((m) => ({
       id: m.id,
@@ -154,18 +180,26 @@ export function buildRulesGraph(
       position: { x: COL_X[li], y: (yByID.get(m.id) ?? 0) + (maxH - colHeights[li]) / 2 },
       data: m.data,
       connectable: false,
+      className: isGhost(m.id) ? "is-draft" : undefined,
     })),
   );
 
   const edges: Edge[] = [];
+  const push = (source: string, target: string) =>
+    edges.push({
+      id: `${source}->${target}`,
+      source,
+      target,
+      className: isGhost(source) || isGhost(target) ? "is-draft-edge" : undefined,
+    });
   for (const [fid, u] of factUses) {
-    for (const ri of u.rules) edges.push({ id: `${fid}->${ruleMetas[ri].id}`, source: fid, target: ruleMetas[ri].id });
+    for (const ri of u.rules) push(fid, ruleMetas[ri].id);
   }
   for (const [et, idx] of typeSources) {
-    for (const ri of idx) edges.push({ id: `${ruleMetas[ri].id}->${typeId(et)}`, source: ruleMetas[ri].id, target: typeId(et) });
+    for (const ri of idx) push(ruleMetas[ri].id, typeId(et));
   }
   for (const [et, achs] of listeners) {
-    for (const a of achs) edges.push({ id: `${typeId(et)}->${achId(a.id)}`, source: typeId(et), target: achId(a.id) });
+    for (const a of achs) push(typeId(et), achId(a.id));
   }
 
   return { nodes, edges };

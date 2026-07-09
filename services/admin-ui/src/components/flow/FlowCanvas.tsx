@@ -2,13 +2,27 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   ReactFlow,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
-import type { DragEvent } from "react";
+import { useEffect, type DragEvent, type ReactNode } from "react";
 import "./flow.css";
+
+// AutoFit re-enquadra o grafo quando `fitKey` muda (nó rascunho adicionado,
+// troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
+// mount. Filho de <ReactFlow>, então tem acesso ao store interno.
+function AutoFit({ fitKey }: { fitKey: unknown }) {
+  const rf = useReactFlow();
+  useEffect(() => {
+    const t = setTimeout(() => rf.fitView({ padding: 0.15, maxZoom: 1, duration: 250 }), 50);
+    return () => clearTimeout(t);
+  }, [fitKey, rf]);
+  return null;
+}
 
 // Cor de cada tipo de nó no MiniMap (mesma paleta dos headers em flow.css).
 const MINIMAP_COLOR: Record<string, string> = {
@@ -30,6 +44,9 @@ export function FlowCanvas({
   onNodeClick,
   onPaneClick,
   onDrop,
+  overlay,
+  fitKey,
+  height,
 }: {
   nodes: Node[];
   edges: Edge[];
@@ -37,11 +54,18 @@ export function FlowCanvas({
   onNodeClick?: (nodeId: string) => void;
   onPaneClick?: () => void;
   onDrop?: (e: DragEvent) => void;
+  // overlay flutua sobre o canvas (Panel top-right) — detalhe do nó
+  // selecionado etc., sem coluna lateral roubando largura (spec 044).
+  overlay?: ReactNode;
+  // fitKey: qualquer mudança re-enquadra o grafo (ver AutoFit).
+  fitKey?: unknown;
+  // height sobrescreve os 580px do CSS (ex.: canvas encolhe com o drawer aberto).
+  height?: number;
 }) {
   return (
     <div
       className="flow-wrap"
-      style={{ flex: 1, minWidth: 0 }}
+      style={height ? { height, transition: "height .2s ease" } : undefined}
       onDragOver={onDrop ? (e) => e.preventDefault() : undefined}
       onDrop={onDrop}
     >
@@ -61,6 +85,8 @@ export function FlowCanvas({
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#232c3a" gap={22} />
+        {fitKey !== undefined && <AutoFit fitKey={fitKey} />}
+        {overlay && <Panel position="top-right">{overlay}</Panel>}
         <Controls showInteractive={false} />
         <MiniMap
           pannable
