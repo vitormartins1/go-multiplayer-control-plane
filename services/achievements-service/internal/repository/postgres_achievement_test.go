@@ -37,6 +37,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/004_processed_matches.sql",
 			"../../migrations/005_stat_criteria.sql",
 			"../../migrations/006_processed_participations.sql",
+			"../../migrations/007_participation_event_id.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -283,17 +284,61 @@ func TestApplyParticipationEvent_Reprocessado_NaoDobra(t *testing.T) {
 	}))
 
 	types := domain.ParticipationEventTypes("invader", "HOST_KILLED", "SUCCESS")
-	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", types, at)
+	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, at)
 	require.NoError(t, err)
 	assert.False(t, dup)
 
-	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", types, at)
+	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, at)
 	require.NoError(t, err)
-	assert.True(t, dup, "reentrega do mesmo evento é no-op")
+	assert.True(t, dup, "reentrega do mesmo evento (sem eventId) é no-op via fallback determinístico")
 
 	prog := mustProgress(t, repo, sandbox, "inv-1")
 	assert.Equal(t, 1, prog["first_invasion"].Progress, "não dobra na reentrega")
 	assert.False(t, prog["first_invasion"].UnlockedAt.IsZero(), "desbloqueada")
+}
+
+// Dois eventId diferentes (mesma sessão/jogador/evento) contam duas vezes —
+// o cenário que o follow-up #4 destrava (ex.: boss que respawna).
+func TestApplyParticipationEvent_EventIDsDiferentes_ContaDuasVezes(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+	require.NoError(t, repo.CreateAchievement(ctx, &domain.Achievement{
+		GameID: sandbox, ID: "boss_slayer", Name: "Caçador de chefes", Description: "d",
+		EventType: domain.EventCoopBossHelped, Target: 5,
+	}))
+	types := domain.ParticipationEventTypes("coop", "BOSS_DEFEATED", "SUCCESS")
+
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-a", types, at)
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-b", types, at)
+	require.NoError(t, err)
+
+	prog := mustProgress(t, repo, sandbox, "coop-1")
+	assert.Equal(t, 2, prog["boss_slayer"].Progress, "mesma sessão, eventId diferente -> conta as duas ocorrências")
+}
+
+// Reenviar o MESMO eventId (retry) continua idempotente, mesmo comportamento
+// de antes só que pela chave nova.
+func TestApplyParticipationEvent_MesmoEventID_NaoDobra(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+	require.NoError(t, repo.CreateAchievement(ctx, &domain.Achievement{
+		GameID: sandbox, ID: "boss_slayer2", Name: "Caçador de chefes 2", Description: "d",
+		EventType: domain.EventCoopBossHelped, Target: 5,
+	}))
+	types := domain.ParticipationEventTypes("coop", "BOSS_DEFEATED", "SUCCESS")
+
+	dup1, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, at)
+	require.NoError(t, err)
+	assert.False(t, dup1)
+	dup2, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, at)
+	require.NoError(t, err)
+	assert.True(t, dup2, "retry do mesmo eventId é no-op")
+
+	prog := mustProgress(t, repo, sandbox, "coop-1")
+	assert.Equal(t, 1, prog["boss_slayer2"].Progress)
 }
 
 // Sessões distintas do mesmo jogador acumulam (a chave inclui session_id).
@@ -307,9 +352,9 @@ func TestApplyParticipationEvent_SessoesDistintas_Acumulam(t *testing.T) {
 	}))
 	types := domain.ParticipationEventTypes("coop", "JOINED", "NEUTRAL")
 
-	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "JOINED", types, at)
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "JOINED", "", types, at)
 	require.NoError(t, err)
-	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-2", "coop-1", "JOINED", types, at)
+	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-2", "coop-1", "JOINED", "", types, at)
 	require.NoError(t, err)
 
 	prog := mustProgress(t, repo, sandbox, "coop-1")
@@ -322,11 +367,11 @@ func TestApplyParticipationEvent_SemEventType_ProcessaSemProgresso(t *testing.T)
 	ctx := context.Background()
 	at := time.Now().UTC()
 
-	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", nil, at)
+	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", "", nil, at)
 	require.NoError(t, err)
 	assert.False(t, dup)
 	// reprocessar continua no-op idempotente.
-	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", nil, at)
+	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", "", nil, at)
 	require.NoError(t, err)
 	assert.True(t, dup)
 

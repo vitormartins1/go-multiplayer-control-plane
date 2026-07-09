@@ -47,8 +47,8 @@ func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string,
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *mockRepo) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event string, eventTypes []string, at time.Time) (bool, error) {
-	args := m.Called(ctx, gameID, sessionID, playerID, event, eventTypes, at)
+func (m *mockRepo) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, at time.Time) (bool, error) {
+	args := m.Called(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, at)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -217,9 +217,9 @@ func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := new(mockRepo)
 			svc := New(repo)
-			repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", c.event, c.want, mock.Anything).Return(false, nil)
+			repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", c.event, mock.Anything, c.want, mock.Anything).Return(false, nil)
 
-			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", c.role, c.event, c.outcome)
+			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", c.role, c.event, c.outcome, "evt-1")
 			require.NoError(t, err)
 			assert.False(t, dup)
 			repo.AssertExpectations(t)
@@ -230,9 +230,9 @@ func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 func TestApplyParticipationEvent_Duplicado_PropagaDup(t *testing.T) {
 	repo := new(mockRepo)
 	svc := New(repo)
-	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED", mock.Anything, mock.Anything).Return(true, nil)
+	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 
-	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "invader", "HOST_KILLED", "SUCCESS")
+	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "invader", "HOST_KILLED", "SUCCESS", "evt-2")
 	require.NoError(t, err)
 	assert.True(t, dup)
 }

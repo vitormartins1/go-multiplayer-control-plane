@@ -221,12 +221,14 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 }
 
 // ApplyParticipationEvent aplica os event types de um evento de participação
-// (host_world_dropin, spec 013/009) numa única tx, idempotente por
-// (session_id, player_id, event). A marca em processed_participations + o
-// progresso vivem na MESMA tx (mesma garantia do ApplyMatchResult): reprocessar
-// é no-op e um crash no meio não deixa o evento "processado" sem efeito.
-// eventTypes vazio (evento sem conquista, ex.: LEFT) → só marca processado.
-func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event string, eventTypes []string, at time.Time) (bool, error) {
+// (host_world_dropin, spec 013/009/012) numa única tx, idempotente por
+// event_id (follow-up #4 — session_id/player_id/event preservados na linha
+// só como referência/debug, não fazem mais parte da chave). A marca em
+// processed_participations + o progresso vivem na MESMA tx (mesma garantia
+// do ApplyMatchResult): reprocessar é no-op e um crash no meio não deixa o
+// evento "processado" sem efeito. eventTypes vazio (evento sem conquista, ex.:
+// LEFT) → só marca processado.
+func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, at time.Time) (bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("achievements repository: apply participation: begin: %w", err)
@@ -234,9 +236,9 @@ func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Cont
 	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
 
 	tag, err := tx.Exec(ctx,
-		`INSERT INTO processed_participations (session_id, player_id, event, game_id)
-		 VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-		sessionID, playerID, event, gameID)
+		`INSERT INTO processed_participations (event_id, session_id, player_id, event, game_id)
+		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (event_id) DO NOTHING`,
+		effectiveEventID(eventID, sessionID, playerID, event), sessionID, playerID, event, gameID)
 	if err != nil {
 		return false, fmt.Errorf("achievements repository: apply participation: mark: %w", err)
 	}
