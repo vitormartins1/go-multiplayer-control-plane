@@ -9,13 +9,18 @@ import (
 // disponibilidade para ajudar, com a sua faixa. Dado puro — o canal de entrega e
 // o estado (active/claimed) vivem no store interno do serviço, não aqui.
 type Sign struct {
-	ModeID string // modo do jogo (ADR-0024): o sinal só casa com hosts do mesmo modo
+	ModeID     string // modo do jogo (ADR-0024): o sinal só casa com hosts do mesmo modo
 	SignID     string
 	GameID     string
 	PlayerID   string // o aliado que anunciou
 	SoulLevel  int
 	WeaponTier int
 	PostedAt   time.Time
+	// Password é a senha em texto puro que o aliado informou ao postar o sinal
+	// (follow-up #1, spec matchmaking/011); vazia = sem senha. Comparada direto
+	// (plaintext == plaintext) contra a senha que o host informa no ListSigns —
+	// nunca atravessa o session-service, então não há razão pra hashear aqui.
+	Password string
 }
 
 // Summoned é o que o aliado recebe quando um host o invoca (spec 007): o mundo em
@@ -32,6 +37,10 @@ type Summoned struct {
 type CoopCriteria struct {
 	SoulLevel  int
 	WeaponTier int
+	// Password: no PostSign, a senha do aliado; no ListSigns, a senha do host
+	// (a mesma que ele definiu no OpenWorld do próprio mundo). Comparação
+	// plaintext-contra-plaintext no bypass de ListSigns (matchmaking/011).
+	Password string
 }
 
 // CoopPolicy é o subconjunto do perfil host_world_dropin que decide se e como o

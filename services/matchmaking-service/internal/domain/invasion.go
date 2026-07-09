@@ -12,6 +12,9 @@ const archetypeHostWorldDropIn = "host_world_dropin"
 type InvaderCriteria struct {
 	SoulLevel  int
 	WeaponTier int
+	// Password é a senha em texto puro que o invasor informou (follow-up #1,
+	// spec matchmaking/011); vazia = sem senha, casamento só por faixa.
+	Password string
 }
 
 // InvadableWorld espelha o diretório do session (session/012): um mundo aberto
@@ -22,6 +25,10 @@ type InvadableWorld struct {
 	HostSoulLevel    int
 	WeaponTier       int
 	FreeInvaderSlots int
+	// PasswordHash espelha session.Session.PasswordHash (spec session/020) —
+	// comparado contra HashWorldPassword(InvaderCriteria.Password) pro bypass
+	// de faixa (spec matchmaking/011).
+	PasswordHash string
 }
 
 // InvasionPolicy é o subconjunto do perfil host_world_dropin que decide se e como

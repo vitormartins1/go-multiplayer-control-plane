@@ -78,6 +78,30 @@ func TestListSigns_FiltraPorFaixa(t *testing.T) {
 	assert.Equal(t, "ally-a", signs[0].PlayerID)
 }
 
+func TestListSigns_SenhaBateForaDaFaixa_Aparece(t *testing.T) {
+	s := NewSummoner(&fakeCoopPolicies{policy: coopRange()}, &fakeInjector{byWorld: map[string]error{}})
+	ctx := context.Background()
+	// aliado B=300 fora da banda do host 100, mas com a senha certa.
+	_, _, err := s.PostSign(ctx, "game-1", "default", "ally-b", domain.CoopCriteria{SoulLevel: 300, Password: "abrepalavra"})
+	require.NoError(t, err)
+
+	signs, err := s.ListSigns(ctx, "game-1", "default", domain.CoopCriteria{SoulLevel: 100, Password: "abrepalavra"})
+	require.NoError(t, err)
+	require.Len(t, signs, 1)
+	assert.Equal(t, "ally-b", signs[0].PlayerID)
+}
+
+func TestListSigns_SenhaErrada_CaiNoCaminhoNormalDeFaixa(t *testing.T) {
+	s := NewSummoner(&fakeCoopPolicies{policy: coopRange()}, &fakeInjector{byWorld: map[string]error{}})
+	ctx := context.Background()
+	_, _, err := s.PostSign(ctx, "game-1", "default", "ally-b", domain.CoopCriteria{SoulLevel: 300, Password: "abrepalavra"})
+	require.NoError(t, err)
+
+	signs, err := s.ListSigns(ctx, "game-1", "default", domain.CoopCriteria{SoulLevel: 100, Password: "senhaerrada"})
+	require.NoError(t, err)
+	assert.Empty(t, signs, "senha errada não isenta a faixa")
+}
+
 func TestListSigns_OutroJogo_Exclui(t *testing.T) {
 	s := NewSummoner(&fakeCoopPolicies{policy: coopOn()}, &fakeInjector{byWorld: map[string]error{}})
 	ctx := context.Background()

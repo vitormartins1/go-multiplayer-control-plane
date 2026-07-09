@@ -90,7 +90,7 @@ func (s *Server) Invade(ctx context.Context, req *pb.InvadeRequest) (*pb.InvadeR
 		return nil, status.Error(codes.InvalidArgument, "game_id é obrigatório")
 	}
 	playerID := playerIDFromContext(ctx)
-	crit := domain.InvaderCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
+	crit := domain.InvaderCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier()), Password: req.GetPassword()}
 
 	invaded, err := s.inv.Invade(ctx, gameID, normalizeMode(req.GetModeId()), playerID, crit)
 	if err != nil {
@@ -122,7 +122,7 @@ func (s *Server) PostSummonSign(req *pb.PostSummonSignRequest, stream pb.Matchma
 		return status.Error(codes.InvalidArgument, "game_id é obrigatório")
 	}
 	playerID := playerIDFromContext(stream.Context())
-	crit := domain.CoopCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier())}
+	crit := domain.CoopCriteria{SoulLevel: int(req.GetSoulLevel()), WeaponTier: int(req.GetWeaponTier()), Password: req.GetPassword()}
 
 	signID, ch, err := s.sum.PostSign(stream.Context(), gameID, normalizeMode(req.GetModeId()), playerID, crit)
 	if err != nil {
@@ -157,7 +157,7 @@ func (s *Server) ListSigns(ctx context.Context, req *pb.ListSignsRequest) (*pb.L
 	if gameID == "" {
 		return nil, status.Error(codes.InvalidArgument, "game_id é obrigatório")
 	}
-	host := domain.CoopCriteria{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetHostWeaponTier())}
+	host := domain.CoopCriteria{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetHostWeaponTier()), Password: req.GetPassword()}
 	signs, err := s.sum.ListSigns(ctx, gameID, normalizeMode(req.GetModeId()), host)
 	if err != nil {
 		return nil, coopError(err, "list signs")

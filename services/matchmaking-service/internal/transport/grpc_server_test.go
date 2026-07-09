@@ -106,14 +106,18 @@ func setupFull(t *testing.T, prov domain.SessionProvisioner, profile domain.Prof
 // stubInvader adapta um resultado/erro fixo à Port domain.Invader. gotPlayerID
 // captura o playerID que chegou via interceptor (prova o wire do JWT no unary).
 type stubInvader struct {
-	result     domain.Invaded
-	err        error
+	result      domain.Invaded
+	err         error
 	gotPlayerID *string
+	gotCriteria *domain.InvaderCriteria
 }
 
-func (s stubInvader) Invade(_ context.Context, _, _, playerID string, _ domain.InvaderCriteria) (domain.Invaded, error) {
+func (s stubInvader) Invade(_ context.Context, _, _, playerID string, crit domain.InvaderCriteria) (domain.Invaded, error) {
 	if s.gotPlayerID != nil {
 		*s.gotPlayerID = playerID
+	}
+	if s.gotCriteria != nil {
+		*s.gotCriteria = crit
 	}
 	return s.result, s.err
 }
@@ -253,6 +257,16 @@ func TestInvade_NaoSuportado_FailedPrecondition(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+func TestInvade_Senha_ChegaAoServiceComoCriteria(t *testing.T) {
+	var gotCrit domain.InvaderCriteria
+	inv := stubInvader{result: domain.Invaded{SessionID: "w1"}, gotCriteria: &gotCrit}
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, inv, defaultSummoner())
+
+	_, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw", SoulLevel: 100, Password: "abrepalavra"})
+	require.NoError(t, err)
+	assert.Equal(t, "abrepalavra", gotCrit.Password)
+}
+
 func TestInvade_NenhumMundo_NotFound(t *testing.T) {
 	client := setupFull(t, okProvisioner, stubProvider{size: 2}, stubInvader{err: domain.ErrNoEligibleWorld}, defaultSummoner())
 
@@ -304,6 +318,22 @@ func TestSummonSigns_FluxoCompleto(t *testing.T) {
 	list, err = client.ListSigns(authCtx("host-1"), &pb.ListSignsRequest{GameId: "hw", HostSoulLevel: 100})
 	require.NoError(t, err)
 	assert.Empty(t, list.GetSigns())
+}
+
+// Senha (follow-up #1, matchmaking/011): aliado fora da faixa simétrica de
+// co-op aparece pro host que informa a mesma senha.
+func TestListSigns_SenhaBateForaDaFaixa_AparecePeloBufconn(t *testing.T) {
+	client, _ := setupCoop(t, domain.CoopPolicy{Archetype: "host_world_dropin", CoopEnabled: true, LevelRangeEnabled: true})
+
+	stream, err := client.PostSummonSign(authCtx("ally-1"), &pb.PostSummonSignRequest{GameId: "hw", SoulLevel: 300, Password: "abrepalavra"})
+	require.NoError(t, err)
+	_, err = stream.Recv() // POSTED
+	require.NoError(t, err)
+
+	list, err := client.ListSigns(authCtx("host-1"), &pb.ListSignsRequest{GameId: "hw", HostSoulLevel: 100, Password: "abrepalavra"})
+	require.NoError(t, err)
+	require.Len(t, list.GetSigns(), 1, "senha bate → aparece mesmo fora da faixa (aliado 300 vs host 100)")
+	assert.Equal(t, "ally-1", list.GetSigns()[0].GetPlayerId())
 }
 
 func TestPostSummonSign_CoopNaoSuportado_FailedPrecondition(t *testing.T) {

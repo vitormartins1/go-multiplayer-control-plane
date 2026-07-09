@@ -72,6 +72,7 @@ func (c *Client) ListInvadableWorlds(ctx context.Context, gameID string) ([]doma
 			HostSoulLevel:    int(w.GetHostSoulLevel()),
 			WeaponTier:       int(w.GetWeaponTier()),
 			FreeInvaderSlots: int(w.GetFreeInvaderSlots()),
+			PasswordHash:     w.GetPasswordHash(),
 		})
 	}
 	return worlds, nil

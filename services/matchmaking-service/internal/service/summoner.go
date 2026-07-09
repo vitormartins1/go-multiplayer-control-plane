@@ -83,6 +83,7 @@ func (s *Summoner) PostSign(ctx context.Context, gameID, modeID, playerID string
 		Sign: domain.Sign{
 			SignID: signID, GameID: gameID, ModeID: modeID, PlayerID: playerID,
 			SoulLevel: crit.SoulLevel, WeaponTier: crit.WeaponTier, PostedAt: s.now(),
+			Password: crit.Password,
 		},
 		ch: make(chan domain.Summoned, 1), // buffer 1: a entrega nunca bloqueia o Summon
 	}
@@ -114,7 +115,11 @@ func (s *Summoner) ListSigns(ctx context.Context, gameID, modeID string, host do
 			continue
 		}
 		ally := domain.CoopCriteria{SoulLevel: sg.SoulLevel, WeaponTier: sg.WeaponTier}
-		if domain.CoopEligible(ally, host.SoulLevel, host.WeaponTier, policy) {
+		// Bypass por senha (follow-up #1, matchmaking/011): a mesma senha que o
+		// host definiu no OpenWorld do seu mundo, comparada plaintext-contra-
+		// plaintext com a do sinal (nunca atravessa o session-service).
+		matchesPassword := host.Password != "" && sg.Password != "" && host.Password == sg.Password
+		if matchesPassword || domain.CoopEligible(ally, host.SoulLevel, host.WeaponTier, policy) {
 			out = append(out, sg.Sign)
 		}
 	}
