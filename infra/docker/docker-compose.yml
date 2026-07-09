@@ -337,6 +337,7 @@ services:
       - ../../services/achievements-service/migrations/003_add_game_scope.sql:/docker-entrypoint-initdb.d/003_add_game_scope.sql:ro
       - ../../services/achievements-service/migrations/004_processed_matches.sql:/docker-entrypoint-initdb.d/004_processed_matches.sql:ro
       - ../../services/achievements-service/migrations/005_stat_criteria.sql:/docker-entrypoint-initdb.d/005_stat_criteria.sql:ro
+      - ../../services/achievements-service/migrations/006_processed_participations.sql:/docker-entrypoint-initdb.d/006_processed_participations.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
