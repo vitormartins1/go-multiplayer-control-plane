@@ -200,6 +200,71 @@ type progressResponse struct {
 	} `json:"progress"`
 }
 
+// eventRulesResponse é o shape de GET /admin/games/{g}/event-rules.
+type eventRulesResponse struct {
+	Rules []struct {
+		ID         string            `json:"id"`
+		Scope      string            `json:"scope"`
+		Archetype  string            `json:"archetype"`
+		Match      map[string]string `json:"match"`
+		EventTypes []string          `json:"eventTypes"`
+	} `json:"rules"`
+}
+
+// GameEventRules lê as regras efetivas do jogo (globais do arquétipo +
+// overrides do jogo, migration 008).
+func (c *Client) GameEventRules(ctx context.Context, gameID string) ([]domain.EventRule, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.gamePath(gameID, "/event-rules"), nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var body eventRulesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("achievements: decode event rules: %w", err)
+	}
+	out := make([]domain.EventRule, 0, len(body.Rules))
+	for _, r := range body.Rules {
+		out = append(out, domain.EventRule{ID: r.ID, Scope: r.Scope, Archetype: r.Archetype, Match: r.Match, EventTypes: r.EventTypes})
+	}
+	return out, nil
+}
+
+// CreateEventRule cria uma regra escopada ao jogo. Validação (400) vira
+// UpstreamError.
+func (c *Client) CreateEventRule(ctx context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error) {
+	body, _ := json.Marshal(map[string]any{
+		"archetype": r.Archetype, "match": r.Match, "eventTypes": r.EventTypes,
+	})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.gamePath(gameID, "/event-rules"), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var created domain.EventRule
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		return nil, fmt.Errorf("achievements: decode created event rule: %w", err)
+	}
+	return &created, nil
+}
+
+// DeleteEventRule remove uma regra do jogo (nunca uma global). 404 -> UpstreamError.
+func (c *Client) DeleteEventRule(ctx context.Context, gameID, id string) error {
+	u := c.gamePath(gameID, "/event-rules/"+url.PathEscape(id))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
 // AchievementProgress devolve o progresso de todos os jogadores na conquista.
 func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(achievementID)+"/progress")

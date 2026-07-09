@@ -227,6 +227,28 @@ type AchievementsReader interface {
 	ImportAchievements(ctx context.Context, gameID string, items []Achievement) (ImportResponse, error)
 	// AchievementProgress devolve o progresso de todos os jogadores na conquista.
 	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]AchievementProgressEntry, error)
+	// GameEventRules devolve as regras EFETIVAS do jogo: globais de cada
+	// arquétipo (Scope="global") + overrides específicos do jogo (Scope="game").
+	// Migration 008 do achievements-service (mapeamento evento->achievement
+	// data-driven, substitui o vocabulário hardcoded do front).
+	GameEventRules(ctx context.Context, gameID string) ([]EventRule, error)
+	// CreateEventRule cria uma regra escopada ao jogo. Validação -> UpstreamError.
+	CreateEventRule(ctx context.Context, gameID string, r EventRule) (*EventRule, error)
+	// DeleteEventRule remove uma regra do jogo (nunca uma global — o
+	// achievements-service trata como 404 nos dois casos). 404 -> UpstreamError.
+	DeleteEventRule(ctx context.Context, gameID, id string) error
+}
+
+// EventRule é uma regra de mapeamento evento->achievement-event-type
+// (migration 008 do achievements-service). Scope "global" = regra do
+// arquétipo (read-only neste painel); "game" = override específico deste
+// jogo (editável/removível).
+type EventRule struct {
+	ID         string            `json:"id"`
+	Scope      string            `json:"scope"`
+	Archetype  string            `json:"archetype"`
+	Match      map[string]string `json:"match"`
+	EventTypes []string          `json:"eventTypes"`
 }
 
 // PlayerDataEntry é uma linha de dado de gameplay do jogador (player-data). O

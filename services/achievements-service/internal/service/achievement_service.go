@@ -13,8 +13,9 @@ import (
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/domain"
 )
 
-// garante em tempo de compilação que satisfazemos a Port de entrada.
+// garante em tempo de compilação que satisfazemos as Ports de entrada.
 var _ domain.AchievementService = (*Service)(nil)
+var _ domain.EventRuleService = (*Service)(nil)
 
 // slugRE valida o id (slug) de uma conquista: 2–40, minúsculas/dígitos/hífen/
 // underscore, sem separador nas pontas. Permite o estilo snake_case do catálogo
@@ -43,13 +44,15 @@ const (
 
 // Service implementa as regras de catálogo e desbloqueio de conquistas.
 type Service struct {
-	repo domain.AchievementRepository
-	now  func() time.Time
+	repo  domain.AchievementRepository
+	rules domain.EventRuleRepository
+	now   func() time.Time
 }
 
-// New cria o service a partir do repositório.
-func New(repo domain.AchievementRepository) *Service {
-	return &Service{repo: repo, now: time.Now}
+// New cria o service a partir do repositório de catálogo/progresso e do
+// repositório de regras de mapeamento evento->achievement (migration 008).
+func New(repo domain.AchievementRepository, rules domain.EventRuleRepository) *Service {
+	return &Service{repo: repo, rules: rules, now: time.Now}
 }
 
 // ListCatalog devolve o catálogo de conquistas do jogo.
@@ -120,29 +123,24 @@ func (s *Service) RecordEvent(ctx context.Context, gameID, playerID string, even
 	return unlocked, nil
 }
 
-// ApplyMatchResult traduz o resultado bruto da partida em eventos de gameplay
-// (match_played p/ todos; match_won p/ quem venceu) e delega ao repo a aplicação
-// idempotente por matchID. Consumido pelo fan-out durável (SQS, ADR-0020).
-// dup=true quando a partida já havia sido processada (no-op).
+// ApplyMatchResult traduz o resultado bruto da partida (queue_arena,
+// win_loss_draw) em eventos de gameplay via EvaluateRules (migration 008) e
+// delega ao repo a aplicação idempotente por matchID. Consumido pelo fan-out
+// durável (SQS, ADR-0020). dup=true quando a partida já havia sido processada
+// (no-op).
 func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, results []domain.MatchResult) (bool, error) {
+	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeQueueArena)
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply match result: rules: %w", err)
+	}
 	players := make([]domain.PlayerMatchInput, 0, len(results))
 	for _, r := range results {
-		events := []string{eventMatchPlayed}
-		switch r.Outcome {
-		case outcomeWin:
-			events = append(events, eventMatchWon)
-		case outcomeLoss:
-			events = append(events, eventMatchLost)
-		case outcomeDraw:
-			events = append(events, eventMatchDrawn)
-		case "":
-			// fallback retrocompat: envelope sem outcome (v1) -> usa Won.
-			if r.Won {
-				events = append(events, eventMatchWon)
-			}
-		default:
-			// valor desconhecido: só match_played (não falha o processamento).
+		outcome := r.Outcome
+		if outcome == "" && r.Won {
+			// fallback retrocompat: envelope sem outcome (v1) -> trata como win.
+			outcome = outcomeWin
 		}
+		events := domain.EvaluateRules(rules, gameID, domain.WinLossDrawFacts(outcome))
 		players = append(players, domain.PlayerMatchInput{PlayerID: r.PlayerID, EventTypes: events, Stats: r.Stats})
 	}
 	dup, err := s.repo.ApplyMatchResult(ctx, gameID, matchID, players, s.now().UTC())
@@ -152,17 +150,22 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID string, 
 	return dup, nil
 }
 
-// ApplyPlacementResult traduz o resultado por colocação (battle_royale, BR3) em
-// event types de gameplay (played/win/top_n via PlacementEventTypes) e stats
-// (survived_ms exposto p/ os critérios por-métrica) e delega ao repo a aplicação
-// idempotente por matchID. Consumido pelo fan-out durável (kind=placement,
-// session/015). dup=true quando a partida já havia sido processada (no-op).
+// ApplyPlacementResult traduz o resultado por colocação (battle_royale, BR3)
+// em event types de gameplay via EvaluateRules (migration 008) e stats
+// (survived_ms exposto p/ os critérios por-métrica), delegando ao repo a
+// aplicação idempotente por matchID. Consumido pelo fan-out durável
+// (kind=placement, session/015). dup=true quando a partida já havia sido
+// processada (no-op).
 func (s *Service) ApplyPlacementResult(ctx context.Context, gameID, matchID string, entries []domain.PlacementEntry) (bool, error) {
+	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeBattleRoyale)
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply placement result: rules: %w", err)
+	}
 	players := make([]domain.PlayerMatchInput, 0, len(entries))
 	for _, e := range entries {
 		players = append(players, domain.PlayerMatchInput{
 			PlayerID:   e.PlayerID,
-			EventTypes: domain.PlacementEventTypes(e.Placement),
+			EventTypes: domain.EvaluateRules(rules, gameID, domain.PlacementFacts(e.Placement)),
 			Stats:      withSurvivedMs(e.Stats, e.SurvivedMs),
 		})
 	}
@@ -194,7 +197,11 @@ func withSurvivedMs(stats map[string]int64, survivedMs int64) map[string]int64 {
 // (kind=collective, session/016). dup=true quando a partida já havia sido
 // processada (no-op). Espelha ApplyPlacementResult.
 func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, outcome string, players []domain.CollectivePlayer) (bool, error) {
-	events := domain.CollectiveEventTypes(outcome) // igual para todos (desfecho coletivo)
+	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeCoopMission)
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply collective result: rules: %w", err)
+	}
+	events := domain.EvaluateRules(rules, gameID, domain.CollectiveFacts(outcome)) // igual para todos (desfecho coletivo)
 	inputs := make([]domain.PlayerMatchInput, 0, len(players))
 	for _, p := range players {
 		inputs = append(inputs, domain.PlayerMatchInput{
@@ -215,7 +222,11 @@ func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, ou
 // aplicação idempotente por eventID (follow-up #4, spec 012). Consumido pelo
 // fan-out durável (SQS). dup=true quando o evento já havia sido processado.
 func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, role, event, outcome, eventID string) (bool, error) {
-	eventTypes := domain.ParticipationEventTypes(role, event, outcome)
+	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeHostWorldDropIn)
+	if err != nil {
+		return false, fmt.Errorf("achievements service: apply participation event: rules: %w", err)
+	}
+	eventTypes := domain.EvaluateRules(rules, gameID, domain.ParticipationFacts(role, event, outcome))
 	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, s.now().UTC())
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply participation event: %w", err)
@@ -296,6 +307,73 @@ func (s *Service) UpdateAchievement(ctx context.Context, gameID, id string, a do
 func (s *Service) DeleteAchievement(ctx context.Context, gameID, id string) error {
 	if err := s.repo.DeleteAchievement(ctx, gameID, id); err != nil {
 		return fmt.Errorf("achievements service: delete achievement: %w", err)
+	}
+	return nil
+}
+
+// validArchetypes é o vocabulário de arquétipos que o achievements-service
+// sabe avaliar (um normalizador de facts em event_rule.go por arquétipo).
+var validArchetypes = map[string]bool{
+	domain.ArchetypeQueueArena:      true,
+	domain.ArchetypeHostWorldDropIn: true,
+	domain.ArchetypeBattleRoyale:    true,
+	domain.ArchetypeCoopMission:     true,
+}
+
+// eventTypeRE valida cada item de EventTypes de uma regra — mesma forma do
+// stat_key/slug já usada no resto do catálogo.
+var eventTypeRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// validateEventRule normaliza e valida uma regra (admin). Match nil vira mapa
+// vazio (regra "sempre bate", ex.: o "played" do seed) — não é erro, só um
+// caso legítimo. ErrInvalidEventRule em archetype desconhecido ou eventTypes
+// vazio/malformado.
+func validateEventRule(r *domain.EventRule) error {
+	if !validArchetypes[r.Archetype] {
+		return domain.ErrInvalidEventRule
+	}
+	if len(r.EventTypes) == 0 {
+		return domain.ErrInvalidEventRule
+	}
+	for _, et := range r.EventTypes {
+		if !eventTypeRE.MatchString(et) {
+			return domain.ErrInvalidEventRule
+		}
+	}
+	if r.Match == nil {
+		r.Match = map[string]string{}
+	}
+	return nil
+}
+
+// ListEffectiveRules devolve as regras globais de cada arquétipo + as
+// específicas do jogo, de todos os arquétipos (admin, painel de Event Rules).
+func (s *Service) ListEffectiveRules(ctx context.Context, gameID string) ([]domain.EventRule, error) {
+	rules, err := s.rules.ListEffective(ctx, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("achievements service: list effective rules: %w", err)
+	}
+	return rules, nil
+}
+
+// CreateEventRule cria uma regra escopada ao jogo (GameID sempre setado pelo
+// service — nunca aceito de outro valor do payload).
+func (s *Service) CreateEventRule(ctx context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error) {
+	if err := validateEventRule(&r); err != nil {
+		return nil, err
+	}
+	r.GameID = &gameID
+	if err := s.rules.CreateRule(ctx, &r); err != nil {
+		return nil, fmt.Errorf("achievements service: create event rule: %w", err)
+	}
+	return &r, nil
+}
+
+// DeleteEventRule remove uma regra do jogo (nunca uma global — a Port de
+// saída garante isso via WHERE game_id = $2, que nunca casa NULL).
+func (s *Service) DeleteEventRule(ctx context.Context, gameID, id string) error {
+	if err := s.rules.DeleteRule(ctx, gameID, id); err != nil {
+		return fmt.Errorf("achievements service: delete event rule: %w", err)
 	}
 	return nil
 }

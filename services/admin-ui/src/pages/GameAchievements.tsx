@@ -28,9 +28,9 @@ import {
   HttpError,
   type AchievementProgressEntry,
   type CatalogAchievement,
+  type EventRule,
   type ImportResponse,
   type MultiplayerMode,
-  type MultiplayerProfile,
   type NewAchievement,
   type StatMode,
 } from "../lib/api";
@@ -42,17 +42,6 @@ import { GuestBadge } from "../components/GuestBadge";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
-
-// EVENT_VOCABULARY espelha os event types derivados pelos sinks do
-// achievements-service por arquétipo (internal/domain/{placement,collective,
-// participation}.go + service/achievement_service.go). Sugestão, não
-// validação: o campo continua aceitando texto livre (027).
-const EVENT_VOCABULARY: Record<MultiplayerProfile["archetype"], string[]> = {
-  queue_arena: ["match_played", "match_won", "match_lost", "match_drawn"],
-  battle_royale: ["battle_royale_played", "battle_royale_win", "battle_royale_top_n"],
-  coop_mission: ["coop_mission_played", "coop_mission_success", "coop_mission_failed"],
-  host_world_dropin: ["world_joined", "invasion_won", "coop_boss_helped"],
-};
 
 // Sugestões de um campo: os valores (data do Autocomplete) + a origem de cada
 // um, mostrada esmaecida na opção (ex.: kills → "modo tdm").
@@ -78,16 +67,14 @@ function statSuggestions(modes: MultiplayerMode[]): Suggestions {
   return { values: [...origin.keys()], origin };
 }
 
-// eventSuggestions = vocabulário fixo dos arquétipos presentes nos modos do
-// jogo; sem modos cadastrados, a lista completa dos 4 arquétipos.
-function eventSuggestions(modes: MultiplayerMode[]): Suggestions {
-  const archetypes =
-    modes.length > 0
-      ? [...new Set(modes.map((m) => m.archetype))]
-      : (Object.keys(EVENT_VOCABULARY) as MultiplayerProfile["archetype"][]);
+// eventSuggestions = união dos eventTypes das regras EFETIVAS do jogo
+// (migration 008: globais do arquétipo + overrides do jogo) — substitui o
+// antigo dicionário hardcoded EVENT_VOCABULARY, que precisava ser atualizado
+// manualmente toda vez que um sink Go ganhava um event type novo.
+function eventSuggestions(rules: EventRule[]): Suggestions {
   const origin = new Map<string, string>();
-  for (const a of archetypes) {
-    for (const ev of EVENT_VOCABULARY[a]) if (!origin.has(ev)) origin.set(ev, a);
+  for (const r of rules) {
+    for (const ev of r.eventTypes) if (!origin.has(ev)) origin.set(ev, r.archetype);
   }
   return { values: [...origin.keys()], origin };
 }
@@ -220,14 +207,18 @@ function CriterionFields<T extends CriterionValues>({
 
 export function GameAchievements({ gameId }: { gameId: string }) {
   const { data: catalog, loading, error, reload } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
-  // modos do jogo p/ sugestões de stat/evento (027); falha → sem sugestões.
+  // modos do jogo p/ sugestões de stat (027); falha → sem sugestões.
   const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
+  // regras efetivas (migration 008) p/ sugestões/validação de evento — globais
+  // do arquétipo + overrides do jogo, substitui o antigo vocabulário hardcoded.
+  const { data: eventRules } = useAsync((s) => api.gameEventRules(gameId, s), [gameId]);
   const stats = statSuggestions(modes ?? []);
-  const events = eventSuggestions(modes ?? []);
-  // Check de drift (029) só com modos carregados E existentes — sem falso alarme.
-  const canCheck = (modes?.length ?? 0) > 0;
-  const statDeclared = (key: string) => !canCheck || stats.origin.has(key);
-  const eventKnown = (type: string) => !canCheck || events.origin.has(type);
+  const events = eventSuggestions(eventRules ?? []);
+  // Check de drift (029) só com dados carregados E existentes — sem falso alarme.
+  const canCheckStats = (modes?.length ?? 0) > 0;
+  const canCheckEvents = (eventRules?.length ?? 0) > 0;
+  const statDeclared = (key: string) => !canCheckStats || stats.origin.has(key);
+  const eventKnown = (type: string) => !canCheckEvents || events.origin.has(type);
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<CatalogAchievement | null>(null);
   const [deleting, setDeleting] = useState<CatalogAchievement | null>(null);
@@ -487,9 +478,9 @@ export function GameAchievements({ gameId }: { gameId: string }) {
                     </Group>
                   ) : (
                     <Group gap={6} wrap="nowrap">
-                      <Text c="dimmed" size="sm">
+                      <Badge variant="light" color="violet">
                         {a.eventType}
-                      </Text>
+                      </Badge>
                       {!!a.eventType && !eventKnown(a.eventType) && (
                         <DriftBadge
                           label="fora do vocabulário"

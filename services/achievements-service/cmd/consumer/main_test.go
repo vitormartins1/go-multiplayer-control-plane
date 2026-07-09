@@ -59,10 +59,52 @@ func (r *dispatchRepo) CreateAchievement(context.Context, *domain.Achievement) e
 func (r *dispatchRepo) UpdateAchievement(context.Context, *domain.Achievement) error { return nil }
 func (r *dispatchRepo) DeleteAchievement(context.Context, string, string) error       { return nil }
 
+// seedRulesRepo é um stub de domain.EventRuleRepository com as MESMAS regras
+// do seed da migration 008 — o dispatch por kind (o que este arquivo testa)
+// exercita o caminho completo até EvaluateRules, então precisa produzir os
+// mesmos event types que o seed real produziria.
+type seedRulesRepo struct{}
+
+func (seedRulesRepo) RulesForArchetype(_ context.Context, _, archetype string) ([]domain.EventRule, error) {
+	switch archetype {
+	case domain.ArchetypeQueueArena:
+		return []domain.EventRule{
+			{Archetype: archetype, Match: map[string]string{}, EventTypes: []string{"match_played"}},
+			{Archetype: archetype, Match: map[string]string{"outcome": "win"}, EventTypes: []string{"match_won"}},
+			{Archetype: archetype, Match: map[string]string{"outcome": "loss"}, EventTypes: []string{"match_lost"}},
+			{Archetype: archetype, Match: map[string]string{"outcome": "draw"}, EventTypes: []string{"match_drawn"}},
+		}, nil
+	case domain.ArchetypeBattleRoyale:
+		return []domain.EventRule{
+			{Archetype: archetype, Match: map[string]string{}, EventTypes: []string{"battle_royale_played"}},
+			{Archetype: archetype, Match: map[string]string{"placement": "1"}, EventTypes: []string{"battle_royale_win"}},
+			{Archetype: archetype, Match: map[string]string{"tier": "top_n"}, EventTypes: []string{"battle_royale_top_n"}},
+		}, nil
+	case domain.ArchetypeCoopMission:
+		return []domain.EventRule{
+			{Archetype: archetype, Match: map[string]string{}, EventTypes: []string{"coop_mission_played"}},
+			{Archetype: archetype, Match: map[string]string{"outcome": domain.MissionSuccess}, EventTypes: []string{"coop_mission_success"}},
+			{Archetype: archetype, Match: map[string]string{"outcome": domain.MissionFailure}, EventTypes: []string{"coop_mission_failed"}},
+		}, nil
+	case domain.ArchetypeHostWorldDropIn:
+		return []domain.EventRule{
+			{Archetype: archetype, Match: map[string]string{"event": "JOINED"}, EventTypes: []string{domain.EventWorldJoined}},
+			{Archetype: archetype, Match: map[string]string{"role": "coop", "event": "BOSS_DEFEATED", "outcome": "SUCCESS"}, EventTypes: []string{domain.EventCoopBossHelped}},
+			{Archetype: archetype, Match: map[string]string{"role": "invader", "event": "HOST_KILLED", "outcome": "SUCCESS"}, EventTypes: []string{domain.EventInvasionWon}},
+		}, nil
+	}
+	return nil, nil
+}
+func (seedRulesRepo) ListEffective(context.Context, string) ([]domain.EventRule, error) {
+	return nil, nil
+}
+func (seedRulesRepo) CreateRule(context.Context, *domain.EventRule) error { return nil }
+func (seedRulesRepo) DeleteRule(context.Context, string, string) error   { return nil }
+
 func newHandler(t *testing.T) (*dispatchRepo, func(body []byte) (bool, error)) {
 	t.Helper()
 	repo := &dispatchRepo{}
-	h := makeHandler(service.New(repo), logger.New("test"))
+	h := makeHandler(service.New(repo, seedRulesRepo{}), logger.New("test"))
 	return repo, func(body []byte) (bool, error) { return h(context.Background(), body) }
 }
 

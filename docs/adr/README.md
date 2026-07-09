@@ -30,3 +30,4 @@
 | [0024](0024-multiplayer-modes.md) | Modos de jogo — perfis de multiplayer nomeados por jogo + session manifest | Accepted | 2026-07-07 | game-registry, matchmaking, session, achievements, leaderboard, analytics, admin-bff, admin-ui, data plane |
 | [0025](0025-game-deletion-soft-delete.md) | Remoção de jogo — soft delete no game-registry (hard purge adiado por evidência) | Accepted | 2026-07-08 | game-registry, admin-bff, admin-ui |
 | [0026](0026-agones-fleet-per-game-allocation.md) | Alocação Agones fleet-aware por jogo (Fleet por game_id) | Proposed | 2026-07-09 | session-service, game-registry, admin-bff, admin-ui, data plane |
+| [0027](0027-generic-event-rules.md) | Regras de mapeamento evento→achievement-event-type genéricas e data-driven | Accepted | 2026-07-09 | achievements-service, admin-bff, admin-ui |

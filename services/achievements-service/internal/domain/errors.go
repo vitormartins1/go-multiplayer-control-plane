@@ -13,4 +13,10 @@ var (
 	ErrAchievementExists = errors.New("achievements: conquista já existe no jogo")
 	// ErrAchievementNotFound: conquista (game_id, id) não existe (update/delete).
 	ErrAchievementNotFound = errors.New("achievements: conquista não encontrada")
+	// ErrInvalidEventRule: archetype desconhecido, match ou eventTypes vazios
+	// na criação de uma regra de mapeamento evento->achievement (admin).
+	ErrInvalidEventRule = errors.New("achievements: regra de evento inválida")
+	// ErrEventRuleNotFound: regra (game_id, id) não existe OU é global (não
+	// editável por este endpoint) — mesma resposta pras duas situações.
+	ErrEventRuleNotFound = errors.New("achievements: regra de evento não encontrada")
 )

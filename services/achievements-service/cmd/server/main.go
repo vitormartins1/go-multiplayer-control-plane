@@ -76,8 +76,9 @@ func run(log *slog.Logger) error {
 	verifier := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
 
 	repo := repository.NewPostgresAchievementRepository(pool)
-	svc := service.New(repo)
-	handler := transport.NewHandler(svc, verifier)
+	rules := repository.NewPostgresEventRuleRepository(pool)
+	svc := service.New(repo, rules)
+	handler := transport.NewHandler(svc, svc, verifier)
 
 	metrics := middleware.NewMetrics(prometheus.DefaultRegisterer, serviceName)
 

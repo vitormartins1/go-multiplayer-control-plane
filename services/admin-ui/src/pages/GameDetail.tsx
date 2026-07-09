@@ -1,5 +1,13 @@
 import { Anchor, Badge, Breadcrumbs, Group, Stack, Tabs, Text, Title } from "@mantine/core";
-import { IconChartBar, IconChartPie, IconServer2, IconSettings, IconTrophy, IconUsers } from "@tabler/icons-react";
+import {
+  IconChartBar,
+  IconChartPie,
+  IconGitBranch,
+  IconServer2,
+  IconSettings,
+  IconTrophy,
+  IconUsers,
+} from "@tabler/icons-react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
@@ -8,6 +16,7 @@ import { useAsync } from "../lib/useAsync";
 import { GameCover } from "../components/GameCover";
 import { GameAchievements } from "./GameAchievements";
 import { GameAnalytics } from "./GameAnalytics";
+import { GameEventRules } from "./GameEventRules";
 import { GameLeaderboards } from "./GameLeaderboards";
 import { GamePlayers } from "./GamePlayers";
 import { GameSessions } from "./GameSessions";
@@ -85,6 +94,9 @@ export function GameDetail() {
           >
             Achievements
           </Tabs.Tab>
+          <Tabs.Tab value="event-rules" leftSection={<IconGitBranch size={16} />}>
+            Event Rules
+          </Tabs.Tab>
           <Tabs.Tab value="leaderboards" leftSection={<IconChartBar size={16} />}>
             Leaderboards
           </Tabs.Tab>
@@ -125,6 +137,9 @@ export function GameDetail() {
 
         <Tabs.Panel value="achievements" pt="md">
           <GameAchievements gameId={gameId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="event-rules" pt="md">
+          <GameEventRules gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="leaderboards" pt="md">
           <GameLeaderboards gameId={gameId} />

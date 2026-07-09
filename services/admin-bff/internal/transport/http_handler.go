@@ -36,6 +36,9 @@ type AdminService interface {
 	DeleteAchievement(ctx context.Context, gameID, id string) error
 	ImportAchievements(ctx context.Context, gameID string, items []domain.Achievement) (domain.ImportResponse, error)
 	AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error)
+	GameEventRules(ctx context.Context, gameID string) ([]domain.EventRule, error)
+	CreateEventRule(ctx context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error)
+	DeleteEventRule(ctx context.Context, gameID, id string) error
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error)
 	SetLeaderboardScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error)
@@ -85,6 +88,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/games/{gameId}/achievements/{id}", h.updateAchievement)
 	mux.HandleFunc("DELETE /api/games/{gameId}/achievements/{id}", h.deleteAchievement)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/achievements", h.playerAchievements)
+	mux.HandleFunc("GET /api/games/{gameId}/event-rules", h.gameEventRules)
+	mux.HandleFunc("POST /api/games/{gameId}/event-rules", h.createEventRule)
+	mux.HandleFunc("DELETE /api/games/{gameId}/event-rules/{id}", h.deleteEventRule)
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
 	mux.HandleFunc("PUT /api/games/{gameId}/leaderboard/{playerID}/score", h.setLeaderboardScore)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
@@ -370,6 +376,41 @@ func (h *Handler) updateAchievement(w http.ResponseWriter, r *http.Request) {
 // deleteAchievement remove uma conquista do jogo; repassa 404.
 func (h *Handler) deleteAchievement(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// gameEventRules lê as regras efetivas do jogo (globais do arquétipo +
+// overrides do jogo, migration 008).
+func (h *Handler) gameEventRules(w http.ResponseWriter, r *http.Request) {
+	rules, err := h.svc.GameEventRules(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rules)
+}
+
+// createEventRule cria uma regra escopada ao jogo; repassa 400.
+func (h *Handler) createEventRule(w http.ResponseWriter, r *http.Request) {
+	var req domain.EventRule
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	rule, err := h.svc.CreateEventRule(r.Context(), r.PathValue("gameId"), req)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, rule)
+}
+
+// deleteEventRule remove uma regra do jogo (nunca uma global); repassa 404.
+func (h *Handler) deleteEventRule(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.DeleteEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
 		writeUpstream(w, err)
 		return
 	}

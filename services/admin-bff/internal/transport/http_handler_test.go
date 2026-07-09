@@ -62,6 +62,10 @@ type fakeService struct {
 	gotLimit         int
 	gotOffset        int
 	gotState         string
+	eventRules       []domain.EventRule
+	eventRulesErr    error
+	gotEventRule     domain.EventRule
+	gotEventRuleID   string
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -211,6 +215,24 @@ func (f *fakeService) SetLeaderboardScore(_ context.Context, gameID, playerID, b
 func (f *fakeService) AchievementProgress(_ context.Context, gameID, _ string) ([]domain.AchievementProgressEntry, error) {
 	f.gotGameID = gameID
 	return nil, nil
+}
+
+func (f *fakeService) GameEventRules(_ context.Context, gameID string) ([]domain.EventRule, error) {
+	f.gotGameID = gameID
+	return f.eventRules, f.eventRulesErr
+}
+
+func (f *fakeService) CreateEventRule(_ context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error) {
+	f.gotGameID, f.gotEventRule = gameID, r
+	if f.eventRulesErr != nil {
+		return nil, f.eventRulesErr
+	}
+	return &r, nil
+}
+
+func (f *fakeService) DeleteEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotEventRuleID = gameID, id
+	return f.eventRulesErr
 }
 
 func newServer(svc AdminService) *httptest.Server {

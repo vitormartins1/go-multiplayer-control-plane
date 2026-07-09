@@ -61,7 +61,10 @@ func run(log *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	svc := service.New(repository.NewPostgresAchievementRepository(pool))
+	svc := service.New(
+		repository.NewPostgresAchievementRepository(pool),
+		repository.NewPostgresEventRuleRepository(pool),
+	)
 
 	awsCfg, err := awsx.Config(context.Background())
 	if err != nil {

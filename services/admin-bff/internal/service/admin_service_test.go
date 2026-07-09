@@ -25,13 +25,15 @@ func (f fakeMetrics) Query(_ context.Context, promQL string) ([]domain.Sample, e
 }
 
 type fakeReader struct {
-	out       []domain.PlayerAchievement
-	catalog   []domain.Achievement
-	err       error
-	gotGameID string
-	gotPlayer string
-	gotID     string
-	gotCreate domain.Achievement
+	out          []domain.PlayerAchievement
+	catalog      []domain.Achievement
+	eventRules   []domain.EventRule
+	err          error
+	gotGameID    string
+	gotPlayer    string
+	gotID        string
+	gotCreate    domain.Achievement
+	gotEventRule domain.EventRule
 }
 
 func (f *fakeReader) CatalogForGame(_ context.Context, gameID string) ([]domain.Achievement, error) {
@@ -62,6 +64,21 @@ func (f *fakeReader) ImportAchievements(_ context.Context, gameID string, _ []do
 func (f *fakeReader) AchievementProgress(_ context.Context, gameID, _ string) ([]domain.AchievementProgressEntry, error) {
 	f.gotGameID = gameID
 	return nil, f.err
+}
+func (f *fakeReader) GameEventRules(_ context.Context, gameID string) ([]domain.EventRule, error) {
+	f.gotGameID = gameID
+	return f.eventRules, f.err
+}
+func (f *fakeReader) CreateEventRule(_ context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error) {
+	f.gotGameID, f.gotEventRule = gameID, r
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &r, nil
+}
+func (f *fakeReader) DeleteEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotID = gameID, id
+	return f.err
 }
 
 type fakeRegistry struct {
