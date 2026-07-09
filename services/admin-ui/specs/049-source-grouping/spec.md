@@ -1,6 +1,6 @@
 # Spec 049 — Agrupamento da coluna de fontes + edges de métrica discretas
 
-> Status: **draft** (aguardando aprovação)
+> Status: **implementada** (aprovada em 2026-07-09)
 > Fatia: pequena/aditiva (só layout e estilo de edge; zero backend, zero
 > mudança de dados) — spec curta, sem plan/tasks separados.
 
@@ -50,15 +50,18 @@ visual.
 
 ## Critérios de aceite
 
-- [ ] Neon Breach: coluna 1 mostra `outcome`/`role`/`event`/`placement` no
+- [x] Neon Breach: coluna 1 mostra `outcome`/`role`/`event`/`placement` no
       topo, `mode` no meio, `stat.*` embaixo, com rótulos de seção.
-- [ ] Edge `revives → (acum. ≥ 15) → Médico de Campo` nasce esmaecida;
-      clicar em `revives` ou no achievement acende a edge.
-- [ ] Nó do Exterminador exibe `kills acum. ≥ 500` no corpo.
-- [ ] Clicar em `revives` continua destacando as DUAS vias (condição da regra
+- [x] Edge `revives → (acum. ≥ 15) → Médico de Campo` nasce esmaecida;
+      clicar em `revives` ou no achievement acende a edge (label da edge
+      também só aparece acesa — o critério permanente mora no nó).
+- [x] Nó do Exterminador exibe `kills acum. ≥ 500` no corpo.
+- [x] Clicar em `revives` continua destacando as DUAS vias (condição da regra
       Mestre Curativo + critério acumulado do Médico de Campo).
-- [ ] Busca, criação in-canvas, hint de redundância e quick-create intactos.
-- [ ] Build verde + smoke visual Playwright (screenshot da coluna agrupada).
+- [x] Busca, criação in-canvas (clique em fonte pré-preenche, Esc limpa) e
+      painéis intactos — smoke Playwright.
+- [x] Build verde (`tsc --noEmit` + vite) + smoke visual Playwright
+      (screenshots da coluna agrupada, caminho do revives e nó de métrica).
 
 ## Fora de escopo (registrado, não fazer)
 

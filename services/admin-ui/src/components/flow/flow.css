@@ -153,6 +153,25 @@
   z-index: 5;
 }
 
+/* --- agrupamento da coluna de fontes (spec 049) --- */
+.flow-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #55606e;
+  pointer-events: none;
+  user-select: none;
+}
+/* edge de métrica (stat→achievement): discreta até entrar no caminho
+   destacado — o critério fica no nó do achievement. */
+.react-flow__edge.is-metric-edge .react-flow__edge-path {
+  stroke-dasharray: 4 4;
+}
+.react-flow__edge.is-metric-edge:not(.is-faded) {
+  opacity: 0.4;
+}
+
 /* --- rascunho (regra em criação, spec 044) --- */
 .react-flow__node.is-draft .flow-card {
   border-style: dashed;

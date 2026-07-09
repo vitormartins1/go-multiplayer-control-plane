@@ -25,6 +25,7 @@ import {
   EventTypeNode,
   RuleDraftNode,
   RuleNode,
+  SectionLabelNode,
   SourceNode,
   type RuleDraftData,
   type TypeDraftData,
@@ -62,6 +63,7 @@ import {
 // Referência estável (module-level) — nodeTypes recriado por render faria o
 // React Flow re-montar todos os nós.
 const NODE_TYPES: NodeTypes = {
+  sectionLabel: SectionLabelNode,
   source: SourceNode,
   rule: RuleNode,
   ruleDraft: RuleDraftNode,
@@ -336,15 +338,24 @@ export function GameEventRulesCanvas({
       if (e.className === "is-draft-edge") {
         return { ...e, animated: true, style: { stroke: "#fab005", strokeWidth: 1.5 } };
       }
+      // Edge de métrica (spec 049): discreta e SEM label enquanto inativa (o
+      // critério mora no nó do achievement); acesa e com label quando entra
+      // no caminho destacado ou casa a busca.
+      const metric = e.className === "is-metric-edge";
       if (matchedNodeIds) {
         const on = matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target);
         return on
-          ? { ...e, style: { stroke: "#748ffc", strokeWidth: 1.5 } }
-          : { ...e, className: cls(e.className, "is-faded"), style: { stroke: "#3a4657" } };
+          ? { ...e, className: metric ? undefined : e.className, style: { stroke: "#748ffc", strokeWidth: 1.5 } }
+          : { ...e, className: cls(e.className, "is-faded"), style: { stroke: "#3a4657" }, label: metric ? undefined : e.label };
       }
       return path && path.edgeIds.has(e.id)
-        ? { ...e, animated: true, style: { stroke: "#748ffc", strokeWidth: 2 } }
-        : { ...e, className: cls(e.className, path ? "is-faded" : undefined), style: { stroke: "#3a4657" } };
+        ? { ...e, className: metric ? undefined : e.className, animated: true, style: { stroke: "#748ffc", strokeWidth: 2 } }
+        : {
+            ...e,
+            className: cls(e.className, path ? "is-faded" : undefined),
+            style: { stroke: "#3a4657" },
+            label: metric ? undefined : e.label,
+          };
     });
     return { nodes, edges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,11 +369,12 @@ export function GameEventRulesCanvas({
   // Com o rascunho ativo, o canvas é superfície de montagem: fonte adiciona
   // condição pré-preenchida (stat entra com ≥); type existente liga/desliga.
   function onNodeClick(id: string) {
+    const node = graph.nodes.find((n) => n.id === id);
+    if (node?.type === "sectionLabel") return; // rótulo de seção não é selecionável
     if (!draft) {
       setSelectedId(id);
       return;
     }
-    const node = graph.nodes.find((n) => n.id === id);
     if (node?.type === "source") {
       const d = node.data as unknown as SourceNodeData;
       onAddRow({ key: d.sourceKey, op: d.kind === "stat" ? "gte" : "eq", value: "" });
