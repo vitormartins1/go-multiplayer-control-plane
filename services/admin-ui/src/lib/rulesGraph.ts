@@ -1,20 +1,23 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { CatalogAchievement, EventRule } from "./api";
-import { condLabel, type MatchValue } from "./matchCond";
+import { condShort, type MatchValue } from "./matchCond";
 
-// rulesGraph monta o grafo de 4 camadas do editor visual de event rules
-// (spec 043 / ADR-0028): facts -> regras -> event types -> achievements.
-// Função pura (mesmo espírito do EvaluateRules no Go): entra o dado da API,
-// sai nodes/edges com posição — nenhum estado de canvas persiste, o desenho é
-// sempre derivado das regras.
+// rulesGraph monta o grafo do editor de event rules (specs 043–048 /
+// ADR-0028) no modelo de FONTES UNIFICADAS (spec 048): a camada 1 tem um nó
+// por CHAVE (facts estruturais, `mode`, stats) e as CONDIÇÕES viram labels
+// das edges fonte→regra. O critério por métrica dos achievements também é
+// edge (stat→achievement) — métrica alimenta conquista DIRETO, sem regra.
+// Função pura: entra o dado da API, sai nodes/edges com posição.
 
-// Um nó de fact é UMA CONDIÇÃO distinta (spec 014): "role = invader",
-// "placement ≤ 10" — o label vem de condLabel.
-export type FactNodeData = { factKey: string; cond: MatchValue };
-export type RuleNodeData = { rule: EventRule; draft?: boolean };
+export type SourceKind = "structural" | "mode" | "stat";
+export type SourceNodeData = {
+  sourceKey: string; // a chave usada nas regras ("outcome", "mode", "stat.kills")
+  kind: SourceKind;
+  drift?: boolean; // stat usada por achievement mas não declarada em nenhum modo
+  conds: string[]; // condições em que aparece (painel)
+};
+export type RuleNodeData = { rule: EventRule; redundantTypes?: string[] };
 export type EventTypeNodeData = { eventType: string; listeners: number };
-// Achievement é disparado por event type OU progride por stat (ADR-0023 A1,
-// mutuamente exclusivos) — o painel mostra o gatilho que existir.
 export type AchievementNodeData = {
   name: string;
   target: number;
@@ -22,174 +25,181 @@ export type AchievementNodeData = {
   statKey?: string;
   statMode?: string;
 };
-// Stat (spec 045): métrica declarada em scoringStats dos modos (ou usada por
-// achievement sem declaração — drift). Read-only: progresso é aplicado direto
-// pelo consumer, NÃO passa por event rules.
-export type StatNodeData = { statKey: string; declared: boolean; listeners: number };
 export type StatInfo = { key: string; declared: boolean };
 
-export const factId = (k: string, v: MatchValue) => `f:${condLabel(k, v)}`;
+export const srcId = (k: string) => `src:${k}`;
 export const ruleId = (r: EventRule) => `r:${r.id}`;
 export const typeId = (et: string) => `t:${et}`;
 export const achId = (id: string) => `a:${id}`;
-export const statId = (k: string) => `s:${k}`;
 
-// Larguras/alturas ESTIMADAS por tipo de nó — o layout roda antes do render,
-// então não dá pra medir o DOM; estimativa conservadora pelo conteúdo.
+export const DRAFT_RULE_ID = "r:__draft__";
+export const draftTypeId = (ghostId: string) => `t:__new__:${ghostId}`;
+
+// FactStatPrefix espelha o prefixo do backend (spec achievements/015).
+export const STAT_PREFIX = "stat.";
+
+// Draft da regra em criação (spec 048, in-canvas): o build só precisa do
+// suficiente pra POSICIONAR e LIGAR os ghosts — o conteúdo editável (linhas,
+// callbacks) é injetado pela página por cima dos nós devolvidos.
+export type DraftGraphInput = {
+  conds: Array<{ key: string; label: string }>; // condições VÁLIDAS (edges ao vivo)
+  linkedTypes: string[]; // event types existentes ligados
+  newTypes: Array<{ id: string; value: string }>; // ghosts editáveis
+  rows: number; // nº de linhas no editor (estimar altura)
+};
+
 const SIZE = {
-  fact: { w: 190, h: 62 },
-  eventType: { w: 210, h: 62 },
-  achievement: { w: 230, h: 82 },
+  source: { h: 50 },
+  eventType: { h: 62 },
+  achievement: { h: 82 },
 };
 const ruleHeight = (r: EventRule) => 46 + 22 * Math.max(1, Object.entries(r.match).length) + 32;
+const draftHeight = (rows: number) => 46 + 40 * Math.max(1, rows) + 78;
 
-// X fixo por camada (grafo estritamente em camadas — por isso layout próprio
-// em vez de dagre/elkjs, ver plan 043) e respiro vertical entre nós.
-const COL_X = [0, 280, 620, 920];
+const COL_X = [0, 300, 640, 920];
 const GAP_Y = 18;
 
-type Meta = { id: string; type: string; data: Record<string, unknown>; h: number; layer: number };
+type Meta = { id: string; type: string; data: Record<string, unknown>; h: number };
 
-// stackColumn empilha os nós de uma camada em Y e devolve a altura total.
-function stackColumn(items: Meta[], heights: Map<string, number>): number {
+function stackColumn(items: Meta[], yByID: Map<string, number>): number {
   let y = 0;
   for (const m of items) {
-    heights.set(m.id, y);
+    yByID.set(m.id, y);
     y += m.h + GAP_Y;
   }
   return Math.max(0, y - GAP_Y);
 }
 
-// barycenter ordena uma camada pela média dos índices dos vizinhos na camada
-// anterior — heurística clássica pra reduzir cruzamento de edges.
+// barycenter reduz cruzamentos ordenando pela média dos índices dos vizinhos.
 function barycenter(items: Meta[], neighborIdx: Map<string, number[]>): Meta[] {
   return [...items].sort((a, b) => {
     const avg = (id: string) => {
       const idx = neighborIdx.get(id);
-      if (!idx || idx.length === 0) return Number.MAX_SAFE_INTEGER; // sem vizinho: vai pro fim
+      if (!idx || idx.length === 0) return Number.MAX_SAFE_INTEGER;
       return idx.reduce((s, i) => s + i, 0) / idx.length;
     };
     return avg(a.id) - avg(b.id);
   });
 }
 
-// DraftRule é a regra EM CRIAÇÃO (drawer aberto, spec 044): entra no layout
-// como pseudo-regra "__draft__" — mesmas ligações das regras reais, só que
-// marcada como rascunho (nós/edges ghost) até o admin salvar.
-export type DraftRule = { match: Record<string, MatchValue>; eventTypes: string[] };
-
-export const DRAFT_RULE_ID = "r:__draft__";
+function sourceKind(key: string): SourceKind {
+  if (key === "mode") return "mode";
+  if (key.startsWith(STAT_PREFIX)) return "stat";
+  return "structural";
+}
 
 export function buildRulesGraph(
   rules: EventRule[],
   catalog: CatalogAchievement[],
-  draft?: DraftRule,
-  stats?: StatInfo[],
+  opts?: { stats?: StatInfo[]; draft?: DraftGraphInput },
 ): { nodes: Node[]; edges: Edge[] } {
-  // Facts/types que existem nas regras REAIS — o que só aparecer via draft é
-  // ghost (some sem resíduo no cancelar, R3 da spec).
-  const realFacts = new Set(rules.flatMap((r) => Object.entries(r.match).map(([k, v]) => factId(k, v))));
-  const realTypes = new Set(rules.flatMap((r) => r.eventTypes.map((et) => typeId(et))));
-  const allRules: EventRule[] = draft
-    ? [
-        ...rules,
-        { id: "__draft__", scope: "game", archetype: rules[0]?.archetype ?? "queue_arena", ...draft },
-      ]
-    : rules;
+  const stats = opts?.stats;
+  const draft = opts?.draft;
 
-  // Camada 2 — regras. Ordem: RASCUNHO primeiro (fica no topo da coluna,
-  // visível mesmo com o drawer aberto cobrindo o pé da janela), depois
-  // globais, depois do jogo (estável).
-  const rank = (r: EventRule) => (r.id === "__draft__" ? 0 : r.scope === "global" ? 1 : 2);
-  const ruleMetas: Meta[] = [...allRules]
-    .sort((a, b) => rank(a) - rank(b))
-    .map((r) => ({
-      id: ruleId(r),
-      type: "rule",
-      data: { rule: r, draft: r.id === "__draft__" || undefined } satisfies RuleNodeData,
-      h: ruleHeight(r),
-      layer: 1,
-    }));
+  // --- Camada 2: regras (rascunho primeiro — fica no topo, visível). ---
+  const ruleMetas: Meta[] = [];
+  if (draft) {
+    ruleMetas.push({ id: DRAFT_RULE_ID, type: "ruleDraft", data: {}, h: draftHeight(draft.rows) });
+  }
+  const rank = (r: EventRule) => (r.scope === "global" ? 0 : 1);
+  for (const r of [...rules].sort((a, b) => rank(a) - rank(b))) {
+    ruleMetas.push({ id: ruleId(r), type: "rule", data: { rule: r } satisfies RuleNodeData, h: ruleHeight(r) });
+  }
   const ruleIdx = new Map(ruleMetas.map((m, i) => [m.id, i]));
 
-  // Camada 1 — condições distintas dos matches (um nó por condição).
-  const factUses = new Map<string, { key: string; cond: MatchValue; rules: number[] }>();
-  for (const r of allRules) {
-    for (const [k, v] of Object.entries(r.match)) {
-      const id = factId(k, v);
-      const u = factUses.get(id) ?? { key: k, cond: v, rules: [] };
-      u.rules.push(ruleIdx.get(ruleId(r))!);
-      factUses.set(id, u);
+  // --- Camada 1: FONTES (um nó por chave). ---
+  // chave -> {kind, conds usadas, índices de regras vizinhas}
+  const sources = new Map<string, { kind: SourceKind; conds: string[]; rules: number[]; drift?: boolean }>();
+  const touchSource = (key: string) => {
+    let s = sources.get(key);
+    if (!s) {
+      s = { kind: sourceKind(key), conds: [], rules: [] };
+      sources.set(key, s);
+    }
+    return s;
+  };
+  const srcRuleEdges: Array<{ key: string; ruleID: string; label: string }> = [];
+  for (const r of rules) {
+    for (const [key, v] of Object.entries(r.match)) {
+      const s = touchSource(key);
+      const label = condShort(v as MatchValue);
+      if (!s.conds.includes(label)) s.conds.push(label);
+      s.rules.push(ruleIdx.get(ruleId(r))!);
+      srcRuleEdges.push({ key, ruleID: ruleId(r), label });
     }
   }
-  let factMetas: Meta[] = [...factUses.entries()].map(([id, u]) => ({
-    id,
-    type: "fact",
-    data: { factKey: u.key, cond: u.cond } satisfies FactNodeData,
-    h: SIZE.fact.h,
-    layer: 0,
+  if (draft) {
+    for (const c of draft.conds) {
+      const s = touchSource(c.key);
+      s.rules.push(ruleIdx.get(DRAFT_RULE_ID)!);
+      srcRuleEdges.push({ key: c.key, ruleID: DRAFT_RULE_ID, label: c.label });
+    }
+  }
+  // stats declaradas/drift entram como fonte mesmo sem uso em regra (toggle
+  // Stats OFF = opts.stats undefined: só sobram as usadas em regras).
+  const metricAchs = new Map<string, CatalogAchievement[]>(); // statKey -> achievements por métrica
+  if (stats) {
+    for (const s of stats) {
+      const src = touchSource(STAT_PREFIX + s.key);
+      src.drift = !s.declared;
+    }
+    const known = new Set(stats.map((s) => s.key));
+    for (const a of catalog) {
+      if (a.statKey && known.has(a.statKey)) {
+        metricAchs.set(a.statKey, [...(metricAchs.get(a.statKey) ?? []), a]);
+      }
+    }
+  }
+  // `mode` é fonte universal (todo envelope carrega) — sempre disponível.
+  touchSource("mode");
+
+  let sourceMetas: Meta[] = [...sources.entries()].map(([key, s]) => ({
+    id: srcId(key),
+    type: "source",
+    data: { sourceKey: key, kind: s.kind, drift: s.drift || undefined, conds: s.conds } satisfies SourceNodeData,
+    h: SIZE.source.h + (s.drift ? 16 : 0),
   }));
-  factMetas = barycenter(
-    factMetas,
-    new Map([...factUses.entries()].map(([id, u]) => [id, u.rules])),
+  sourceMetas = barycenter(
+    sourceMetas,
+    new Map([...sources.entries()].map(([key, s]) => [srcId(key), s.rules])),
   );
 
-  // Camada 3 — event types distintos emitidos pelas regras.
+  // --- Camada 3: event types. ---
   const typeSources = new Map<string, number[]>();
-  for (const r of allRules) {
-    for (const et of r.eventTypes) {
-      const list = typeSources.get(et) ?? [];
-      list.push(ruleIdx.get(ruleId(r))!);
-      typeSources.set(et, list);
-    }
+  const touchType = (et: string, ruleI: number) => {
+    typeSources.set(et, [...(typeSources.get(et) ?? []), ruleI]);
+  };
+  for (const r of rules) {
+    for (const et of r.eventTypes) touchType(et, ruleIdx.get(ruleId(r))!);
   }
-  // Camada 4 — achievements do jogo que escutam um event type do grafo
-  // (stat-criteria fica de fora: statKey não é disparado por event type).
+  if (draft) {
+    for (const et of draft.linkedTypes) touchType(et, ruleIdx.get(DRAFT_RULE_ID)!);
+  }
   const listeners = new Map<string, CatalogAchievement[]>();
   for (const a of catalog) {
     if (!a.statKey && a.eventType && typeSources.has(a.eventType)) {
       listeners.set(a.eventType, [...(listeners.get(a.eventType) ?? []), a]);
     }
   }
-
   let typeMetas: Meta[] = [...typeSources.keys()].map((et) => ({
     id: typeId(et),
     type: "eventType",
     data: { eventType: et, listeners: listeners.get(et)?.length ?? 0 } satisfies EventTypeNodeData,
     h: SIZE.eventType.h,
-    layer: 2,
   }));
+  // ghosts de type NOVO (editáveis) — data injetada pela página.
+  if (draft) {
+    for (const g of draft.newTypes) {
+      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: 66 });
+    }
+  }
   typeMetas = barycenter(
     typeMetas,
     new Map([...typeSources.entries()].map(([et, idx]) => [typeId(et), idx])),
   );
+  const typeIdx = new Map(typeMetas.map((m, i) => [m.id, i]));
 
-  // Stats (spec 045): entram na MESMA coluna dos event types (coluna de
-  // "gatilhos"), abaixo deles — read-only, edge direta stat -> achievement.
-  const statAchs = new Map<string, CatalogAchievement[]>();
-  if (stats) {
-    const known = new Set(stats.map((s) => s.key));
-    for (const a of catalog) {
-      if (a.statKey && known.has(a.statKey)) {
-        statAchs.set(a.statKey, [...(statAchs.get(a.statKey) ?? []), a]);
-      }
-    }
-  }
-  const statMetas: Meta[] = (stats ?? []).map((s) => ({
-    id: statId(s.key),
-    type: "stat",
-    data: {
-      statKey: s.key,
-      declared: s.declared,
-      listeners: statAchs.get(s.key)?.length ?? 0,
-    } satisfies StatNodeData,
-    // stat sem declaração ganha uma linha de aviso (drift) — card mais alto.
-    h: s.declared ? SIZE.eventType.h : SIZE.eventType.h + 18,
-    layer: 2,
-  }));
-  const triggerMetas = [...typeMetas, ...statMetas];
-  const triggerIdx = new Map(triggerMetas.map((m, i) => [m.id, i]));
-
+  // --- Camada 4: achievements (por evento + por métrica). ---
   let achMetas: Meta[] = [];
   const achNeighbor = new Map<string, number[]>();
   for (const [et, achs] of listeners) {
@@ -199,42 +209,30 @@ export function buildRulesGraph(
         type: "achievement",
         data: { name: a.name, target: a.target, eventType: et } satisfies AchievementNodeData,
         h: SIZE.achievement.h,
-        layer: 3,
       });
-      achNeighbor.set(achId(a.id), [triggerIdx.get(typeId(et))!]);
+      achNeighbor.set(achId(a.id), [typeIdx.get(typeId(et))!]);
     }
   }
-  for (const [key, achs] of statAchs) {
+  for (const [key, achs] of metricAchs) {
     for (const a of achs) {
       achMetas.push({
         id: achId(a.id),
         type: "achievement",
-        data: {
-          name: a.name,
-          target: a.target,
-          statKey: key,
-          statMode: a.statMode,
-        } satisfies AchievementNodeData,
+        data: { name: a.name, target: a.target, statKey: key, statMode: a.statMode } satisfies AchievementNodeData,
         h: SIZE.achievement.h,
-        layer: 3,
       });
-      achNeighbor.set(achId(a.id), [triggerIdx.get(statId(key))!]);
+      achNeighbor.set(achId(a.id), [typeMetas.length]); // depois dos types (embaixo)
     }
   }
   achMetas = barycenter(achMetas, achNeighbor);
 
-  // Posições: empilha cada coluna e centraliza verticalmente pela mais alta.
-  const columns = [factMetas, ruleMetas, triggerMetas, achMetas];
+  // --- Posições: colunas fixas, centralizadas pela mais alta. ---
+  const columns = [sourceMetas, ruleMetas, typeMetas, achMetas];
   const yByID = new Map<string, number>();
   const colHeights = columns.map((c) => stackColumn(c, yByID));
   const maxH = Math.max(...colHeights, 0);
 
-  // Ghost = só existe por causa do draft (regra rascunho + facts/types
-  // inéditos dela) — estilo tracejado, some sem resíduo no cancelar.
-  const isGhost = (id: string) =>
-    id === DRAFT_RULE_ID ||
-    (id.startsWith("f:") && !realFacts.has(id)) ||
-    (id.startsWith("t:") && !realTypes.has(id));
+  const isGhost = (id: string) => id === DRAFT_RULE_ID || id.startsWith("t:__new__:");
 
   const nodes: Node[] = columns.flatMap((col, li) =>
     col.map((m) => ({
@@ -244,36 +242,50 @@ export function buildRulesGraph(
       data: m.data,
       connectable: false,
       className: isGhost(m.id) ? "is-draft" : undefined,
+      // draft: arrasta só pelo header (inputs dentro do nó, padrão nodrag).
+      dragHandle: m.type === "ruleDraft" ? ".flow-card__header" : undefined,
     })),
   );
 
   const edges: Edge[] = [];
-  const push = (source: string, target: string) =>
+  const push = (source: string, target: string, label?: string) =>
     edges.push({
-      id: `${source}->${target}`,
+      id: `${source}->${target}${label ? `|${label}` : ""}`,
       source,
       target,
+      label,
       className: isGhost(source) || isGhost(target) ? "is-draft-edge" : undefined,
+      labelStyle: { fill: "#9aa7b4", fontSize: 10, fontFamily: "ui-monospace, monospace" },
+      labelBgStyle: { fill: "#0f141b", fillOpacity: 0.9 },
+      labelBgPadding: [3, 2] as [number, number],
     });
-  for (const [fid, u] of factUses) {
-    for (const ri of u.rules) push(fid, ruleMetas[ri].id);
-  }
+
+  for (const e of srcRuleEdges) push(srcId(e.key), e.ruleID, e.label);
   for (const [et, idx] of typeSources) {
     for (const ri of idx) push(ruleMetas[ri].id, typeId(et));
+  }
+  if (draft) {
+    for (const g of draft.newTypes) push(DRAFT_RULE_ID, draftTypeId(g.id));
   }
   for (const [et, achs] of listeners) {
     for (const a of achs) push(typeId(et), achId(a.id));
   }
-  for (const [key, achs] of statAchs) {
-    for (const a of achs) push(statId(key), achId(a.id));
+  for (const [key, achs] of metricAchs) {
+    for (const a of achs) {
+      push(
+        srcId(STAT_PREFIX + key),
+        achId(a.id),
+        `${a.statMode === "per_match" ? "por partida" : "acumulada"} ≥ ${a.target}`,
+      );
+    }
   }
 
   return { nodes, edges };
 }
 
-// pathHighlight devolve os nós/edges alcançáveis a partir do selecionado, nos
-// DOIS sentidos (upstream + downstream) — é o caminho completo fact -> regra
-// -> event type -> achievement que a seleção destaca (R2 da spec).
+// pathHighlight devolve nós/edges alcançáveis a partir do selecionado nos
+// DOIS sentidos (upstream + downstream) — o caminho completo que a seleção
+// destaca.
 export function pathHighlight(
   edges: Edge[],
   selectedId: string,

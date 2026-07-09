@@ -29,6 +29,12 @@ export const OP_OPTIONS: Array<{ value: MatchOp; label: string }> = [
 
 const NUMERIC_OPS: ReadonlySet<MatchOp> = new Set(["lt", "lte", "gt", "gte"]);
 
+// MatchRow é uma linha do EDITOR de condições (spec 048, edição in-canvas):
+// chave + operador + valor cru (texto). buildMatchValue converte pro wire.
+export type MatchRow = { key: string; op: MatchOp; value: string };
+
+export const EMPTY_ROW: MatchRow = { key: "", op: "eq", value: "" };
+
 export function condOp(v: MatchValue): MatchOp {
   return typeof v === "string" ? "eq" : v.op;
 }
@@ -39,6 +45,14 @@ export function condLabel(key: string, v: MatchValue): string {
   if (typeof v === "string") return `${key} = ${v}`;
   if (v.op === "in") return `${key} in [${(v.value as string[]).join(", ")}]`;
   return `${key} ${OP_SYMBOL[v.op]} ${v.value}`;
+}
+
+// condShort formata só operador+valor (a chave vira o nó de FONTE e a
+// condição vira o label da edge, spec 048): "= win", "≤ 10", "in [a, b]".
+export function condShort(v: MatchValue): string {
+  if (typeof v === "string") return `= ${v}`;
+  if (v.op === "in") return `in [${(v.value as string[]).join(", ")}]`;
+  return `${OP_SYMBOL[v.op]} ${v.value}`;
 }
 
 // condRaw devolve o valor como string editável (pré-preencher o form a partir

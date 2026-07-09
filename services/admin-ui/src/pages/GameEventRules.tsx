@@ -184,7 +184,7 @@ export function GameEventRules({ gameId }: { gameId: string }) {
           catalog={catalog ?? []}
           archetypeOptions={archetypeOptions}
           modes={modes ?? []}
-          reload={reload}
+          reload={reloadAll}
         />
       )}
       {view === "table" && rules && visibleRules.length > 0 && (
