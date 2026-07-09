@@ -496,3 +496,47 @@ func TestCreateAchievement_JaExiste_Propaga(t *testing.T) {
 	})
 	assert.ErrorIs(t, err, domain.ErrAchievementExists)
 }
+
+// --- Stats como facts (spec 015) ---
+
+// mvpRules estende o seed do coop com uma regra por stat: quem fizer 10+
+// kills numa missão cumprida ganha mission_mvp (a avaliação é por jogador).
+type mvpRules struct{ fakeEventRules }
+
+func (m mvpRules) RulesForArchetype(ctx context.Context, gameID, archetype string) ([]domain.EventRule, error) {
+	rules, _ := m.fakeEventRules.RulesForArchetype(ctx, gameID, archetype)
+	if archetype == domain.ArchetypeCoopMission {
+		rules = append(rules, domain.EventRule{
+			Archetype: archetype,
+			Match: map[string]domain.MatchCond{
+				"outcome":    domain.Eq(domain.MissionSuccess),
+				"stat.kills": {Op: domain.OpGte, Value: float64(10)},
+			},
+			EventTypes: []string{"mission_mvp"},
+		})
+	}
+	return rules, nil
+}
+
+// Critério 2 da spec 015: regra com stat.* casa só pros jogadores cujo stat
+// satisfaz — os demais seguem recebendo apenas os event types coletivos.
+func TestApplyCollectiveResult_StatPorJogador_MVP(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo, mvpRules{})
+
+	players := []domain.CollectivePlayer{
+		{PlayerID: "mvp", Stats: map[string]int64{"kills": 12}},
+		{PlayerID: "suporte", Stats: map[string]int64{"kills": 3, "revives": 5}},
+		{PlayerID: "sem-stats"},
+	}
+	want := []domain.PlayerMatchInput{
+		{PlayerID: "mvp", EventTypes: []string{"coop_mission_played", "coop_mission_success", "mission_mvp"}, Stats: map[string]int64{"kills": 12}},
+		{PlayerID: "suporte", EventTypes: []string{"coop_mission_played", "coop_mission_success"}, Stats: map[string]int64{"kills": 3, "revives": 5}},
+		{PlayerID: "sem-stats", EventTypes: []string{"coop_mission_played", "coop_mission_success"}, Stats: nil},
+	}
+	repo.On("ApplyMatchResult", mock.Anything, gameID, "m-mvp", want, mock.Anything).Return(false, nil)
+
+	_, err := svc.ApplyCollectiveResult(context.Background(), gameID, "m-mvp", "", domain.MissionSuccess, players)
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
+}

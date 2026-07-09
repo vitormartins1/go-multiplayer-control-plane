@@ -159,11 +159,18 @@ export function GameEventRulesCanvas({
     }
     return [...seen.values()];
   }, [archRules]);
-  // `mode` é fact cross-kind (spec achievements/013): sugerido sempre, com os
-  // modeIds cadastrados no arquétipo como valores.
+  // `mode` é fact cross-kind (spec achievements/013) e as stats do arquétipo
+  // viram facts `stat.<chave>` (spec achievements/015) — sugeridos junto das
+  // chaves já usadas em regras.
   const keySuggestions = useMemo(
-    () => [...new Set([...knownFacts.map((f) => f.key), "mode"])],
-    [knownFacts],
+    () => [
+      ...new Set([
+        ...knownFacts.map((f) => f.key),
+        "mode",
+        ...statsForArch.map((s) => `stat.${s.key}`),
+      ]),
+    ],
+    [knownFacts, statsForArch],
   );
   const modeIdSuggestions = useMemo(
     () => modes.filter((m) => m.archetype === arch).map((m) => m.modeId),

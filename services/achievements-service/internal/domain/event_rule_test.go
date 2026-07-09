@@ -265,3 +265,38 @@ func TestMatchCondValid(t *testing.T) {
 	assert.False(t, MatchCond{Op: OpLte, Value: "10"}.Valid(), "numérico exige number, não string")
 	assert.False(t, MatchCond{Op: OpLte, Value: nil}.Valid(), "value nil (decode leniente) é inválido")
 }
+
+// --- Stats como facts (spec 015) ---
+
+func TestFactsWithStats_PrefixoEChaves(t *testing.T) {
+	f := WinLossDrawFacts("win").WithStats(map[string]int64{"deaths": 0, "kills": 7})
+	assert.Equal(t, "0", f["stat.deaths"])
+	assert.Equal(t, "7", f["stat.kills"])
+	assert.Equal(t, "win", f["outcome"], "facts estruturais preservados")
+
+	f = WinLossDrawFacts("win").WithStats(nil)
+	_, ok := f["stat.deaths"]
+	assert.False(t, ok, "sem stats no envelope, nenhum fact stat.*")
+}
+
+// Critério 1 da spec 015: flawless victory — outcome=win E stat.deaths <= 0.
+func TestEvaluateRules_FlawlessVictory(t *testing.T) {
+	rules := []EventRule{
+		{Archetype: ArchetypeQueueArena, Match: map[string]MatchCond{
+			"outcome":     Eq("win"),
+			"stat.deaths": {Op: OpLte, Value: float64(0)},
+		}, EventTypes: []string{"flawless_victory"}},
+	}
+
+	got := EvaluateRules(rules, "g", WinLossDrawFacts("win").WithStats(map[string]int64{"deaths": 0}))
+	assert.Equal(t, []string{"flawless_victory"}, got, "win sem mortes casa")
+
+	got = EvaluateRules(rules, "g", WinLossDrawFacts("win").WithStats(map[string]int64{"deaths": 2}))
+	assert.Nil(t, got, "win com mortes não casa")
+
+	got = EvaluateRules(rules, "g", WinLossDrawFacts("loss").WithStats(map[string]int64{"deaths": 0}))
+	assert.Nil(t, got, "loss sem mortes não casa")
+
+	got = EvaluateRules(rules, "g", WinLossDrawFacts("win"))
+	assert.Nil(t, got, "envelope sem a stat: fact ausente, não casa")
+}

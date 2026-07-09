@@ -154,6 +154,22 @@ func (f Facts) WithMode(modeID string) Facts {
 	return f
 }
 
+// FactStatPrefix prefixa os facts vindos das stats do jogador (spec 015) —
+// evita colisão com facts estruturais (um jogo com stat chamada "outcome"
+// não conflita) e deixa a origem explícita no admin: stat.kills, stat.deaths.
+const FactStatPrefix = "stat."
+
+// WithStats devolve os facts com as stats do JOGADOR somadas como facts
+// numéricos (stat.<chave>) — mesmo padrão de decorator do WithMode. Os
+// comparadores do V2a (spec 014) fazem a comparação numérica; stat ausente
+// no envelope = fact ausente = regra com stat.<x> não casa.
+func (f Facts) WithStats(stats map[string]int64) Facts {
+	for k, v := range stats {
+		f[FactStatPrefix+k] = strconv.FormatInt(v, 10)
+	}
+	return f
+}
+
 // condMatches avalia UMA condição contra o valor do fact. Fact ausente nunca
 // casa (nem no ne — desigualdade exige a chave presente); fact não-numérico
 // nunca casa op numérico; op desconhecido/value nil nunca casa (defensivo —
