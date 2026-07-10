@@ -61,6 +61,7 @@ import {
   repackVisible,
   srcId,
   STAT_PREFIX,
+  type SourceNodeData,
   type StatInfo,
   typeId,
 } from "../lib/rulesGraph";
@@ -163,7 +164,19 @@ function RuleFocusMiniCanvas({
   );
   const graph = useMemo(() => buildRulesGraph(rules, catalog, { stats: statsInput }), [rules, catalog, statsInput]);
   const { nodes, edges } = useMemo(() => {
-    const path = pathHighlight(graph.edges, focusNodeId);
+    // Foco numa fonte de STAT: restringe o caminho às edges de MÉTRICA
+    // (fonte → achievement direto) — uma regra que usa o mesmo stat como
+    // condição de match não tem relação com ESTE achievement específico
+    // (achado do Vitor: a prévia de "deaths" também trazia a regra
+    // flawless_invasion, que só coincide na chave, sem alimentar o
+    // achievement). Sem essa restrição, pathHighlight segue TODAS as edges
+    // que saem da fonte, inclusive as de condição de regra.
+    const focusNode = graph.nodes.find((n) => n.id === focusNodeId);
+    const isStatSource = focusNode?.type === "source" && (focusNode.data as SourceNodeData).kind === "stat";
+    const edgesForPath = isStatSource
+      ? graph.edges.filter((e) => !(e.source === focusNodeId && e.className !== "is-metric-edge"))
+      : graph.edges;
+    const path = pathHighlight(edgesForPath, focusNodeId);
     const filtered = graph.nodes.filter((n) => path.nodeIds.has(n.id));
     const repacked = repackVisible(filtered).map((n) => ({ ...n, selectable: false, draggable: false }));
     return { nodes: repacked, edges: graph.edges.filter((e) => path.edgeIds.has(e.id)) };
