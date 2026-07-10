@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // AdminService é a Port de entrada consumida pelo handler.
@@ -115,10 +116,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 func (h *Handler) topology(w http.ResponseWriter, r *http.Request) {
 	topo, err := h.svc.Topology(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	writeJSON(w, http.StatusOK, topo)
+	httpkit.WriteJSON(w, http.StatusOK, topo)
 }
 
 // liveMetrics depende só do Prometheus: fonte fora -> 503.
@@ -126,13 +127,13 @@ func (h *Handler) liveMetrics(w http.ResponseWriter, r *http.Request) {
 	lm, err := h.svc.LiveMetrics(r.Context())
 	if err != nil {
 		if errors.Is(err, domain.ErrMetricsUnavailable) {
-			writeError(w, http.StatusServiceUnavailable, "metrics_unavailable")
+			httpkit.WriteError(w, http.StatusServiceUnavailable, "metrics_unavailable")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	writeJSON(w, http.StatusOK, lm)
+	httpkit.WriteJSON(w, http.StatusOK, lm)
 }
 
 // players lista os usuários (User base) via identity. limit/offset repassados;
@@ -144,13 +145,13 @@ func (h *Handler) players(w http.ResponseWriter, r *http.Request) {
 	page, err := h.svc.Players(r.Context(), limit, offset)
 	if err != nil {
 		if errors.Is(err, domain.ErrIdentityUnavailable) {
-			writeError(w, http.StatusBadGateway, "players_unavailable")
+			httpkit.WriteError(w, http.StatusBadGateway, "players_unavailable")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	writeJSON(w, http.StatusOK, page)
+	httpkit.WriteJSON(w, http.StatusOK, page)
 }
 
 // player: um usuário pelo id (spec 020) — handle do header do PlayerDetail.
@@ -160,15 +161,15 @@ func (h *Handler) player(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrPlayerNotFound):
-			writeError(w, http.StatusNotFound, "player_not_found")
+			httpkit.WriteError(w, http.StatusNotFound, "player_not_found")
 		case errors.Is(err, domain.ErrIdentityUnavailable):
-			writeError(w, http.StatusBadGateway, "players_unavailable")
+			httpkit.WriteError(w, http.StatusBadGateway, "players_unavailable")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal")
+			httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		}
 		return
 	}
-	writeJSON(w, http.StatusOK, p)
+	httpkit.WriteJSON(w, http.StatusOK, p)
 }
 
 func atoiOr(s string, def int) int {
@@ -185,7 +186,7 @@ func (h *Handler) games(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpkit.WriteJSON(w, http.StatusOK, list)
 }
 
 // createGame registra um jogo; repassa 400/409 do game-registry.
@@ -195,7 +196,7 @@ func (h *Handler) createGame(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	g, err := h.svc.CreateGame(r.Context(), req.Slug, req.Name)
@@ -203,7 +204,7 @@ func (h *Handler) createGame(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, g)
+	httpkit.WriteJSON(w, http.StatusCreated, g)
 }
 
 // renameGame altera o nome do jogo (Configurações do painel, spec 010).
@@ -212,7 +213,7 @@ func (h *Handler) renameGame(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	g, err := h.svc.RenameGame(r.Context(), r.PathValue("gameId"), req.Name)
@@ -220,7 +221,7 @@ func (h *Handler) renameGame(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, g)
+	httpkit.WriteJSON(w, http.StatusOK, g)
 }
 
 // deleteGame remove o jogo (soft delete no registry, ADR-0025, spec 018):
@@ -249,7 +250,7 @@ func (h *Handler) getMultiplayerProfile(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) setMultiplayerProfile(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	raw, err := h.svc.SetMultiplayerProfile(r.Context(), r.PathValue("gameId"), body)
@@ -283,7 +284,7 @@ func (h *Handler) getMultiplayerMode(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setMultiplayerMode(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	raw, err := h.svc.SetMultiplayerMode(r.Context(), r.PathValue("gameId"), r.PathValue("modeId"), body)
@@ -309,7 +310,7 @@ func (h *Handler) gameCatalog(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, cat)
+	httpkit.WriteJSON(w, http.StatusOK, cat)
 }
 
 // achievementProgress devolve o progresso de todos os jogadores na conquista.
@@ -322,21 +323,21 @@ func (h *Handler) achievementProgress(w http.ResponseWriter, r *http.Request) {
 	if entries == nil {
 		entries = []domain.AchievementProgressEntry{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"progress": entries})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"progress": entries})
 }
 
 // createAchievement cadastra uma conquista no jogo; repassa 400/409.
 func (h *Handler) createAchievement(w http.ResponseWriter, r *http.Request) {
 	var a domain.Achievement
 	if err := decode(r, &a); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	if err := h.svc.CreateAchievement(r.Context(), r.PathValue("gameId"), a); err != nil {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, a)
+	httpkit.WriteJSON(w, http.StatusCreated, a)
 }
 
 // importAchievements cadastra conquistas em lote a partir de um array JSON
@@ -346,37 +347,37 @@ func (h *Handler) importAchievements(w http.ResponseWriter, r *http.Request) {
 		Achievements []domain.Achievement `json:"achievements"`
 	}
 	if err := decode(r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_input")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_input")
 		return
 	}
 	if len(body.Achievements) == 0 {
-		writeError(w, http.StatusBadRequest, "empty_batch")
+		httpkit.WriteError(w, http.StatusBadRequest, "empty_batch")
 		return
 	}
 	if len(body.Achievements) > 500 {
-		writeError(w, http.StatusBadRequest, "batch_too_large")
+		httpkit.WriteError(w, http.StatusBadRequest, "batch_too_large")
 		return
 	}
 	result, err := h.svc.ImportAchievements(r.Context(), r.PathValue("gameId"), body.Achievements)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	httpkit.WriteJSON(w, http.StatusOK, result)
 }
 
 // updateAchievement edita uma conquista do jogo; repassa 400/404.
 func (h *Handler) updateAchievement(w http.ResponseWriter, r *http.Request) {
 	var a domain.Achievement
 	if err := decode(r, &a); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	if err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), a); err != nil {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, a)
+	httpkit.WriteJSON(w, http.StatusOK, a)
 }
 
 // deleteAchievement remove uma conquista do jogo; repassa 404.
@@ -396,14 +397,14 @@ func (h *Handler) gameEventRules(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rules)
+	httpkit.WriteJSON(w, http.StatusOK, rules)
 }
 
 // createEventRule cria uma regra escopada ao jogo; repassa 400.
 func (h *Handler) createEventRule(w http.ResponseWriter, r *http.Request) {
 	var req domain.EventRule
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	rule, err := h.svc.CreateEventRule(r.Context(), r.PathValue("gameId"), req)
@@ -411,7 +412,7 @@ func (h *Handler) createEventRule(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, rule)
+	httpkit.WriteJSON(w, http.StatusCreated, rule)
 }
 
 // updateEventRule substitui match/eventTypes de uma regra do jogo (spec 016);
@@ -419,7 +420,7 @@ func (h *Handler) createEventRule(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) updateEventRule(w http.ResponseWriter, r *http.Request) {
 	var req domain.EventRule
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	rule, err := h.svc.UpdateEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id"), req)
@@ -427,7 +428,7 @@ func (h *Handler) updateEventRule(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rule)
+	httpkit.WriteJSON(w, http.StatusOK, rule)
 }
 
 // deleteEventRule remove uma regra do jogo (nunca uma global); repassa 404.
@@ -466,7 +467,7 @@ func (h *Handler) playerAchievements(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpkit.WriteJSON(w, http.StatusOK, list)
 }
 
 // gameLeaderboard lê o top-N do jogo (leaderboard; window/offset repassados
@@ -483,7 +484,7 @@ func (h *Handler) gameLeaderboard(w http.ResponseWriter, r *http.Request) {
 	if entries == nil {
 		entries = []domain.LeaderboardEntry{}
 	}
-	writeJSON(w, http.StatusOK, entries)
+	httpkit.WriteJSON(w, http.StatusOK, entries)
 }
 
 // setLeaderboardScore substitui o score do jogador (admin override, force-set).
@@ -492,7 +493,7 @@ func (h *Handler) setLeaderboardScore(w http.ResponseWriter, r *http.Request) {
 		Score *int64 `json:"score"`
 	}
 	if err := decode(r, &req); err != nil || req.Score == nil {
-		writeError(w, http.StatusBadRequest, "invalid_score")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
 	entry, err := h.svc.SetLeaderboardScore(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), r.URL.Query().Get("board"), *req.Score)
@@ -500,7 +501,7 @@ func (h *Handler) setLeaderboardScore(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entry)
+	httpkit.WriteJSON(w, http.StatusOK, entry)
 }
 
 // gamePlayers: a player base do jogo (presença, ADR-0019).
@@ -513,7 +514,7 @@ func (h *Handler) gamePlayers(w http.ResponseWriter, r *http.Request) {
 	if players == nil {
 		players = []domain.GamePlayer{}
 	}
-	writeJSON(w, http.StatusOK, players)
+	httpkit.WriteJSON(w, http.StatusOK, players)
 }
 
 // playerGames: os jogos em que o player está presente (consulta reversa).
@@ -526,7 +527,7 @@ func (h *Handler) playerGames(w http.ResponseWriter, r *http.Request) {
 	if games == nil {
 		games = []domain.Game{}
 	}
-	writeJSON(w, http.StatusOK, games)
+	httpkit.WriteJSON(w, http.StatusOK, games)
 }
 
 // gameSessions: partidas do jogo (session-service), players enriquecidos com
@@ -543,7 +544,7 @@ func (h *Handler) gameSessions(w http.ResponseWriter, r *http.Request) {
 	if sessions.Closed == nil {
 		sessions.Closed = []domain.GameSession{}
 	}
-	writeJSON(w, http.StatusOK, sessions)
+	httpkit.WriteJSON(w, http.StatusOK, sessions)
 }
 
 // rooms é o board global de sessões (todos os jogos), enriquecido. state filtra.
@@ -559,7 +560,7 @@ func (h *Handler) rooms(w http.ResponseWriter, r *http.Request) {
 	if sessions.Closed == nil {
 		sessions.Closed = []domain.GameSession{}
 	}
-	writeJSON(w, http.StatusOK, sessions)
+	httpkit.WriteJSON(w, http.StatusOK, sessions)
 }
 
 // closeRoom encerra uma sessão ativa (force-close). 404 do session vira 404.
@@ -569,7 +570,7 @@ func (h *Handler) closeRoom(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, sess)
+	httpkit.WriteJSON(w, http.StatusOK, sess)
 }
 
 // analyticsOverview expõe o panorama cross-game (ADR-0021). Analytics fora -> 502.
@@ -577,10 +578,10 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 	ov, err := h.svc.AnalyticsOverview(r.Context())
 	if err != nil {
 		if errors.Is(err, domain.ErrAnalyticsUnavailable) {
-			writeError(w, http.StatusBadGateway, "analytics_unavailable")
+			httpkit.WriteError(w, http.StatusBadGateway, "analytics_unavailable")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	if ov.Games == nil {
@@ -589,7 +590,7 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 	if ov.Daily == nil {
 		ov.Daily = []domain.AnalyticsDaily{}
 	}
-	writeJSON(w, http.StatusOK, ov)
+	httpkit.WriteJSON(w, http.StatusOK, ov)
 }
 
 // gameAnalytics expõe o detalhe de analytics de um jogo (resumo + série diária +
@@ -604,10 +605,10 @@ func (h *Handler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	d, err := h.svc.GameAnalytics(r.Context(), r.PathValue("gameId"), days)
 	if err != nil {
 		if errors.Is(err, domain.ErrAnalyticsUnavailable) {
-			writeError(w, http.StatusBadGateway, "analytics_unavailable")
+			httpkit.WriteError(w, http.StatusBadGateway, "analytics_unavailable")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	if d.Daily == nil {
@@ -616,7 +617,7 @@ func (h *Handler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	if d.RoleParticipations == nil {
 		d.RoleParticipations = []domain.ParticipationStat{}
 	}
-	writeJSON(w, http.StatusOK, d)
+	httpkit.WriteJSON(w, http.StatusOK, d)
 }
 
 // fanoutHealth expõe os sinais do fan-out durável (ADR-0020). Prometheus fora -> 503.
@@ -624,13 +625,13 @@ func (h *Handler) fanoutHealth(w http.ResponseWriter, r *http.Request) {
 	fh, err := h.svc.FanoutHealth(r.Context())
 	if err != nil {
 		if errors.Is(err, domain.ErrMetricsUnavailable) {
-			writeError(w, http.StatusServiceUnavailable, "metrics_unavailable")
+			httpkit.WriteError(w, http.StatusServiceUnavailable, "metrics_unavailable")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	writeJSON(w, http.StatusOK, fh)
+	httpkit.WriteJSON(w, http.StatusOK, fh)
 }
 
 // playerData: dado de gameplay do jogador no jogo (player-data).
@@ -643,7 +644,7 @@ func (h *Handler) playerData(w http.ResponseWriter, r *http.Request) {
 	if entries == nil {
 		entries = []domain.PlayerDataEntry{}
 	}
-	writeJSON(w, http.StatusOK, entries)
+	httpkit.WriteJSON(w, http.StatusOK, entries)
 }
 
 // cloudSave: save do jogador no jogo (cloud-save). 404 (sem save) é repassado
@@ -654,7 +655,7 @@ func (h *Handler) cloudSave(w http.ResponseWriter, r *http.Request) {
 		writeUpstream(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, save)
+	httpkit.WriteJSON(w, http.StatusOK, save)
 }
 
 // decode lê o corpo JSON rejeitando campos desconhecidos.
@@ -674,28 +675,22 @@ func writeUpstream(w http.ResponseWriter, err error) {
 		if code == "" {
 			code = "upstream_error"
 		}
-		writeError(w, ue.Status, code)
+		httpkit.WriteError(w, ue.Status, code)
 	case errors.Is(err, domain.ErrGameRegistryUnavailable):
-		writeError(w, http.StatusBadGateway, "game_registry_unavailable")
+		httpkit.WriteError(w, http.StatusBadGateway, "game_registry_unavailable")
 	case errors.Is(err, domain.ErrAchievementsUnavailable):
-		writeError(w, http.StatusBadGateway, "achievements_unavailable")
+		httpkit.WriteError(w, http.StatusBadGateway, "achievements_unavailable")
 	case errors.Is(err, domain.ErrLeaderboardUnavailable):
-		writeError(w, http.StatusBadGateway, "leaderboard_unavailable")
+		httpkit.WriteError(w, http.StatusBadGateway, "leaderboard_unavailable")
 	case errors.Is(err, domain.ErrPlayerDataUnavailable):
-		writeError(w, http.StatusBadGateway, "player_data_unavailable")
+		httpkit.WriteError(w, http.StatusBadGateway, "player_data_unavailable")
 	case errors.Is(err, domain.ErrCloudSaveUnavailable):
-		writeError(w, http.StatusBadGateway, "cloud_save_unavailable")
+		httpkit.WriteError(w, http.StatusBadGateway, "cloud_save_unavailable")
 	case errors.Is(err, domain.ErrSessionsUnavailable):
-		writeError(w, http.StatusBadGateway, "sessions_unavailable")
+		httpkit.WriteError(w, http.StatusBadGateway, "sessions_unavailable")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
 
 // writeRawJSON repassa um corpo JSON já serializado (passthrough cru, sem
@@ -704,8 +699,4 @@ func writeRawJSON(w http.ResponseWriter, status int, raw json.RawMessage) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(raw)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
 }

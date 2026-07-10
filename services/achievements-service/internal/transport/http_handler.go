@@ -12,6 +12,7 @@ import (
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // Handler expõe os endpoints HTTP do achievements-service.
@@ -70,12 +71,12 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := auth.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		playerID, err := h.verifier.Verify(r.Context(), token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		ctx := context.WithValue(r.Context(), playerIDKey, playerID)
@@ -86,7 +87,7 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 func (h *Handler) recordEvent(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	var req struct {
@@ -95,7 +96,7 @@ func (h *Handler) recordEvent(w http.ResponseWriter, r *http.Request) {
 	// sem DisallowUnknownFields de propósito: um id de jogador no corpo é
 	// ignorado (o playerID vem do JWT), e o evento é extensível.
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	unlocked, err := h.svc.RecordEvent(r.Context(), gameID, playerID(r.Context()), domain.Event{Type: req.Type})
@@ -103,13 +104,13 @@ func (h *Handler) recordEvent(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"unlocked": toAchievementDTOs(unlocked)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"unlocked": toAchievementDTOs(unlocked)})
 }
 
 func (h *Handler) listCatalog(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	cat, err := h.svc.ListCatalog(r.Context(), gameID)
@@ -117,13 +118,13 @@ func (h *Handler) listCatalog(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"achievements": toAchievementDTOs(cat)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"achievements": toAchievementDTOs(cat)})
 }
 
 func (h *Handler) listForPlayer(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	list, err := h.svc.ListForPlayer(r.Context(), gameID, playerID(r.Context()))
@@ -131,7 +132,7 @@ func (h *Handler) listForPlayer(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
 }
 
 // adminCreateAchievement adiciona uma conquista ao catálogo do jogo do path.
@@ -146,7 +147,7 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		Target      int    `json:"target"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	a, err := h.svc.CreateAchievement(r.Context(), r.PathValue("gameId"), domain.Achievement{
@@ -157,7 +158,7 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toAchievementDTO(*a))
+	httpkit.WriteJSON(w, http.StatusCreated, toAchievementDTO(*a))
 }
 
 // adminUpdateAchievement edita uma conquista do catálogo do jogo (admin).
@@ -171,7 +172,7 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		Target      int    `json:"target"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	a, err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.Achievement{
@@ -182,7 +183,7 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toAchievementDTO(*a))
+	httpkit.WriteJSON(w, http.StatusOK, toAchievementDTO(*a))
 }
 
 // adminDeleteAchievement remove uma conquista do catálogo do jogo (admin).
@@ -202,7 +203,7 @@ func (h *Handler) adminRecordEvent(w http.ResponseWriter, r *http.Request) {
 		Type string `json:"type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	unlocked, err := h.svc.RecordEvent(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), domain.Event{Type: req.Type})
@@ -210,7 +211,7 @@ func (h *Handler) adminRecordEvent(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"unlocked": toAchievementDTOs(unlocked)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"unlocked": toAchievementDTOs(unlocked)})
 }
 
 // adminListForPlayer devolve o catálogo do jogo {gameId} anotado com o progresso
@@ -221,7 +222,7 @@ func (h *Handler) adminListForPlayer(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"achievements": toPlayerAchievementDTOs(list)})
 }
 
 // adminAchievementProgress devolve o progresso de todos os jogadores na conquista.
@@ -240,7 +241,7 @@ func (h *Handler) adminAchievementProgress(w http.ResponseWriter, r *http.Reques
 		}
 		dtos = append(dtos, dto)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"progress": dtos})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"progress": dtos})
 }
 
 // adminListEventRules devolve as regras EFETIVAS do jogo {gameId}: globais de
@@ -252,7 +253,7 @@ func (h *Handler) adminListEventRules(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rules": toEventRuleDTOs(rules)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"rules": toEventRuleDTOs(rules)})
 }
 
 // adminCreateEventRule cria uma regra escopada ao jogo {gameId} (nunca uma
@@ -264,7 +265,7 @@ func (h *Handler) adminCreateEventRule(w http.ResponseWriter, r *http.Request) {
 		EventTypes []string                    `json:"eventTypes"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	rule, err := h.rules.CreateEventRule(r.Context(), r.PathValue("gameId"), domain.EventRule{
@@ -274,7 +275,7 @@ func (h *Handler) adminCreateEventRule(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toEventRuleDTO(*rule))
+	httpkit.WriteJSON(w, http.StatusCreated, toEventRuleDTO(*rule))
 }
 
 // adminUpdateEventRule substitui match/eventTypes de uma regra do jogo
@@ -286,7 +287,7 @@ func (h *Handler) adminUpdateEventRule(w http.ResponseWriter, r *http.Request) {
 		EventTypes []string                    `json:"eventTypes"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	rule, err := h.rules.UpdateEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.EventRule{
@@ -296,7 +297,7 @@ func (h *Handler) adminUpdateEventRule(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toEventRuleDTO(*rule))
+	httpkit.WriteJSON(w, http.StatusOK, toEventRuleDTO(*rule))
 }
 
 // adminDeleteEventRule remove uma regra do jogo {gameId} (globais são
@@ -338,7 +339,7 @@ func (h *Handler) adminListCatalog(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"achievements": toAchievementDTOs(cat)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"achievements": toAchievementDTOs(cat)})
 }
 
 // --- helpers ---
@@ -450,32 +451,22 @@ func toPlayerAchievementDTOs(in []domain.PlayerAchievement) []playerAchievementD
 	return out
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
-}
-
 // writeDomainError mapeia erros de domínio para HTTP status + código estável.
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidEvent):
-		writeError(w, http.StatusBadRequest, "invalid_event")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_event")
 	case errors.Is(err, domain.ErrInvalidAchievement):
-		writeError(w, http.StatusBadRequest, "invalid_achievement")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_achievement")
 	case errors.Is(err, domain.ErrAchievementExists):
-		writeError(w, http.StatusConflict, "achievement_exists")
+		httpkit.WriteError(w, http.StatusConflict, "achievement_exists")
 	case errors.Is(err, domain.ErrAchievementNotFound):
-		writeError(w, http.StatusNotFound, "achievement_not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "achievement_not_found")
 	case errors.Is(err, domain.ErrInvalidEventRule):
-		writeError(w, http.StatusBadRequest, "invalid_event_rule")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_event_rule")
 	case errors.Is(err, domain.ErrEventRuleNotFound):
-		writeError(w, http.StatusNotFound, "event_rule_not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "event_rule_not_found")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
 }

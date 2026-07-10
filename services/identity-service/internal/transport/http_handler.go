@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // Handler expõe os endpoints HTTP do identity-service.
@@ -56,7 +57,7 @@ type accountResponse struct {
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req credentials
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	acc, err := h.auth.Register(r.Context(), req.Handle, req.Password)
@@ -64,13 +65,13 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, accountResponse{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
+	httpkit.WriteJSON(w, http.StatusCreated, accountResponse{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req credentials
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	token, err := h.auth.Authenticate(r.Context(), req.Handle, req.Password, req.GameId)
@@ -78,7 +79,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
 func (h *Handler) loginAnonymous(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +90,7 @@ func (h *Handler) loginAnonymous(w http.ResponseWriter, r *http.Request) {
 	// Corpo vazio -> io.EOF, tolerado (gameId fica ""). Assim não depende do
 	// Content-Length (cobre também Transfer-Encoding: chunked).
 	if err := decode(r, &req); err != nil && !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	token, err := h.auth.LoginAnonymous(r.Context(), req.GameId)
@@ -97,13 +98,13 @@ func (h *Handler) loginAnonymous(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
 func (h *Handler) jwks(w http.ResponseWriter, r *http.Request) {
 	b, err := h.tokens.JWKS(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -131,7 +132,7 @@ func (h *Handler) adminListPlayers(w http.ResponseWriter, r *http.Request) {
 
 	accounts, total, err := h.players.ListPlayers(r.Context(), limit, offset)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 
@@ -139,7 +140,7 @@ func (h *Handler) adminListPlayers(w http.ResponseWriter, r *http.Request) {
 	for i, a := range accounts {
 		players[i] = playerDTO{ID: a.ID, Handle: a.Handle, CreatedAt: a.CreatedAt}
 	}
-	writeJSON(w, http.StatusOK, listPlayersResponse{Total: total, Players: players})
+	httpkit.WriteJSON(w, http.StatusOK, listPlayersResponse{Total: total, Players: players})
 }
 
 // adminGetPlayer devolve um usuário pelo id (specs/004-admin-player-by-id).
@@ -148,13 +149,13 @@ func (h *Handler) adminGetPlayer(w http.ResponseWriter, r *http.Request) {
 	acc, err := h.players.GetPlayer(r.Context(), r.PathValue("playerID"))
 	if err != nil {
 		if errors.Is(err, domain.ErrAccountNotFound) {
-			writeError(w, http.StatusNotFound, "player_not_found")
+			httpkit.WriteError(w, http.StatusNotFound, "player_not_found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	writeJSON(w, http.StatusOK, playerDTO{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
+	httpkit.WriteJSON(w, http.StatusOK, playerDTO{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
 }
 
 // atoiOr devolve o inteiro de s, ou def se vazio/inválido.
@@ -171,28 +172,18 @@ func decode(r *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
-}
-
 // writeDomainError mapeia erros de domínio para HTTP status + código estável.
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidHandle):
-		writeError(w, http.StatusBadRequest, "invalid_handle")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_handle")
 	case errors.Is(err, domain.ErrWeakPassword):
-		writeError(w, http.StatusBadRequest, "weak_password")
+		httpkit.WriteError(w, http.StatusBadRequest, "weak_password")
 	case errors.Is(err, domain.ErrHandleTaken):
-		writeError(w, http.StatusConflict, "handle_taken")
+		httpkit.WriteError(w, http.StatusConflict, "handle_taken")
 	case errors.Is(err, domain.ErrInvalidCredentials):
-		writeError(w, http.StatusUnauthorized, "invalid_credentials")
+		httpkit.WriteError(w, http.StatusUnauthorized, "invalid_credentials")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
 }

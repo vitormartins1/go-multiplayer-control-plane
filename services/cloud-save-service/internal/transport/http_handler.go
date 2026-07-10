@@ -5,7 +5,6 @@ package transport
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/cloud-save-service/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // maxSaveBytes limita o tamanho do save (proteção; quota por jogador é backlog).
@@ -49,12 +49,12 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := auth.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		playerID, err := h.verifier.Verify(r.Context(), token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		ctx := context.WithValue(r.Context(), playerIDKey, playerID)
@@ -65,7 +65,7 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 func (h *Handler) save(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxSaveBytes)
@@ -73,10 +73,10 @@ func (h *Handler) save(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
-			writeError(w, http.StatusRequestEntityTooLarge, "too_large")
+			httpkit.WriteError(w, http.StatusRequestEntityTooLarge, "too_large")
 			return
 		}
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	ct := r.Header.Get("Content-Type")
@@ -93,7 +93,7 @@ func (h *Handler) save(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) load(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	snap, err := h.svc.Load(r.Context(), gameID, playerID(r.Context()))
@@ -122,8 +122,7 @@ func (h *Handler) adminLoad(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(adminSaveDTO{
+	httpkit.WriteJSON(w, http.StatusOK, adminSaveDTO{
 		ContentType: snap.ContentType,
 		Size:        len(snap.Blob),
 		UpdatedAt:   snap.UpdatedAt,
@@ -143,18 +142,12 @@ func playerID(ctx context.Context) string {
 	return id
 }
 
-func writeError(w http.ResponseWriter, status int, code string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
-}
-
 // writeDomainError mapeia erros de domínio para HTTP status + código estável.
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "not_found")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
 }

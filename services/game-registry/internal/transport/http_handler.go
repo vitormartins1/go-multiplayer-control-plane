@@ -10,6 +10,7 @@ import (
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/jsonparams"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // hostWorldDropInKnownKeys é o vocabulário tipado do arquétipo (tags JSON de
@@ -301,7 +302,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	g, err := h.games.Register(r.Context(), req.Slug, req.Name)
@@ -309,20 +310,20 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toDTO(g))
+	httpkit.WriteJSON(w, http.StatusCreated, toDTO(g))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	games, err := h.games.List(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	out := make([]gameDTO, len(games))
 	for i := range games {
 		out[i] = toDTO(&games[i])
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpkit.WriteJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -338,7 +339,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 			ModeID: m.ModeID, DisplayName: m.DisplayName, Archetype: m.Profile.Archetype,
 		})
 	}
-	writeJSON(w, http.StatusOK, gameWithProfileDTO{
+	httpkit.WriteJSON(w, http.StatusOK, gameWithProfileDTO{
 		gameDTO:            toDTO(g),
 		MultiplayerProfile: profileToDTO(g.MultiplayerProfile),
 		MultiplayerModes:   summaries,
@@ -357,13 +358,13 @@ func (h *Handler) listModes(w http.ResponseWriter, r *http.Request) {
 	for i := range modes {
 		out = append(out, toModeDTO(&modes[i], ""))
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpkit.WriteJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) setMode(w http.ResponseWriter, r *http.Request) {
 	var req setModeRequest
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	p := profileToDomain(profileDTO{Archetype: req.Archetype, Topology: req.Topology, Params: req.Params})
@@ -372,7 +373,7 @@ func (h *Handler) setMode(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toModeDTO(m, ""))
+	httpkit.WriteJSON(w, http.StatusOK, toModeDTO(m, ""))
 }
 
 // getMode inclui a Fleet do jogo na resposta (ADR-0026, spec 012) — é o
@@ -384,7 +385,7 @@ func (h *Handler) getMode(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toModeDTO(m, fleet))
+	httpkit.WriteJSON(w, http.StatusOK, toModeDTO(m, fleet))
 }
 
 func (h *Handler) deleteMode(w http.ResponseWriter, r *http.Request) {
@@ -399,7 +400,7 @@ func (h *Handler) deleteMode(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setProfile(w http.ResponseWriter, r *http.Request) {
 	var req profileDTO
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	p, err := h.games.SetMultiplayerProfile(r.Context(), r.PathValue("id"), profileToDomain(req))
@@ -407,7 +408,7 @@ func (h *Handler) setProfile(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, profileToDTO(p))
+	httpkit.WriteJSON(w, http.StatusOK, profileToDTO(p))
 }
 
 // getProfile devolve o perfil de multiplayer do jogo (404 se ausente).
@@ -417,7 +418,7 @@ func (h *Handler) getProfile(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, profileToDTO(p))
+	httpkit.WriteJSON(w, http.StatusOK, profileToDTO(p))
 }
 
 // rename altera só o nome do jogo (Configurações do painel, spec 005).
@@ -426,7 +427,7 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	g, err := h.games.Rename(r.Context(), r.PathValue("id"), req.Name)
@@ -434,7 +435,7 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toDTO(g))
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(g))
 }
 
 // setFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012).
@@ -443,7 +444,7 @@ func (h *Handler) setFleet(w http.ResponseWriter, r *http.Request) {
 		Fleet string `json:"fleet"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	g, err := h.games.SetFleet(r.Context(), r.PathValue("id"), req.Fleet)
@@ -451,7 +452,7 @@ func (h *Handler) setFleet(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toDTO(g))
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(g))
 }
 
 // delete marca o jogo como removido (soft delete, ADR-0025, spec 010): 204;
@@ -471,7 +472,7 @@ func (h *Handler) markPresence(w http.ResponseWriter, r *http.Request) {
 		Handle string `json:"handle"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	if err := h.presence.Mark(r.Context(), r.PathValue("gameId"), r.PathValue("playerID"), req.Handle); err != nil {
@@ -498,7 +499,7 @@ func (h *Handler) listPlayers(w http.ResponseWriter, r *http.Request) {
 	for i, p := range players {
 		out[i] = presenceDTO{PlayerID: p.PlayerID, Handle: p.Handle, FirstSeen: p.FirstSeen}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpkit.WriteJSON(w, http.StatusOK, out)
 }
 
 // playerGames devolve os jogos em que o player {playerID} está presente
@@ -513,7 +514,7 @@ func (h *Handler) playerGames(w http.ResponseWriter, r *http.Request) {
 	for i := range games {
 		out[i] = toDTO(&games[i])
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpkit.WriteJSON(w, http.StatusOK, out)
 }
 
 // --- helpers ---
@@ -524,48 +525,38 @@ func decode(r *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
-}
-
 // writeDomainError mapeia erros de domínio para HTTP status + código estável.
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidSlug):
-		writeError(w, http.StatusBadRequest, "invalid_slug")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_slug")
 	case errors.Is(err, domain.ErrInvalidName):
-		writeError(w, http.StatusBadRequest, "invalid_name")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_name")
 	case errors.Is(err, domain.ErrSlugTaken):
-		writeError(w, http.StatusConflict, "slug_taken")
+		httpkit.WriteError(w, http.StatusConflict, "slug_taken")
 	case errors.Is(err, domain.ErrGameNotFound):
-		writeError(w, http.StatusNotFound, "not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "not_found")
 	case errors.Is(err, domain.ErrInvalidFleet):
-		writeError(w, http.StatusBadRequest, "invalid_fleet")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_fleet")
 	case errors.Is(err, domain.ErrUnsupportedArchetype):
-		writeError(w, http.StatusBadRequest, "unsupported_archetype")
+		httpkit.WriteError(w, http.StatusBadRequest, "unsupported_archetype")
 	case errors.Is(err, domain.ErrUnsupportedTopology):
-		writeError(w, http.StatusBadRequest, "unsupported_topology")
+		httpkit.WriteError(w, http.StatusBadRequest, "unsupported_topology")
 	case errors.Is(err, domain.ErrInvalidProfileParams):
-		writeError(w, http.StatusBadRequest, "invalid_profile_params")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_profile_params")
 	case errors.Is(err, domain.ErrProfileNotFound):
-		writeError(w, http.StatusNotFound, "profile_not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "profile_not_found")
 	case errors.Is(err, domain.ErrInvalidModeID):
-		writeError(w, http.StatusBadRequest, "invalid_mode_id")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_mode_id")
 	case errors.Is(err, domain.ErrModeNotFound):
-		writeError(w, http.StatusNotFound, "mode_not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "mode_not_found")
 	case errors.Is(err, domain.ErrDefaultModeProtected):
-		writeError(w, http.StatusConflict, "default_mode_protected")
+		httpkit.WriteError(w, http.StatusConflict, "default_mode_protected")
 	case errors.Is(err, domain.ErrTooManyModes):
-		writeError(w, http.StatusBadRequest, "too_many_modes")
+		httpkit.WriteError(w, http.StatusBadRequest, "too_many_modes")
 	case errors.Is(err, domain.ErrModeConflict):
-		writeError(w, http.StatusConflict, "mode_conflict")
+		httpkit.WriteError(w, http.StatusConflict, "mode_conflict")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
 }
