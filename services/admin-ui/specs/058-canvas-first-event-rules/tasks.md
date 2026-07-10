@@ -67,3 +67,7 @@ Três ajustes pedidos pelo Vitor:
 1. **Lista deixou de ser colapsável** — removido `dockCollapsed`/`onToggleCollapsed`, o botão de chevron no header e o `Collapse` em volta da tabela. A lista agora está sempre visível por completo (só o scroll interno controla o que aparece, quando excede a altura do painel).
 2. **Alinhamento do header** — `Group` do header ganhou `align="center"` explícito (o filtro, o badge de contagem, o info e o atualizar não estavam centralizados verticalmente entre si de forma consistente).
 3. **Contraste do zebrado** — o `striped` padrão do Mantine `Table` usa uma cor pensada pra fundo claro; contra o painel escuro (`rgba(18,24,33,0.95)`) as linhas ficavam quase indistinguíveis. Trocado por uma listra manual (`i % 2 === 1 ? "rgba(255,255,255,0.045)" : undefined`) — sobreposição branca bem sutil, sempre visível independente da cor de fundo por trás.
+
+## Follow-up 6: "buscar no subgrafo" vira toggle inline (mesmo padrão de "regras relacionadas")
+
+Pedido do Vitor: o ícone de busca (destaca nodes no canvas) ainda abria um `Popover` — mesma inconsistência que "regras relacionadas" tinha antes do follow-up 3. Convertido pro mesmo padrão: `searchOpen` (estado local do rail), clique expande um `TextInput` inline à direita do ícone (sem `Popover`/balãozinho), clique de novo recolhe. Os dois toggles do rail (busca e relacionadas) agora têm comportamento idêntico.
