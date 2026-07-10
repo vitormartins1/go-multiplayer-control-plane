@@ -163,12 +163,6 @@
 .flow-opchip:hover {
   border-color: #4dabf7;
 }
-.flow-addtype {
-  position: absolute;
-  right: -13px;
-  top: calc(50% - 13px);
-  z-index: 5;
-}
 
 /* --- form in-canvas com identidade do card (spec 050) --- */
 .flow-wrap .flow-input {

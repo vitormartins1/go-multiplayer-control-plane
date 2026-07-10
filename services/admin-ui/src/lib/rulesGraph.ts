@@ -66,7 +66,10 @@ const SIZE = {
   achievement: { h: 86 },
 };
 const ruleHeight = (r: EventRule) => 69 + 22 * Math.max(1, Object.entries(r.match).length);
-const draftHeight = (rows: number) => 98 + 33 * Math.max(1, rows);
+// RECALIBRADA (spec 052): ações Cancelar/Salvar migraram pro header e o
+// footer sumiu — offsetHeight real: 104px c/ 1 linha, 136px c/ 2 (medido
+// via Playwright, 72 + 32/linha).
+const draftHeight = (rows: number) => 72 + 32 * Math.max(1, rows);
 
 const COL_X = [0, 300, 640, 920];
 const GAP_Y = 18;
@@ -238,7 +241,8 @@ export function buildRulesGraph(
   // ghosts de type NOVO (editáveis) — data injetada pela página.
   if (draft) {
     for (const g of draft.newTypes) {
-      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: 73 });
+      // 71px medido (spec 052 — sem o botão de fechar no header).
+      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: 71 });
     }
   }
   const typeNeighbor = new Map([...typeSources.entries()].map(([et, idx]) => [typeId(et), idx]));
