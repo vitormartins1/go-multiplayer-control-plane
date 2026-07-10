@@ -85,6 +85,89 @@ func findByStatKey(ctx context.Context, q querier, gameID, statKey string) ([]do
 	return scanAchievements(rows)
 }
 
+// findByEventTypes busca, numa única query, as conquistas por evento cujo
+// event_type está no conjunto informado — usada por ApplyMatchResult/
+// ApplyParticipationEvent pra evitar o N+1 clássico (achado no /code-review):
+// antes, uma partida com P jogadores × E event types cada rodava P×E queries
+// separadas dentro da mesma transação. Devolve agrupado por event_type; a
+// ordem por id dentro de cada grupo vem de graça (ORDER BY id é global, e um
+// subconjunto de uma sequência ordenada continua ordenado).
+func findByEventTypes(ctx context.Context, q querier, gameID string, eventTypes []string) (map[string][]domain.Achievement, error) {
+	out := make(map[string][]domain.Achievement)
+	if len(eventTypes) == 0 {
+		return out, nil
+	}
+	const sql = `SELECT ` + achievementCols + `
+	             FROM achievements WHERE game_id = $1 AND event_type = ANY($2) ORDER BY id`
+	rows, err := q.Query(ctx, sql, gameID, eventTypes)
+	if err != nil {
+		return nil, fmt.Errorf("achievements repository: find by event types: %w", err)
+	}
+	defer rows.Close()
+	list, err := scanAchievements(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range list {
+		out[a.EventType] = append(out[a.EventType], a)
+	}
+	return out, nil
+}
+
+// findByStatKeys é o equivalente de findByEventTypes para o critério por stat.
+func findByStatKeys(ctx context.Context, q querier, gameID string, statKeys []string) (map[string][]domain.Achievement, error) {
+	out := make(map[string][]domain.Achievement)
+	if len(statKeys) == 0 {
+		return out, nil
+	}
+	const sql = `SELECT ` + achievementCols + `
+	             FROM achievements WHERE game_id = $1 AND stat_key = ANY($2) ORDER BY id`
+	rows, err := q.Query(ctx, sql, gameID, statKeys)
+	if err != nil {
+		return nil, fmt.Errorf("achievements repository: find by stat keys: %w", err)
+	}
+	defer rows.Close()
+	list, err := scanAchievements(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range list {
+		out[a.StatKey] = append(out[a.StatKey], a)
+	}
+	return out, nil
+}
+
+// distinctEventTypes/distinctStatKeys agregam as chaves de todos os jogadores
+// da partida numa única lista sem duplicatas, pro batch de findByEventTypes/
+// findByStatKeys rodar uma vez por transação em vez de uma vez por jogador.
+func distinctEventTypes(players []domain.PlayerMatchInput) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, pe := range players {
+		for _, et := range pe.EventTypes {
+			if _, ok := seen[et]; !ok {
+				seen[et] = struct{}{}
+				out = append(out, et)
+			}
+		}
+	}
+	return out
+}
+
+func distinctStatKeys(players []domain.PlayerMatchInput) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, pe := range players {
+		for statKey := range pe.Stats {
+			if _, ok := seen[statKey]; !ok {
+				seen[statKey] = struct{}{}
+				out = append(out, statKey)
+			}
+		}
+	}
+	return out
+}
+
 // ProgressForAchievement devolve o progresso de todos os jogadores na conquista.
 func (r *PostgresAchievementRepository) ProgressForAchievement(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
 	const q = `SELECT player_id, progress, unlocked_at
@@ -191,14 +274,23 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 		return true, tx.Commit(ctx) // já processada: no-op idempotente
 	}
 
+	// Busca o catálogo casado uma única vez por transação (achado no
+	// /code-review: antes, findByEventType/findByStatKey rodavam uma query por
+	// jogador × event type/stat, um N+1 clássico numa partida com muitos
+	// jogadores).
+	eventMatches, err := findByEventTypes(ctx, tx, gameID, distinctEventTypes(players))
+	if err != nil {
+		return false, err
+	}
+	statMatches, err := findByStatKeys(ctx, tx, gameID, distinctStatKeys(players))
+	if err != nil {
+		return false, err
+	}
+
 	for _, pe := range players {
 		// critério por evento: +1 por ocorrência (como sempre).
 		for _, et := range pe.EventTypes {
-			matches, err := findByEventType(ctx, tx, gameID, et)
-			if err != nil {
-				return false, err
-			}
-			for _, a := range matches {
+			for _, a := range eventMatches[et] {
 				if _, err := recordProgress(ctx, tx, gameID, pe.PlayerID, a.ID, a.Target, at); err != nil {
 					return false, err
 				}
@@ -206,11 +298,7 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 		}
 		// critério por stat: avança pela métrica (cumulative/per_match).
 		for statKey, value := range pe.Stats {
-			matches, err := findByStatKey(ctx, tx, gameID, statKey)
-			if err != nil {
-				return false, err
-			}
-			for _, a := range matches {
+			for _, a := range statMatches[statKey] {
 				if _, err := recordStatProgress(ctx, tx, gameID, pe.PlayerID, a.ID, a.Target, value, a.StatMode, at); err != nil {
 					return false, err
 				}
@@ -246,13 +334,24 @@ func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Cont
 		return true, tx.Commit(ctx) // já processado: no-op idempotente
 	}
 
+	// Mesmo batch de ApplyMatchResult (achado no /code-review): uma query por
+	// transação em vez de uma por event type/stat.
+	statKeys := make([]string, 0, len(stats))
+	for statKey := range stats {
+		statKeys = append(statKeys, statKey)
+	}
+	eventMatches, err := findByEventTypes(ctx, tx, gameID, eventTypes)
+	if err != nil {
+		return false, err
+	}
+	statMatches, err := findByStatKeys(ctx, tx, gameID, statKeys)
+	if err != nil {
+		return false, err
+	}
+
 	// critério por evento: +1 por ocorrência para cada event type traduzido.
 	for _, et := range eventTypes {
-		matches, err := findByEventType(ctx, tx, gameID, et)
-		if err != nil {
-			return false, err
-		}
-		for _, a := range matches {
+		for _, a := range eventMatches[et] {
 			if _, err := recordProgress(ctx, tx, gameID, playerID, a.ID, a.Target, at); err != nil {
 				return false, err
 			}
@@ -261,11 +360,7 @@ func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Cont
 	// critério por stat (spec 018): mesmo loop de ApplyMatchResult — fecha a
 	// assimetria do host_world_dropin com os outros 3 arquétipos.
 	for statKey, value := range stats {
-		matches, err := findByStatKey(ctx, tx, gameID, statKey)
-		if err != nil {
-			return false, err
-		}
-		for _, a := range matches {
+		for _, a := range statMatches[statKey] {
 			if _, err := recordStatProgress(ctx, tx, gameID, playerID, a.ID, a.Target, value, a.StatMode, at); err != nil {
 				return false, err
 			}
