@@ -759,12 +759,15 @@ export function GameEventRulesCanvas({
         overlay={
           selectedNode && !draft ? (
             <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
-              <Group justify="space-between" wrap="nowrap" gap={4} mb={detailsCollapsed ? 0 : "xs"}>
-                <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Group justify="space-between" wrap="nowrap" align="flex-start" gap={4} mb={detailsCollapsed ? 0 : "xs"}>
+                <Group gap={6} wrap="nowrap" align="baseline" style={{ minWidth: 0 }}>
                   <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
                     {detailsHeaderSummary(selectedNode).kind}
                   </Text>
-                  <Text size="xs" c="dimmed" truncate="end" style={{ minWidth: 0 }}>
+                  {/* sem truncate (spec 058, achado do Vitor): a identidade completa
+                      só aparece aqui — o corpo não repete mais o tipo/identidade, então
+                      cortar o nome aqui perderia informação sem ela sobrar em outro lugar. */}
+                  <Text size="xs" c="dimmed" style={{ minWidth: 0, wordBreak: "break-word" }}>
                     {detailsHeaderSummary(selectedNode).label}
                   </Text>
                 </Group>
@@ -1191,14 +1194,9 @@ function NodeDetails({
         : [];
     return (
       <Stack gap="xs">
-        <Group gap="xs">
-          <Text fw={600} size="sm">
-            Regra
-          </Text>
-          <Badge size="xs" variant="outline" color={global ? "gray" : "teal"}>
-            {global ? "global" : "jogo"}
-          </Badge>
-        </Group>
+        {/* sem repetir "Regra" + escopo aqui — já está no cabeçalho sempre
+            visível do painel (spec 058, achado do Vitor: corpo repetia o
+            que o cabeçalho já mostrava, pra todos os tipos de node). */}
         <Text size="xs" c="dimmed">
           Match (todas as condições precisam bater nos facts do evento):
         </Text>
@@ -1261,12 +1259,6 @@ function NodeDetails({
     const isStat = d.kind === "stat";
     return (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          {isStat ? "Stat (métrica)" : d.kind === "mode" ? "Modo de jogo" : "Fact"}
-        </Text>
-        <Badge variant="light" color={isStat ? "orange" : "blue"} tt="none" style={{ alignSelf: "flex-start" }}>
-          {d.sourceKey}
-        </Badge>
         {d.drift && (
           <Text size="xs" c="red">
             Nenhum modo deste jogo declara esta stat — achievements por ela podem nunca progredir
@@ -1301,12 +1293,6 @@ function NodeDetails({
     const d = node.data as unknown as EventTypeNodeData;
     return (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Event type
-        </Text>
-        <Badge variant="light" color="violet" tt="none" style={{ alignSelf: "flex-start" }}>
-          {d.eventType}
-        </Badge>
         {d.listeners === 0 ? (
           <>
             <Text size="xs" c="dimmed">
@@ -1334,22 +1320,23 @@ function NodeDetails({
   const d = node.data as unknown as AchievementNodeData;
   return (
     <Stack gap="xs">
-      <Text fw={600} size="sm">
-        Achievement
-      </Text>
-      <Text size="sm">{d.name}</Text>
       <Text size="xs" c="dimmed">
         {d.statKey ? (
           <>
             Progride pela stat <code>{d.statKey}</code> (
-            {d.statMode === "per_match" ? "por partida" : "acumulada"}) — direto, sem regra
+            {d.statMode === "per_match" ? "por partida" : "acumulada"}) — direto, sem regra.
           </>
         ) : (
           <>
-            Escuta <code>{d.eventType}</code>
+            Escuta <code>{d.eventType}</code>.
           </>
-        )}{" "}
-        · target {d.target}. Gerenciado na aba Achievements.
+        )}
+      </Text>
+      <Badge size="xs" variant="light" color="yellow" tt="none" style={{ alignSelf: "flex-start" }}>
+        meta: {d.target}
+      </Badge>
+      <Text size="xs" c="dimmed" fs="italic">
+        Gerenciado na aba Achievements.
       </Text>
     </Stack>
   );
