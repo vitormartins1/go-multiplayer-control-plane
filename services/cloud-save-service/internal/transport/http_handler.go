@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/cloud-save-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
 )
 
 // maxSaveBytes limita o tamanho do save (proteção; quota por jogador é backlog).
@@ -46,7 +47,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
 func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r)
+		token := auth.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -135,15 +136,6 @@ func (h *Handler) adminLoad(w http.ResponseWriter, r *http.Request) {
 // gameHeader lê o jogo do header X-Game-Id (contexto ambiente do data plane).
 func gameHeader(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-Game-Id"))
-}
-
-func bearerToken(r *http.Request) string {
-	const prefix = "Bearer "
-	h := r.Header.Get("Authorization")
-	if len(h) > len(prefix) && strings.EqualFold(h[:len(prefix)], prefix) {
-		return h[len(prefix):]
-	}
-	return ""
 }
 
 func playerID(ctx context.Context) string {
