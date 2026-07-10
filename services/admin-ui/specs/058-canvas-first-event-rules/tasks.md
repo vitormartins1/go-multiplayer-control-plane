@@ -51,3 +51,11 @@ Dois pedidos do Vitor testando o rail horizontal:
 2. **A reserva do `fitView` media o dock INTEIRO (lista + rail)** — errado, porque o rail é curto (só a faixa do topo) e nunca tampa node nenhum; reservar a largura dele também só empurrava o grafo mais longe do que precisava. Resolvido restruturando `dockReservedWidth`: em vez do `FlowCanvas` medir sozinho (via `ResizeObserver` no wrapper do `dock` inteiro), agora é o CHAMADOR (`GameEventRulesCanvas.tsx`) que mede — só o painel da LISTA (`listRef` dentro de `EventRulesDock`, repassado por `onListPanelWidthChange`) — e passa o número explícito pro `FlowCanvas` via `dockReservedWidth`. `FlowCanvas` ficou mais simples (não mede mais nada sozinho, só recebe o número).
 
 Verificado com medição separada de cada painel (`getBoundingClientRect` da lista vs. do rail, não da caixa combinada — o teste inicial com a caixa combinada dava falso positivo de sobreposição): 0 nós sobrepondo a lista E 0 nós sobrepondo o rail, tanto com o toggle de relacionadas fechado quanto aberto (rail crescendo de ~102px pra ~315px de largura) — como o rail é curto (38px de altura, só a fileira do topo), mesmo crescendo bastante pra direita nunca chega a tampar node nenhum na prática.
+
+## Follow-up 4: margem maior entre dock e nós + filtro no header da lista
+
+Dois ajustes finos pedidos pelo Vitor:
+
+1. **`FIT_MARGIN` foi de 24px pra 90px** — o respiro mínimo teórico (garantido pelo `padding` assimétrico do fitView) ficou visualmente apertado depois da calibração do follow-up 3 (a reserva agora é exata, só da lista, sem sobra). Ajustado por iteração visual (medir `listRect.right` vs. `firstNodeLeft` via Playwright, comparar com o screenshot) até ficar confortável.
+
+2. **Filtro de lista migrou pro header do painel da lista** — antes vivia escondido dentro do popover "filtrar/buscar" do rail, junto com a busca no subgrafo. Removido o texto "Event Rules" e o header agora é `[TextInput "filtrar…"] [Badge dinâmico] [info] ... [atualizar] [recolher]` — o Badge deixou de mostrar `rules.length` (total fixo) e passou a mostrar `filtered.length` (dinâmico, reflete o filtro ativo). O popover do rail ficou só com "Buscar no subgrafo" (a busca que destaca nodes no canvas, conceito diferente do filtro da lista). Verificado: filtrar "boss" no jogo de teste reduz a contagem de 13 pra 4 em tempo real.
