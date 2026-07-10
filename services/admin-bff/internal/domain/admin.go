@@ -241,6 +241,13 @@ type AchievementsReader interface {
 	// DeleteEventRule remove uma regra do jogo (nunca uma global — o
 	// achievements-service trata como 404 nos dois casos). 404 -> UpstreamError.
 	DeleteEventRule(ctx context.Context, gameID, id string) error
+	// SuppressEventRule desliga uma regra GLOBAL para o jogo gameID (spec 017
+	// do achievements-service, V2b do ADR-0028) — override de jogo não é
+	// suprimível (404 -> UpstreamError, mesma resposta de "não existe").
+	SuppressEventRule(ctx context.Context, gameID, id string) error
+	// UnsuppressEventRule restaura uma regra global suprimida. Sem supressão
+	// ativa -> 404 -> UpstreamError.
+	UnsuppressEventRule(ctx context.Context, gameID, id string) error
 }
 
 // EventRule é uma regra de mapeamento evento->achievement-event-type
@@ -248,13 +255,16 @@ type AchievementsReader interface {
 // arquétipo (read-only neste painel); "game" = override específico deste
 // jogo (editável/removível).
 type EventRule struct {
-	ID         string                     `json:"id"`
-	Scope      string                     `json:"scope"`
-	Archetype  string                     `json:"archetype"`
+	ID        string `json:"id"`
+	Scope     string `json:"scope"`
+	Archetype string `json:"archetype"`
 	// Match é opaco (string OU objeto de comparador, spec achievements/014) —
 	// o BFF repassa sem interpretar, como o PlayerDataEntry.Value abaixo.
 	Match      map[string]json.RawMessage `json:"match"`
 	EventTypes []string                   `json:"eventTypes"`
+	// Suppressed (spec 017, V2b): sempre presente; só relevante pra Scope
+	// "global" — repassado como veio do achievements-service.
+	Suppressed bool `json:"suppressed"`
 }
 
 // PlayerDataEntry é uma linha de dado de gameplay do jogador (player-data). O

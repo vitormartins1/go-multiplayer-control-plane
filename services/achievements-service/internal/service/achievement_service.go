@@ -415,3 +415,22 @@ func (s *Service) DeleteEventRule(ctx context.Context, gameID, id string) error 
 	}
 	return nil
 }
+
+// SuppressEventRule desliga uma regra global para o jogo gameID (spec 017,
+// V2b). Passthrough fino — gameID/id vêm do path, sem conteúdo de payload
+// pra validar (ao contrário de Create/Update); a checagem de "existe e é
+// global" mora no repositório.
+func (s *Service) SuppressEventRule(ctx context.Context, gameID, id string) error {
+	if err := s.rules.Suppress(ctx, gameID, id); err != nil {
+		return fmt.Errorf("achievements service: suppress event rule: %w", err)
+	}
+	return nil
+}
+
+// UnsuppressEventRule restaura uma regra global suprimida (spec 017, V2b).
+func (s *Service) UnsuppressEventRule(ctx context.Context, gameID, id string) error {
+	if err := s.rules.Unsuppress(ctx, gameID, id); err != nil {
+		return fmt.Errorf("achievements service: unsuppress event rule: %w", err)
+	}
+	return nil
+}

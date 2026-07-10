@@ -40,6 +40,8 @@ type AdminService interface {
 	CreateEventRule(ctx context.Context, gameID string, r domain.EventRule) (*domain.EventRule, error)
 	UpdateEventRule(ctx context.Context, gameID, id string, r domain.EventRule) (*domain.EventRule, error)
 	DeleteEventRule(ctx context.Context, gameID, id string) error
+	SuppressEventRule(ctx context.Context, gameID, id string) error
+	UnsuppressEventRule(ctx context.Context, gameID, id string) error
 	PlayerAchievements(ctx context.Context, gameID, playerID string) ([]domain.PlayerAchievement, error)
 	GameLeaderboard(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error)
 	SetLeaderboardScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error)
@@ -93,6 +95,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games/{gameId}/event-rules", h.createEventRule)
 	mux.HandleFunc("PUT /api/games/{gameId}/event-rules/{id}", h.updateEventRule)
 	mux.HandleFunc("DELETE /api/games/{gameId}/event-rules/{id}", h.deleteEventRule)
+	mux.HandleFunc("POST /api/games/{gameId}/event-rules/{id}/suppress", h.suppressEventRule)
+	mux.HandleFunc("DELETE /api/games/{gameId}/event-rules/{id}/suppress", h.unsuppressEventRule)
 	mux.HandleFunc("GET /api/games/{gameId}/leaderboard", h.gameLeaderboard)
 	mux.HandleFunc("PUT /api/games/{gameId}/leaderboard/{playerID}/score", h.setLeaderboardScore)
 	mux.HandleFunc("GET /api/games/{gameId}/players/{playerID}/data", h.playerData)
@@ -429,6 +433,26 @@ func (h *Handler) updateEventRule(w http.ResponseWriter, r *http.Request) {
 // deleteEventRule remove uma regra do jogo (nunca uma global); repassa 404.
 func (h *Handler) deleteEventRule(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// suppressEventRule desliga uma regra global para o jogo (spec 017, V2b);
+// repassa 404 (override de jogo ou id inexistente) do upstream.
+func (h *Handler) suppressEventRule(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.SuppressEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// unsuppressEventRule restaura uma regra global suprimida; repassa 404 (sem
+// supressão ativa) do upstream.
+func (h *Handler) unsuppressEventRule(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.UnsuppressEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
 		writeUpstream(w, err)
 		return
 	}

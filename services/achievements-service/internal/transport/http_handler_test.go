@@ -91,15 +91,19 @@ func (f *fakeService) ProgressForAchievement(_ context.Context, gameID, _ string
 // pelos testes das rotas /event-rules; os demais testes (achievements) não se
 // importam com ele, então newServer injeta um vazio.
 type fakeEventRuleService struct {
-	rules       []domain.EventRule
-	createErr   error
-	updateErr   error
-	deleteErr   error
-	gotGameID   string
-	gotCreate   domain.EventRule
-	gotUpdateID string
-	gotUpdate   domain.EventRule
-	gotDeleteID string
+	rules           []domain.EventRule
+	createErr       error
+	updateErr       error
+	deleteErr       error
+	suppressErr     error
+	unsuppressErr   error
+	gotGameID       string
+	gotCreate       domain.EventRule
+	gotUpdateID     string
+	gotUpdate       domain.EventRule
+	gotDeleteID     string
+	gotSuppressID   string
+	gotUnsuppressID string
 }
 
 func (f *fakeEventRuleService) ListEffectiveRules(_ context.Context, gameID string) ([]domain.EventRule, error) {
@@ -132,6 +136,16 @@ func (f *fakeEventRuleService) UpdateEventRule(_ context.Context, gameID, id str
 func (f *fakeEventRuleService) DeleteEventRule(_ context.Context, gameID, id string) error {
 	f.gotGameID, f.gotDeleteID = gameID, id
 	return f.deleteErr
+}
+
+func (f *fakeEventRuleService) SuppressEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotSuppressID = gameID, id
+	return f.suppressErr
+}
+
+func (f *fakeEventRuleService) UnsuppressEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotUnsuppressID = gameID, id
+	return f.unsuppressErr
 }
 
 func newServer(svc domain.AchievementService, v domain.TokenVerifier) *httptest.Server {
@@ -431,6 +445,28 @@ func TestAdminListEventRules_200(t *testing.T) {
 	require.Len(t, body.Rules, 1)
 	assert.Equal(t, "global", body.Rules[0].Scope)
 	assert.Equal(t, []string{"world_joined"}, body.Rules[0].EventTypes)
+	assert.False(t, body.Rules[0].Suppressed)
+}
+
+// eventRuleDTO.Suppressed reflete o que o service devolve (populado pelo
+// repositório via ListEffective — spec 017, V2b).
+func TestAdminListEventRules_RefleteSuppressed(t *testing.T) {
+	global := domain.EventRule{ID: "r1", GameID: nil, Archetype: "battle_royale",
+		Match: map[string]domain.MatchCond{}, EventTypes: []string{"battle_royale_top_n"}, Suppressed: true}
+	rules := &fakeEventRuleService{rules: []domain.EventRule{global}}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodGet, "/admin/games/g/event-rules", "", "", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body struct {
+		Rules []eventRuleDTO `json:"rules"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Rules, 1)
+	assert.True(t, body.Rules[0].Suppressed)
 }
 
 func TestAdminCreateEventRule_201(t *testing.T) {
@@ -524,4 +560,48 @@ func TestAdminDeleteEventRule_Inexistente_404(t *testing.T) {
 	resp := do(t, srv, http.MethodDelete, "/admin/games/g/event-rules/global-1", "", "", "")
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "global ou inexistente: mesma resposta")
+}
+
+func TestAdminSuppressEventRule_204(t *testing.T) {
+	rules := &fakeEventRuleService{}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/g/event-rules/global-1/suppress", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "g", rules.gotGameID)
+	assert.Equal(t, "global-1", rules.gotSuppressID)
+}
+
+func TestAdminSuppressEventRule_RegraDeJogoOuInexistente_404(t *testing.T) {
+	rules := &fakeEventRuleService{suppressErr: domain.ErrEventRuleNotFound}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/g/event-rules/r1/suppress", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "override de jogo não é suprimível")
+}
+
+func TestAdminUnsuppressEventRule_204(t *testing.T) {
+	rules := &fakeEventRuleService{}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodDelete, "/admin/games/g/event-rules/global-1/suppress", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "g", rules.gotGameID)
+	assert.Equal(t, "global-1", rules.gotUnsuppressID)
+}
+
+func TestAdminUnsuppressEventRule_SemSupressaoAtiva_404(t *testing.T) {
+	rules := &fakeEventRuleService{unsuppressErr: domain.ErrEventRuleNotFound}
+	srv := newServerWithRules(&fakeService{}, rules, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodDelete, "/admin/games/g/event-rules/global-1/suppress", "", "", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }

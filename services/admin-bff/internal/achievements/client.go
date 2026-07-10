@@ -203,11 +203,12 @@ type progressResponse struct {
 // eventRulesResponse é o shape de GET /admin/games/{g}/event-rules.
 type eventRulesResponse struct {
 	Rules []struct {
-		ID         string            `json:"id"`
-		Scope      string            `json:"scope"`
-		Archetype  string            `json:"archetype"`
+		ID         string                     `json:"id"`
+		Scope      string                     `json:"scope"`
+		Archetype  string                     `json:"archetype"`
 		Match      map[string]json.RawMessage `json:"match"` // condições opacas (spec 014) — o BFF não interpreta
-		EventTypes []string          `json:"eventTypes"`
+		EventTypes []string                   `json:"eventTypes"`
+		Suppressed bool                       `json:"suppressed"` // spec 017, V2b
 	} `json:"rules"`
 }
 
@@ -227,7 +228,10 @@ func (c *Client) GameEventRules(ctx context.Context, gameID string) ([]domain.Ev
 	}
 	out := make([]domain.EventRule, 0, len(body.Rules))
 	for _, r := range body.Rules {
-		out = append(out, domain.EventRule{ID: r.ID, Scope: r.Scope, Archetype: r.Archetype, Match: r.Match, EventTypes: r.EventTypes})
+		out = append(out, domain.EventRule{
+			ID: r.ID, Scope: r.Scope, Archetype: r.Archetype, Match: r.Match, EventTypes: r.EventTypes,
+			Suppressed: r.Suppressed,
+		})
 	}
 	return out, nil
 }
@@ -288,6 +292,32 @@ func (c *Client) DeleteEventRule(ctx context.Context, gameID, id string) error {
 	return nil
 }
 
+// SuppressEventRule desliga uma regra global para o jogo gameID (spec 017,
+// V2b). Override de jogo ou id inexistente -> 404 -> UpstreamError.
+func (c *Client) SuppressEventRule(ctx context.Context, gameID, id string) error {
+	u := c.gamePath(gameID, "/event-rules/"+url.PathEscape(id)+"/suppress")
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+// UnsuppressEventRule restaura uma regra global suprimida. Sem supressão
+// ativa -> 404 -> UpstreamError.
+func (c *Client) UnsuppressEventRule(ctx context.Context, gameID, id string) error {
+	u := c.gamePath(gameID, "/event-rules/"+url.PathEscape(id)+"/suppress")
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
+	resp, err := upstream.Do(c.http, req, domain.ErrAchievementsUnavailable)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
 // AchievementProgress devolve o progresso de todos os jogadores na conquista.
 func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(achievementID)+"/progress")
@@ -312,4 +342,3 @@ func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID 
 	}
 	return out, nil
 }
-

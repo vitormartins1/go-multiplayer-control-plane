@@ -46,9 +46,9 @@ func seedRules(archetype string) []EventRule {
 func TestEvaluateRules_HostWorldDropIn_Tabela(t *testing.T) {
 	rules := seedRules(ArchetypeHostWorldDropIn)
 	tests := []struct {
-		name                  string
+		name                 string
 		role, event, outcome string
-		want                  []string
+		want                 []string
 	}{
 		{"invasor mata host com sucesso", "invader", "HOST_KILLED", "SUCCESS", []string{EventInvasionWon}},
 		{"invasor mata host sem sucesso não casa", "invader", "HOST_KILLED", "FAIL", nil},
@@ -151,6 +151,19 @@ func TestEvaluateRules_OverrideDeOutroJogo_NaoVaza(t *testing.T) {
 	}
 	got := EvaluateRules(rules, gameA, Facts{"event": "JOINED"})
 	assert.Equal(t, []string{"world_joined"}, got, "override do jogo B não aparece pro jogo A")
+}
+
+// EvaluateRules ignora regra marcada Suppressed (spec 017, V2b) — guarda
+// defensiva; a fonte de verdade é o repositório não devolvê-la em
+// RulesForArchetype, mas o avaliador precisa se proteger sozinho também.
+func TestEvaluateRules_RegraSuprimida_NaoContribui(t *testing.T) {
+	gameA := "game-a"
+	rules := []EventRule{
+		{Archetype: "x", GameID: nil, Match: map[string]MatchCond{}, EventTypes: []string{"battle_royale_top_n"}, Suppressed: true},
+		{Archetype: "x", GameID: nil, Match: map[string]MatchCond{}, EventTypes: []string{"battle_royale_played"}},
+	}
+	got := EvaluateRules(rules, gameA, Facts{})
+	assert.Equal(t, []string{"battle_royale_played"}, got, "regra suprimida não contribui event types")
 }
 
 func TestMatchSubset_VazioSempreBate(t *testing.T) {

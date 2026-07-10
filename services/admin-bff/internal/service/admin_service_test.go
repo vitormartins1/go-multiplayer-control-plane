@@ -87,6 +87,14 @@ func (f *fakeReader) DeleteEventRule(_ context.Context, gameID, id string) error
 	f.gotGameID, f.gotID = gameID, id
 	return f.err
 }
+func (f *fakeReader) SuppressEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotID = gameID, id
+	return f.err
+}
+func (f *fakeReader) UnsuppressEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotID = gameID, id
+	return f.err
+}
 
 type fakeRegistry struct {
 	games       []domain.Game

@@ -341,6 +341,7 @@ services:
       - ../../services/achievements-service/migrations/007_participation_event_id.sql:/docker-entrypoint-initdb.d/007_participation_event_id.sql:ro
       - ../../services/achievements-service/migrations/008_event_rules.sql:/docker-entrypoint-initdb.d/008_event_rules.sql:ro
       - ../../services/achievements-service/migrations/009_match_operators.sql:/docker-entrypoint-initdb.d/009_match_operators.sql:ro
+      - ../../services/achievements-service/migrations/010_event_rule_suppressions.sql:/docker-entrypoint-initdb.d/010_event_rule_suppressions.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
