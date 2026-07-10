@@ -22,7 +22,16 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconChartBar, IconDownload, IconPencil, IconPlus, IconRefresh, IconTrash, IconUpload } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconChartBar,
+  IconDownload,
+  IconPencil,
+  IconPlus,
+  IconRefresh,
+  IconTrash,
+  IconUpload,
+} from "@tabler/icons-react";
 import { useRef, useState, type ChangeEvent } from "react";
 import {
   api,
@@ -84,12 +93,18 @@ function eventSuggestions(rules: EventRule[]): Suggestions {
 // DriftBadge é o aviso de consistência (029): critério apontando para algo que
 // o cadastro de modos não conhece. Detecta drift, não impede — read-only,
 // provavelmente typo/rename, mas pode ser intencional (envelope aberto).
+// Só o ícone cru (sem Badge em volta — ficava "triângulo dentro de bolinha",
+// visualmente estranho) pra não competir por espaço horizontal na coluna de
+// critério — o label vira aria-label; o detalhe some no tooltip, como já era.
 function DriftBadge({ label, tooltip }: { label: string; tooltip: string }) {
   return (
     <Tooltip label={tooltip} multiline w={280} withArrow>
-      <Badge size="xs" variant="outline" color="yellow" style={{ cursor: "default" }}>
-        {label}
-      </Badge>
+      <IconAlertTriangle
+        size={14}
+        color="var(--mantine-color-yellow-5)"
+        aria-label={label}
+        style={{ cursor: "default", flexShrink: 0 }}
+      />
     </Tooltip>
   );
 }
@@ -454,7 +469,7 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             <Table.Tr>
               <Table.Th w={40}></Table.Th>
               <Table.Th>Id</Table.Th>
-              <Table.Th>Nome</Table.Th>
+              <Table.Th w={220}>Nome</Table.Th>
               <Table.Th>Descrição</Table.Th>
               <Table.Th>Critério</Table.Th>
               <Table.Th>Meta</Table.Th>
@@ -468,7 +483,11 @@ export function GameAchievements({ gameId }: { gameId: string }) {
                   <AchievementIcon seed={a.id} />
                 </Table.Td>
                 <Table.Td c="dimmed">{a.id}</Table.Td>
-                <Table.Td>{a.name}</Table.Td>
+                <Table.Td>
+                  <Text truncate="end" maw={200} title={a.name}>
+                    {a.name}
+                  </Text>
+                </Table.Td>
                 <Table.Td c="dimmed">{a.description}</Table.Td>
                 <Table.Td>
                   {a.statKey ? (
