@@ -77,3 +77,16 @@ Pedido do Vitor: o ícone de busca (destaca nodes no canvas) ainda abria um `Pop
 Achado do Vitor: o botão de enquadrar do canto inferior esquerdo (`Controls`, nativo do React Flow) reenquadrava sem reservar espaço pro dock — só o `AutoFit` (nosso componente) fazia isso. Causa: `<Controls>` tem o PRÓPRIO prop `fitViewOptions`, separado do `fitViewOptions` passado no `<ReactFlow>` raiz — o botão nativo usa o dele, não o nosso. `FlowCanvas.tsx` não passava nada, então caía no padrão sem reserva.
 
 Extraída a lógica de padding assimétrico pra uma função `reservedFitOptions(reservedLeft)`, reaproveitada tanto pelo `AutoFit` quanto passada direto pro `<Controls fitViewOptions={...}>`. Precisou tipar o retorno como `Padding` (de `@xyflow/system`) — sem a anotação explícita, o TS não conseguia inferir os literais `${number}px` fora de um objeto inline. Verificado: zoom manual pra desalinhar + clique no botão nativo reenquadra respeitando a mesma margem do fit automático.
+
+## Follow-up 8: painel de detalhe do node refeito — sem duplicação cabeçalho/corpo
+
+Achado do Vitor: o corpo de `NodeDetails` repetia, pros 4 tipos de node, exatamente o "tipo + identidade" que o cabeçalho já mostra sempre (mesmo recolhido) — ex.: header "REGRA · do jogo" seguido de `Text "Regra"` + `Badge "jogo"` no corpo; "ACHIEVEMENT · Corredor Relâmpago" seguido de `Text "Achievement"` + `Text "Corredor Relâmpago"`; mesmo padrão pra `source` (Fact/Modo/Stat) e `eventType`.
+
+Redesenhado do zero, por cenário:
+- **Header**: label deixa de truncar (`truncate="end"` removido) — agora quebra linha se precisar. Antes, cortar o nome ali seria perda de informação real, já que o corpo não repete mais a identidade em lugar nenhum.
+- **Rule**: corpo começa direto em "Match: ..." — sem repetir "Regra"/escopo.
+- **Source** (Fact/Modo/Stat): corpo começa direto no aviso de drift (se houver) + parágrafo explicativo + condições em uso — sem repetir o tipo/chave.
+- **EventType**: corpo começa direto na contagem de listeners ou aviso de órfão + botão — sem repetir "Event type"/nome.
+- **Achievement**: reestruturado de uma frase corrida ("Progride pela stat X (modo) · target N. Gerenciado na aba Achievements.") pra 3 linhas separadas — mecanismo de progresso, badge "meta: N" (consistente com o padrão de badge dos outros 3 tipos), e nota de rodapé em itálico ("Gerenciado na aba Achievements.").
+
+Verificado visualmente nos 4 tipos de node + estado recolhido (o cabeçalho sozinho continua autoexplicativo sem o corpo).
