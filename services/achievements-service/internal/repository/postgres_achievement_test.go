@@ -465,6 +465,51 @@ func TestUpdateAchievement_Inexistente_ErrNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrAchievementNotFound)
 }
 
+// TestUpdateAchievement_TrocaCriterio_ResetaProgresso prova a correção do
+// /code-review: progresso acumulado sob um critério (ex. kills, stat) não
+// pode sobreviver a uma troca de critério (ex. para vitórias, evento) — senão
+// reaparece como "quase lá" num critério que o jogador nunca cumpriu.
+func TestUpdateAchievement_TrocaCriterio_ResetaProgresso(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	require.NoError(t, repo.CreateAchievement(ctx, &domain.Achievement{
+		GameID: gameCRUD, ID: "muta", Name: "Muta", StatKey: "kills", StatMode: domain.StatModeCumulative, Target: 10}))
+	_, err := repo.RecordProgress(ctx, gameCRUD, "p1", "muta", 10, time.Now().UTC())
+	require.NoError(t, err)
+	prog, err := repo.ListPlayerProgress(ctx, gameCRUD, "p1")
+	require.NoError(t, err)
+	require.Len(t, prog, 1, "progresso registrado antes da troca")
+
+	// Troca o critério: de stat (kills) para evento (match_won).
+	require.NoError(t, repo.UpdateAchievement(ctx, &domain.Achievement{
+		GameID: gameCRUD, ID: "muta", Name: "Muta", EventType: "match_won", Target: 3}))
+
+	prog, err = repo.ListPlayerProgress(ctx, gameCRUD, "p1")
+	require.NoError(t, err)
+	assert.Empty(t, prog, "progresso do critério antigo não sobrevive à troca")
+}
+
+// TestUpdateAchievement_MesmoCriterio_PreservaProgresso garante que a
+// correção acima não é ampla demais: editar campos que não mudam o critério
+// (name/description/target) não pode apagar progresso legítimo.
+func TestUpdateAchievement_MesmoCriterio_PreservaProgresso(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	require.NoError(t, repo.CreateAchievement(ctx, &domain.Achievement{
+		GameID: gameCRUD, ID: "estavel", Name: "Estável", EventType: "match_won", Target: 5}))
+	// target=5: uma única ocorrência avança o progresso pra 1, sem desbloquear.
+	_, err := repo.RecordProgress(ctx, gameCRUD, "p1", "estavel", 5, time.Now().UTC())
+	require.NoError(t, err)
+
+	require.NoError(t, repo.UpdateAchievement(ctx, &domain.Achievement{
+		GameID: gameCRUD, ID: "estavel", Name: "Estável 2", Description: "novo texto", EventType: "match_won", Target: 8}))
+
+	prog, err := repo.ListPlayerProgress(ctx, gameCRUD, "p1")
+	require.NoError(t, err)
+	require.Len(t, prog, 1, "mesmo critério (event_type inalterado) preserva progresso")
+	assert.Equal(t, 1, prog[0].Progress)
+}
+
 func TestDeleteAchievement_RemoveConquistaEProgresso(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
 	ctx := context.Background()

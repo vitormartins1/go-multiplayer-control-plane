@@ -327,17 +327,50 @@ func (r *PostgresAchievementRepository) CreateAchievement(ctx context.Context, a
 }
 
 // UpdateAchievement atualiza os campos mutáveis da conquista (game_id, id).
-// Zero linhas afetadas -> ErrAchievementNotFound.
+// O critério (event_type/stat_key/stat_mode) define o que o progresso
+// acumulado em player_achievements está medindo — se o update troca o
+// critério (achado no /code-review: stat↔event ou stat_key/event_type
+// diferentes), o progresso antigo passa a medir a coisa errada sob a
+// semântica nova (ex.: 10 kills acumulados reaparecendo como "quase lá" num
+// critério novo de vitórias). SELECT ... FOR UPDATE + reset dentro da mesma
+// transação evita a corrida (update concorrente lendo o critério antigo
+// depois do commit). Linha inexistente -> ErrAchievementNotFound.
 func (r *PostgresAchievementRepository) UpdateAchievement(ctx context.Context, a *domain.Achievement) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("achievements repository: update achievement: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	var oldEventType, oldStatKey, oldStatMode string
+	err = tx.QueryRow(ctx,
+		`SELECT event_type, stat_key, stat_mode FROM achievements WHERE game_id = $1 AND id = $2 FOR UPDATE`,
+		a.GameID, a.ID,
+	).Scan(&oldEventType, &oldStatKey, &oldStatMode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrAchievementNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("achievements repository: update achievement: select: %w", err)
+	}
+
 	const q = `UPDATE achievements
 	           SET name = $3, description = $4, event_type = $5, stat_key = $6, stat_mode = $7, target = $8
 	           WHERE game_id = $1 AND id = $2`
-	tag, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target)
-	if err != nil {
+	if _, err := tx.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target); err != nil {
 		return fmt.Errorf("achievements repository: update achievement: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return domain.ErrAchievementNotFound
+
+	if oldEventType != a.EventType || oldStatKey != a.StatKey || oldStatMode != a.StatMode {
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM player_achievements WHERE game_id = $1 AND achievement_id = $2`,
+			a.GameID, a.ID); err != nil {
+			return fmt.Errorf("achievements repository: update achievement: reset progress: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("achievements repository: update achievement: commit: %w", err)
 	}
 	return nil
 }
