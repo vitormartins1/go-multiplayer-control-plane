@@ -207,6 +207,20 @@ export function GameEventRulesCanvas({
     }
   }, [focusRuleId, autoEditRuleId, rules, archetype]);
 
+  // effectiveArch (achado do Vitor testando o picker de arquétipo do form
+  // de criação): durante CRIAÇÃO num jogo com mais de um arquétipo, o
+  // vocabulário de sugestões (key/value/mode/event type) tem que refletir o
+  // arquétipo ESCOLHIDO no form (draftArchetype) — não o arquétipo ativo do
+  // canvas (arch). São coisas diferentes: `arch` é "o que o canvas está
+  // mostrando agora"; `draftArchetype` é "em que arquétipo a regra nova vai
+  // nascer". Sem isso, o autocomplete (e até os nós de fonte clicáveis pra
+  // preencher condição) continuavam do arquétipo antigo mesmo depois de
+  // trocar no picker. Fora de criação (ou jogo de 1 arquétipo só), os dois
+  // coincidem — edição nunca muda arquétipo (spec 016), então nesse caso
+  // `arch` já está correto.
+  const effectiveArch =
+    draft && !draft.editingRuleID && archetypeOptions.length > 1 ? draftArchetype : arch;
+
   // archRules inclui a regra em edição mesmo se `arch` ainda não convergiu
   // pro arquétipo dela (defensivo contra qualquer race remanescente entre o
   // efeito de sincronização acima e o startEdit disparado por autoEditRuleId
@@ -214,14 +228,14 @@ export function GameEventRulesCanvas({
   // uma regra ausente do conjunto filtrado e quebrava, achado testando a
   // navegação "Editar regra" vinda de Achievements).
   const archRules = useMemo(
-    () => rules.filter((r) => r.archetype === arch || r.id === draft?.editingRuleID),
-    [rules, arch, draft],
+    () => rules.filter((r) => r.archetype === effectiveArch || r.id === draft?.editingRuleID),
+    [rules, effectiveArch, draft],
   );
 
   // Stats do arquétipo (spec 045): declaradas + drift (usada por achievement
   // sem declaração em NENHUM modo).
   const statsForArch = useMemo<StatInfo[]>(() => {
-    const declaredHere = new Set(modes.filter((m) => m.archetype === arch).flatMap(modeStats));
+    const declaredHere = new Set(modes.filter((m) => m.archetype === effectiveArch).flatMap(modeStats));
     const declaredAnywhere = new Set(modes.flatMap(modeStats));
     const out: StatInfo[] = [...declaredHere].sort().map((key) => ({ key, declared: true }));
     const drift = new Set(
@@ -229,7 +243,7 @@ export function GameEventRulesCanvas({
     );
     for (const key of [...drift].sort()) out.push({ key, declared: false });
     return out;
-  }, [modes, arch, catalog]);
+  }, [modes, effectiveArch, catalog]);
 
   // Vocabulário derivado do dado real (nunca hardcoded, ADR-0027).
   const keySuggestions = useMemo(
@@ -243,8 +257,8 @@ export function GameEventRulesCanvas({
     [archRules, statsForArch],
   );
   const modeIdSuggestions = useMemo(
-    () => modes.filter((m) => m.archetype === arch).map((m) => m.modeId),
-    [modes, arch],
+    () => modes.filter((m) => m.archetype === effectiveArch).map((m) => m.modeId),
+    [modes, effectiveArch],
   );
   // valores já usados por chave (só igualdades — sugestão de valor).
   const knownValues = useMemo(() => {
