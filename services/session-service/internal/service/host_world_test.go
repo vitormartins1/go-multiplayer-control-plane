@@ -29,7 +29,7 @@ func openWorldSetup(t *testing.T) (*Service, *mockAllocator, *mockIssuer, string
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 
@@ -73,7 +73,7 @@ func TestOpenWorld_PerfilIndisponivel_ErrUnsupportedArchetype(t *testing.T) {
 func TestOpenWorld_PoolEsgotado_ErrNoServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrNoServer)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrNoServer)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(prof))
 
@@ -81,11 +81,40 @@ func TestOpenWorld_PoolEsgotado_ErrNoServer(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }
 
+// TestOpenWorld_PropagaFleetDoSnapshotParaAllocate (ADR-0026, spec 022).
+func TestOpenWorld_PropagaFleetDoSnapshotParaAllocate(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	prof := &mockProfile{}
+	snap := coopInvaderProfile()
+	snap.Fleet = "capoeira-souls"
+	alloc.On("Allocate", mock.Anything, mock.Anything, "game-1", "capoeira-souls").Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(snap, nil)
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
+
+	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	require.NoError(t, err)
+	alloc.AssertExpectations(t)
+}
+
+// TestOpenWorld_FleetIndisponivel_ErrFleetUnavailable (ADR-0026, spec 022).
+func TestOpenWorld_FleetIndisponivel_ErrFleetUnavailable(t *testing.T) {
+	alloc := &mockAllocator{}
+	prof := &mockProfile{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrFleetUnavailable)
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
+	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(prof))
+
+	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	assert.ErrorIs(t, err, domain.ErrFleetUnavailable)
+}
+
 func TestOpenWorld_TokenFalha_LiberaServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("", assert.AnError)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
@@ -113,7 +142,7 @@ func TestJoinWorld_PapelNaoHabilitado_ErrRoleNotEnabled(t *testing.T) {
 	prof := &mockProfile{}
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(domain.ProfileSnapshot{
 		Archetype: "host_world_dropin", EnabledRoles: []string{domain.RoleCoop}, CoopSlots: 1,
@@ -139,7 +168,7 @@ func TestJoinWorld_TokenFalha_ReverteSlot(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a"}, nil)
 	// host abre ok; join falha ao emitir o token.
 	iss.On("Issue", "host-1", mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	iss.On("Issue", "phantom-1", mock.Anything, mock.Anything, mock.Anything).Return("", assert.AnError)
@@ -224,7 +253,7 @@ func multiWorldSvc(t *testing.T, profiles map[string]domain.ProfileSnapshot) *Se
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	for g, p := range profiles {
 		prof.On("ModeProfile", mock.Anything, g, mock.Anything).Return(p, nil)
@@ -353,7 +382,7 @@ func TestListInvadableWorlds_OrdenaPorOpenedAtAsc(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 

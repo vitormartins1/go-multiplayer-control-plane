@@ -19,7 +19,7 @@ func TestCreate_CongelaSnapshotDoModoEEmiteClaimModeID(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "warzone"}).Return("tok", nil)
 	snap := domain.ProfileSnapshot{
 		ModeID: "warzone", Archetype: domain.ArchetypeBattleRoyale, Topology: "dedicated",
@@ -65,7 +65,7 @@ func (f *flakyProvider) ModeProfile(_ context.Context, _, modeID string) (domain
 func TestSnapshot_Imutavel_MudancaNoRegistryNaoAfetaSessaoEmVoo(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a:1"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a:1"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("tok", nil)
 	prov := &flakyProvider{}
 
@@ -145,7 +145,7 @@ func TestReportResult_PublicaComModeIDDaSessao(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a:1"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s0", Address: "a:1"}, nil)
 	alloc.On("Release", mock.Anything, "s0").Return(nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("tok", nil)
 

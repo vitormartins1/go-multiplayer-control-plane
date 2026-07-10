@@ -113,6 +113,31 @@ func TestOpenWorld_JogoNaoHostWorld_FailedPrecondition(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+// TestOpenWorld_FleetIndisponivel_FailedPrecondition (ADR-0026, spec 022):
+// allocator recusa sem Fleet configurada — mesmo mapeamento do CreateSession.
+func TestOpenWorld_FleetIndisponivel_FailedPrecondition(t *testing.T) {
+	iss, err := token.Generate()
+	require.NoError(t, err)
+	prof := stubProfile{profile: domain.ProfileSnapshot{
+		Archetype: "host_world_dropin", Topology: "dedicated", ParamsJSON: []byte(`{"enabledRoles":["coop"],"coopSlots":2}`),
+		Hash: "hw-hash", EnabledRoles: []string{domain.RoleCoop}, CoopSlots: 2,
+	}}
+	svc := service.New(fleetlessAllocator{}, iss, publisher.New(slogDiscard()), service.WithProfileProvider(prof))
+	srv := grpc.NewServer()
+	pb.RegisterSessionServer(srv, NewServer(svc))
+	lis := bufconn.Listen(1024 * 1024)
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough://bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close(); srv.Stop() })
+	client := pb.NewSessionClient(conn)
+
+	_, err = client.OpenWorld(context.Background(), &pb.OpenWorldRequest{HostPlayerId: "h", GameId: "hw"})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
 func TestJoinWorld_PapelNaoHabilitado_InvalidArgument(t *testing.T) {
 	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
 	open, err := client.OpenWorld(context.Background(), &pb.OpenWorldRequest{HostPlayerId: "h", GameId: "hw"})

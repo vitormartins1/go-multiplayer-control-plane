@@ -34,6 +34,9 @@ var (
 	// ErrProfileUnavailable indica que o perfil de multiplayer do jogo não pôde ser
 	// lido/usado (ausente, arquétipo incompatível, rede) — origem no ProfileProvider.
 	ErrProfileUnavailable = errors.New("session: multiplayer profile unavailable")
+	// ErrFleetUnavailable indica que o allocator Agones recusou alocar porque o
+	// jogo não tem Fleet configurada (ADR-0026) — o static nunca devolve este erro.
+	ErrFleetUnavailable = errors.New("session: fleet not configured")
 	// ErrInvalidParticipation indica um evento de participação fora do vocabulário
 	// (Event/Outcome inválido) — spec 013.
 	ErrInvalidParticipation = errors.New("session: invalid participation event")

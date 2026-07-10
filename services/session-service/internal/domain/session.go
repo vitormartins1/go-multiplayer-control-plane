@@ -350,6 +350,12 @@ type ProfileSnapshot struct {
 	EnabledRoles []string // "coop" e/ou "invader"
 	CoopSlots    int
 	InvaderSlots int
+
+	// Fleet é a Fleet Agones do JOGO dono do modo (ADR-0026, spec 022) — não faz
+	// parte do hash (atributo de infra, não de configuração de gameplay que o
+	// manifest valida). Vazio = jogo sem Agones real habilitado ainda; o adapter
+	// Agones recusa alocar nesse caso (o static ignora).
+	Fleet string
 }
 
 // SessionManifest é a resposta do GetSessionConfig (spec 017): a visão do
@@ -377,9 +383,11 @@ type ProfileProvider interface {
 // (ADR-0011, spec 004) levando os metadados da partida para o GameServer.
 type ServerAllocator interface {
 	// Allocate reserva um game server livre para a partida. matchID/gameID viram
-	// annotations do GameServer no Agones (o static ignora). ErrNoServer se o
-	// pool esgotar.
-	Allocate(ctx context.Context, matchID, gameID string) (Server, error)
+	// annotations do GameServer no Agones (o static ignora). fleet seleciona a
+	// Fleet Agones (ADR-0026): o adapter Agones recusa com ErrFleetUnavailable se
+	// vazio; o static ignora, como já ignora gameID. ErrNoServer se o pool
+	// esgotar.
+	Allocate(ctx context.Context, matchID, gameID, fleet string) (Server, error)
 	// Release devolve o server ao pool, liberando-o para nova alocação.
 	Release(ctx context.Context, serverID string) error
 }

@@ -136,7 +136,7 @@ func (s *Service) Create(ctx context.Context, matchID, gameID, modeID string, te
 		return nil, nil, fmt.Errorf("session service: create: %w", err)
 	}
 
-	server, err := s.allocator.Allocate(ctx, matchID, gameID)
+	server, err := s.allocator.Allocate(ctx, matchID, gameID, snap.Fleet)
 	if err != nil {
 		return nil, nil, fmt.Errorf("session service: create: allocate: %w", err)
 	}
@@ -581,7 +581,7 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID st
 	}
 
 	sessionID := uuid.NewString()
-	server, err := s.allocator.Allocate(ctx, sessionID, gameID)
+	server, err := s.allocator.Allocate(ctx, sessionID, gameID, snap.Fleet)
 	if err != nil {
 		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: allocate: %w", err)
 	}

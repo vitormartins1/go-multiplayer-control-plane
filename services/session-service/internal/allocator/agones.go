@@ -32,27 +32,31 @@ var (
 type Agones struct {
 	client    dynamic.Interface
 	namespace string
-	fleet     string
 }
 
-// NewAgones cria o adapter. fleet é o valor do label `agones.dev/fleet` usado
-// como selector da alocação.
-func NewAgones(client dynamic.Interface, namespace, fleet string) *Agones {
-	return &Agones{client: client, namespace: namespace, fleet: fleet}
+// NewAgones cria o adapter. A Fleet não é mais fixa na construção (ADR-0026) —
+// cada chamada de Allocate resolve a Fleet do jogo (via ProfileSnapshot).
+func NewAgones(client dynamic.Interface, namespace string) *Agones {
+	return &Agones{client: client, namespace: namespace}
 }
 
 // Allocate cria uma GameServerAllocation com os metadados da partida. As
 // annotations aterrissam SEM prefixo no GameServer (validado empiricamente,
 // Agones 1.58) — o Unity lê `objectMeta.annotations["match_id"]` cru e rearma
 // o gate. Fleet sem Ready → o Agones responde `UnAllocated` → ErrNoServer.
-func (a *Agones) Allocate(ctx context.Context, matchID, gameID string) (domain.Server, error) {
+// fleet vazio → ErrFleetUnavailable, sem chamar a API k8s (ADR-0026): melhor
+// falhar cedo e claro do que arriscar alocar da Fleet errada.
+func (a *Agones) Allocate(ctx context.Context, matchID, gameID, fleet string) (domain.Server, error) {
+	if fleet == "" {
+		return domain.Server{}, fmt.Errorf("agones: fleet not set: %w", domain.ErrFleetUnavailable)
+	}
 	gsa := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "allocation.agones.dev/v1",
 		"kind":       "GameServerAllocation",
 		"metadata":   map[string]any{"generateName": "session-"},
 		"spec": map[string]any{
 			"selectors": []any{
-				map[string]any{"matchLabels": map[string]any{"agones.dev/fleet": a.fleet}},
+				map[string]any{"matchLabels": map[string]any{"agones.dev/fleet": fleet}},
 			},
 			"metadata": map[string]any{
 				"annotations": map[string]any{"match_id": matchID, "game_id": gameID},
@@ -95,14 +99,14 @@ func (a *Agones) Release(ctx context.Context, serverID string) error {
 	return nil
 }
 
-// LiveServerIDs lista os GameServers vivos da fleet (LIST por label
-// `agones.dev/fleet=<fleet>`) e devolve o conjunto dos `metadata.name` — o mesmo
-// ID que Allocate grava em Server.ID (spec 008, ADR-0022). Uma chamada por tick
-// do sweeper (barata; não N GETs).
+// LiveServerIDs lista os GameServers vivos do namespace (sem filtro de Fleet —
+// desde o ADR-0026 múltiplas Fleets, uma por jogo, coexistem no mesmo
+// namespace; filtrar por uma só deixaria de reconciliar as sessões dos demais
+// jogos) e devolve o conjunto dos `metadata.name` — o mesmo ID que Allocate
+// grava em Server.ID (spec 008, ADR-0022). Uma chamada por tick do sweeper
+// (barata; não N GETs).
 func (a *Agones) LiveServerIDs(ctx context.Context) (map[string]struct{}, error) {
-	list, err := a.client.Resource(gameServerGVR).Namespace(a.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "agones.dev/fleet=" + a.fleet,
-	})
+	list, err := a.client.Resource(gameServerGVR).Namespace(a.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("agones: list gameservers: %w", err)
 	}
@@ -131,8 +135,8 @@ func WithPublicHost(inner domain.ServerAllocator, host string) domain.ServerAllo
 	return &publicHost{inner: inner, host: host}
 }
 
-func (p *publicHost) Allocate(ctx context.Context, matchID, gameID string) (domain.Server, error) {
-	server, err := p.inner.Allocate(ctx, matchID, gameID)
+func (p *publicHost) Allocate(ctx context.Context, matchID, gameID, fleet string) (domain.Server, error) {
+	server, err := p.inner.Allocate(ctx, matchID, gameID, fleet)
 	if err != nil {
 		return server, err
 	}

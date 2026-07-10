@@ -40,8 +40,8 @@ func TestAgonesAllocate_Allocated_DevolveServerComEndereco(t *testing.T) {
 		"ports":          []any{map[string]any{"name": "default", "port": int64(7127)}},
 	})
 
-	agones := NewAgones(client, "default", "packet-arena")
-	server, err := agones.Allocate(context.Background(), "match-1", "game-1")
+	agones := NewAgones(client, "default")
+	server, err := agones.Allocate(context.Background(), "match-1", "game-1", "packet-arena")
 
 	require.NoError(t, err)
 	assert.Equal(t, "packet-arena-abcde-12345", server.ID)
@@ -62,11 +62,49 @@ func TestAgonesAllocate_Allocated_DevolveServerComEndereco(t *testing.T) {
 	assert.Equal(t, map[string]string{"agones.dev/fleet": "packet-arena"}, labels)
 }
 
+// TestAgonesAllocate_FleetsDiferentes_SelectorUsaOValorPorChamada (ADR-0026):
+// a Fleet não é mais fixa no adapter — cada chamada resolve a sua.
+func TestAgonesAllocate_FleetsDiferentes_SelectorUsaOValorPorChamada(t *testing.T) {
+	client := newFakeDynamic(t, map[string]any{
+		"state": "Allocated", "gameServerName": "gs-1", "address": "172.19.0.3",
+		"ports": []any{map[string]any{"name": "default", "port": int64(7127)}},
+	})
+	agones := NewAgones(client, "default")
+
+	_, err := agones.Allocate(context.Background(), "match-1", "game-1", "packet-arena")
+	require.NoError(t, err)
+	_, err = agones.Allocate(context.Background(), "match-2", "game-2", "capoeira-souls")
+	require.NoError(t, err)
+
+	actions := client.Actions()
+	require.Len(t, actions, 2)
+	fleetOf := func(i int) string {
+		created := actions[i].(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured)
+		selectors, _, _ := unstructured.NestedSlice(created.Object, "spec", "selectors")
+		labels, _, _ := unstructured.NestedStringMap(selectors[0].(map[string]any), "matchLabels")
+		return labels["agones.dev/fleet"]
+	}
+	assert.Equal(t, "packet-arena", fleetOf(0))
+	assert.Equal(t, "capoeira-souls", fleetOf(1))
+}
+
+// TestAgonesAllocate_FleetVazia_ErrFleetUnavailable (ADR-0026): falha cedo, sem
+// chamar a API k8s — melhor do que arriscar alocar da Fleet errada.
+func TestAgonesAllocate_FleetVazia_ErrFleetUnavailable(t *testing.T) {
+	client := newFakeDynamic(t, map[string]any{"state": "Allocated"})
+	agones := NewAgones(client, "default")
+
+	_, err := agones.Allocate(context.Background(), "match-1", "game-1", "")
+
+	assert.ErrorIs(t, err, domain.ErrFleetUnavailable)
+	assert.Empty(t, client.Actions(), "não chama a API k8s com fleet vazia")
+}
+
 func TestAgonesAllocate_UnAllocated_ErrNoServer(t *testing.T) {
 	client := newFakeDynamic(t, map[string]any{"state": "UnAllocated"})
 
-	agones := NewAgones(client, "default", "packet-arena")
-	_, err := agones.Allocate(context.Background(), "match-1", "game-1")
+	agones := NewAgones(client, "default")
+	_, err := agones.Allocate(context.Background(), "match-1", "game-1", "packet-arena")
 
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }
@@ -79,7 +117,7 @@ func TestAgonesRelease_GameServerInexistente_Idempotente(t *testing.T) {
 		return true, nil, k8serrors.NewNotFound(schema.GroupResource{Group: "agones.dev", Resource: "gameservers"}, "gs-sumiu")
 	})
 
-	agones := NewAgones(client, "default", "packet-arena")
+	agones := NewAgones(client, "default")
 	// Unity já fez Shutdown() → o GameServer não existe mais; não é erro.
 	assert.NoError(t, agones.Release(context.Background(), "gs-sumiu"))
 }
@@ -94,7 +132,7 @@ func TestAgonesRelease_DeletaGameServerPorNome(t *testing.T) {
 		return true, nil, nil
 	})
 
-	agones := NewAgones(client, "default", "packet-arena")
+	agones := NewAgones(client, "default")
 	require.NoError(t, agones.Release(context.Background(), "packet-arena-abcde-12345"))
 	assert.Equal(t, "packet-arena-abcde-12345", deleted)
 }
@@ -113,30 +151,34 @@ func gameServerObj(name, fleet string) *unstructured.Unstructured {
 	}}
 }
 
-func TestAgonesLiveServerIDs_DevolveNomesDaFleet(t *testing.T) {
+// TestAgonesLiveServerIDs_DevolveTodasAsFleetsDoNamespace (ADR-0026): sem
+// filtro de label — múltiplas Fleets (uma por jogo) coexistem no namespace, e o
+// sweeper de reconciliação (ADR-0022) precisa enxergar todas, não só uma.
+func TestAgonesLiveServerIDs_DevolveTodasAsFleetsDoNamespace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "agones.dev", Version: "v1", Kind: "GameServerList"}, &unstructured.UnstructuredList{})
 	client := dynamicfake.NewSimpleDynamicClient(scheme,
 		gameServerObj("packet-arena-aaaaa", "packet-arena"),
 		gameServerObj("packet-arena-bbbbb", "packet-arena"),
-		gameServerObj("outra-fleet-ccccc", "outra-fleet"), // filtrada pelo selector
+		gameServerObj("capoeira-souls-ccccc", "capoeira-souls"),
 	)
 
-	agones := NewAgones(client, "default", "packet-arena")
+	agones := NewAgones(client, "default")
 	live, err := agones.LiveServerIDs(context.Background())
 
 	require.NoError(t, err)
 	assert.Equal(t, map[string]struct{}{
-		"packet-arena-aaaaa": {},
-		"packet-arena-bbbbb": {},
-	}, live, "só os GameServers da fleet")
+		"packet-arena-aaaaa":  {},
+		"packet-arena-bbbbb":  {},
+		"capoeira-souls-ccccc": {},
+	}, live, "todos os GameServers do namespace, de qualquer fleet")
 }
 
 func TestWithPublicHost_ReescreveHostMantemPorta(t *testing.T) {
 	inner := New([]string{"172.19.0.3:7127"})
 	alloc := WithPublicHost(inner, "127.0.0.1")
 
-	server, err := alloc.Allocate(context.Background(), "match-1", "game-1")
+	server, err := alloc.Allocate(context.Background(), "match-1", "game-1", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "127.0.0.1:7127", server.Address, "host reescrito, porta dinâmica mantida")
