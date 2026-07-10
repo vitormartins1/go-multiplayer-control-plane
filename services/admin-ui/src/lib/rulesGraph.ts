@@ -396,17 +396,59 @@ export function pathHighlight(
   return { nodeIds, edgeIds };
 }
 
-// siblingRuleIds devolve os ids de nós `rule`/`ruleDraft` que têm uma edge
-// direta pra qualquer node em focusNodeIds (tipicamente o resultado de
-// pathHighlight de uma regra) — usado pelo toggle "regras relacionadas"
-// (spec 055): acha quem mais escuta a mesma source/eventType da regra
-// focada. Um salto só, por design — não expande recursivamente (senão
-// reintroduz a poluição visual que o foco existe pra evitar).
-export function siblingRuleIds(edges: Edge[], focusNodeIds: Set<string>): Set<string> {
+// siblingRuleIds devolve os ids de nós `rule`/`ruleDraft` "vizinhos" da regra
+// focada (toggle "regras relacionadas", spec 055) — refinado (achado do
+// Vitor testando: a lista enchia demais). Dois critérios:
+// - EVENT TYPE compartilhado: basta as duas regras emitirem pro mesmo type —
+//   é um identificador discreto (não tem "valor" pra comparar), então
+//   compartilhar já é uma relação real. Sempre considerado (não é filtrado
+//   por `allowedKinds` — é um sinal de natureza diferente da fonte).
+// - SOURCE (fact/mode/stat) compartilhada: NÃO basta usar a mesma chave
+//   (ex.: "role") — precisa ser o MESMO valor de condição (ex.: as duas com
+//   "= coop"). Duas regras com role=coop e role=invader não têm nada a ver
+//   uma com a outra, mesmo referenciando a mesma fonte.
+// `allowedKinds` (2026-07-10, achado do Vitor: facts genéricos tipo
+// outcome=SUCCESS sozinhos já geram muito fan-out) filtra a comparação de
+// SOURCE por kind (SourceKind — "structural"/"mode"/"stat"); vazio desliga o
+// mecanismo inteiro (nem event type conta) — é o que representa o toggle
+// "desligado" na UI (Chip.Group sem nenhum chip marcado).
+// Um salto só, por design — não expande recursivamente (senão reintroduz a
+// poluição visual que o foco existe pra evitar).
+export function siblingRuleIds(
+  nodes: Node[],
+  edges: Edge[],
+  focusRuleId: string,
+  allowedKinds: Set<SourceKind>,
+): Set<string> {
+  if (allowedKinds.size === 0) return new Set();
+
+  const kindOf = new Map<string, SourceKind>();
+  for (const n of nodes) {
+    if (n.type === "source") kindOf.set(n.id, (n.data as unknown as SourceNodeData).kind);
+  }
+
+  const focusEventTypes = new Set(
+    edges.filter((e) => e.source === focusRuleId && e.target.startsWith("t:")).map((e) => e.target),
+  );
+  // label exato por source da regra focada (ex.: "src:role" -> "= coop").
+  const focusSourceLabels = new Map(
+    edges.filter((e) => e.target === focusRuleId && e.source.startsWith("src:")).map((e) => [e.source, e.label]),
+  );
+
   const siblings = new Set<string>();
   for (const e of edges) {
-    if (focusNodeIds.has(e.source) && e.target.startsWith("r:")) siblings.add(e.target);
-    if (focusNodeIds.has(e.target) && e.source.startsWith("r:")) siblings.add(e.source);
+    if (e.source.startsWith("r:") && e.source !== focusRuleId && focusEventTypes.has(e.target)) {
+      siblings.add(e.source);
+    }
+    if (
+      e.target.startsWith("r:") &&
+      e.target !== focusRuleId &&
+      e.source.startsWith("src:") &&
+      focusSourceLabels.get(e.source) === e.label
+    ) {
+      const kind = kindOf.get(e.source);
+      if (kind && allowedKinds.has(kind)) siblings.add(e.target);
+    }
   }
   return siblings;
 }

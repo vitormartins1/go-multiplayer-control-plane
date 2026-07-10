@@ -1,6 +1,7 @@
 import {
   Badge,
   Button,
+  Chip,
   CloseButton,
   Drawer,
   Group,
@@ -61,6 +62,7 @@ import {
   type DraftGraphInput,
   type EventTypeNodeData,
   type RuleNodeData,
+  type SourceKind,
   type SourceNodeData,
   type StatInfo,
 } from "../lib/rulesGraph";
@@ -129,7 +131,11 @@ export function GameEventRulesCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showStats, setShowStats] = useState(true);
-  const [showRelated, setShowRelated] = useState(false);
+  // relatedKinds (2026-07-10): "regras relacionadas" por kind de source
+  // (facts/modo/stats) em vez de um switch único — vazio = desligado (achado
+  // do Vitor: facts genéricos tipo outcome=SUCCESS sozinhos já geram muito
+  // fan-out; agora dá pra restringir a só stats, por exemplo).
+  const [relatedKinds, setRelatedKinds] = useState<Set<SourceKind>>(new Set());
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [deleting, setDeleting] = useState<EventRule | null>(null);
   // event type órfão a partir do qual criar um achievement (quick-create).
@@ -246,17 +252,18 @@ export function GameEventRulesCanvas({
   // mesmo durante criação pura.
   const focusPath = useMemo(() => {
     if (!effectiveFocusId) return null;
-    const base = pathHighlight(graph.edges, `r:${effectiveFocusId}`);
-    if (!showRelated) return base;
+    const ruleNodeId = `r:${effectiveFocusId}`;
+    const base = pathHighlight(graph.edges, ruleNodeId);
+    if (relatedKinds.size === 0) return base;
     const nodeIds = new Set(base.nodeIds);
     const edgeIds = new Set(base.edgeIds);
-    for (const siblingId of siblingRuleIds(graph.edges, base.nodeIds)) {
+    for (const siblingId of siblingRuleIds(graph.nodes, graph.edges, ruleNodeId, relatedKinds)) {
       const p = pathHighlight(graph.edges, siblingId);
       p.nodeIds.forEach((id) => nodeIds.add(id));
       p.edgeIds.forEach((id) => edgeIds.add(id));
     }
     return { nodeIds, edgeIds };
-  }, [graph, effectiveFocusId, showRelated]);
+  }, [graph, effectiveFocusId, relatedKinds]);
 
   // --- callbacks do rascunho (injetados no node.data) ---
   function patchDraft(patch: Partial<DraftState>) {
@@ -647,13 +654,28 @@ export function GameEventRulesCanvas({
           Nova regra
         </Button>
         <Switch size="xs" label="Stats" checked={showStats} onChange={(e) => setShowStats(e.currentTarget.checked)} />
-        <Switch
-          size="xs"
-          label="Regras relacionadas"
-          checked={showRelated}
-          disabled={!focusRuleId}
-          onChange={(e) => setShowRelated(e.currentTarget.checked)}
-        />
+        <Group gap={4} wrap="nowrap">
+          <Text size="xs" c="dimmed">
+            Regras relacionadas:
+          </Text>
+          <Chip.Group
+            multiple
+            value={[...relatedKinds]}
+            onChange={(vals) => setRelatedKinds(new Set(vals as SourceKind[]))}
+          >
+            <Group gap={4} wrap="nowrap">
+              <Chip size="xs" value="structural" disabled={!focusRuleId}>
+                Facts
+              </Chip>
+              <Chip size="xs" value="mode" disabled={!focusRuleId}>
+                Modo
+              </Chip>
+              <Chip size="xs" value="stat" disabled={!focusRuleId}>
+                Stats
+              </Chip>
+            </Group>
+          </Chip.Group>
+        </Group>
         <TextInput
           size="xs"
           w={200}
@@ -681,7 +703,7 @@ export function GameEventRulesCanvas({
           nodeTypes={NODE_TYPES}
           onNodeClick={onNodeClick}
           onPaneClick={() => setSelectedId(null)}
-          fitKey={`${arch}|${focusRuleId ?? "none"}|${showRelated}|${!!draft}|${nodes.length}`}
+          fitKey={`${arch}|${focusRuleId ?? "none"}|${[...relatedKinds].sort().join(",")}|${!!draft}|${nodes.length}`}
           height="calc(100vh - 345px)"
           overlay={
             selectedNode && !draft ? (
