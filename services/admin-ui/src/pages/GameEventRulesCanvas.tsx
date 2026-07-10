@@ -10,9 +10,11 @@ import {
   Modal,
   NumberInput,
   Paper,
-  Select,
+  Popover,
+  ScrollArea,
   Stack,
   Switch,
+  Table,
   Text,
   Textarea,
   TextInput,
@@ -22,7 +24,9 @@ import {
   IconBan,
   IconChevronDown,
   IconChevronUp,
+  IconInfoCircle,
   IconPlus,
+  IconRefresh,
   IconRotate2,
   IconSearch,
   IconTrash,
@@ -51,6 +55,7 @@ import {
   type MultiplayerProfile,
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
+import { matchesListFilter } from "../lib/eventRules";
 import {
   buildMatchValue,
   condLabel,
@@ -142,6 +147,17 @@ export function GameEventRulesCanvas({
 }) {
   const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(archetypeOptions[0]);
   const arch = archetypeOptions.includes(archetype) ? archetype : archetypeOptions[0];
+
+  // dockCollapsed (spec 058): o painel único de navegação/controles (lista +
+  // toolbar + info) que hoje fica flutuando sobre o canvas — mesmo padrão
+  // recolher/expandir do painel de detalhe do node.
+  const [dockCollapsed, setDockCollapsed] = useState(false);
+  const [listFilter, setListFilter] = useState("");
+  // draftArchetype (spec 058): o seletor de arquétipo saiu da toolbar fixa —
+  // só importa no momento de CRIAR uma regra num jogo com mais de um
+  // arquétipo (edição nunca muda arquétipo, spec 016); inicializado a partir
+  // do arquétipo ativo (arch) quando o form de criação abre.
+  const [draftArchetype, setDraftArchetype] = useState<MultiplayerProfile["archetype"]>(archetypeOptions[0]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // detailsCollapsed (painel de detalhe do node selecionado): recolhe pra só
@@ -333,6 +349,15 @@ export function GameEventRulesCanvas({
     setDraft(null);
   }
 
+  // startCreate abre o form de criação in-canvas (spec 048/058) — parte do
+  // arquétipo atualmente ativo (arch); se o jogo tiver mais de um, o
+  // draftArchetype fica editável no próprio form (archetypePicker).
+  function startCreate() {
+    setSelectedId(null);
+    setDraftArchetype(arch);
+    setDraft({ editingRuleID: null, rows: [EMPTY_ROW], linked: [], news: newGhost(), error: null, saving: false });
+  }
+
   // startEdit transforma o nó da regra no form (spec 050) — mesmo estado da
   // criação, pré-carregado do match/types persistidos. Abrir edição descarta
   // rascunho aberto (e vice-versa): um form por vez.
@@ -391,7 +416,11 @@ export function GameEventRulesCanvas({
         await api.updateEventRule(gameId, draft.editingRuleID, { match, eventTypes });
         notifications.show({ color: "green", message: "Regra atualizada." });
       } else {
-        await api.createEventRule(gameId, { archetype: arch, match, eventTypes });
+        // Sem seletor manual na toolbar (spec 058): jogo de 1 arquétipo só
+        // usa `arch` direto; com mais de um, draftArchetype (editável no
+        // próprio form, archetypePicker) manda.
+        const archetype = archetypeOptions.length > 1 ? draftArchetype : arch;
+        await api.createEventRule(gameId, { archetype, match, eventTypes });
         notifications.show({ color: "green", message: "Regra adicionada." });
       }
       setDraft(null);
@@ -521,6 +550,14 @@ export function GameEventRulesCanvas({
           onAddRow: () => onAddRow(),
           onSave: saveDraft,
           onCancel: cancelDraft,
+          archetypePicker:
+            !draft.editingRuleID && archetypeOptions.length > 1
+              ? {
+                  value: draftArchetype,
+                  options: archetypeOptions.map((a) => ({ value: a, label: ARCHETYPE_META[a].label })),
+                  onChange: (v) => setDraftArchetype(v as MultiplayerProfile["archetype"]),
+                }
+              : undefined,
         }
       : null;
 
@@ -597,7 +634,19 @@ export function GameEventRulesCanvas({
     });
     return { nodes, edges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, selectedId, draft, search, keySuggestions, knownValues, modeIdSuggestions, typeSuggestions, focusPath]);
+  }, [
+    graph,
+    selectedId,
+    draft,
+    search,
+    keySuggestions,
+    knownValues,
+    modeIdSuggestions,
+    typeSuggestions,
+    focusPath,
+    draftArchetype,
+    archetypeOptions,
+  ]);
 
   const selectedNode = useMemo(
     () => graph.nodes.find((n) => n.id === selectedId) ?? null,
@@ -674,130 +723,74 @@ export function GameEventRulesCanvas({
 
   return (
     <Stack gap="xs">
-      <Group gap="xs">
-        <Select
-          size="xs"
-          w={230}
-          data={archetypeOptions.map((a) => ({ value: a, label: ARCHETYPE_META[a].label }))}
-          value={arch}
-          onChange={(v) => {
-            if (v) {
-              setArchetype(v as MultiplayerProfile["archetype"]);
-              setSelectedId(null);
-              setDraft(null);
-              onFocusRule(null); // regra focada pode não pertencer ao arquétipo novo
-            }
-          }}
-          allowDeselect={false}
-        />
-        <Button
-          size="xs"
-          leftSection={<IconPlus size={14} />}
-          disabled={!!draft}
-          onClick={() => {
-            setSelectedId(null);
-            setDraft({ editingRuleID: null, rows: [EMPTY_ROW], linked: [], news: newGhost(), error: null, saving: false });
-          }}
-        >
-          Nova regra
-        </Button>
-        <Group gap={4} wrap="nowrap">
-          <Text size="xs" c="dimmed">
-            Regras relacionadas:
-          </Text>
-          <Chip.Group
-            multiple
-            value={[...relatedKinds]}
-            onChange={(vals) => setRelatedKinds(new Set(vals as SourceKind[]))}
-          >
-            <Group gap={4} wrap="nowrap">
-              <Chip size="xs" value="structural" disabled={!focusRuleId}>
-                Facts
-              </Chip>
-              <Chip size="xs" value="mode" disabled={!focusRuleId}>
-                Modo
-              </Chip>
-              <Chip size="xs" value="stat" disabled={!focusRuleId}>
-                Stats
-              </Chip>
-            </Group>
-          </Chip.Group>
-          <Switch
-            size="xs"
-            label="qualquer limiar"
-            checked={statIgnoreValue}
-            disabled={!relatedKinds.has("stat")}
-            onChange={(e) => setStatIgnoreValue(e.currentTarget.checked)}
+      <FlowCanvas
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={NODE_TYPES}
+        onNodeClick={onNodeClick}
+        onPaneClick={() => setSelectedId(null)}
+        fitKey={`${arch}|${focusRuleId ?? "none"}|${[...relatedKinds].sort().join(",")}|${statIgnoreValue}|${!!draft}|${nodes.length}`}
+        height="calc(100vh - 224px)"
+        dock={
+          <EventRulesDock
+            rules={rules}
+            focusRuleId={focusRuleId}
+            onFocusRule={onFocusRule}
+            listFilter={listFilter}
+            onListFilter={setListFilter}
+            collapsed={dockCollapsed}
+            onToggleCollapsed={() => setDockCollapsed((c) => !c)}
+            draft={draft}
+            onNewRule={startCreate}
+            relatedKinds={relatedKinds}
+            onRelatedKinds={setRelatedKinds}
+            statIgnoreValue={statIgnoreValue}
+            onStatIgnoreValue={setStatIgnoreValue}
+            search={search}
+            onSearch={setSearch}
+            onDelete={(r) => setDeleting(r)}
+            onToggleSuppress={toggleSuppress}
+            onReload={reload}
           />
-        </Group>
-        <TextInput
-          size="xs"
-          w={200}
-          placeholder="buscar no subgrafo…"
-          leftSection={<IconSearch size={13} />}
-          value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
-          rightSection={search ? <CloseButton size="xs" onClick={() => setSearch("")} /> : undefined}
-        />
-        {draft && (
-          <Text size="xs" c="dimmed">
-            Montando rascunho — clique numa fonte pra adicionar condição; num event type pra ligar.
-          </Text>
-        )}
-      </Group>
-
-      {!draft && !focusRuleId ? (
-        <Text c="dimmed" ta="center" py={80}>
-          Selecione uma regra na lista para visualizar.
-        </Text>
-      ) : (
-        <FlowCanvas
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={NODE_TYPES}
-          onNodeClick={onNodeClick}
-          onPaneClick={() => setSelectedId(null)}
-          fitKey={`${arch}|${focusRuleId ?? "none"}|${[...relatedKinds].sort().join(",")}|${statIgnoreValue}|${!!draft}|${nodes.length}`}
-          height="calc(100vh - 345px)"
-          overlay={
-            selectedNode && !draft ? (
-              <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
-                <Group justify="space-between" wrap="nowrap" gap={4} mb={detailsCollapsed ? 0 : "xs"}>
-                  <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-                    <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
-                      {detailsHeaderSummary(selectedNode).kind}
-                    </Text>
-                    <Text size="xs" c="dimmed" truncate="end" style={{ minWidth: 0 }}>
-                      {detailsHeaderSummary(selectedNode).label}
-                    </Text>
-                  </Group>
-                  <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => setDetailsCollapsed((c) => !c)}
-                      aria-label={detailsCollapsed ? "Expandir detalhe" : "Recolher detalhe"}
-                    >
-                      {detailsCollapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
-                    </ActionIcon>
-                    <CloseButton size="sm" onClick={() => setSelectedId(null)} aria-label="Fechar detalhe" />
-                  </Group>
+        }
+        overlay={
+          selectedNode && !draft ? (
+            <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
+              <Group justify="space-between" wrap="nowrap" gap={4} mb={detailsCollapsed ? 0 : "xs"}>
+                <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                  <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
+                    {detailsHeaderSummary(selectedNode).kind}
+                  </Text>
+                  <Text size="xs" c="dimmed" truncate="end" style={{ minWidth: 0 }}>
+                    {detailsHeaderSummary(selectedNode).label}
+                  </Text>
                 </Group>
-                <Collapse in={!detailsCollapsed}>
-                  <NodeDetails
-                    node={selectedNode}
-                    unconditionalTypes={unconditionalTypes}
-                    onDelete={(r) => setDeleting(r)}
-                    onToggleSuppress={toggleSuppress}
-                    onQuickAch={(et) => setQuickAchType(et)}
-                  />
-                </Collapse>
-              </Paper>
-            ) : undefined
-          }
-        />
-      )}
+                <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => setDetailsCollapsed((c) => !c)}
+                    aria-label={detailsCollapsed ? "Expandir detalhe" : "Recolher detalhe"}
+                  >
+                    {detailsCollapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
+                  </ActionIcon>
+                  <CloseButton size="sm" onClick={() => setSelectedId(null)} aria-label="Fechar detalhe" />
+                </Group>
+              </Group>
+              <Collapse in={!detailsCollapsed}>
+                <NodeDetails
+                  node={selectedNode}
+                  unconditionalTypes={unconditionalTypes}
+                  onDelete={(r) => setDeleting(r)}
+                  onToggleSuppress={toggleSuppress}
+                  onQuickAch={(et) => setQuickAchType(et)}
+                />
+              </Collapse>
+            </Paper>
+          ) : undefined
+        }
+      />
 
       {/* Quick-create de achievement a partir de um event type órfão (spec
           048) — mesmos campos/validação do form da aba Achievements, critério
@@ -829,6 +822,215 @@ export function GameEventRulesCanvas({
         </Stack>
       </Modal>
     </Stack>
+  );
+}
+
+// EventRulesDock (spec 058): painel único flutuando sobre o canvas — lista
+// de regras + toolbar (nova regra, relacionadas, busca) + texto explicativo
+// (popover de info), tudo recolhível junto (mesmo padrão do painel de
+// detalhe do node). Antes disso, lista/toolbar/texto eram chrome FIXO em
+// GameEventRules.tsx, disputando espaço permanente com o canvas — a mudança
+// migrou tudo isso pra dentro do canvas, deixando a aba sem scroll de
+// página (o scroll que sobra é só o interno da lista, dentro do painel).
+function EventRulesDock({
+  rules,
+  focusRuleId,
+  onFocusRule,
+  listFilter,
+  onListFilter,
+  collapsed,
+  onToggleCollapsed,
+  draft,
+  onNewRule,
+  relatedKinds,
+  onRelatedKinds,
+  statIgnoreValue,
+  onStatIgnoreValue,
+  search,
+  onSearch,
+  onDelete,
+  onToggleSuppress,
+  onReload,
+}: {
+  rules: EventRule[];
+  focusRuleId: string | null;
+  onFocusRule: (ruleId: string | null) => void;
+  listFilter: string;
+  onListFilter: (v: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  draft: DraftState | null;
+  onNewRule: () => void;
+  relatedKinds: Set<SourceKind>;
+  onRelatedKinds: (kinds: Set<SourceKind>) => void;
+  statIgnoreValue: boolean;
+  onStatIgnoreValue: (v: boolean) => void;
+  search: string;
+  onSearch: (v: string) => void;
+  onDelete: (r: EventRule) => void;
+  onToggleSuppress: (r: EventRule) => void;
+  onReload: () => void;
+}) {
+  const filtered = rules.filter(matchesListFilter(listFilter));
+  return (
+    <Paper
+      withBorder
+      shadow="md"
+      w={320}
+      style={{
+        background: "rgba(18, 24, 33, 0.95)",
+        maxHeight: "calc(100vh - 190px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <Group justify="space-between" wrap="nowrap" p="xs" pb={collapsed ? "xs" : 4}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="xs" fw={700}>
+            Event Rules
+          </Text>
+          <Badge size="xs" variant="light" color="gray">
+            {rules.length}
+          </Badge>
+          <Popover width={300} withArrow position="bottom-start" withinPortal>
+            <Popover.Target>
+              <ActionIcon size="xs" variant="subtle" color="gray" aria-label="Como funciona">
+                <IconInfoCircle size={13} />
+              </ActionIcon>
+            </Popover.Target>
+            <Popover.Dropdown>
+              <Text size="xs">
+                Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome
+                no host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event
+                types listados ao progresso das conquistas cadastradas na aba Achievements. Regras{" "}
+                <b>globais</b> valem pra todo jogo com o arquétipo (semeadas por padrão, não editáveis
+                aqui); regras do <b>jogo</b> só valem pra este jogo. Selecione uma regra pra ver o subgrafo
+                dela no canvas.
+              </Text>
+            </Popover.Dropdown>
+          </Popover>
+        </Group>
+        <Group gap={2} wrap="nowrap">
+          <ActionIcon size="sm" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar">
+            <IconRefresh size={14} />
+          </ActionIcon>
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            color="gray"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expandir painel" : "Recolher painel"}
+          >
+            {collapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
+          </ActionIcon>
+        </Group>
+      </Group>
+      <Collapse in={!collapsed} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <Stack gap={6} px="xs" pb="xs">
+          <Group gap={6} wrap="nowrap">
+            <Button size="xs" leftSection={<IconPlus size={13} />} disabled={!!draft} onClick={onNewRule}>
+              Nova
+            </Button>
+            <TextInput
+              size="xs"
+              placeholder="filtrar…"
+              style={{ flex: 1 }}
+              value={listFilter}
+              onChange={(e) => onListFilter(e.currentTarget.value)}
+              rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
+            />
+          </Group>
+          <Group gap={4} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              Relacionadas:
+            </Text>
+            <Chip.Group multiple value={[...relatedKinds]} onChange={(v) => onRelatedKinds(new Set(v as SourceKind[]))}>
+              <Group gap={4} wrap="nowrap">
+                <Chip size="xs" value="structural" disabled={!focusRuleId}>
+                  Facts
+                </Chip>
+                <Chip size="xs" value="mode" disabled={!focusRuleId}>
+                  Modo
+                </Chip>
+                <Chip size="xs" value="stat" disabled={!focusRuleId}>
+                  Stats
+                </Chip>
+              </Group>
+            </Chip.Group>
+          </Group>
+          {relatedKinds.has("stat") && (
+            <Switch
+              size="xs"
+              label="qualquer limiar"
+              checked={statIgnoreValue}
+              onChange={(e) => onStatIgnoreValue(e.currentTarget.checked)}
+            />
+          )}
+          <TextInput
+            size="xs"
+            placeholder="buscar no subgrafo…"
+            leftSection={<IconSearch size={12} />}
+            value={search}
+            onChange={(e) => onSearch(e.currentTarget.value)}
+            rightSection={search ? <CloseButton size="xs" onClick={() => onSearch("")} /> : undefined}
+          />
+          {draft && (
+            <Text size="xs" c="dimmed">
+              Montando rascunho — clique numa fonte pra adicionar condição; num event type pra ligar.
+            </Text>
+          )}
+        </Stack>
+        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+          <Table striped highlightOnHover fz="xs">
+            <Table.Tbody>
+              {filtered.map((r) => (
+                <Table.Tr
+                  key={r.id}
+                  onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
+                  style={{
+                    cursor: "pointer",
+                    opacity: r.suppressed ? 0.5 : undefined,
+                    background: r.id === focusRuleId ? "var(--mantine-color-blue-light)" : undefined,
+                  }}
+                >
+                  <Table.Td style={{ whiteSpace: "nowrap" }}>
+                    <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                      {r.scope === "global" ? "global" : "jogo"}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={3} wrap="wrap">
+                      {r.eventTypes.map((et) => (
+                        <Badge key={et} size="xs" variant="light" color={ARCHETYPE_META[r.archetype].color}>
+                          {et}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
+                    {r.scope === "game" ? (
+                      <ActionIcon size="xs" variant="subtle" color="red" onClick={() => onDelete(r)} aria-label="Remover">
+                        <IconTrash size={13} />
+                      </ActionIcon>
+                    ) : (
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color={r.suppressed ? "teal" : "orange"}
+                        onClick={() => onToggleSuppress(r)}
+                        aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+                      >
+                        {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
+                      </ActionIcon>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+      </Collapse>
+    </Paper>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   Button,
   Group,
   Popover,
+  Select,
   Text,
   UnstyledButton,
 } from "@mantine/core";
@@ -156,6 +157,14 @@ export type RuleDraftData = {
   onAddRow: () => void;
   onSave: () => void;
   onCancel: () => void;
+  // archetypePicker (spec 058): só presente em criação (mode "create") num
+  // jogo com mais de um arquétipo — undefined = não renderiza nada (jogo de
+  // 1 arquétipo só, ou edição, onde o arquétipo é imutável, spec 016).
+  archetypePicker?: {
+    value: string;
+    options: Array<{ value: string; label: string }>;
+    onChange: (v: string) => void;
+  };
 };
 
 // inputs do form in-canvas com a identidade do card (spec 050) — sem o visual
@@ -213,6 +222,17 @@ export function RuleDraftNode({ data }: NodeProps) {
         </Group>
       </div>
       <div className="flow-card__body nodrag">
+        {!editing && d.archetypePicker && (
+          <Select
+            size="xs"
+            classNames={FLOW_INPUT}
+            data={d.archetypePicker.options}
+            value={d.archetypePicker.value}
+            onChange={(v) => v && d.archetypePicker!.onChange(v)}
+            allowDeselect={false}
+            comboboxProps={{ withinPortal: true }}
+          />
+        )}
         {d.rows.map((row, i) => (
           <Group key={i} gap={4} wrap="nowrap">
             <Autocomplete
