@@ -217,6 +217,40 @@ func TestApplyMatchResult_StatCumulative_Idempotente(t *testing.T) {
 	assert.Equal(t, 30, prog["sharpshooter"].Progress, "acumulado não dobra na reentrega")
 }
 
+// Delta negativo (payload malformado do dedicated server, achado no
+// /code-review) não pode decrementar progresso já acumulado legitimamente.
+func TestApplyMatchResult_StatCumulative_DeltaNegativo_NaoDecrementa(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": 40}}}, at)
+	require.NoError(t, err)
+
+	_, err = repo.ApplyMatchResult(ctx, sandbox, "m2",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": -999}}}, at)
+	require.NoError(t, err)
+
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 40, prog["sharpshooter"].Progress, "delta negativo clampado a 0, progresso preservado")
+}
+
+// Delta negativo na primeira ocorrência (jogador ainda sem linha em
+// player_achievements) não pode gravar progress negativo no INSERT inicial.
+func TestApplyMatchResult_StatCumulative_DeltaNegativoNaPrimeiraPartida_NaoGravaNegativo(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1",
+		[]domain.PlayerMatchInput{{PlayerID: "p1", Stats: map[string]int64{"kills": -50}}}, at)
+	require.NoError(t, err)
+
+	prog := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 0, prog["sharpshooter"].Progress, "delta negativo na primeira ocorrência clampado a 0")
+}
+
 // Stat ausente do resultado -> a conquista daquele stat não ganha progresso.
 func TestApplyMatchResult_StatAusente_SemProgresso(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))

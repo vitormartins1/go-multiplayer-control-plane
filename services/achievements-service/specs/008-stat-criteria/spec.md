@@ -59,3 +59,21 @@ Uma conquista tem **um** critério, discriminado por `statKey`:
 - **`teamId`** — conquistas por time / "vencer como time X" (follow-up; o outcome já carrega `teamId`).
 - **leaderboard acumulativo** (A2, spec própria).
 - Presets/seed por jogo real (os stats vivem no `queue_arena`; seed só no `sandbox`).
+
+## Follow-up — delta negativo clampado a 0
+
+Achado no `/code-review` do projeto como um todo (2026-07-10): `stats` chega
+via envelope SQS de um dedicated server (fonte externa, não confiável) e o
+`delta` do stat era somado direto no SQL sem validar sinal — a spec original
+(§ "Aplicar o resultado") assumia `valor >= 0` sem enforçar. Um payload
+malformado com `kills: -999` no modo `cumulative` decrementaria (ou zeraria
+via `LEAST`) progresso já acumulado legitimamente; no INSERT inicial (jogador
+sem linha ainda), gravaria `progress` negativo em qualquer modo.
+
+`recordStatProgress` (`internal/repository/postgres_achievement.go`) agora
+clampa `delta` a 0 antes de montar a query — ponto único, cobre os dois modos
+e o INSERT inicial. Sem rejeitar a mensagem inteira (evitaria poison-message
+no SQS: um envelope permanentemente malformado nunca marcaria
+`processed_matches`, causando redelivery infinito). Testes novos:
+`TestApplyMatchResult_StatCumulative_DeltaNegativo_NaoDecrementa` e
+`TestApplyMatchResult_StatCumulative_DeltaNegativoNaPrimeiraPartida_NaoGravaNegativo`.

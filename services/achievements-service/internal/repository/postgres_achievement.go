@@ -278,8 +278,16 @@ func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Cont
 // atômica (ADR-0023 A1). cumulative soma o valor da partida ao acumulado;
 // per_match guarda o melhor valor de partida. Em ambos o progress é capado em
 // target, o desbloqueio é registrado uma única vez (COALESCE) e o WHERE evita
-// mexer após o desbloqueio. delta é o valor do stat nesta partida (>= 0).
+// mexer após o desbloqueio. delta é o valor do stat nesta partida, esperado
+// >= 0 — mas vem de fora (dedicated server via envelope SQS, achado no
+// /code-review), então um delta negativo malformado é clampado a 0 aqui: sem
+// isso, o modo cumulative decrementaria (ou zeraria via LEAST) progresso já
+// legítimo de partidas anteriores, e o INSERT inicial (novo jogador) gravaria
+// progress negativo em qualquer modo.
 func recordStatProgress(ctx context.Context, qr querier, gameID, playerID, achievementID string, target int, delta int64, mode string, at time.Time) (bool, error) {
+	if delta < 0 {
+		delta = 0
+	}
 	// A expressão de progresso difere pelo modo; o resto da instrução é igual.
 	// cumulative: progress + delta ; per_match: max(progress, delta).
 	// $6 (delta) precisa de cast explícito: sem ele o Postgres infere text (o
