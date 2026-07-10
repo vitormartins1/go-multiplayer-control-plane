@@ -17,7 +17,8 @@ services:
       ALLOCATOR_MODE: agones
       KUBECONFIG: /kubeconfig
       AGONES_NAMESPACE: default
-      AGONES_FLEET: packet-arena
+      # Fleet não é mais fixa por env var (ADR-0026): cada sessão resolve a
+      # Fleet do perfil do jogo no game-registry (PUT /games/{id}/fleet).
       SESSION_TTL: 30m
     volumes:
       - ../../../unity-queue-arena-data-plane/tools/pi5/kubeconfig-compose-pi5.yaml:/kubeconfig:ro

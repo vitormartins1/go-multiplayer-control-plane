@@ -33,6 +33,11 @@ Esta spec fecha o gap: a Fleet passa a vir do jogo (não do perfil/modo — amen
 - Antes de habilitar esta spec em qualquer ambiente com Agones real ativo (hoje: só o `queue_arena`, Fleet `packet-arena`), o perfil do jogo correspondente precisa ter `fleet: "packet-arena"` setado via game-registry (spec 012) — senão a primeira sessão depois do deploy falha com `FailedPrecondition`. É um passo manual único, documentado aqui e no runbook (não há migração automática: `fleet` é atributo por perfil/jogo, não um default de schema).
 - `host_world_dropin` (`unity-host-world-dropin-data-plane`) segue no adapter `static` até sua própria Fase 5 — item 4 acima garante que nada muda para ele nesta spec.
 
+**Executado (2026-07-10):**
+- `PUT /games/{id}/fleet` chamado para os dois jogos de referência: **Packet Arena** (`e4c9c5b4-e54f-4884-b377-ace16160cf8b`) → `fleet: "packet-arena"`; **Capoeira Souls** (`274a9171-83c7-407b-bc43-e4a7730134c8`, `host_world_dropin`) → `fleet: "capoeira-souls"` (pré-cadastrado mesmo sem Fleet Kubernetes própria ainda — a Fase 5 daquele repo só precisa criar o `fleet.yaml`, o lado do control plane já está pronto).
+- `infra/docker/docker-compose.agones.yml` e `docker-compose.agones-pi5.yml` tinham `AGONES_FLEET: packet-arena` sobrando (env var morta desde a remoção do item 5) — removido dos dois.
+- Docs de referência cross-repo atualizadas nos dois repos Unity (`unity-queue-arena-data-plane/docs/ROADMAP.md`, `unity-host-world-dropin-data-plane/docs/ROADMAP.md` + `CLAUDE.md`) — cada um com uma nota "o que mudou no backend e o que fazer aqui" para quem abrir sessão de trabalho naquelas pastas.
+
 ## Fora de escopo
 
 - Criar a Fleet no cluster (k3d/Pi5) — trabalho de infra (Terraform/manifests Agones), item de runbook separado, não desta spec.
