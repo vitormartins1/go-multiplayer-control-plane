@@ -154,7 +154,6 @@ export type RuleDraftData = {
   onRow: (i: number, patch: Partial<MatchRow>) => void;
   onRemoveRow: (i: number) => void;
   onAddRow: () => void;
-  onAddType: () => void;
   onSave: () => void;
   onCancel: () => void;
 };
@@ -204,9 +203,14 @@ export function RuleDraftNode({ data }: NodeProps) {
       <div className="flow-card__header" style={{ cursor: "grab" }}>
         {editing ? <IconPencil size={12} /> : <IconGitBranch size={12} />}
         {editing ? "Editar regra" : "Nova regra"}
-        <Badge size="xs" variant="outline" color="yellow" ml="auto">
-          {editing ? "editando" : "rascunho"}
-        </Badge>
+        <Group gap={4} ml="auto" className="nodrag">
+          <Button size="compact-xs" variant="subtle" color="gray" leftSection={<IconX size={12} />} onClick={d.onCancel}>
+            Cancelar
+          </Button>
+          <Button size="compact-xs" variant="light" leftSection={<IconCheck size={12} />} loading={d.saving} onClick={d.onSave}>
+            Salvar
+          </Button>
+        </Group>
       </div>
       <div className="flow-card__body nodrag">
         {d.rows.map((row, i) => (
@@ -258,35 +262,6 @@ export function RuleDraftNode({ data }: NodeProps) {
           </Text>
         )}
       </div>
-      <div className="flow-card__footer nodrag">
-        <Group justify="space-between" gap={4}>
-          <Button size="compact-xs" variant="subtle" color="gray" leftSection={<IconX size={12} />} onClick={d.onCancel}>
-            Cancelar
-          </Button>
-          <Button
-            size="compact-xs"
-            variant="light"
-            leftSection={<IconCheck size={12} />}
-            loading={d.saving}
-            onClick={d.onSave}
-          >
-            Salvar regra
-          </Button>
-        </Group>
-      </div>
-      {/* "+" junto ao handle direito: cria um event type novo editável */}
-      <ActionIcon
-        className="nodrag flow-addtype"
-        variant="filled"
-        color="violet"
-        size="sm"
-        radius="xl"
-        onClick={d.onAddType}
-        aria-label="Adicionar event type"
-        title="+ event type"
-      >
-        <IconPlus size={14} />
-      </ActionIcon>
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
@@ -317,9 +292,11 @@ export type TypeDraftData = {
   value: string;
   suggestions: string[];
   onChange: (v: string) => void;
-  onRemove: () => void;
 };
 
+// EventTypeDraftNode nasce sempre junto do form (spec 052) — exatamente um
+// por rascunho, do início ao fim; sem botão de fechar (deixar vazio ao
+// salvar é válido, o save filtra valores vazios).
 export function EventTypeDraftNode({ data }: NodeProps) {
   const d = data as unknown as TypeDraftData;
   if (!d.onChange) return null; // data ainda não injetada
@@ -327,9 +304,6 @@ export function EventTypeDraftNode({ data }: NodeProps) {
     <div className="flow-card flow-card--type flow-card--editing-type">
       <div className="flow-card__header">
         <IconBolt size={12} /> Event type novo
-        <ActionIcon variant="subtle" color="red" size="xs" ml="auto" className="nodrag" onClick={d.onRemove} aria-label="Remover type">
-          <IconX size={12} />
-        </ActionIcon>
       </div>
       <div className="flow-card__body nodrag">
         <Autocomplete

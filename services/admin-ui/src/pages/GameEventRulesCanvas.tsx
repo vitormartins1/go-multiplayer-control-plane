@@ -230,9 +230,11 @@ export function GameEventRulesCanvas({
       return { ...d, error: null, rows };
     });
   }
-  function onAddType() {
+  // newGhost gera a ÚNICA caixinha de event type novo do form (spec 052) —
+  // nasce junto com o rascunho/edição, sem "+" e sem botão de fechar.
+  function newGhost(): Array<{ id: string; value: string }> {
     ghostSeq.current += 1;
-    setDraft((d) => (d ? { ...d, news: [...d.news, { id: String(ghostSeq.current), value: "" }] } : d));
+    return [{ id: String(ghostSeq.current), value: "" }];
   }
   function cancelDraft() {
     setDraft(null);
@@ -252,7 +254,7 @@ export function GameEventRulesCanvas({
       editingRuleID: rule.id,
       rows: rows.length > 0 ? rows : [EMPTY_ROW],
       linked: [...rule.eventTypes],
-      news: [],
+      news: newGhost(),
       error: null,
       saving: false,
     });
@@ -332,7 +334,6 @@ export function GameEventRulesCanvas({
           onRow,
           onRemoveRow,
           onAddRow: () => onAddRow(),
-          onAddType,
           onSave: saveDraft,
           onCancel: cancelDraft,
         }
@@ -370,7 +371,6 @@ export function GameEventRulesCanvas({
             setDraft((d) =>
               d ? { ...d, error: null, news: d.news.map((g) => (g.id === gid ? { ...g, value: v } : g)) } : d,
             ),
-          onRemove: () => setDraft((d) => (d ? { ...d, news: d.news.filter((g) => g.id !== gid) } : d)),
         };
         node = { ...n, data: td as unknown as Record<string, unknown> };
       }
@@ -502,7 +502,7 @@ export function GameEventRulesCanvas({
           disabled={!!draft}
           onClick={() => {
             setSelectedId(null);
-            setDraft({ editingRuleID: null, rows: [EMPTY_ROW], linked: [], news: [], error: null, saving: false });
+            setDraft({ editingRuleID: null, rows: [EMPTY_ROW], linked: [], news: newGhost(), error: null, saving: false });
           }}
         >
           Nova regra
