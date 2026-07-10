@@ -22,6 +22,7 @@ var hostWorldDropInKnownKeys = map[string]struct{}{
 	"weaponTierEnabled": {},
 	"passwordEnabled":   {},
 	"invasionEnabled":   {},
+	"scoringStats":      {},
 }
 
 // Persistência dos modos de multiplayer (ADR-0023 + ADR-0024, specs 006/009):
@@ -91,6 +92,7 @@ type storedHostWorldDropIn struct {
 	WeaponTierEnabled bool     `json:"weaponTierEnabled"`
 	PasswordEnabled   bool     `json:"passwordEnabled"`
 	InvasionEnabled   bool     `json:"invasionEnabled"`
+	ScoringStats      []string `json:"scoringStats,omitempty"`
 }
 
 func (r *PostgresGameRepository) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
@@ -223,6 +225,7 @@ func encodeProfile(p *domain.MultiplayerProfile) ([]byte, error) {
 			WeaponTierEnabled: hw.WeaponTierEnabled,
 			PasswordEnabled:   hw.PasswordEnabled,
 			InvasionEnabled:   hw.InvasionEnabled,
+			ScoringStats:      hw.ScoringStats,
 		})
 		if err != nil {
 			return nil, err
@@ -312,6 +315,7 @@ func decodeProfile(raw []byte) (*domain.MultiplayerProfile, error) {
 			WeaponTierEnabled: sh.WeaponTierEnabled,
 			PasswordEnabled:   sh.PasswordEnabled,
 			InvasionEnabled:   sh.InvasionEnabled,
+			ScoringStats:      sh.ScoringStats,
 		}
 		p.ExtraParams = jsonparams.Extract(sp.Params, hostWorldDropInKnownKeys)
 	case domain.ArchetypeBattleRoyale:

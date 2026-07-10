@@ -104,7 +104,7 @@ func TestSetMultiplayerProfile_VariantesValidas_Ok(t *testing.T) {
 			qa := qa
 			repo := new(mockRepo)
 			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
-	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{Archetype: domain.ArchetypeQueueArena, Topology: domain.TopologyDedicated, QueueArena: &qa}
 			_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
 			assert.NoError(t, err)
@@ -199,6 +199,7 @@ func TestSetMultiplayerProfile_HostWorldDropIn_ParamsInvalidos_Erro(t *testing.T
 		"coopSlots sem papel coop":       {EnabledRoles: []string{"invader"}, InvaderSlots: 1, CoopSlots: 2},
 		"invader sem invaderSlots":       mutHWD(base, func(h *domain.HostWorldDropInParams) { h.InvaderSlots = 0 }),
 		"invaderSlots sem papel invader": {EnabledRoles: []string{"coop"}, CoopSlots: 2, InvaderSlots: 1},
+		"scoringStats invalido":          mutHWD(base, func(h *domain.HostWorldDropInParams) { h.ScoringStats = []string{"Kills"} }),
 	}
 	for name, hw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -220,13 +221,14 @@ func TestSetMultiplayerProfile_HostWorldDropIn_VariantesValidas_Ok(t *testing.T)
 		"só invasão":       {EnabledRoles: []string{"invader"}, InvaderSlots: 2, InvasionEnabled: true},
 		"coop+invader":     {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1},
 		"todos os filtros": {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1, LevelRangeEnabled: true, WeaponTierEnabled: true, PasswordEnabled: true, InvasionEnabled: true},
+		"com scoringStats": {EnabledRoles: []string{"coop", "invader"}, CoopSlots: 2, InvaderSlots: 1, ScoringStats: []string{"kills", "deaths"}},
 	}
 	for name, hw := range cases {
 		t.Run(name, func(t *testing.T) {
 			hw := hw
 			repo := new(mockRepo)
 			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
-	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{
 				Archetype:       domain.ArchetypeHostWorldDropIn,
 				Topology:        domain.TopologyDedicated,
@@ -320,7 +322,7 @@ func TestSetMultiplayerProfile_BattleRoyale_VariantesValidas_Ok(t *testing.T) {
 			br := br
 			repo := new(mockRepo)
 			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
-	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{
 				Archetype:    domain.ArchetypeBattleRoyale,
 				Topology:     domain.TopologyDedicated,
@@ -415,7 +417,7 @@ func TestSetMultiplayerProfile_CoopMission_VariantesValidas_Ok(t *testing.T) {
 			cm := cm
 			repo := new(mockRepo)
 			repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
-	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
+			repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
 			p := domain.MultiplayerProfile{
 				Archetype:   domain.ArchetypeCoopMission,
 				Topology:    domain.TopologyDedicated,

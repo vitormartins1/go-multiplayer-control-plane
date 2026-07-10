@@ -427,6 +427,27 @@ func TestGetProfile_HostWorldDropIn_ExpoeChaveExtra(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), `"bossPowerScalingPerPhantom":1.2`)
 }
 
+// scoringStats (achado usando o motor de event rules a fundo — antes só os
+// outros 3 arquétipos tinham) precisa ir e voltar pelo DTO igual aos demais.
+func TestSetProfile_HostWorldDropIn_ScoringStats_RoundTrip(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMultiplayerProfile", mock.Anything, "id-1", mock.MatchedBy(func(p domain.MultiplayerProfile) bool {
+		return p.HostWorldDropIn != nil &&
+			assert.ObjectsAreEqual([]string{"kills", "deaths"}, p.HostWorldDropIn.ScoringStats)
+	})).Return(&domain.MultiplayerProfile{
+		Archetype: domain.ArchetypeHostWorldDropIn, Topology: domain.TopologyDedicated,
+		HostWorldDropIn: &domain.HostWorldDropInParams{
+			EnabledRoles: []string{"coop"}, CoopSlots: 2, ScoringStats: []string{"kills", "deaths"},
+		},
+	}, nil)
+
+	body := `{"archetype":"host_world_dropin","topology":"dedicated","params":{"enabledRoles":["coop"],"coopSlots":2,"scoringStats":["kills","deaths"]}}`
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/multiplayer-profile", body)
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"scoringStats":["kills","deaths"]`)
+	svc.AssertExpectations(t)
+}
+
 func TestSetProfile_ArchetypeNaoSuportado_400(t *testing.T) {
 	svc := new(mockService)
 	svc.On("SetMultiplayerProfile", mock.Anything, mock.Anything, mock.Anything).

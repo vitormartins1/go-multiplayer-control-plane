@@ -23,6 +23,7 @@ var hostWorldDropInKnownKeys = map[string]struct{}{
 	"weaponTierEnabled": {},
 	"passwordEnabled":   {},
 	"invasionEnabled":   {},
+	"scoringStats":      {},
 }
 
 // Handler expõe os endpoints HTTP do game-registry. É control plane interno
@@ -113,6 +114,7 @@ type hostWorldDropInParamsDTO struct {
 	WeaponTierEnabled bool     `json:"weaponTierEnabled"`
 	PasswordEnabled   bool     `json:"passwordEnabled"`
 	InvasionEnabled   bool     `json:"invasionEnabled"`
+	ScoringStats      []string `json:"scoringStats"`
 }
 
 type battleRoyaleParamsDTO struct {
@@ -189,6 +191,7 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			WeaponTierEnabled: hw.WeaponTierEnabled,
 			PasswordEnabled:   hw.PasswordEnabled,
 			InvasionEnabled:   hw.InvasionEnabled,
+			ScoringStats:      nonNil(hw.ScoringStats),
 		}
 		p.ExtraParams = jsonparams.Extract(d.Params, hostWorldDropInKnownKeys)
 	case domain.ArchetypeBattleRoyale:
@@ -252,6 +255,7 @@ func profileToDTO(p *domain.MultiplayerProfile) *profileDTO {
 				WeaponTierEnabled: hw.WeaponTierEnabled,
 				PasswordEnabled:   hw.PasswordEnabled,
 				InvasionEnabled:   hw.InvasionEnabled,
+				ScoringStats:      nonNil(hw.ScoringStats),
 			})
 			d.Params = jsonparams.Merge(raw, p.ExtraParams)
 		}
