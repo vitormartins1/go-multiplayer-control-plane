@@ -188,7 +188,19 @@ function RuleFocusMiniCanvas({
   }, [graph, focusNodeId]);
 
   return (
-    <FlowCanvas nodes={nodes} edges={edges} nodeTypes={MINI_NODE_TYPES} height={280} fitKey={focusNodeId} overlay={overlay} />
+    <FlowCanvas
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={MINI_NODE_TYPES}
+      height={280}
+      fitKey={focusNodeId}
+      overlay={overlay}
+      // fitMargin menor que o default (90px, calibrado pro canvas grande de
+      // Event Rules) — nessa prévia compacta o respiro fixo consumia
+      // proporcionalmente demais da área e os nodes ficavam pequenos demais
+      // pra ler (achado do Vitor).
+      fitMargin={24}
+    />
   );
 }
 

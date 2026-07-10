@@ -21,14 +21,18 @@ const FIT_MARGIN = 90; // respiro (px) além da área reservada pro dock/overlay
 // fit-view do React Flow (Controls), que por padrão IGNORA o fitViewOptions
 // passado ao <ReactFlow> raiz — Controls tem o PRÓPRIO prop fitViewOptions,
 // separado (achado do Vitor: clicar no botão do canto inferior esquerdo
-// enquadrava sem considerar a área reservada pro dock).
-function reservedFitOptions(reservedLeft: number): { padding: Padding; maxZoom: number } {
+// enquadrava sem considerar a área reservada pro dock). `margin` é
+// parametrizável (default FIT_MARGIN) — o canvas grande de Event Rules usa
+// os 90px de sempre, mas um canvas compacto (ex.: a prévia mini de
+// achievements) precisa de bem menos respiro, senão os nodes ficam
+// pequenos demais pra ler (achado do Vitor, spec 057).
+function reservedFitOptions(reservedLeft: number, margin: number = FIT_MARGIN): { padding: Padding; maxZoom: number } {
   return {
     padding: {
-      left: `${reservedLeft + FIT_MARGIN}px`,
-      right: `${FIT_MARGIN}px`,
-      top: `${FIT_MARGIN}px`,
-      bottom: `${FIT_MARGIN}px`,
+      left: `${reservedLeft + margin}px`,
+      right: `${margin}px`,
+      top: `${margin}px`,
+      bottom: `${margin}px`,
     },
     maxZoom: 1,
   };
@@ -37,12 +41,12 @@ function reservedFitOptions(reservedLeft: number): { padding: Padding; maxZoom: 
 // AutoFit re-enquadra o grafo quando `fitKey` muda (nó rascunho adicionado,
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
 // mount. Filho de <ReactFlow>, então tem acesso ao store interno.
-function AutoFit({ fitKey, reservedLeft }: { fitKey: unknown; reservedLeft: number }) {
+function AutoFit({ fitKey, reservedLeft, margin }: { fitKey: unknown; reservedLeft: number; margin: number }) {
   const rf = useReactFlow();
   useEffect(() => {
-    const t = setTimeout(() => rf.fitView({ ...reservedFitOptions(reservedLeft), duration: 250 }), 50);
+    const t = setTimeout(() => rf.fitView({ ...reservedFitOptions(reservedLeft, margin), duration: 250 }), 50);
     return () => clearTimeout(t);
-  }, [fitKey, reservedLeft, rf]);
+  }, [fitKey, reservedLeft, margin, rf]);
   return null;
 }
 
@@ -75,6 +79,7 @@ export function FlowCanvas({
   overlay,
   fitKey,
   height,
+  fitMargin,
 }: {
   nodes: Node[];
   edges: Edge[];
@@ -101,6 +106,12 @@ export function FlowCanvas({
   // height sobrescreve os 580px do CSS — número (px) ou expressão CSS
   // (ex.: "calc(100vh - 340px)" pro canvas ocupar a altura da aba, spec 047).
   height?: number | string;
+  // fitMargin (achado do Vitor, spec 057): respiro do fitView em px — default
+  // FIT_MARGIN (90, calibrado pro canvas grande de Event Rules). Um canvas
+  // compacto (ex.: a prévia mini de achievements) passa um valor menor, senão
+  // o respiro fixo consome proporcionalmente demais da área e os nodes
+  // encolhem pra caber.
+  fitMargin?: number;
 }) {
   return (
     <div
@@ -125,10 +136,15 @@ export function FlowCanvas({
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#232c3a" gap={22} />
-        {fitKey !== undefined && <AutoFit fitKey={fitKey} reservedLeft={dockReservedWidth ?? 0} />}
+        {fitKey !== undefined && (
+          <AutoFit fitKey={fitKey} reservedLeft={dockReservedWidth ?? 0} margin={fitMargin ?? FIT_MARGIN} />
+        )}
         {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
-        <Controls showInteractive={false} fitViewOptions={reservedFitOptions(dockReservedWidth ?? 0)} />
+        <Controls
+          showInteractive={false}
+          fitViewOptions={reservedFitOptions(dockReservedWidth ?? 0, fitMargin ?? FIT_MARGIN)}
+        />
         <MiniMap
           pannable
           zoomable
