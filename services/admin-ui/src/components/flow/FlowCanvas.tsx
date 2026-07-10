@@ -12,7 +12,7 @@ import {
 import { useEffect, type DragEvent, type ReactNode } from "react";
 import "./flow.css";
 
-const FIT_MARGIN = 24; // respiro (px) além da área reservada pro dock/overlay.
+const FIT_MARGIN = 90; // respiro (px) além da área reservada pro dock/overlay.
 
 // AutoFit re-enquadra o grafo quando `fitKey` muda (nó rascunho adicionado,
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
