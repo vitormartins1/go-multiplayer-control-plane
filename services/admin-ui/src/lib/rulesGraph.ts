@@ -412,6 +412,12 @@ export function pathHighlight(
 // SOURCE por kind (SourceKind — "structural"/"mode"/"stat"); vazio desliga o
 // mecanismo inteiro (nem event type conta) — é o que representa o toggle
 // "desligado" na UI (Chip.Group sem nenhum chip marcado).
+// `statIgnoreValue` (2026-07-10): stats são numéricos/em tiers — duas regras
+// no MESMO stat com limiares diferentes (kills≥5 vs kills≥25) costumam ser
+// conceitualmente relacionadas mesmo sem o valor bater exato, diferente de
+// facts/modo (categóricos: role=coop vs role=invader são coisas diferentes,
+// exigir valor exato sempre faz sentido ali). Controlado pelo usuário na UI —
+// só afeta a comparação de sources do kind "stat".
 // Um salto só, por design — não expande recursivamente (senão reintroduz a
 // poluição visual que o foco existe pra evitar).
 export function siblingRuleIds(
@@ -419,6 +425,7 @@ export function siblingRuleIds(
   edges: Edge[],
   focusRuleId: string,
   allowedKinds: Set<SourceKind>,
+  statIgnoreValue = false,
 ): Set<string> {
   if (allowedKinds.size === 0) return new Set();
 
@@ -440,14 +447,12 @@ export function siblingRuleIds(
     if (e.source.startsWith("r:") && e.source !== focusRuleId && focusEventTypes.has(e.target)) {
       siblings.add(e.source);
     }
-    if (
-      e.target.startsWith("r:") &&
-      e.target !== focusRuleId &&
-      e.source.startsWith("src:") &&
-      focusSourceLabels.get(e.source) === e.label
-    ) {
+    if (e.target.startsWith("r:") && e.target !== focusRuleId && e.source.startsWith("src:")) {
       const kind = kindOf.get(e.source);
-      if (kind && allowedKinds.has(kind)) siblings.add(e.target);
+      if (!kind || !allowedKinds.has(kind)) continue;
+      const sameKey = focusSourceLabels.has(e.source);
+      const matches = kind === "stat" && statIgnoreValue ? sameKey : focusSourceLabels.get(e.source) === e.label;
+      if (matches) siblings.add(e.target);
     }
   }
   return siblings;
