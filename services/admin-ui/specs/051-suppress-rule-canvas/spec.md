@@ -1,6 +1,6 @@
 # Spec 051 — Suprimir/restaurar regra global no canvas (V2b)
 
-> Status: **rascunho** (aguardando aprovação)
+> Status: **implementada** (aprovada e validada por smoke em 2026-07-10)
 > Fatia: UI substancial — depende de `achievements-service/017` (endpoints
 > de suppress/unsuppress + campo `suppressed`).
 > Origem: mesma pergunta do ADR-0027/0028 — hoje a redundância entre regras
@@ -79,16 +79,19 @@ revelar necessário auditar quando/quem, isso é aditivo (o backend já grava
 
 ## Critérios de aceite
 
-- [ ] Regra global ativa → botão "Suprimir para este jogo" no painel; clicar
+- [x] Regra global ativa → botão "Suprimir para este jogo" no painel; clicar
       esmaece o nó, tracejam as edges de saída, badge vira "suprimida".
-- [ ] Regra global suprimida → botão "Restaurar" no painel; clicar devolve o
+- [x] Regra global suprimida → botão "Restaurar" no painel; clicar devolve o
       nó ao estado normal (badge "read-only", edges sólidas).
-- [ ] Warning de redundância não aparece mais citando um event type que só é
-      emitido incondicionalmente por uma regra agora suprimida.
-- [ ] Ação replicada na visão em tabela, com o mesmo efeito.
-- [ ] Regra de jogo (override) nunca mostra ação de suprimir (só a de
+- [x] Warning de redundância não aparece mais citando um event type que só é
+      emitido incondicionalmente por uma regra agora suprimida (verificado
+      por inspeção do filtro `unconditionalTypes`; a seed atual não tem
+      overlap de event type entre regra incondicional e condicional do mesmo
+      arquétipo pra demonstrar ao vivo sem dado de teste extra).
+- [x] Ação replicada na visão em tabela, com o mesmo efeito.
+- [x] Regra de jogo (override) nunca mostra ação de suprimir (só a de
       remover, já existente).
-- [ ] Build verde + smoke Playwright: suprimir uma regra global de teste,
+- [x] Build verde + smoke Playwright: suprimir uma regra global de teste,
       confirmar visual + painel, restaurar, confirmar volta ao normal.
 
 ## Fora de escopo

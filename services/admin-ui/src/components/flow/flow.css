@@ -72,6 +72,14 @@
 .flow-card--rule-game {
   border-color: rgba(32, 201, 151, 0.45);
 }
+/* regra global suprimida por este jogo (spec 017/051, V2b) — esmaecida,
+   borda tracejada de alerta; laranja pra não colidir com o vermelho do
+   drift nem o amarelo da redundância (outros dois alertas do canvas). */
+.flow-card--suppressed {
+  opacity: 0.45;
+  border-style: dashed;
+  border-color: #fd7e14;
+}
 .flow-card--type .flow-card__header {
   color: #b197fc;
   background: rgba(177, 151, 252, 0.08);
@@ -236,6 +244,15 @@
 }
 .react-flow__edge.is-draft-edge .react-flow__edge-path {
   stroke-dasharray: 6 4;
+}
+
+/* edge regra→type de uma regra suprimida — caminho morto, não rascunho. */
+.react-flow__edge.is-suppressed-edge .react-flow__edge-path {
+  stroke-dasharray: 4 3;
+  stroke: #fd7e14;
+}
+.react-flow__edge.is-suppressed-edge:not(.is-faded) {
+  opacity: 0.45;
 }
 
 /* --- handles --- */
