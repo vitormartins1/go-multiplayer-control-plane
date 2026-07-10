@@ -30,6 +30,9 @@ func (m *mockRepo) FindByID(ctx context.Context, id string) (*domain.Game, error
 func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
 	return m.Called(ctx, id, name).Error(0)
 }
+func (m *mockRepo) UpdateFleet(ctx context.Context, id, fleet string) error {
+	return m.Called(ctx, id, fleet).Error(0)
+}
 func (m *mockRepo) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
 	return m.Called(ctx, gameID, modes).Error(0)
 }
@@ -58,6 +61,40 @@ func TestRename_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("UpdateName", mock.Anything, "nao", "X").Return(domain.ErrGameNotFound)
 	_, err := New(repo).Rename(context.Background(), "nao", "X")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+func TestSetFleet_Valido_Atualiza(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateFleet", mock.Anything, "g1", "packet-arena").Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1", Fleet: "packet-arena"}, nil)
+
+	g, err := New(repo).SetFleet(context.Background(), "g1", "packet-arena")
+	require.NoError(t, err)
+	assert.Equal(t, "packet-arena", g.Fleet)
+	repo.AssertExpectations(t)
+}
+
+func TestSetFleet_VazioLimpaCampo(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateFleet", mock.Anything, "g1", "").Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+
+	g, err := New(repo).SetFleet(context.Background(), "g1", "")
+	require.NoError(t, err)
+	assert.Empty(t, g.Fleet)
+	repo.AssertExpectations(t)
+}
+
+func TestSetFleet_FormatoInvalido_ErrInvalidFleet(t *testing.T) {
+	_, err := New(new(mockRepo)).SetFleet(context.Background(), "g1", "Packet_Arena")
+	assert.ErrorIs(t, err, domain.ErrInvalidFleet)
+}
+
+func TestSetFleet_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateFleet", mock.Anything, "nao", "packet-arena").Return(domain.ErrGameNotFound)
+	_, err := New(repo).SetFleet(context.Background(), "nao", "packet-arena")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 

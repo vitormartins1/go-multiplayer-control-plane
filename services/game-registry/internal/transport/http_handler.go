@@ -45,6 +45,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games/{id}", h.get)
 	mux.HandleFunc("PUT /games/{id}", h.rename)
 	mux.HandleFunc("DELETE /games/{id}", h.delete)
+	// Fleet Agones (ADR-0026, spec 012).
+	mux.HandleFunc("PUT /games/{id}/fleet", h.setFleet)
 	// Perfil de multiplayer — alias legado do modo "default" (ADR-0023/0024).
 	mux.HandleFunc("PUT /games/{id}/multiplayer-profile", h.setProfile)
 	mux.HandleFunc("GET /games/{id}/multiplayer-profile", h.getProfile)
@@ -70,6 +72,8 @@ type gameDTO struct {
 	ImageSource         string `json:"imageSource"`         // "generated" no MVP
 	GeneratedImageSeed  string `json:"generatedImageSeed"`  // default = slug
 	GeneratedImageStyle string `json:"generatedImageStyle"` // default = "shapes"
+	// Fleet Agones do jogo (ADR-0026, spec 012); "" = sem Agones real habilitado.
+	Fleet string `json:"fleet"`
 }
 
 func toDTO(g *domain.Game) gameDTO {
@@ -79,6 +83,7 @@ func toDTO(g *domain.Game) gameDTO {
 		ImageSource:         g.ImageSource,
 		GeneratedImageSeed:  g.GeneratedImageSeed,
 		GeneratedImageStyle: g.GeneratedImageStyle,
+		Fleet:               g.Fleet,
 	}
 }
 
@@ -149,10 +154,14 @@ type modeSummaryDTO struct {
 }
 
 // modeDTO é um modo completo (coleção multiplayer-profiles). O embed do
-// profileDTO achata archetype/topology/params no mesmo objeto JSON.
+// profileDTO achata archetype/topology/params no mesmo objeto JSON. Fleet é
+// atributo do JOGO dono do modo (ADR-0026), não do perfil — por isso fora do
+// embed; omitempty porque nem todo call-site tem o valor à mão (listModes/
+// setMode devolvem "").
 type modeDTO struct {
 	ModeID      string `json:"modeId"`
 	DisplayName string `json:"displayName,omitempty"`
+	Fleet       string `json:"fleet,omitempty"`
 	profileDTO
 }
 
@@ -164,8 +173,8 @@ type setModeRequest struct {
 	Params      json.RawMessage `json:"params"`
 }
 
-func toModeDTO(m *domain.MultiplayerMode) modeDTO {
-	return modeDTO{ModeID: m.ModeID, DisplayName: m.DisplayName, profileDTO: *profileToDTO(&m.Profile)}
+func toModeDTO(m *domain.MultiplayerMode, fleet string) modeDTO {
+	return modeDTO{ModeID: m.ModeID, DisplayName: m.DisplayName, Fleet: fleet, profileDTO: *profileToDTO(&m.Profile)}
 }
 
 func profileToDomain(d profileDTO) domain.MultiplayerProfile {
@@ -346,7 +355,7 @@ func (h *Handler) listModes(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]modeDTO, 0, len(modes))
 	for i := range modes {
-		out = append(out, toModeDTO(&modes[i]))
+		out = append(out, toModeDTO(&modes[i], ""))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -363,16 +372,19 @@ func (h *Handler) setMode(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toModeDTO(m))
+	writeJSON(w, http.StatusOK, toModeDTO(m, ""))
 }
 
+// getMode inclui a Fleet do jogo na resposta (ADR-0026, spec 012) — é o
+// endpoint que o session-service (registryclient) consome para montar o
+// ProfileSnapshot numa única chamada.
 func (h *Handler) getMode(w http.ResponseWriter, r *http.Request) {
-	m, err := h.games.GetMode(r.Context(), r.PathValue("id"), r.PathValue("modeId"))
+	m, fleet, err := h.games.GetMode(r.Context(), r.PathValue("id"), r.PathValue("modeId"))
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toModeDTO(m))
+	writeJSON(w, http.StatusOK, toModeDTO(m, fleet))
 }
 
 func (h *Handler) deleteMode(w http.ResponseWriter, r *http.Request) {
@@ -418,6 +430,23 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := h.games.Rename(r.Context(), r.PathValue("id"), req.Name)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toDTO(g))
+}
+
+// setFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012).
+func (h *Handler) setFleet(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Fleet string `json:"fleet"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.games.SetFleet(r.Context(), r.PathValue("id"), req.Fleet)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -516,6 +545,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "slug_taken")
 	case errors.Is(err, domain.ErrGameNotFound):
 		writeError(w, http.StatusNotFound, "not_found")
+	case errors.Is(err, domain.ErrInvalidFleet):
+		writeError(w, http.StatusBadRequest, "invalid_fleet")
 	case errors.Is(err, domain.ErrUnsupportedArchetype):
 		writeError(w, http.StatusBadRequest, "unsupported_archetype")
 	case errors.Is(err, domain.ErrUnsupportedTopology):
