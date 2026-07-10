@@ -71,3 +71,9 @@ Três ajustes pedidos pelo Vitor:
 ## Follow-up 6: "buscar no subgrafo" vira toggle inline (mesmo padrão de "regras relacionadas")
 
 Pedido do Vitor: o ícone de busca (destaca nodes no canvas) ainda abria um `Popover` — mesma inconsistência que "regras relacionadas" tinha antes do follow-up 3. Convertido pro mesmo padrão: `searchOpen` (estado local do rail), clique expande um `TextInput` inline à direita do ícone (sem `Popover`/balãozinho), clique de novo recolhe. Os dois toggles do rail (busca e relacionadas) agora têm comportamento idêntico.
+
+## Follow-up 7: botão nativo de fit-view (Controls) não considerava a área reservada
+
+Achado do Vitor: o botão de enquadrar do canto inferior esquerdo (`Controls`, nativo do React Flow) reenquadrava sem reservar espaço pro dock — só o `AutoFit` (nosso componente) fazia isso. Causa: `<Controls>` tem o PRÓPRIO prop `fitViewOptions`, separado do `fitViewOptions` passado no `<ReactFlow>` raiz — o botão nativo usa o dele, não o nosso. `FlowCanvas.tsx` não passava nada, então caía no padrão sem reserva.
+
+Extraída a lógica de padding assimétrico pra uma função `reservedFitOptions(reservedLeft)`, reaproveitada tanto pelo `AutoFit` quanto passada direto pro `<Controls fitViewOptions={...}>`. Precisou tipar o retorno como `Padding` (de `@xyflow/system`) — sem a anotação explícita, o TS não conseguia inferir os literais `${number}px` fora de um objeto inline. Verificado: zoom manual pra desalinhar + clique no botão nativo reenquadra respeitando a mesma margem do fit automático.
