@@ -248,7 +248,7 @@ func TestApplyMatchResult_TraduzEventosPorVitoria(t *testing.T) {
 	}
 	want := []domain.PlayerMatchInput{
 		{PlayerID: "p1", EventTypes: []string{"match_played", "match_won"}},
-		{PlayerID: "p2", EventTypes: []string{"match_played"}},
+		{PlayerID: "p2", EventTypes: []string{"match_played", "match_lost"}},
 	}
 	repo.On("ApplyMatchResult", mock.Anything, gameID, "match-1", want, mock.Anything).Return(false, nil)
 
@@ -269,7 +269,7 @@ func TestApplyMatchResult_OutcomeParaEventos(t *testing.T) {
 		"loss":          {domain.MatchResult{PlayerID: "p", Outcome: "loss"}, []string{"match_played", "match_lost"}},
 		"draw":          {domain.MatchResult{PlayerID: "p", Outcome: "draw"}, []string{"match_played", "match_drawn"}},
 		"fallback won":  {domain.MatchResult{PlayerID: "p", Won: true}, []string{"match_played", "match_won"}},
-		"fallback loss": {domain.MatchResult{PlayerID: "p", Won: false}, []string{"match_played"}},
+		"fallback loss": {domain.MatchResult{PlayerID: "p", Won: false}, []string{"match_played", "match_lost"}},
 		"invalido":      {domain.MatchResult{PlayerID: "p", Outcome: "victory"}, []string{"match_played"}},
 	}
 	for name, c := range cases {

@@ -136,9 +136,18 @@ func (s *Service) ApplyMatchResult(ctx context.Context, gameID, matchID, modeID 
 	players := make([]domain.PlayerMatchInput, 0, len(results))
 	for _, r := range results {
 		outcome := r.Outcome
-		if outcome == "" && r.Won {
-			// fallback retrocompat: envelope sem outcome (v1) -> trata como win.
-			outcome = outcomeWin
+		if outcome == "" {
+			// fallback retrocompat: envelope sem outcome (v1) -> deriva de Won.
+			// Won é bool estrito nesse formato (sem conceito de empate — ver
+			// domain.MatchResult), então false representa derrota de verdade,
+			// não "sem informação" (achado no /code-review: só o ramo Won=true
+			// setava outcome, deixando derrotas v1 com outcome="" e nunca
+			// casando regras `outcome=loss`).
+			if r.Won {
+				outcome = outcomeWin
+			} else {
+				outcome = outcomeLoss
+			}
 		}
 		events := domain.EvaluateRules(rules, gameID,
 			domain.WinLossDrawFacts(outcome).WithMode(modeID).WithStats(r.Stats))
