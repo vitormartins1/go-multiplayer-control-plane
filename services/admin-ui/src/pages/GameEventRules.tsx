@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconBan, IconRefresh, IconRotate2, IconSearch, IconTrash } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type EventRule, type MultiplayerProfile } from "../lib/api";
 import { condLabel } from "../lib/matchCond";
 import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
@@ -57,7 +57,18 @@ function matchesListFilter(term: string) {
 // Go hardcoded por arquétipo (ParticipationEventTypes/PlacementEventTypes/
 // CollectiveEventTypes). Regras globais (uma por arquétipo, semeadas na
 // migration) são read-only aqui; só overrides do jogo são criáveis/removíveis.
-export function GameEventRules({ gameId }: { gameId: string }) {
+export function GameEventRules({
+  gameId,
+  pendingRuleFocus,
+  onConsumePendingRuleFocus,
+}: {
+  gameId: string;
+  // pendingRuleFocus (spec 057): navegação vinda da aba Achievements com uma
+  // regra específica pra focar (e opcionalmente editar). Consumido uma vez
+  // (onConsumePendingRuleFocus) pra não re-disparar em renders seguintes.
+  pendingRuleFocus?: { ruleId: string; edit: boolean } | null;
+  onConsumePendingRuleFocus?: () => void;
+}) {
   const { data: rules, loading, error, reload } = useAsync((s) => api.gameEventRules(gameId, s), [gameId]);
   // modos/perfis do jogo — a fonte de verdade de quais arquétipos ele
   // realmente usa (evita listar/oferecer arquétipos que o jogo não tem).
@@ -85,6 +96,16 @@ export function GameEventRules({ gameId }: { gameId: string }) {
   const filteredRules = visibleRules.filter(matchesListFilter(listFilter));
 
   const [deleting, setDeleting] = useState<EventRule | null>(null);
+
+  // Consome pendingRuleFocus só quando as regras já carregaram (senão
+  // focaria um id que ainda não existe na lista) — limpa no pai logo depois,
+  // então autoEditRuleId (repassado ao canvas) só fica setado 1-2 renders.
+  useEffect(() => {
+    if (!pendingRuleFocus || !rules) return;
+    setFocusRuleId(pendingRuleFocus.ruleId);
+    onConsumePendingRuleFocus?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRuleFocus, rules]);
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -230,6 +251,7 @@ export function GameEventRules({ gameId }: { gameId: string }) {
               reload={reloadAll}
               focusRuleId={focusRuleId}
               onFocusRule={setFocusRuleId}
+              autoEditRuleId={pendingRuleFocus?.edit ? pendingRuleFocus.ruleId : null}
             />
           </Box>
         </Group>

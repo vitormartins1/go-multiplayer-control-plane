@@ -113,6 +113,7 @@ export function GameEventRulesCanvas({
   reload,
   focusRuleId,
   onFocusRule,
+  autoEditRuleId,
 }: {
   gameId: string;
   rules: EventRule[];
@@ -124,6 +125,9 @@ export function GameEventRulesCanvas({
   // vazio até uma regra ser focada, e mostra só o subgrafo dela.
   focusRuleId: string | null;
   onFocusRule: (ruleId: string | null) => void;
+  // autoEditRuleId (spec 057): navegação vinda de Achievements pedindo edição
+  // direta — só abre o form se a regra for do jogo (global é sempre read-only).
+  autoEditRuleId?: string | null;
 }) {
   const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(archetypeOptions[0]);
   const arch = archetypeOptions.includes(archetype) ? archetype : archetypeOptions[0];
@@ -154,13 +158,29 @@ export function GameEventRulesCanvas({
   // (senão a regra focada nem existiria no `graph` e o filtro esvaziaria tudo).
   useEffect(() => {
     setSelectedId(focusRuleId ? `r:${focusRuleId}` : null);
-    if (focusRuleId) {
-      const rule = rules.find((r) => r.id === focusRuleId);
+    // autoEditRuleId (spec 057) entra na MESMA sincronização: no mount vindo
+    // de Achievements, autoEditRuleId já chega preenchido (deriva direto da
+    // prop pendingRuleFocus) enquanto focusRuleId ainda é null (é estado
+    // próprio do GameEventRules, que só atualiza num efeito assíncrono
+    // depois) — sem isso, a troca de arquétipo não disparava a tempo do
+    // startEdit, e archRules ficava filtrado pro arquétipo errado.
+    const targetRuleId = focusRuleId ?? autoEditRuleId ?? null;
+    if (targetRuleId) {
+      const rule = rules.find((r) => r.id === targetRuleId);
       if (rule && rule.archetype !== archetype) setArchetype(rule.archetype);
     }
-  }, [focusRuleId, rules, archetype]);
+  }, [focusRuleId, autoEditRuleId, rules, archetype]);
 
-  const archRules = useMemo(() => rules.filter((r) => r.archetype === arch), [rules, arch]);
+  // archRules inclui a regra em edição mesmo se `arch` ainda não convergiu
+  // pro arquétipo dela (defensivo contra qualquer race remanescente entre o
+  // efeito de sincronização acima e o startEdit disparado por autoEditRuleId
+  // — sem isso, buildRulesGraph recebia draft.editingRuleID apontando pra
+  // uma regra ausente do conjunto filtrado e quebrava, achado testando a
+  // navegação "Editar regra" vinda de Achievements).
+  const archRules = useMemo(
+    () => rules.filter((r) => r.archetype === arch || r.id === draft?.editingRuleID),
+    [rules, arch, draft],
+  );
 
   // Stats do arquétipo (spec 045): declaradas + drift (usada por achievement
   // sem declaração em NENHUM modo).
@@ -319,6 +339,16 @@ export function GameEventRulesCanvas({
       saving: false,
     });
   }
+
+  // autoEditRuleId (spec 057): navegação vinda de Achievements — dispara o
+  // form de edição sozinho quando a regra pedida é do jogo (chega já com
+  // focusRuleId setado igual, então o subgrafo focado já está correto).
+  useEffect(() => {
+    if (!autoEditRuleId) return;
+    const rule = rules.find((r) => r.id === autoEditRuleId && r.scope === "game");
+    if (rule) startEdit(rule);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoEditRuleId, rules]);
 
   async function saveDraft() {
     if (!draft) return;
