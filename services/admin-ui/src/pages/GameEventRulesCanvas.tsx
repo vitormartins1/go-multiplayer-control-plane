@@ -865,7 +865,7 @@ function EventRulesToolbarRail({
   const [relatedOpen, setRelatedOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   return (
-    <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)" }}>
+    <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)", pointerEvents: "auto" }}>
       <Group gap={4} wrap="nowrap">
         <Tooltip label={draft ? "Salve ou cancele o rascunho atual" : "Nova regra"} position="bottom" withinPortal>
           <ActionIcon size="md" variant="filled" disabled={!!draft} onClick={onNewRule} aria-label="Nova regra">
@@ -999,7 +999,15 @@ function EventRulesDock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <Group align="flex-start" gap={8} wrap="nowrap">
+    // pointerEvents "none" no container + "auto" nos dois cards (spec 058,
+    // achado do Vitor: às vezes não dava pra clicar em alguns facts/regras)
+    // — o Panel do React Flow não põe pointer-events:none por padrão, e o
+    // Group (flex row) tem um retângulo delimitador tão alto quanto o maior
+    // filho (a lista); a faixa "vazia" ao lado do rail curto, que parece
+    // canvas livre, na verdade fazia parte desse retângulo e bloqueava
+    // clique nos nodes por baixo. Só os cards de verdade (lista/rail)
+    // voltam a aceitar clique.
+    <Group align="flex-start" gap={8} wrap="nowrap" style={{ pointerEvents: "none" }}>
       <Paper
         ref={listRef}
         withBorder
@@ -1010,6 +1018,7 @@ function EventRulesDock({
           maxHeight: "calc(100vh - 190px)",
           display: "flex",
           flexDirection: "column",
+          pointerEvents: "auto",
         }}
       >
         <Group justify="space-between" wrap="nowrap" align="center" p="xs">
