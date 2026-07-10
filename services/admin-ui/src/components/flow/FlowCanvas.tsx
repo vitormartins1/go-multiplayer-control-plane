@@ -9,18 +9,39 @@ import {
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
-import { useEffect, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import "./flow.css";
+
+const FIT_MARGIN = 24; // respiro (px) além da área reservada pro dock/overlay.
 
 // AutoFit re-enquadra o grafo quando `fitKey` muda (nó rascunho adicionado,
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
 // mount. Filho de <ReactFlow>, então tem acesso ao store interno.
-function AutoFit({ fitKey }: { fitKey: unknown }) {
+// `reservedLeft` (spec 058, achado do Vitor): o fitView padrão considera o
+// canvas INTEIRO, sem saber que o dock flutuante cobre uma faixa da
+// esquerda — nós acabavam posicionados por baixo da lista. O padding do
+// fitView aceita valores ASSIMÉTRICOS por lado (reserva real de espaço, não
+// só respiro visual) — reserva a largura MEDIDA do dock (ResizeObserver, não
+// um número chutado) só do lado esquerdo.
+function AutoFit({ fitKey, reservedLeft }: { fitKey: unknown; reservedLeft: number }) {
   const rf = useReactFlow();
   useEffect(() => {
-    const t = setTimeout(() => rf.fitView({ padding: 0.15, maxZoom: 1, duration: 250 }), 50);
+    const t = setTimeout(
+      () =>
+        rf.fitView({
+          padding: {
+            left: `${reservedLeft + FIT_MARGIN}px`,
+            right: `${FIT_MARGIN}px`,
+            top: `${FIT_MARGIN}px`,
+            bottom: `${FIT_MARGIN}px`,
+          },
+          maxZoom: 1,
+          duration: 250,
+        }),
+      50,
+    );
     return () => clearTimeout(t);
-  }, [fitKey, rf]);
+  }, [fitKey, reservedLeft, rf]);
   return null;
 }
 
@@ -71,6 +92,23 @@ export function FlowCanvas({
   // (ex.: "calc(100vh - 340px)" pro canvas ocupar a altura da aba, spec 047).
   height?: number | string;
 }) {
+  // dockWidth: largura REAL medida do painel (ResizeObserver, não um número
+  // fixo torcido pra bater com o CSS do chamador) — usada pelo AutoFit pra
+  // reservar exatamente o espaço que o dock ocupa. 0 quando não há `dock`
+  // (GamePipeline/mini-canvas de Achievements não passam essa prop).
+  const dockWrapRef = useRef<HTMLDivElement>(null);
+  const [dockWidth, setDockWidth] = useState(0);
+  useEffect(() => {
+    const el = dockWrapRef.current;
+    if (!el) {
+      setDockWidth(0);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => setDockWidth(entries[0].contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dock]);
+
   return (
     <div
       className="flow-wrap"
@@ -94,8 +132,12 @@ export function FlowCanvas({
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#232c3a" gap={22} />
-        {fitKey !== undefined && <AutoFit fitKey={fitKey} />}
-        {dock && <Panel position="top-left">{dock}</Panel>}
+        {fitKey !== undefined && <AutoFit fitKey={fitKey} reservedLeft={dockWidth} />}
+        {dock && (
+          <Panel position="top-left">
+            <div ref={dockWrapRef}>{dock}</div>
+          </Panel>
+        )}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
         <Controls showInteractive={false} />
         <MiniMap
