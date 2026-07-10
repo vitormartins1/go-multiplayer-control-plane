@@ -407,6 +407,18 @@ export function GameAchievements({
       ...criterionValidators,
     },
   });
+  // editSnapshot guarda os valores no momento em que a edição abriu — é pra
+  // onde o botão Resetar volta (diferente de editForm.reset(), que voltaria
+  // pros initialValues genéricos do form, não pro que estava salvo desta
+  // conquista específica).
+  const [editSnapshot, setEditSnapshot] = useState<typeof editForm.values | null>(null);
+
+  // focusRow troca a linha expandida — sai do modo edição sempre que o alvo
+  // muda (evita `editing` apontar pra uma conquista que não é mais a expandida).
+  function focusRow(id: string | null) {
+    setExpandedCriteriaId(id);
+    setEditing((prev) => (prev && prev.id !== id ? null : prev));
+  }
 
   async function submit(values: typeof form.values) {
     try {
@@ -431,17 +443,23 @@ export function GameAchievements({
     }
   }
 
+  // openEdit abre a edição INLINE no expander (não é mais modal): expande a
+  // linha e já entra em modo edição — clicar na tag do critério continua
+  // abrindo só a prévia read-only, sem passar por aqui.
   function openEdit(a: CatalogAchievement) {
-    editForm.setValues({
+    const values = {
       name: a.name,
       description: a.description,
-      criterion: a.statKey ? "stat" : "event",
+      criterion: (a.statKey ? "stat" : "event") as "event" | "stat",
       eventType: a.eventType ?? "",
       statKey: a.statKey ?? "",
       statMode: a.statMode ?? "cumulative",
       target: a.target,
-    });
+    };
+    editForm.setValues(values);
+    setEditSnapshot(values);
     setEditing(a);
+    setExpandedCriteriaId(a.id);
   }
 
   async function submitEdit(values: typeof editForm.values) {
@@ -453,7 +471,7 @@ export function GameAchievements({
         ...buildCriterion(values),
       });
       notifications.show({ color: "green", message: "Conquista atualizada." });
-      setEditing(null);
+      focusRow(null);
       reload();
     } catch (e) {
       const msg =
@@ -464,6 +482,12 @@ export function GameAchievements({
             : "Falha ao salvar (serviço indisponível?).";
       editForm.setErrors({ name: msg });
     }
+  }
+
+  // resetEdit volta aos valores do momento em que a edição abriu (não é
+  // reload — puramente local, sem chamada ao servidor).
+  function resetEdit() {
+    if (editSnapshot) editForm.setValues(editSnapshot);
   }
 
   function handleDownloadTemplate() {
@@ -582,7 +606,33 @@ export function GameAchievements({
           <Table.Tbody>
             {catalog.map((a) => {
               const expanded = expandedCriteriaId === a.id;
-              const rule = a.statKey ? undefined : targetRuleFor(a);
+              const isEditingThisRow = editing?.id === a.id;
+              // previewAchievement/previewCatalog/previewFocusNodeId (edição
+              // inline): enquanto editando, o mini-canvas reflete os valores
+              // AINDA NÃO salvos do form — troca de critério/meta atualiza o
+              // grafo na hora, sem precisar dar Salvar. Fora do modo edição,
+              // é o dado real do catálogo (comportamento de sempre).
+              const previewAchievement: CatalogAchievement = isEditingThisRow
+                ? {
+                    ...a,
+                    name: editForm.values.name,
+                    description: editForm.values.description,
+                    ...buildCriterion(editForm.values),
+                  }
+                : a;
+              const previewCatalog = isEditingThisRow
+                ? (catalog ?? []).map((item) => (item.id === a.id ? previewAchievement : item))
+                : (catalog ?? []);
+              // foca na FONTE do stat (não no achievement individual) — mesmo
+              // padrão do lado de evento (foca no event type, não no achievement):
+              // pathHighlight faz dois caminhos unidirecionais a partir do foco, então
+              // só alcança os "irmãos" quando o foco é o nó de ramificação (source/type),
+              // nunca a folha (achievement) — achado do Vitor testando com um stat com
+              // 5 achievements ligados, só o próprio aparecia na prévia.
+              const previewFocusNodeId = previewAchievement.statKey
+                ? srcId(STAT_PREFIX + previewAchievement.statKey)
+                : typeId(previewAchievement.eventType);
+              const rule = previewAchievement.statKey ? undefined : targetRuleFor(previewAchievement);
               return (
                 <Fragment key={a.id}>
                   <Table.Tr>
@@ -602,7 +652,7 @@ export function GameAchievements({
                           gap={6}
                           wrap="nowrap"
                           style={{ cursor: "pointer" }}
-                          onClick={() => setExpandedCriteriaId(expanded ? null : a.id)}
+                          onClick={() => (expanded ? focusRow(null) : focusRow(a.id))}
                         >
                           <Badge variant="light" color="grape" style={{ cursor: "pointer" }}>
                             {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
@@ -619,7 +669,7 @@ export function GameAchievements({
                           gap={6}
                           wrap="nowrap"
                           style={{ cursor: "pointer" }}
-                          onClick={() => setExpandedCriteriaId(expanded ? null : a.id)}
+                          onClick={() => (expanded ? focusRow(null) : focusRow(a.id))}
                         >
                           <Badge variant="light" color="violet" style={{ cursor: "pointer" }}>
                             {a.eventType}
@@ -653,38 +703,67 @@ export function GameAchievements({
                       <Table.Td colSpan={7} p={0}>
                         <Collapse in={expanded}>
                           <Box p="sm" bg="var(--mantine-color-dark-8)">
-                            <RuleFocusMiniCanvas
-                              rules={relevantEventRules}
-                              catalog={catalog ?? []}
-                              // foca na FONTE do stat (não no achievement individual) — mesmo
-                              // padrão do lado de evento (foca no event type, não no achievement):
-                              // pathHighlight faz dois caminhos unidirecionais a partir do foco, então
-                              // só alcança os "irmãos" quando o foco é o nó de ramificação (source/type),
-                              // nunca a folha (achievement) — achado do Vitor testando com um stat com
-                              // 5 achievements ligados, só o próprio aparecia na prévia.
-                              focusNodeId={a.statKey ? srcId(STAT_PREFIX + a.statKey) : typeId(a.eventType)}
-                              overlay={
-                                <Group gap={6}>
-                                  {!a.statKey && rule && (
-                                    <Button
-                                      size="xs"
-                                      variant="light"
-                                      onClick={() => onNavigateToRule?.(rule.id, { edit: rule.scope === "game" })}
-                                    >
-                                      {rule.scope === "game" ? "Editar regra" : "Ver regra"}
-                                    </Button>
-                                  )}
-                                  <ActionIcon
-                                    variant="subtle"
-                                    color="gray"
-                                    onClick={() => setExpandedCriteriaId(null)}
-                                    aria-label="Fechar prévia"
-                                  >
-                                    <IconX size={16} />
-                                  </ActionIcon>
-                                </Group>
-                              }
-                            />
+                            <Group wrap="nowrap" align="stretch" gap="md">
+                              {/* Editar deixou de ser modal (pedido do Vitor): abre
+                                  aqui, ao lado do canvas — 20% pro form, 80% pro
+                                  canvas (que ocupava 100% antes de existir edição). */}
+                              {isEditingThisRow && (
+                                <Box style={{ flex: "0 0 20%", minWidth: 240 }}>
+                                  <form onSubmit={editForm.onSubmit(submitEdit)}>
+                                    <Stack gap="xs">
+                                      <TextInput label="Nome" size="xs" {...editForm.getInputProps("name")} />
+                                      <Textarea
+                                        label="Descrição"
+                                        size="xs"
+                                        autosize
+                                        minRows={2}
+                                        {...editForm.getInputProps("description")}
+                                      />
+                                      <CriterionFields form={editForm} stats={stats} events={events} />
+                                      <Button type="submit" size="xs" fullWidth>
+                                        Salvar
+                                      </Button>
+                                      <Group grow gap="xs">
+                                        <Button variant="default" size="xs" onClick={resetEdit}>
+                                          Resetar
+                                        </Button>
+                                        <Button variant="subtle" color="gray" size="xs" onClick={() => focusRow(null)}>
+                                          Cancelar
+                                        </Button>
+                                      </Group>
+                                    </Stack>
+                                  </form>
+                                </Box>
+                              )}
+                              <Box style={{ flex: "1 1 0%", minWidth: 0 }}>
+                                <RuleFocusMiniCanvas
+                                  rules={relevantEventRules}
+                                  catalog={previewCatalog}
+                                  focusNodeId={previewFocusNodeId}
+                                  overlay={
+                                    <Group gap={6}>
+                                      {!previewAchievement.statKey && rule && (
+                                        <Button
+                                          size="xs"
+                                          variant="light"
+                                          onClick={() => onNavigateToRule?.(rule.id, { edit: rule.scope === "game" })}
+                                        >
+                                          {rule.scope === "game" ? "Editar regra" : "Ver regra"}
+                                        </Button>
+                                      )}
+                                      <ActionIcon
+                                        variant="subtle"
+                                        color="gray"
+                                        onClick={() => focusRow(null)}
+                                        aria-label="Fechar prévia"
+                                      >
+                                        <IconX size={16} />
+                                      </ActionIcon>
+                                    </Group>
+                                  }
+                                />
+                              </Box>
+                            </Group>
                           </Box>
                         </Collapse>
                       </Table.Td>
@@ -707,20 +786,6 @@ export function GameAchievements({
             <CriterionFields form={form} stats={stats} events={events} />
             <Group justify="flex-end">
               <Button type="submit">Adicionar</Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
-
-      {/* Editar conquista (id é a chave, não editável) */}
-      <Modal opened={!!editing} onClose={() => setEditing(null)} title={`Editar ${editing?.id ?? ""}`}>
-        <form onSubmit={editForm.onSubmit(submitEdit)}>
-          <Stack>
-            <TextInput label="Nome" {...editForm.getInputProps("name")} />
-            <Textarea label="Descrição" autosize minRows={2} {...editForm.getInputProps("description")} />
-            <CriterionFields form={editForm} stats={stats} events={events} />
-            <Group justify="flex-end">
-              <Button type="submit">Salvar</Button>
             </Group>
           </Stack>
         </form>
