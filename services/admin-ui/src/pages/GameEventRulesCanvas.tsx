@@ -302,7 +302,11 @@ export function GameEventRulesCanvas({
       editingRuleID: rule.id,
       rows: rows.length > 0 ? rows : [EMPTY_ROW],
       linked: [...rule.eventTypes],
-      news: newGhost(),
+      // sem ghost de tipo novo ao editar (achado do Vitor testando: abria uma
+      // caixinha "event type novo" vazia sem o usuário ter pedido) — editar
+      // mexe só na regra por enquanto; linkar/desvincular tipos existentes
+      // continua via clique no node (event types visíveis no foco da regra).
+      news: [],
       error: null,
       saving: false,
     });
