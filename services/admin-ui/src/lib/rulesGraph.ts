@@ -68,8 +68,12 @@ const SIZE = {
 const ruleHeight = (r: EventRule) => 69 + 22 * Math.max(1, Object.entries(r.match).length);
 // RECALIBRADA (spec 052): ações Cancelar/Salvar migraram pro header e o
 // footer sumiu — offsetHeight real: 104px c/ 1 linha, 136px c/ 2 (medido
-// via Playwright, 72 + 32/linha).
-const draftHeight = (rows: number) => 72 + 32 * Math.max(1, rows);
+// via Playwright, 72 + 32/linha). Exportada: repackVisible (spec 056) precisa
+// da mesma fórmula pra saber a altura real do node ruleDraft.
+export const draftHeight = (rows: number) => 72 + 32 * Math.max(1, rows);
+// Altura fixa do ghost de event type em edição (calibrada, spec 048/050) —
+// ao contrário do ruleDraft, não cresce com conteúdo.
+const EVENT_TYPE_DRAFT_H = 71;
 
 const COL_X = [0, 300, 640, 920];
 const GAP_Y = 18;
@@ -248,8 +252,7 @@ export function buildRulesGraph(
   // ghosts de type NOVO (editáveis) — data injetada pela página.
   if (draft) {
     for (const g of draft.newTypes) {
-      // 71px medido (spec 052 — sem o botão de fechar no header).
-      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: 71 });
+      typeMetas.push({ id: draftTypeId(g.id), type: "eventTypeDraft", data: {}, h: EVENT_TYPE_DRAFT_H });
     }
   }
   const typeNeighbor = new Map([...typeSources.entries()].map(([et, idx]) => [typeId(et), idx]));
@@ -409,9 +412,16 @@ export function siblingRuleIds(edges: Edge[], focusNodeIds: Set<string>): Set<st
 }
 
 // heightOf estima a altura de um node já posicionado (mesmas fórmulas de
-// buildRulesGraph) — usado só por repackVisible, nunca em ghost/draft (o
-// filtro que chama repackVisible já está desligado quando há draft ativo).
-function heightOf(n: Node): number {
+// buildRulesGraph) — usado só por repackVisible. `overrides` cobre os casos
+// dinâmicos que essa função sozinha não sabe calcular: no momento em que
+// repackVisible roda (spec 055/056), o node ruleDraft ainda tem `data: {}`
+// (o draftData real só é injetado depois, no useMemo do canvas) — sem
+// override, `heightOf` não tem como saber quantas linhas de match o rascunho
+// tem. Sem entrada no mapa, cai no mínimo de 1 linha (nunca fica pior que a
+// estimativa antiga, só imprecisa quando há 2+ linhas).
+function heightOf(n: Node, overrides?: Map<string, number>): number {
+  const override = overrides?.get(n.id);
+  if (override !== undefined) return override;
   switch (n.type) {
     case "source": {
       const d = n.data as unknown as SourceNodeData;
@@ -419,8 +429,12 @@ function heightOf(n: Node): number {
     }
     case "rule":
       return ruleHeight((n.data as unknown as RuleNodeData).rule);
+    case "ruleDraft":
+      return draftHeight(1);
     case "eventType":
       return SIZE.eventType.h;
+    case "eventTypeDraft":
+      return EVENT_TYPE_DRAFT_H;
     case "achievement":
       return SIZE.achievement.h;
     case "sectionLabel":
@@ -437,7 +451,11 @@ function heightOf(n: Node): number {
 // Reempacota cada coluna (agrupada por x, que já reflete a camada) do zero,
 // preservando a ordem relativa (Y original) e recentralizando pela coluna
 // mais alta — mesmo efeito visual do build completo, só que pro subconjunto.
-export function repackVisible(nodes: Node[]): Node[] {
+// `heightOverrides` (spec 056 follow-up): altura real do node ruleDraft em
+// edição/criação (draftHeight(rows) do caller) — sem isso a coluna vizinha
+// (event type novo, sources) não acompanha o card crescendo/encolhendo
+// conforme o usuário adiciona/remove condições.
+export function repackVisible(nodes: Node[], heightOverrides?: Map<string, number>): Node[] {
   const byX = new Map<number, Node[]>();
   for (const n of nodes) byX.set(n.position.x, [...(byX.get(n.position.x) ?? []), n]);
 
@@ -448,7 +466,7 @@ export function repackVisible(nodes: Node[]): Node[] {
     let cursor = 0;
     for (const n of sorted) {
       y.set(n.id, cursor);
-      cursor += heightOf(n) + GAP_Y;
+      cursor += heightOf(n, heightOverrides) + GAP_Y;
     }
     stacked.set(x, { col: sorted, y, h: Math.max(0, cursor - GAP_Y) });
   }

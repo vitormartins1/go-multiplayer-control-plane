@@ -52,6 +52,7 @@ import {
 import {
   buildRulesGraph,
   DRAFT_RULE_ID,
+  draftHeight,
   pathHighlight,
   repackVisible,
   siblingRuleIds,
@@ -374,6 +375,17 @@ export function GameEventRulesCanvas({
     let visibleNodes = graph.nodes;
     let visibleEdges = graph.edges;
 
+    // draftHeightOverrides (spec 056 follow-up): a altura real do node
+    // ruleDraft (draftHeight(rows), a mesma fórmula do build) — repackVisible
+    // não tem como calculá-la sozinho porque, neste ponto, o node ainda tem
+    // `data: {}` (o draftData só é injetado mais abaixo). Sem isso, a coluna
+    // vizinha (event type novo, sources) não acompanha o card crescendo ou
+    // encolhendo conforme o usuário adiciona/remove condições de match — o
+    // objetivo é ela ficar sempre alinhada ao meio da caixinha da regra.
+    const draftHeightOverrides = draft
+      ? new Map([[draft.editingRuleID ? `r:${draft.editingRuleID}` : DRAFT_RULE_ID, draftHeight(draft.rows.length)]])
+      : undefined;
+
     // applyFocusFilter: nodes/edges alcançáveis por path (spec 055), com
     // repack — sectionLabel só sobrevive se alguma source do grupo dela
     // estiver visível (evita cabeçalho de seção órfão). Reaproveitado tanto
@@ -395,7 +407,10 @@ export function GameEventRulesCanvas({
       // repackVisible: sem isso, os nodes filtrados mantêm as coordenadas Y
       // calculadas pro arquétipo inteiro — vãos enormes onde ficavam os nodes
       // escondidos (achado do Vitor testando o foco na prática).
-      return { nodes: repackVisible(filtered), edges: graph.edges.filter((e) => path.edgeIds.has(e.id)) };
+      return {
+        nodes: repackVisible(filtered, draftHeightOverrides),
+        edges: graph.edges.filter((e) => path.edgeIds.has(e.id)),
+      };
     };
 
     if (draft && !draft.editingRuleID) {
@@ -414,7 +429,7 @@ export function GameEventRulesCanvas({
       // sources que vão aparecendo mantêm a posição Y calculada pra coluna
       // inteira, em vez de se organizarem só com base no que está na tela —
       // mesmo raciocínio do follow-up da spec 055.
-      visibleNodes = repackVisible(filtered);
+      visibleNodes = repackVisible(filtered, draftHeightOverrides);
       const visibleIds = new Set(filtered.map((n) => n.id));
       visibleEdges = graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
     } else if (focusPath) {
