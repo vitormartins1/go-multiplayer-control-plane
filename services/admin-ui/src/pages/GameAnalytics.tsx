@@ -1,10 +1,8 @@
-import { Alert, Group, Loader, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
-import { useState } from "react";
+import { Alert, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
 import { formatDuration } from "../lib/format";
-import { GamePipeline } from "./GamePipeline";
 
 // rótulos amigáveis dos eventos de participação (host_world_dropin).
 const EVENT_LABELS: Record<string, string> = {
@@ -24,31 +22,11 @@ const ROLE_LABELS: Record<string, string> = {
 export function GameAnalytics({ gameId }: { gameId: string }) {
   const { data, loading, error } = useAsync((s) => api.gameAnalytics(gameId, s), [gameId]);
 
-  // Números = agregados (view original); Pipeline = mapa de dados do fan-out
-  // (spec 046, read-only).
-  const [view, setView] = useState<"numbers" | "pipeline">("numbers");
-
   const hasData = data && data.matches > 0;
   const participations = data?.roleParticipations ?? [];
 
   return (
     <Stack>
-      <Group justify="flex-end">
-        <SegmentedControl
-          size="xs"
-          value={view}
-          onChange={(v) => setView(v as "numbers" | "pipeline")}
-          data={[
-            { value: "numbers", label: "Números" },
-            { value: "pipeline", label: "Pipeline" },
-          ]}
-        />
-      </Group>
-
-      {view === "pipeline" && <GamePipeline gameId={gameId} />}
-
-      {view === "numbers" && (
-        <>
       {loading && !data && <Loader />}
       {!!error && !data && <Alert color="red">Analytics indisponível (analytics-service fora?).</Alert>}
 
@@ -121,8 +99,6 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
             <StatCard label="Taxa de sucesso" value={`${(data.mission.successRate * 100).toFixed(1)}%`} />
           </SimpleGrid>
         </Stack>
-      )}
-        </>
       )}
     </Stack>
   );
