@@ -51,6 +51,7 @@ import {
 } from "../lib/matchCond";
 import {
   buildRulesGraph,
+  DRAFT_RULE_ID,
   pathHighlight,
   repackVisible,
   siblingRuleIds,
@@ -233,12 +234,18 @@ export function GameEventRulesCanvas({
     [archRules, catalog, showStats, statsForArch, draftInput],
   );
 
-  // focusPath (spec 055): subgrafo da regra focada. Um draft ativo (criar ou
-  // editar) desliga o filtro — o fluxo de criação/edição in-canvas (specs
-  // 050/052) continua vendo o grafo cheio, sem mudança nenhuma nesse ramo.
+  // effectiveFocusId (spec 056): durante edição, foca na regra sendo editada
+  // (pode ser uma "vizinha" trazida por showRelated, não a focusRuleId
+  // original) — durante criação pura (editingRuleID null) não há foco por
+  // regra (o canvas usa o ramo dinâmico de sources, mais abaixo).
+  const effectiveFocusId = draft ? draft.editingRuleID : focusRuleId;
+
+  // focusPath (spec 055, estendido pela 056): subgrafo da regra focada —
+  // agora também ativo durante edição (effectiveFocusId), só fica null
+  // mesmo durante criação pura.
   const focusPath = useMemo(() => {
-    if (!focusRuleId || draft) return null;
-    const base = pathHighlight(graph.edges, `r:${focusRuleId}`);
+    if (!effectiveFocusId) return null;
+    const base = pathHighlight(graph.edges, `r:${effectiveFocusId}`);
     if (!showRelated) return base;
     const nodeIds = new Set(base.nodeIds);
     const edgeIds = new Set(base.edgeIds);
@@ -248,7 +255,7 @@ export function GameEventRulesCanvas({
       p.edgeIds.forEach((id) => edgeIds.add(id));
     }
     return { nodeIds, edgeIds };
-  }, [graph, focusRuleId, showRelated, draft]);
+  }, [graph, effectiveFocusId, showRelated]);
 
   // --- callbacks do rascunho (injetados no node.data) ---
   function patchDraft(patch: Partial<DraftState>) {
@@ -356,37 +363,64 @@ export function GameEventRulesCanvas({
     const term = search.trim().toLowerCase();
 
     // spec 055: sem regra focada (e fora de um draft), canvas vazio — o
-    // grafo completo só aparece dentro do fluxo de criação/edição (draft),
-    // que fica intocado. Com foco, corta pro subgrafo (+ vizinhas, se
-    // showRelated) — sectionLabel só sobrevive se alguma source do grupo
-    // dela estiver visível (evita cabeçalho de seção órfão).
+    // grafo completo só sobra como fallback (não deveria ocorrer na prática —
+    // ver comentário do último ramo). Foco (normal ou edição) corta pro
+    // subgrafo via applyFocusFilter; criação pura tem seu próprio filtro
+    // dinâmico (spec 056); sem foco e sem draft, vazio.
     let visibleNodes = graph.nodes;
     let visibleEdges = graph.edges;
-    if (!draft) {
-      if (!focusPath) {
-        visibleNodes = [];
-        visibleEdges = [];
-      } else {
-        const filtered = graph.nodes.filter((n) => {
-          if (focusPath.nodeIds.has(n.id)) return true;
-          if (n.type === "sectionLabel" && n.id.startsWith("lbl:")) {
-            const kind = n.id.slice(4);
-            return graph.nodes.some(
-              (s) =>
-                s.type === "source" &&
-                (s.data as unknown as SourceNodeData).kind === kind &&
-                focusPath.nodeIds.has(s.id),
-            );
-          }
-          return false;
-        });
-        // repackVisible: sem isso, os nodes filtrados mantêm as coordenadas Y
-        // calculadas pro arquétipo inteiro — vãos enormes onde ficavam os
-        // nodes escondidos (achado do Vitor testando o foco na prática).
-        visibleNodes = repackVisible(filtered);
-        visibleEdges = graph.edges.filter((e) => focusPath.edgeIds.has(e.id));
-      }
+
+    // applyFocusFilter: nodes/edges alcançáveis por path (spec 055), com
+    // repack — sectionLabel só sobrevive se alguma source do grupo dela
+    // estiver visível (evita cabeçalho de seção órfão). Reaproveitado tanto
+    // pelo foco "normal" (lista) quanto pela edição (spec 056).
+    const applyFocusFilter = (path: { nodeIds: Set<string>; edgeIds: Set<string> }) => {
+      const filtered = graph.nodes.filter((n) => {
+        if (path.nodeIds.has(n.id)) return true;
+        if (n.type === "sectionLabel" && n.id.startsWith("lbl:")) {
+          const kind = n.id.slice(4);
+          return graph.nodes.some(
+            (s) =>
+              s.type === "source" &&
+              (s.data as unknown as SourceNodeData).kind === kind &&
+              path.nodeIds.has(s.id),
+          );
+        }
+        return false;
+      });
+      // repackVisible: sem isso, os nodes filtrados mantêm as coordenadas Y
+      // calculadas pro arquétipo inteiro — vãos enormes onde ficavam os nodes
+      // escondidos (achado do Vitor testando o foco na prática).
+      return { nodes: repackVisible(filtered), edges: graph.edges.filter((e) => path.edgeIds.has(e.id)) };
+    };
+
+    if (draft && !draft.editingRuleID) {
+      // Criação pura (spec 056): só a caixinha da regra + o(s) ghost(s) de
+      // tipo + as sources cujas chaves já foram digitadas/validadas numa
+      // linha de match — linkar um tipo EXISTENTE continua funcionando via
+      // autocomplete no próprio ghost (typeSuggestions), sem precisar do nó
+      // dele aparecer (decisão do Vitor).
+      const referencedKeys = new Set(draft.rows.map((r) => r.key.trim()).filter(Boolean));
+      const filtered = graph.nodes.filter((n) => {
+        if (n.id === DRAFT_RULE_ID || n.id.startsWith("t:__new__:")) return true;
+        if (n.type === "source") return referencedKeys.has((n.data as unknown as SourceNodeData).sourceKey);
+        return false;
+      });
+      visibleNodes = filtered;
+      visibleEdges = graph.edges.filter(
+        (e) => filtered.some((n) => n.id === e.source) && filtered.some((n) => n.id === e.target),
+      );
+    } else if (focusPath) {
+      const r = applyFocusFilter(focusPath);
+      visibleNodes = r.nodes;
+      visibleEdges = r.edges;
+    } else if (!draft) {
+      visibleNodes = [];
+      visibleEdges = [];
     }
+    // draft && draft.editingRuleID && !focusPath: não deveria ocorrer
+    // (effectiveFocusId sempre setado quando editingRuleID existe) — cai no
+    // fallback seguro (grafo inteiro) declarado acima.
 
     const path = !term && selectedId && !draft ? pathHighlight(visibleEdges, selectedId) : null;
 
@@ -625,7 +659,7 @@ export function GameEventRulesCanvas({
           nodeTypes={NODE_TYPES}
           onNodeClick={onNodeClick}
           onPaneClick={() => setSelectedId(null)}
-          fitKey={`${arch}|${focusRuleId ?? "none"}|${showRelated}|${!!draft}`}
+          fitKey={`${arch}|${focusRuleId ?? "none"}|${showRelated}|${!!draft}|${nodes.length}`}
           height="calc(100vh - 345px)"
           overlay={
             selectedNode && !draft ? (
