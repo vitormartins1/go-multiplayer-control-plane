@@ -46,23 +46,24 @@ const modeId_ = (m: string) => `m:${m}`;
 const kindId = (k: string) => `k:${k}`;
 const consumerId = (c: string) => `c:${c}`;
 
-// Altura do card de consumer (achado do Vitor): uma linha só de scoringStats
-// pode listar 15+ stats e quebrar em várias linhas — um `h` fixo (era 96)
-// deixa o card vizinho da mesma coluna (analytics) sobrepondo o leaderboard
-// quando ele cresce. CALIBRADO com offsetHeight real via Playwright (jogo
-// Achievements Test, 16 stats numa linha só): card de largura fixa 260px
-// (flow.css) + fonte monospace 11px -> ~34 caracteres cabem por linha.
-// wrappedLines simula o word-wrap greedy do navegador (exato pra monospace,
-// já que cada caractere tem a mesma largura — ceil(len/max) sozinho erra
-// porque o navegador quebra na palavra, não no caractere, sobrando espaço no
-// fim de cada linha).
-const CONSUMER_MAX_CHARS_PER_LINE = 34;
-const CONSUMER_LINE_H = 17;
-const CONSUMER_HEADER_H = 31;
-const CONSUMER_BODY_PADDING = 16; // 8px topo + 8px base (.flow-card__body)
-const CONSUMER_ROW_GAP = 4; // .flow-card__body gap, entre as linhas de data.lines
+// Altura dos cards de conteúdo variável (achado do Vitor): uma linha só de
+// scoringStats pode listar 15+ stats e quebrar em várias linhas — um `h`
+// fixo (eram 86 pro modo, 96 pro consumer) deixa o card vizinho da mesma
+// coluna sobrepondo o de cima quando ele cresce. CALIBRADO com offsetHeight
+// real via Playwright (jogo Achievements Test p/ consumer, Neon Breach p/
+// modo — mesmo header/body/row CSS nos dois, só a LARGURA fixa do card
+// difere, por isso dois MAX_CHARS_PER_LINE). wrappedLines simula o word-wrap
+// greedy do navegador (exato pra monospace, já que cada caractere tem a
+// mesma largura — ceil(len/max) sozinho erra porque o navegador quebra na
+// palavra, não no caractere, sobrando espaço no fim de cada linha).
+const FLOW_CARD_LINE_H = 17;
+const FLOW_CARD_HEADER_H = 31; // header + as duas bordas de 1px do card
+const FLOW_CARD_BODY_PADDING = 16; // 8px topo + 8px base (.flow-card__body)
+const FLOW_CARD_ROW_GAP = 4; // .flow-card__body gap, entre as linhas do corpo
+const CONSUMER_MAX_CHARS_PER_LINE = 34; // card de 260px (flow.css)
+const MODE_MAX_CHARS_PER_LINE = 24; // card de 190px (.flow-card--fact, flow.css)
 
-function wrappedLines(text: string, maxChars = CONSUMER_MAX_CHARS_PER_LINE): number {
+function wrappedLines(text: string, maxChars: number): number {
   const words = text.split(" ");
   let lines = 1;
   let cur = 0;
@@ -78,9 +79,18 @@ function wrappedLines(text: string, maxChars = CONSUMER_MAX_CHARS_PER_LINE): num
   return lines;
 }
 
+function cardHeight(rows: string[], maxCharsPerLine: number): number {
+  const rowsH = rows.reduce((sum, l) => sum + wrappedLines(l, maxCharsPerLine) * FLOW_CARD_LINE_H, 0);
+  return FLOW_CARD_HEADER_H + FLOW_CARD_BODY_PADDING + rowsH + FLOW_CARD_ROW_GAP * Math.max(0, rows.length - 1);
+}
+
 function consumerHeight(lines: string[]): number {
-  const rows = lines.reduce((sum, l) => sum + wrappedLines(l) * CONSUMER_LINE_H, 0);
-  return CONSUMER_HEADER_H + CONSUMER_BODY_PADDING + rows + CONSUMER_ROW_GAP * Math.max(0, lines.length - 1);
+  return cardHeight(lines, CONSUMER_MAX_CHARS_PER_LINE);
+}
+
+function modeHeight(modeId: string, stats: string[]): number {
+  const statsLine = stats.length > 0 ? `stats: ${stats.join(", ")}` : "sem stats declaradas";
+  return cardHeight([modeId, statsLine], MODE_MAX_CHARS_PER_LINE);
 }
 
 export function buildPipelineGraph(
@@ -101,7 +111,7 @@ export function buildPipelineGraph(
       archetypeColor: ARCHETYPE_META[m.archetype].color,
       stats: stats(m),
     } satisfies PipelineModeData,
-    h: 86,
+    h: modeHeight(m.modeId, stats(m)),
   }));
 
   // Camada 2 — kinds de envelope realmente produzidos pelos modos do jogo.

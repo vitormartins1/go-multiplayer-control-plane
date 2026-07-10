@@ -68,6 +68,13 @@ export function GamePipeline({ gameId }: { gameId: string }) {
         // Rules) — pedido do Vitor: o pipeline tem só 3 colunas curtas, o
         // respiro grande deixava os nodes pequenos demais.
         fitMargin={32}
+        // interactive=false (pedido do Vitor): a vista de pipeline é só
+        // leitura — sem botões de zoom/fit, sem arrastar nó/canvas. Só
+        // clicar pra selecionar (onNodeClick/onPaneClick acima) continua.
+        interactive={false}
+        // minimap=false: não faz sentido um minimapa de navegação num canvas
+        // sem pan/zoom pra navegar.
+        minimap={false}
         overlay={
           selectedNode ? (
             <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>

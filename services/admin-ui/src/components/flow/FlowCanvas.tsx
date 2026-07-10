@@ -80,6 +80,8 @@ export function FlowCanvas({
   fitKey,
   height,
   fitMargin,
+  interactive = true,
+  minimap = true,
 }: {
   nodes: Node[];
   edges: Edge[];
@@ -112,6 +114,15 @@ export function FlowCanvas({
   // o respiro fixo consome proporcionalmente demais da área e os nodes
   // encolhem pra caber.
   fitMargin?: number;
+  // interactive=false (achado do Vitor, pipeline): desliga pan/zoom/arrastar
+  // nós e some com os botões de zoom/fit — só clicar/selecionar continua
+  // funcionando (onNodeClick/onPaneClick inalterados). Default true preserva
+  // o comportamento de sempre nos outros canvas (Event Rules, prévia mini).
+  interactive?: boolean;
+  // minimap=false (pedido do Vitor, pipeline): tira o minimapa inteiro — não
+  // faz sentido num canvas só-leitura sem pan/zoom pra navegar. Default true
+  // preserva o comportamento de sempre nos outros canvas.
+  minimap?: boolean;
 }) {
   return (
     <div
@@ -129,6 +140,11 @@ export function FlowCanvas({
         fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
         minZoom={0.3}
         nodesConnectable={false}
+        nodesDraggable={interactive}
+        panOnDrag={interactive}
+        zoomOnScroll={interactive}
+        zoomOnPinch={interactive}
+        zoomOnDoubleClick={interactive}
         edgesFocusable={false}
         deleteKeyCode={null}
         onNodeClick={onNodeClick ? (_, n) => onNodeClick(n.id) : undefined}
@@ -141,17 +157,21 @@ export function FlowCanvas({
         )}
         {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
-        <Controls
-          showInteractive={false}
-          fitViewOptions={reservedFitOptions(dockReservedWidth ?? 0, fitMargin ?? FIT_MARGIN)}
-        />
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(n) => MINIMAP_COLOR[n.type ?? ""] ?? "#8b949e"}
-          nodeStrokeWidth={2}
-          style={{ width: 140, height: 96 }}
-        />
+        {interactive && (
+          <Controls
+            showInteractive={false}
+            fitViewOptions={reservedFitOptions(dockReservedWidth ?? 0, fitMargin ?? FIT_MARGIN)}
+          />
+        )}
+        {minimap && (
+          <MiniMap
+            pannable={interactive}
+            zoomable={interactive}
+            nodeColor={(n) => MINIMAP_COLOR[n.type ?? ""] ?? "#8b949e"}
+            nodeStrokeWidth={2}
+            style={{ width: 140, height: 96 }}
+          />
+        )}
       </ReactFlow>
     </div>
   );
