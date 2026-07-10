@@ -860,6 +860,7 @@ function EventRulesToolbarRail({
   onSearch: (v: string) => void;
 }) {
   const [relatedOpen, setRelatedOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   return (
     <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)" }}>
       <Group gap={4} wrap="nowrap">
@@ -868,30 +869,28 @@ function EventRulesToolbarRail({
             <IconPlus size={16} />
           </ActionIcon>
         </Tooltip>
-        <Popover width={240} withArrow position="bottom-start" withinPortal>
-          <Popover.Target>
-            <ActionIcon
-              size="md"
-              variant={search ? "light" : "subtle"}
-              color={search ? "blue" : "gray"}
-              aria-label="Buscar no subgrafo"
-            >
-              <IconSearch size={16} />
-            </ActionIcon>
-          </Popover.Target>
-          <Popover.Dropdown>
-            <Stack gap={8}>
-              <TextInput
-                size="xs"
-                label="Buscar no subgrafo"
-                placeholder="destaca no canvas…"
-                value={search}
-                onChange={(e) => onSearch(e.currentTarget.value)}
-                rightSection={search ? <CloseButton size="xs" onClick={() => onSearch("")} /> : undefined}
-              />
-            </Stack>
-          </Popover.Dropdown>
-        </Popover>
+        <Tooltip label="Buscar no subgrafo" position="bottom" withinPortal>
+          <ActionIcon
+            size="md"
+            variant={searchOpen || search ? "light" : "subtle"}
+            color={searchOpen || search ? "blue" : "gray"}
+            onClick={() => setSearchOpen((o) => !o)}
+            aria-label="Buscar no subgrafo"
+            aria-expanded={searchOpen}
+          >
+            <IconSearch size={16} />
+          </ActionIcon>
+        </Tooltip>
+        {searchOpen && (
+          <TextInput
+            size="xs"
+            placeholder="destaca no canvas…"
+            value={search}
+            onChange={(e) => onSearch(e.currentTarget.value)}
+            rightSection={search ? <CloseButton size="xs" onClick={() => onSearch("")} /> : undefined}
+            style={{ width: 200 }}
+          />
+        )}
         <Tooltip label="Regras relacionadas" position="bottom" withinPortal>
           <ActionIcon
             size="md"
