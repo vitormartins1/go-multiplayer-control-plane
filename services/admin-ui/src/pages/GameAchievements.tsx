@@ -144,6 +144,7 @@ function RuleFocusMiniCanvas({
   catalog,
   focusNodeId,
   overlay,
+  layoutKey,
 }: {
   rules: EventRule[];
   catalog: CatalogAchievement[];
@@ -152,6 +153,12 @@ function RuleFocusMiniCanvas({
   // mesmo padrão do canvas de Event Rules, em vez de um Group abaixo do
   // canvas ocupando espaço vertical à toa.
   overlay?: ReactNode;
+  // layoutKey (achado do Vitor): muda quando a LARGURA do canvas muda sem o
+  // foco mudar (entrar/sair do modo edição estreita o canvas de 100% pra
+  // 80% pro form) — sem isso, o AutoFit (keyed só em focusNodeId) não
+  // reenquadra, e o ReactFlow mantém o pan/zoom de quando o canvas era mais
+  // largo: o grafo fica cortado na borda em vez de recentralizar.
+  layoutKey?: unknown;
 }) {
   // buildRulesGraph só cria nós de achievement por MÉTRICA (metricAchs) quando
   // recebe `opts.stats` — sem isso, um achievement por stat nem aparece no
@@ -193,7 +200,7 @@ function RuleFocusMiniCanvas({
       edges={edges}
       nodeTypes={MINI_NODE_TYPES}
       height={280}
-      fitKey={focusNodeId}
+      fitKey={`${focusNodeId}::${String(layoutKey)}`}
       overlay={overlay}
       // fitMargin menor que o default (90px, calibrado pro canvas grande de
       // Event Rules) — nessa prévia compacta o respiro fixo consumia
@@ -720,9 +727,15 @@ export function GameAchievements({
                                   aqui, ao lado do canvas — 20% pro form, 80% pro
                                   canvas (que ocupava 100% antes de existir edição). */}
                               {isEditingThisRow && (
-                                <Box style={{ flex: "0 0 20%", minWidth: 240 }}>
-                                  <form onSubmit={editForm.onSubmit(submitEdit)}>
-                                    <Stack gap="xs">
+                                <Box style={{ flex: "0 0 20%", minWidth: 240, display: "flex" }}>
+                                  <form
+                                    onSubmit={editForm.onSubmit(submitEdit)}
+                                    style={{ display: "flex", flexDirection: "column", width: "100%" }}
+                                  >
+                                    {/* Stack dos campos com flex:1 empurra os botões pro rodapé —
+                                        sem isso, trocar entre "Por evento"/"Por métrica" (nº de campos
+                                        diferente) deslocava os botões pra cima/baixo (achado do Vitor). */}
+                                    <Stack gap="xs" style={{ flex: 1 }}>
                                       <TextInput label="Nome" size="xs" {...editForm.getInputProps("name")} />
                                       <Textarea
                                         label="Descrição"
@@ -732,6 +745,8 @@ export function GameAchievements({
                                         {...editForm.getInputProps("description")}
                                       />
                                       <CriterionFields form={editForm} stats={stats} events={events} />
+                                    </Stack>
+                                    <Stack gap="xs" mt="md">
                                       <Button type="submit" size="xs" fullWidth>
                                         Salvar
                                       </Button>
@@ -752,6 +767,7 @@ export function GameAchievements({
                                   rules={relevantEventRules}
                                   catalog={previewCatalog}
                                   focusNodeId={previewFocusNodeId}
+                                  layoutKey={isEditingThisRow}
                                   overlay={
                                     <Group gap={6}>
                                       {!previewAchievement.statKey && rule && (
