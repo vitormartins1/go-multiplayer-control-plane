@@ -41,12 +41,13 @@ type AnalyticsOverview struct {
 	Daily  []AnalyticsDaily    `json:"daily"`
 }
 
-// ParticipationStat é a contagem de um (papel, evento) no detalhe de um jogo
-// host_world_dropin (spec 014/004). Vazio no queue_arena.
+// ParticipationStat é a contagem de um (papel, evento, outcome) no detalhe de
+// um jogo host_world_dropin (spec 014/004/007). Vazio no queue_arena.
 type ParticipationStat struct {
-	Role  string `json:"role"`
-	Event string `json:"event"`
-	Count int64  `json:"count"`
+	Role    string `json:"role"`
+	Event   string `json:"event"`
+	Outcome string `json:"outcome"`
+	Count   int64  `json:"count"`
 }
 
 // GameAnalyticsDetail é o detalhe de analytics de um jogo (resumo + série diária

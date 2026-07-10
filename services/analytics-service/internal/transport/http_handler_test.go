@@ -62,7 +62,7 @@ func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {
 	r := &fakeReader{ga: domain.GameAnalytics{
 		GameStat:           domain.GameStat{GameID: "g1", Matches: 2},
 		Daily:              []domain.DailyPoint{{Day: "2026-07-04", Matches: 2}},
-		RoleParticipations: []domain.ParticipationStat{{Role: "invader", Event: "HOST_KILLED", Count: 3}},
+		RoleParticipations: []domain.ParticipationStat{{Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS", Count: 3}},
 	}}
 	rec := httptest.NewRecorder()
 	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics?days=7", nil))
@@ -77,9 +77,10 @@ func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {
 			Matches int64  `json:"matches"`
 		} `json:"daily"`
 		RoleParticipations []struct {
-			Role  string `json:"role"`
-			Event string `json:"event"`
-			Count int64  `json:"count"`
+			Role    string `json:"role"`
+			Event   string `json:"event"`
+			Outcome string `json:"outcome"`
+			Count   int64  `json:"count"`
 		} `json:"roleParticipations"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
@@ -88,6 +89,7 @@ func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {
 	assert.Equal(t, "2026-07-04", body.Daily[0].Day)
 	require.Len(t, body.RoleParticipations, 1)
 	assert.Equal(t, "invader", body.RoleParticipations[0].Role)
+	assert.Equal(t, "SUCCESS", body.RoleParticipations[0].Outcome, "outcome não pode se perder no DTO (achado 2026-07-10)")
 	assert.Equal(t, int64(3), body.RoleParticipations[0].Count)
 }
 
