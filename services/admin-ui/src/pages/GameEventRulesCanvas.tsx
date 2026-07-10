@@ -846,8 +846,6 @@ export function GameEventRulesCanvas({
 // botão/input diferente aqui).
 function EventRulesToolbarRail({
   focusRuleId,
-  listFilter,
-  onListFilter,
   draft,
   onNewRule,
   relatedKinds,
@@ -858,8 +856,6 @@ function EventRulesToolbarRail({
   onSearch,
 }: {
   focusRuleId: string | null;
-  listFilter: string;
-  onListFilter: (v: string) => void;
   draft: DraftState | null;
   onNewRule: () => void;
   relatedKinds: Set<SourceKind>;
@@ -882,23 +878,15 @@ function EventRulesToolbarRail({
           <Popover.Target>
             <ActionIcon
               size="md"
-              variant={listFilter || search ? "light" : "subtle"}
-              color={listFilter || search ? "blue" : "gray"}
-              aria-label="Filtrar/buscar"
+              variant={search ? "light" : "subtle"}
+              color={search ? "blue" : "gray"}
+              aria-label="Buscar no subgrafo"
             >
               <IconSearch size={16} />
             </ActionIcon>
           </Popover.Target>
           <Popover.Dropdown>
             <Stack gap={8}>
-              <TextInput
-                size="xs"
-                label="Filtrar lista"
-                placeholder="arquétipo, evento, condição…"
-                value={listFilter}
-                onChange={(e) => onListFilter(e.currentTarget.value)}
-                rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
-              />
               <TextInput
                 size="xs"
                 label="Buscar no subgrafo"
@@ -1033,12 +1021,17 @@ function EventRulesDock({
         }}
       >
         <Group justify="space-between" wrap="nowrap" p="xs" pb={collapsed ? "xs" : 4}>
-          <Group gap={6} wrap="nowrap">
-            <Text size="xs" fw={700}>
-              Event Rules
-            </Text>
-            <Badge size="xs" variant="light" color="gray">
-              {rules.length}
+          <Group gap={6} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+            <TextInput
+              size="xs"
+              placeholder="filtrar…"
+              value={listFilter}
+              onChange={(e) => onListFilter(e.currentTarget.value)}
+              rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <Badge size="xs" variant="light" color="gray" style={{ flexShrink: 0 }}>
+              {filtered.length}
             </Badge>
             <Popover width={300} withArrow position="bottom-start" withinPortal>
               <Popover.Target>
@@ -1127,8 +1120,6 @@ function EventRulesDock({
       </Paper>
       <EventRulesToolbarRail
         focusRuleId={focusRuleId}
-        listFilter={listFilter}
-        onListFilter={onListFilter}
         draft={draft}
         onNewRule={onNewRule}
         relatedKinds={relatedKinds}
