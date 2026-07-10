@@ -95,11 +95,33 @@ func TestListModes_SemModos_200ListaVazia(t *testing.T) {
 
 func TestGetMode_Inexistente_404ModeNotFound(t *testing.T) {
 	svc := new(mockService)
-	svc.On("GetMode", mock.Anything, "g1", "nao").Return(nil, domain.ErrModeNotFound)
+	svc.On("GetMode", mock.Anything, "g1", "nao").Return(nil, "", domain.ErrModeNotFound)
 
 	rr := do(newServer(svc), http.MethodGet, "/games/g1/multiplayer-profiles/nao", "")
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "mode_not_found")
+}
+
+// TestGetMode_ComFleet_IncluiFleetNaResposta (ADR-0026, spec 012): a Fleet do
+// jogo dono do modo viaja embutida na resposta do GET, sem round-trip extra —
+// é o que o session-service (registryclient) consome numa única chamada.
+func TestGetMode_ComFleet_IncluiFleetNaResposta(t *testing.T) {
+	svc := new(mockService)
+	mode := &domain.MultiplayerMode{
+		ModeID: "default",
+		Profile: domain.MultiplayerProfile{
+			Archetype: domain.ArchetypeQueueArena,
+			Topology:  "dedicated",
+			QueueArena: &domain.QueueArenaParams{
+				Structure: "ffa", PlayerCount: 4, WinCondition: "first_to_score", ScoreTarget: 10, MatchStructure: "single",
+			},
+		},
+	}
+	svc.On("GetMode", mock.Anything, "g1", "default").Return(mode, "packet-arena", nil)
+
+	rr := do(newServer(svc), http.MethodGet, "/games/g1/multiplayer-profiles/default", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"fleet":"packet-arena"`)
 }
 
 func TestDeleteMode_Valido_204(t *testing.T) {

@@ -44,6 +44,8 @@ func (s *Server) CreateSession(ctx context.Context, req *pb.CreateSessionRequest
 			return nil, status.Error(codes.InvalidArgument, "invalid team composition")
 		case errors.Is(err, domain.ErrProfileUnavailable):
 			return nil, status.Error(codes.FailedPrecondition, "mode profile unavailable")
+		case errors.Is(err, domain.ErrFleetUnavailable):
+			return nil, status.Error(codes.FailedPrecondition, "fleet not configured")
 		default:
 			return nil, status.Error(codes.Internal, "create session")
 		}
@@ -195,6 +197,8 @@ func worldError(err error, op string) error {
 		return status.Error(codes.FailedPrecondition, "player already joined")
 	case errors.Is(err, domain.ErrInvalidParticipation):
 		return status.Error(codes.InvalidArgument, "invalid participation event")
+	case errors.Is(err, domain.ErrFleetUnavailable):
+		return status.Error(codes.FailedPrecondition, "fleet not configured")
 	default:
 		return status.Error(codes.Internal, op)
 	}

@@ -58,6 +58,26 @@ func TestModeProfile_QueueArena_SnapshotComParamsCrusEHash(t *testing.T) {
 	assert.Empty(t, p.EnabledRoles, "derivados de host_world ficam zero")
 }
 
+// TestModeProfile_ComFleet_PropagaParaOSnapshot (ADR-0026, spec 022): a Fleet
+// do jogo dono do modo (game-registry/012) vira ProfileSnapshot.Fleet.
+func TestModeProfile_ComFleet_PropagaParaOSnapshot(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":8},"fleet":"packet-arena"}`, nil)
+	p, err := New(srv.URL, srv.Client()).ModeProfile(t.Context(), "g1", "tdm")
+	require.NoError(t, err)
+	assert.Equal(t, "packet-arena", p.Fleet)
+}
+
+// TestModeProfile_SemFleetNaResposta_SnapshotComFleetVazia: compat com
+// game-registry pré-spec-012 (campo ausente do JSON), não deve quebrar.
+func TestModeProfile_SemFleetNaResposta_SnapshotComFleetVazia(t *testing.T) {
+	srv := serverReturning(t, http.StatusOK,
+		`{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":8}}`, nil)
+	p, err := New(srv.URL, srv.Client()).ModeProfile(t.Context(), "g1", "tdm")
+	require.NoError(t, err)
+	assert.Empty(t, p.Fleet)
+}
+
 func TestModeProfile_InjetaInternalKey(t *testing.T) {
 	var gotKey string
 	srv := serverReturning(t, http.StatusOK,

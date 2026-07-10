@@ -238,9 +238,11 @@ func buildAllocator(log *slog.Logger) (domain.ServerAllocator, domain.ServerRegi
 			return nil, nil, fmt.Errorf("allocator agones: client: %w", err)
 		}
 		namespace := envOr("AGONES_NAMESPACE", "default")
-		fleet := envOr("AGONES_FLEET", "packet-arena")
-		log.Info("allocator agones", "namespace", namespace, "fleet", fleet)
-		ag := allocator.NewAgones(client, namespace, fleet)
+		// Fleet não é mais fixa por env var (ADR-0026): cada sessão resolve a
+		// Fleet do perfil do jogo (game-registry). Ver rollout na spec 022 —
+		// jogos que já usam Agones precisam ter a Fleet cadastrada antes do deploy.
+		log.Info("allocator agones", "namespace", namespace)
+		ag := allocator.NewAgones(client, namespace)
 		alloc, registry = ag, ag // mesmo adapter serve alocação e liveness
 	default:
 		return nil, nil, fmt.Errorf("ALLOCATOR_MODE inválido: %q (static|agones)", mode)

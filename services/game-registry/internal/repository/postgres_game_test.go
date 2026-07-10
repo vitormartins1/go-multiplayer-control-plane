@@ -33,6 +33,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/004_add_cover_metadata.sql",
 			"../../migrations/005_add_multiplayer_profile.sql",
 			"../../migrations/006_add_deleted_at.sql",
+			"../../migrations/007_add_fleet.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -147,6 +148,35 @@ func TestPostgresGameRepository_UpdateName_AtualizaSoNome(t *testing.T) {
 func TestPostgresGameRepository_UpdateName_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := NewPostgresGameRepository(newTestPool(t))
 	err := repo.UpdateName(context.Background(), "00000000-0000-0000-0000-000000000000", "X")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+// TestPostgresGameRepository_UpdateFleet_RoundTrip (ADR-0026, spec 012): jogo
+// nasce sem fleet ("" na leitura, coluna NULL); UpdateFleet seta e limpa.
+func TestPostgresGameRepository_UpdateFleet_RoundTrip(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("orb", "Orb Rush")
+	require.NoError(t, repo.Create(ctx, g))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Fleet, "jogo novo nasce sem fleet")
+
+	require.NoError(t, repo.UpdateFleet(ctx, g.ID, "packet-arena"))
+	got, err = repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "packet-arena", got.Fleet)
+
+	require.NoError(t, repo.UpdateFleet(ctx, g.ID, ""))
+	got, err = repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Fleet, "fleet vazia limpa o campo")
+}
+
+func TestPostgresGameRepository_UpdateFleet_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	err := repo.UpdateFleet(context.Background(), "00000000-0000-0000-0000-000000000000", "packet-arena")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 

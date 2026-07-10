@@ -130,17 +130,19 @@ func (s *service) setMode(ctx context.Context, gameID, modeID string, displayNam
 	return &mode, nil
 }
 
-func (s *service) GetMode(ctx context.Context, gameID, modeID string) (*domain.MultiplayerMode, error) {
+// GetMode também devolve a Fleet do jogo (ADR-0026, spec 012) — já carregada
+// no mesmo FindByID, sem query extra.
+func (s *service) GetMode(ctx context.Context, gameID, modeID string) (*domain.MultiplayerMode, string, error) {
 	g, err := s.repo.FindByID(ctx, gameID)
 	if err != nil {
-		return nil, fmt.Errorf("game-registry service: get mode: %w", err)
+		return nil, "", fmt.Errorf("game-registry service: get mode: %w", err)
 	}
 	for i := range g.MultiplayerModes {
 		if g.MultiplayerModes[i].ModeID == modeID {
-			return &g.MultiplayerModes[i], nil
+			return &g.MultiplayerModes[i], g.Fleet, nil
 		}
 	}
-	return nil, domain.ErrModeNotFound
+	return nil, "", domain.ErrModeNotFound
 }
 
 func (s *service) ListModes(ctx context.Context, gameID string) ([]domain.MultiplayerMode, error) {

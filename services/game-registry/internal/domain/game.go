@@ -33,6 +33,13 @@ type Game struct {
 	// MultiplayerModes é a coleção de modos do jogo (ADR-0024): "default"
 	// primeiro, demais por ModeID asc. Carregada por FindByID; List não a carrega.
 	MultiplayerModes []MultiplayerMode
+	// Fleet é o nome da Fleet Agones (label `agones.dev/fleet`) que aloca os game
+	// servers deste jogo (ADR-0026). Por JOGO, não por modo: todos os modos do
+	// mesmo jogo compartilham o mesmo binário/Fleet (o server lê `params_json` no
+	// boot para se configurar por modo, ADR-0024) — só arquétipo/jogo diferente
+	// precisa de imagem/Fleet diferente. Vazio = sem Agones real habilitado ainda
+	// (o session-service recusa alocar via Agones nesse caso).
+	Fleet string
 }
 
 // MultiplayerMode é um perfil de multiplayer NOMEADO (ADR-0024): um jogo tem
@@ -199,6 +206,10 @@ type GameService interface {
 	// jogo responde como inexistente em toda a API e o slug permanece reservado.
 	// ErrGameNotFound se ausente ou já deletado.
 	Delete(ctx context.Context, id string) error
+	// SetFleet atualiza a Fleet Agones do jogo (ADR-0026). Vazio limpa o campo;
+	// não-vazio precisa casar o formato de slug (ErrInvalidFleet caso contrário).
+	// ErrGameNotFound se não existir.
+	SetFleet(ctx context.Context, id, fleet string) (*Game, error)
 	// SetMultiplayerProfile valida e faz upsert do perfil de multiplayer do jogo
 	// (ADR-0023). ErrUnsupportedArchetype/ErrUnsupportedTopology/
 	// ErrInvalidProfileParams em entrada inválida; ErrGameNotFound se o jogo não
@@ -214,7 +225,10 @@ type GameService interface {
 	// devolvem ErrModeNotFound se o modo não existir. Todos: ErrGameNotFound se o
 	// jogo não existir.
 	SetMode(ctx context.Context, gameID, modeID, displayName string, p MultiplayerProfile) (*MultiplayerMode, error)
-	GetMode(ctx context.Context, gameID, modeID string) (*MultiplayerMode, error)
+	// GetMode também devolve a Fleet do jogo dono do modo (ADR-0026, spec 012) —
+	// já carregada no mesmo FindByID, sem query extra; consumida pelo
+	// session-service (registryclient.ModeProfile) numa única chamada.
+	GetMode(ctx context.Context, gameID, modeID string) (*MultiplayerMode, string, error)
 	ListModes(ctx context.Context, gameID string) ([]MultiplayerMode, error)
 	DeleteMode(ctx context.Context, gameID, modeID string) error
 }
@@ -229,6 +243,9 @@ type GameRepository interface {
 	FindByID(ctx context.Context, id string) (*Game, error)
 	// UpdateName atualiza só o nome do jogo; ErrGameNotFound se não existir.
 	UpdateName(ctx context.Context, id, name string) error
+	// UpdateFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012);
+	// ErrGameNotFound se não existir. Vazio limpa o campo.
+	UpdateFleet(ctx context.Context, id, fleet string) error
 	// SoftDelete marca deleted_at (ADR-0025); ErrGameNotFound se ausente ou já
 	// deletado. Jogo deletado nunca sai deste repositório: List/FindByID/
 	// UpdateName/SetModes o tratam como inexistente — o domínio não representa

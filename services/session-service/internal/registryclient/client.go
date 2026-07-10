@@ -42,6 +42,9 @@ type modeResponse struct {
 	Archetype string          `json:"archetype"`
 	Topology  string          `json:"topology"`
 	Params    json.RawMessage `json:"params"`
+	// Fleet é a Fleet Agones do jogo dono do modo (ADR-0026, game-registry/012);
+	// "" em respostas de game-registry pré-spec-012 (compat).
+	Fleet string `json:"fleet"`
 }
 
 // hostWorldParams é o subconjunto que o session decodifica para derivar os
@@ -86,6 +89,7 @@ func (c *Client) ModeProfile(ctx context.Context, gameID, modeID string) (domain
 		Topology:   m.Topology,
 		ParamsJSON: append([]byte(nil), m.Params...),
 		Hash:       profileHash(m),
+		Fleet:      m.Fleet,
 	}
 	if m.Archetype == domain.ArchetypeHostWorldDropIn {
 		var hw hostWorldParams

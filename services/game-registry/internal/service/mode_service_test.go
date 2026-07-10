@@ -104,18 +104,20 @@ func TestSetMode_JogoInexistente_ErrGameNotFound(t *testing.T) {
 
 func TestGetMode_Existe_Devolve(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("FindByID", mock.Anything, "g1").Return(
-		gameWithModes(domain.MultiplayerMode{ModeID: "tdm", DisplayName: "TDM", Profile: validProfile()}), nil)
+	g := gameWithModes(domain.MultiplayerMode{ModeID: "tdm", DisplayName: "TDM", Profile: validProfile()})
+	g.Fleet = "packet-arena"
+	repo.On("FindByID", mock.Anything, "g1").Return(g, nil)
 
-	m, err := New(repo).GetMode(context.Background(), "g1", "tdm")
+	m, fleet, err := New(repo).GetMode(context.Background(), "g1", "tdm")
 	require.NoError(t, err)
 	assert.Equal(t, "TDM", m.DisplayName)
+	assert.Equal(t, "packet-arena", fleet, "fleet do jogo dono do modo, sem query extra")
 }
 
 func TestGetMode_Inexistente_ErrModeNotFound(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("FindByID", mock.Anything, "g1").Return(gameWithModes(), nil)
-	_, err := New(repo).GetMode(context.Background(), "g1", "nao")
+	_, _, err := New(repo).GetMode(context.Background(), "g1", "nao")
 	assert.ErrorIs(t, err, domain.ErrModeNotFound)
 }
 

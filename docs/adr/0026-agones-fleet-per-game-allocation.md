@@ -1,6 +1,6 @@
 # ADR-0026: Alocação Agones fleet-aware por jogo (Fleet por game_id)
 
-**Status:** Proposed
+**Status:** Accepted (2026-07-10)
 **Data:** 2026-07-09
 **Serviço(s) afetado(s):** session-service, game-registry, admin-bff/admin-ui, data plane (Unity, indireto)
 **Relaciona:** ADR-0011/0012 (Agones desde o início), ADR-0022 (ServerRegistry/reconciliação), ADR-0023 (perfil de multiplayer)
@@ -35,11 +35,13 @@ A pergunta que motivou este ADR (do usuário, sobre multi-jogo no mesmo cluster 
 
 ## Decisão
 
-Adotamos a **Opção B**. `MultiplayerProfile` (game-registry) ganha um campo **`Fleet string`** (nome da Fleet/label `agones.dev/fleet` a usar) — explícito, não uma convenção implícita `fleet = game_id`, porque o slug do jogo (UUID hoje) não é um bom nome de Fleet e porque jogos de teste podem querer compartilhar uma Fleet de dev.
+Adotamos a **Opção B**. O jogo (`domain.Game`, game-registry) ganha um campo **`Fleet string`** (nome da Fleet/label `agones.dev/fleet` a usar) — explícito, não uma convenção implícita `fleet = game_id`, porque o slug do jogo (UUID hoje) não é um bom nome de Fleet e porque jogos de teste podem querer compartilhar uma Fleet de dev.
 
-`domain.ServerAllocator.Allocate` passa a receber o `fleet` resolvido (via o perfil, já buscado no fluxo de `OpenWorld`/`CreateSession` por ADR-0023 — sem chamada extra ao game-registry) em vez de o adapter Agones carregar um `fleet` fixo desde a construção. `NewAgones(client, namespace)` perde o parâmetro `fleet` do construtor; o selector da `GameServerAllocation` passa a montar `matchLabels: {agones.dev/fleet: fleet}` com o valor por-chamada. O adapter `static` (pool mock) ignora o campo, como já ignora `gameID` hoje.
+> **Amendment (2026-07-10):** a redação original deste ADR colocava o campo em `MultiplayerProfile` (por modo). Isso contradizia o próprio argumento que descartou a Opção C acima: modos do mesmo jogo compartilham o **mesmo binário** (o server lê `params_json` no boot para se configurar por modo, ADR-0024) — logo só faz sentido **uma Fleet por jogo**, nunca por modo. Corrigido antes da implementação (game-registry/012, session-service/022): o campo `Fleet` vive em `domain.Game`, irmão de `MultiplayerModes`, não em cada perfil.
 
-Sem `Fleet` cadastrado no perfil → erro claro na criação da sessão (`FailedPrecondition`, mesma família do "sem perfil de multiplayer" que já existe) em vez de cair silenciosamente numa fleet default errada.
+`domain.ServerAllocator.Allocate` passa a receber o `fleet` resolvido (do jogo, embutido na resposta do modo que o fluxo de `OpenWorld`/`CreateSession` já busca por ADR-0023/0024 — sem chamada extra ao game-registry) em vez de o adapter Agones carregar um `fleet` fixo desde a construção. `NewAgones(client, namespace)` perde o parâmetro `fleet` do construtor; o selector da `GameServerAllocation` passa a montar `matchLabels: {agones.dev/fleet: fleet}` com o valor por-chamada. O adapter `static` (pool mock) ignora o campo, como já ignora `gameID` hoje.
+
+Sem `Fleet` cadastrado no jogo → erro claro na criação da sessão (`FailedPrecondition`, mesma família do "sem perfil de multiplayer" que já existe) em vez de cair silenciosamente numa fleet default errada.
 
 ## Consequências
 

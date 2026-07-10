@@ -20,6 +20,10 @@ var _ domain.GameService = (*service)(nil)
 // pontas são alfanuméricas, então o mínimo é 2 caracteres).
 var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$`)
 
+// fleetRE: nome de Fleet Agones (label agones.dev/fleet) — mesmo formato de
+// modeIDRE (profile_service.go), compatível com label do Kubernetes.
+var fleetRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+
 const maxNameLen = 100
 
 // defaultImageStyle é o estilo do gerador de capa (cliente). Trocar aqui muda
@@ -72,6 +76,22 @@ func (s *service) Rename(ctx context.Context, id, name string) (*domain.Game, er
 	g, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("game-registry service: rename: reload: %w", err)
+	}
+	return g, nil
+}
+
+// SetFleet atualiza a Fleet Agones do jogo (ADR-0026). Vazio limpa o campo;
+// não-vazio precisa casar fleetRE.
+func (s *service) SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error) {
+	if fleet != "" && !fleetRE.MatchString(fleet) {
+		return nil, domain.ErrInvalidFleet
+	}
+	if err := s.repo.UpdateFleet(ctx, id, fleet); err != nil {
+		return nil, fmt.Errorf("game-registry service: set fleet: %w", err)
+	}
+	g, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: set fleet: reload: %w", err)
 	}
 	return g, nil
 }

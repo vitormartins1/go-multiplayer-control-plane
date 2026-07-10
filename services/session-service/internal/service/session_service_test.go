@@ -20,8 +20,8 @@ func discardLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard,
 
 type mockAllocator struct{ mock.Mock }
 
-func (m *mockAllocator) Allocate(ctx context.Context, matchID, gameID string) (domain.Server, error) {
-	args := m.Called(ctx, matchID, gameID)
+func (m *mockAllocator) Allocate(ctx context.Context, matchID, gameID, fleet string) (domain.Server, error) {
+	args := m.Called(ctx, matchID, gameID, fleet)
 	return args.Get(0).(domain.Server), args.Error(1)
 }
 
@@ -115,7 +115,7 @@ func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "default"}).Return("token-p1", nil)
 	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "default"}).Return("token-p2", nil)
 
@@ -137,7 +137,7 @@ func TestCreate_NPlayers_GeraNGrantsComServerAddress(t *testing.T) {
 
 func TestCreate_PoolEsgotado_RetornaErrNoServer(t *testing.T) {
 	alloc := &mockAllocator{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrNoServer)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrNoServer)
 
 	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
 	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
@@ -146,11 +146,45 @@ func TestCreate_PoolEsgotado_RetornaErrNoServer(t *testing.T) {
 	assert.Equal(t, float64(0), svc.ActiveSessions())
 }
 
+// TestCreate_PropagaFleetDoSnapshotParaAllocate (ADR-0026, spec 022): a Fleet
+// do snapshot (vinda do game-registry) chega ao allocator, sem lógica extra.
+func TestCreate_PropagaFleetDoSnapshotParaAllocate(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	profiles := &mockProfile{}
+	profiles.On("ModeProfile", mock.Anything, "game-1", "default").Return(domain.ProfileSnapshot{
+		ModeID: "default", Archetype: domain.ArchetypeQueueArena, Topology: "dedicated",
+		ParamsJSON: []byte(`{"structure":"ffa","playerCount":2}`), Hash: "h", Fleet: "capoeira-souls",
+	}, nil)
+	alloc.On("Allocate", mock.Anything, "match-1", "game-1", "capoeira-souls").Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(profiles))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
+
+	require.NoError(t, err)
+	alloc.AssertExpectations(t)
+}
+
+// TestCreate_FleetIndisponivel_NaoEmiteTokens (ADR-0026, spec 022): o erro do
+// allocator propaga e a sessão não chega a emitir connect tokens.
+func TestCreate_FleetIndisponivel_NaoEmiteTokens(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{}, domain.ErrFleetUnavailable)
+
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
+
+	assert.ErrorIs(t, err, domain.ErrFleetUnavailable)
+	iss.AssertNotCalled(t, "Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestReportResult_PublicaLiberaEncerra(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
 	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
@@ -173,7 +207,7 @@ func TestReportResult_PublishFalha_NaoEncerraSessao(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
 	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
@@ -208,7 +242,7 @@ func reportSetupArchetype(t *testing.T, archetype string) (*Service, *mockPublis
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{archetype: archetype}))
 	_, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1", "p2"))
@@ -263,7 +297,7 @@ func TestReportResult_OutcomeInvalido_ErrInvalidOutcome(t *testing.T) {
 func TestSweep_SessaoExpirada_FechaComTTLELiberaServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	// clock injetável: cria a sessão em t0 e varre em t0+31m com TTL de 30m.
@@ -289,7 +323,7 @@ func TestSweep_SessaoExpirada_FechaComTTLELiberaServer(t *testing.T) {
 func TestSweep_SessaoDentroDoTTL_NaoFecha(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
@@ -307,7 +341,7 @@ func TestReconcile_ServerSumiuAposGrace_FechaComoAbandoned(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	reg := &mockRegistry{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
@@ -334,7 +368,7 @@ func TestReconcile_DentroDoGrace_NaoFecha(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	reg := &mockRegistry{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
@@ -357,7 +391,7 @@ func TestReconcile_ErroNoList_NaoFechaNada(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	reg := &mockRegistry{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
@@ -379,7 +413,7 @@ func TestReconcile_ServerVivo_NaoFecha(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	reg := &mockRegistry{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
@@ -400,7 +434,7 @@ func TestReconcile_ServerVivo_NaoFecha(t *testing.T) {
 func TestReconcile_SemRegistry_NoOp(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
@@ -417,7 +451,7 @@ func TestReportResult_MarcaCloseReasonResult(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
 	sess, _, err := svc.Create(context.Background(), "match-1", "game-1", "default", ffaTeams("p1"))
@@ -439,7 +473,7 @@ func newSvcComSessoes(t *testing.T, opts ...Option) *Service {
 	t.Helper()
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	alloc.On("Release", mock.Anything, mock.Anything).Return(nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	pub := &mockPublisher{}
@@ -494,7 +528,7 @@ func TestHistorico_RespeitaLimite_MaisAntigaSai(t *testing.T) {
 func TestCreate_FalhaAoEmitirToken_LiberaServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{ModeID: "default"}).Return("", assert.AnError)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
@@ -509,7 +543,7 @@ func TestCreate_FalhaAoEmitirToken_LiberaServer(t *testing.T) {
 func TestCloseByAdmin_Ativa_FechaELiberaServer(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
@@ -532,7 +566,7 @@ func TestCloseByAdmin_Inexistente_ErrSessionNotFound(t *testing.T) {
 func TestAllSessions_JogosDistintos_VemJuntas(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s", Address: "a"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "s", Address: "a"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
 	_, _, _ = svc.Create(context.Background(), "m1", "g1", "default", ffaTeams("p1"))
@@ -548,7 +582,7 @@ func TestCreate_ComTimes_RegistraTimesEEmiteTokenComTeamID(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	// cada jogador recebe o token com o team_id do seu lado.
 	iss.On("Issue", "p1", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-1", ModeID: "default"}).Return("t1", nil)
 	iss.On("Issue", "p2", "match-1", "10.0.0.1:7777", domain.ConnectClaims{TeamID: "team-2", ModeID: "default"}).Return("t2", nil)
@@ -589,7 +623,7 @@ func TestReportResult_CarimbaTeamIDDaComposicaoRegistrada(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
@@ -700,7 +734,7 @@ func TestReportResult_Placement_CarimbaSquadDaFormacao(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 
@@ -803,7 +837,7 @@ func TestReportResult_Collective_CarimbaTimeDaFormacao(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("t", nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 

@@ -18,7 +18,7 @@ func TestReportResult_GravaResultNaSessaoFechada(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	pub.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
@@ -54,7 +54,7 @@ func TestReportResult_PublishFalha_NaoGravaResult(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	pub := &mockPublisher{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	pub.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("sns fora"))
 	svc := New(alloc, iss, pub, WithProfileProvider(stubProfiles{}))
@@ -72,7 +72,7 @@ func TestReportResult_PublishFalha_NaoGravaResult(t *testing.T) {
 func TestCloseByAdmin_SemResult(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
-	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
 	alloc.On("Release", mock.Anything, "server-0").Return(nil)
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))

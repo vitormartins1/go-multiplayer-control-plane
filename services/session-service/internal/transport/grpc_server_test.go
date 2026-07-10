@@ -18,6 +18,7 @@ import (
 
 	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/gen/session/v1"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/allocator"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/publisher"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/service"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/token"
@@ -113,6 +114,36 @@ func winLossDrawReq(matchID string) *pb.ReportResultRequest {
 			Players: []*pb.PlayerOutcome{{PlayerId: "p1", Outcome: "win"}},
 		}},
 	}
+}
+
+// fleetlessAllocator sempre recusa com ErrFleetUnavailable — simula o adapter
+// Agones real quando o jogo não tem Fleet configurada (ADR-0026, spec 022).
+type fleetlessAllocator struct{}
+
+func (fleetlessAllocator) Allocate(context.Context, string, string, string) (domain.Server, error) {
+	return domain.Server{}, domain.ErrFleetUnavailable
+}
+func (fleetlessAllocator) Release(context.Context, string) error { return nil }
+
+// TestCreateSession_FleetIndisponivel_FailedPrecondition (ADR-0026, spec 022).
+func TestCreateSession_FleetIndisponivel_FailedPrecondition(t *testing.T) {
+	iss, err := token.Generate()
+	require.NoError(t, err)
+	svc := service.New(fleetlessAllocator{}, iss, publisher.New(slogDiscard()), service.WithProfileProvider(stubProfile{}))
+	srv := grpc.NewServer()
+	pb.RegisterSessionServer(srv, NewServer(svc))
+	lis := bufconn.Listen(1024 * 1024)
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough://bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close(); srv.Stop() })
+	client := pb.NewSessionClient(conn)
+
+	_, err = client.CreateSession(context.Background(), &pb.CreateSessionRequest{MatchId: "m1", Players: []string{"p1"}})
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }
 
 func TestReportResult_MatchInexistente_NotFound(t *testing.T) {

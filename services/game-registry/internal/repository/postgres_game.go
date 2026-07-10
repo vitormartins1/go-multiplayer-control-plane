@@ -52,6 +52,19 @@ func (r *PostgresGameRepository) UpdateName(ctx context.Context, id, name string
 	return nil
 }
 
+// UpdateFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012). Vazio
+// persiste NULL (mesma leitura NULL->"" do selectCols).
+func (r *PostgresGameRepository) UpdateFleet(ctx context.Context, id, fleet string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET fleet = NULLIF($2, '') WHERE id = $1 AND deleted_at IS NULL`, id, fleet)
+	if err != nil {
+		return fmt.Errorf("game-registry repository: update fleet: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGameNotFound
+	}
+	return nil
+}
+
 // SoftDelete marca deleted_at (ADR-0025). O UPDATE condicional cobre
 // inexistente e já deletado com uma query só (RowsAffected 0), sem corrida.
 func (r *PostgresGameRepository) SoftDelete(ctx context.Context, id string) error {
@@ -67,14 +80,17 @@ func (r *PostgresGameRepository) SoftDelete(ctx context.Context, id string) erro
 }
 
 // selectCols robustece a leitura para registros antigos: image NULL -> "",
-// seed NULL -> slug (mesma regra do cadastro). Ver migration 004.
+// seed NULL -> slug (mesma regra do cadastro), fleet NULL -> "" (migration 007,
+// ADR-0026). Ver migration 004.
 const selectCols = `id, slug, name, created_at,
 	COALESCE(image, ''), image_source,
-	COALESCE(generated_image_seed, slug), generated_image_style`
+	COALESCE(generated_image_seed, slug), generated_image_style,
+	COALESCE(fleet, '')`
 
 func scanGame(row interface{ Scan(...any) error }, g *domain.Game) error {
 	return row.Scan(&g.ID, &g.Slug, &g.Name, &g.CreatedAt,
-		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle)
+		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle,
+		&g.Fleet)
 }
 
 func (r *PostgresGameRepository) List(ctx context.Context) ([]domain.Game, error) {
@@ -109,6 +125,7 @@ func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*doma
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&g.ID, &g.Slug, &g.Name, &g.CreatedAt,
 		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle,
+		&g.Fleet,
 		&profileRaw,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

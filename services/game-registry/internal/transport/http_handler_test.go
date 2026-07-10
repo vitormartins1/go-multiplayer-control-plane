@@ -53,10 +53,11 @@ func (m *mockService) SetMode(ctx context.Context, gameID, modeID, displayName s
 	res, _ := args.Get(0).(*domain.MultiplayerMode)
 	return res, args.Error(1)
 }
-func (m *mockService) GetMode(ctx context.Context, gameID, modeID string) (*domain.MultiplayerMode, error) {
+func (m *mockService) GetMode(ctx context.Context, gameID, modeID string) (*domain.MultiplayerMode, string, error) {
 	args := m.Called(ctx, gameID, modeID)
 	res, _ := args.Get(0).(*domain.MultiplayerMode)
-	return res, args.Error(1)
+	fleet, _ := args.Get(1).(string)
+	return res, fleet, args.Error(2)
 }
 func (m *mockService) ListModes(ctx context.Context, gameID string) ([]domain.MultiplayerMode, error) {
 	args := m.Called(ctx, gameID)
@@ -68,6 +69,11 @@ func (m *mockService) DeleteMode(ctx context.Context, gameID, modeID string) err
 }
 func (m *mockService) Delete(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
+}
+func (m *mockService) SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error) {
+	args := m.Called(ctx, id, fleet)
+	g, _ := args.Get(0).(*domain.Game)
+	return g, args.Error(1)
 }
 
 type mockPresence struct{ mock.Mock }
@@ -248,6 +254,34 @@ func TestRename_Inexistente_404(t *testing.T) {
 	svc := new(mockService)
 	svc.On("Rename", mock.Anything, "nao", "X").Return((*domain.Game)(nil), domain.ErrGameNotFound)
 	rr := do(newServer(svc), http.MethodPut, "/games/nao", `{"name":"X"}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+// Fleet Agones (ADR-0026, spec 012).
+
+func TestSetFleet_200_AtualizaFleet(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetFleet", mock.Anything, "id-1", "packet-arena").Return(&domain.Game{ID: "id-1", Slug: "orb", Fleet: "packet-arena"}, nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/fleet", `{"fleet":"packet-arena"}`)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"fleet":"packet-arena"`)
+	svc.AssertExpectations(t)
+}
+
+func TestSetFleet_FormatoInvalido_400(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetFleet", mock.Anything, "id-1", "Packet_Arena").Return((*domain.Game)(nil), domain.ErrInvalidFleet)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/fleet", `{"fleet":"Packet_Arena"}`)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid_fleet")
+}
+
+func TestSetFleet_Inexistente_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetFleet", mock.Anything, "nao", "packet-arena").Return((*domain.Game)(nil), domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodPut, "/games/nao/fleet", `{"fleet":"packet-arena"}`)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
