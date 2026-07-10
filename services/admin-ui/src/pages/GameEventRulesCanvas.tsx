@@ -1,7 +1,9 @@
 import {
+  ActionIcon,
   Badge,
   Button,
   Chip,
+  Collapse,
   CloseButton,
   Drawer,
   Group,
@@ -16,7 +18,16 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconBan, IconPlus, IconRotate2, IconSearch, IconTrash, IconTrophy } from "@tabler/icons-react";
+import {
+  IconBan,
+  IconChevronDown,
+  IconChevronUp,
+  IconPlus,
+  IconRotate2,
+  IconSearch,
+  IconTrash,
+  IconTrophy,
+} from "@tabler/icons-react";
 import type { Edge, Node, NodeTypes } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlowCanvas } from "../components/flow/FlowCanvas";
@@ -133,6 +144,12 @@ export function GameEventRulesCanvas({
   const arch = archetypeOptions.includes(archetype) ? archetype : archetypeOptions[0];
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // detailsCollapsed (painel de detalhe do node selecionado): recolhe pra só
+  // o cabeçalho, sem perder a seleção — o conteúdo continua atualizando por
+  // baixo (Collapse não desmonta). Clicar em outro node sempre reexpande
+  // (achado do Vitor: recolher é só um "deixa enxuto por agora", não um modo
+  // permanente).
+  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const [search, setSearch] = useState("");
   // relatedKinds (2026-07-10): "regras relacionadas" por kind de source
   // (facts/modo/stats) em vez de um switch único — vazio = desligado (achado
@@ -594,6 +611,7 @@ export function GameEventRulesCanvas({
     if (node?.type === "sectionLabel") return; // rótulo de seção não é selecionável
     if (!draft) {
       setSelectedId(id);
+      setDetailsCollapsed(false);
       // spec 055: clicar numa regra (a focada, ou uma vizinha trazida pelo
       // toggle "relacionadas") refoca o canvas nela e sincroniza a lista —
       // só regra dispara isso; clicar em source/eventType/achievement só
@@ -744,19 +762,37 @@ export function GameEventRulesCanvas({
           overlay={
             selectedNode && !draft ? (
               <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
-                <CloseButton
-                  size="sm"
-                  onClick={() => setSelectedId(null)}
-                  style={{ position: "absolute", top: 8, right: 8 }}
-                  aria-label="Fechar detalhe"
-                />
-                <NodeDetails
-                  node={selectedNode}
-                  unconditionalTypes={unconditionalTypes}
-                  onDelete={(r) => setDeleting(r)}
-                  onToggleSuppress={toggleSuppress}
-                  onQuickAch={(et) => setQuickAchType(et)}
-                />
+                <Group justify="space-between" wrap="nowrap" gap={4} mb={detailsCollapsed ? 0 : "xs"}>
+                  <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                    <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
+                      {detailsHeaderSummary(selectedNode).kind}
+                    </Text>
+                    <Text size="xs" c="dimmed" truncate="end" style={{ minWidth: 0 }}>
+                      {detailsHeaderSummary(selectedNode).label}
+                    </Text>
+                  </Group>
+                  <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+                    <ActionIcon
+                      size="sm"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => setDetailsCollapsed((c) => !c)}
+                      aria-label={detailsCollapsed ? "Expandir detalhe" : "Recolher detalhe"}
+                    >
+                      {detailsCollapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
+                    </ActionIcon>
+                    <CloseButton size="sm" onClick={() => setSelectedId(null)} aria-label="Fechar detalhe" />
+                  </Group>
+                </Group>
+                <Collapse in={!detailsCollapsed}>
+                  <NodeDetails
+                    node={selectedNode}
+                    unconditionalTypes={unconditionalTypes}
+                    onDelete={(r) => setDeleting(r)}
+                    onToggleSuppress={toggleSuppress}
+                    onQuickAch={(et) => setQuickAchType(et)}
+                  />
+                </Collapse>
               </Paper>
             ) : undefined
           }
@@ -819,6 +855,33 @@ function nodeText(n: Node): string {
     }
     default:
       return "";
+  }
+}
+
+// detailsHeaderSummary: rótulo curto do node selecionado, mostrado no
+// cabeçalho do painel de detalhe mesmo quando ele está recolhido (spec do
+// Vitor: o painel some quase inteiro, mas o cabeçalho continua dizendo o
+// quê está selecionado).
+function detailsHeaderSummary(n: Node): { kind: string; label: string } {
+  switch (n.type) {
+    case "rule": {
+      const { rule } = n.data as unknown as RuleNodeData;
+      return { kind: "Regra", label: rule.scope === "global" ? "global" : "do jogo" };
+    }
+    case "source": {
+      const d = n.data as unknown as SourceNodeData;
+      return { kind: d.kind === "stat" ? "Stat" : d.kind === "mode" ? "Modo" : "Fact", label: d.sourceKey };
+    }
+    case "eventType": {
+      const d = n.data as unknown as EventTypeNodeData;
+      return { kind: "Event type", label: d.eventType };
+    }
+    case "achievement": {
+      const d = n.data as unknown as AchievementNodeData;
+      return { kind: "Achievement", label: d.name };
+    }
+    default:
+      return { kind: "Detalhe", label: "" };
   }
 }
 
