@@ -131,6 +131,12 @@ type HostWorldDropInParams struct {
 	// InvasionEnabled: invasores podem entrar sem convite (mundo aparece como
 	// alvo elegível). Se falso, só co-op (aliados convidados pelo host).
 	InvasionEnabled bool
+	// ScoringStats são métricas extras que o resultado carregará (ex.: kills,
+	// deaths); pode ser vazia. Adicionado depois dos outros 3 arquétipos —
+	// achado usando o motor de event rules a fundo (o participation_event só
+	// ganhou stats na spec achievements/018; até então não fazia sentido
+	// declarar aqui).
+	ScoringStats []string
 }
 
 // BattleRoyaleParams são os parâmetros do arquétipo "battle_royale": lobby

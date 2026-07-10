@@ -73,8 +73,9 @@ const NODE_TYPES: NodeTypes = {
   achievement: AchievementNode,
 };
 
-// scoringStats mora em params e nem todo arquétipo declara (host_world_dropin
-// não tem o conceito) — daí o helper defensivo.
+// scoringStats mora em params — os 4 arquétipos declaram (host_world_dropin
+// fechou o gap na spec game-registry/scoringStats-hwd); helper genérico só
+// pra manter o narrowing de tipo do union discriminado.
 function modeStats(m: MultiplayerMode): string[] {
   return "scoringStats" in m.params ? m.params.scoringStats : [];
 }

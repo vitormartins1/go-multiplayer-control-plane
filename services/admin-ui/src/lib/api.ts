@@ -82,6 +82,10 @@ export interface HostWorldDropInParams {
   weaponTierEnabled: boolean;
   passwordEnabled: boolean;
   invasionEnabled: boolean;
+  // scoringStats: achado usando o motor de event rules a fundo (jogo
+  // Achievements Test) — host_world_dropin era o único arquétipo sem o
+  // campo; fechado junto com achievements/018 (stats no participation_event).
+  scoringStats: string[];
 }
 
 // battle_royale (ADR-0023): lobby grande + squads; colocação ordinal.

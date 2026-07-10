@@ -21,6 +21,7 @@ func TestEncodeDecodeProfile_HostWorldDropIn_PreservaChaveExtra(t *testing.T) {
 			EnabledRoles: []string{"coop", "invader"},
 			CoopSlots:    2, InvaderSlots: 1,
 			InvasionEnabled: true,
+			ScoringStats:    []string{"kills", "deaths"},
 		},
 		// bossPowerScalingPerPhantom é fora do vocabulário tipado (follow-up
 		// #14) — precisa sobreviver ao round-trip de persistência intacta.

@@ -70,6 +70,7 @@ const HWD_DEFAULTS: HostWorldDropInParams = {
   weaponTierEnabled: false,
   passwordEnabled: true,
   invasionEnabled: true,
+  scoringStats: [],
 };
 
 const BR_DEFAULTS: BattleRoyaleParams = {
@@ -368,6 +369,7 @@ function HostWorldDropInForm({
 }) {
   const hasCoop = p.enabledRoles.includes("coop");
   const hasInvader = p.enabledRoles.includes("invader");
+  const invalidStats = p.scoringStats.filter((s) => !STAT_RE.test(s));
 
   function toggleRole(role: "coop" | "invader", checked: boolean) {
     const next = checked
@@ -474,6 +476,26 @@ function HostWorldDropInForm({
           </Stack>
         </Fieldset>
       </SimpleGrid>
+
+      <Fieldset legend="Métricas">
+        <TagsInput
+          label={
+            <FieldLabel
+              label="Stats de pontuação"
+              help="Métricas extras que o data plane reporta no evento de participação (ex.: kills, deaths). Cada stat pode virar critério de achievement (por métrica) ou condição de regra (comparador). Use identificadores em minúsculas começando com letra."
+            />
+          }
+          description="Pressione Enter para adicionar cada stat."
+          value={p.scoringStats}
+          onChange={(v) => set("scoringStats", v)}
+          error={
+            invalidStats.length > 0
+              ? `Stat inválido: ${invalidStats.join(", ")} (só minúsculas, começa com letra)`
+              : undefined
+          }
+          clearable
+        />
+      </Fieldset>
     </>
   );
 }

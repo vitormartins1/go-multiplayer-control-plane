@@ -337,6 +337,11 @@ func validateHostWorldDropIn(p domain.HostWorldDropInParams) error {
 	if !hasInvader && p.InvaderSlots != 0 {
 		return domain.ErrInvalidProfileParams
 	}
+	for _, stat := range p.ScoringStats {
+		if !scoringStatRE.MatchString(stat) {
+			return domain.ErrInvalidProfileParams
+		}
+	}
 	return nil
 }
 
