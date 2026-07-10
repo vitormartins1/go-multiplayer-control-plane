@@ -399,3 +399,57 @@ export function siblingRuleIds(edges: Edge[], focusNodeIds: Set<string>): Set<st
   }
   return siblings;
 }
+
+// heightOf estima a altura de um node já posicionado (mesmas fórmulas de
+// buildRulesGraph) — usado só por repackVisible, nunca em ghost/draft (o
+// filtro que chama repackVisible já está desligado quando há draft ativo).
+function heightOf(n: Node): number {
+  switch (n.type) {
+    case "source": {
+      const d = n.data as unknown as SourceNodeData;
+      return SIZE.source.h + (d.drift ? 15 : 0);
+    }
+    case "rule":
+      return ruleHeight((n.data as unknown as RuleNodeData).rule);
+    case "eventType":
+      return SIZE.eventType.h;
+    case "achievement":
+      return SIZE.achievement.h;
+    case "sectionLabel":
+      return LABEL_H;
+    default:
+      return SIZE.achievement.h;
+  }
+}
+
+// repackVisible recalcula as posições Y de um subconjunto já filtrado de nodes
+// (spec 055 follow-up): buildRulesGraph posiciona pensando no arquétipo
+// INTEIRO; filtrar por foco sem recalcular deixa os nodes visíveis nas
+// coordenadas originais, com vãos enormes onde ficavam os nodes escondidos.
+// Reempacota cada coluna (agrupada por x, que já reflete a camada) do zero,
+// preservando a ordem relativa (Y original) e recentralizando pela coluna
+// mais alta — mesmo efeito visual do build completo, só que pro subconjunto.
+export function repackVisible(nodes: Node[]): Node[] {
+  const byX = new Map<number, Node[]>();
+  for (const n of nodes) byX.set(n.position.x, [...(byX.get(n.position.x) ?? []), n]);
+
+  const stacked = new Map<number, { col: Node[]; y: Map<string, number>; h: number }>();
+  for (const [x, col] of byX) {
+    const sorted = [...col].sort((a, b) => a.position.y - b.position.y);
+    const y = new Map<string, number>();
+    let cursor = 0;
+    for (const n of sorted) {
+      y.set(n.id, cursor);
+      cursor += heightOf(n) + GAP_Y;
+    }
+    stacked.set(x, { col: sorted, y, h: Math.max(0, cursor - GAP_Y) });
+  }
+  const maxH = Math.max(0, ...[...stacked.values()].map((s) => s.h));
+
+  const out: Node[] = [];
+  for (const [x, { col, y, h }] of stacked) {
+    const offset = (maxH - h) / 2;
+    for (const n of col) out.push({ ...n, position: { x, y: (y.get(n.id) ?? 0) + offset } });
+  }
+  return out;
+}

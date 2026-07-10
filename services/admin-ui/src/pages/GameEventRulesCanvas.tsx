@@ -52,6 +52,7 @@ import {
 import {
   buildRulesGraph,
   pathHighlight,
+  repackVisible,
   siblingRuleIds,
   STAT_PREFIX,
   type AchievementNodeData,
@@ -366,7 +367,7 @@ export function GameEventRulesCanvas({
         visibleNodes = [];
         visibleEdges = [];
       } else {
-        visibleNodes = graph.nodes.filter((n) => {
+        const filtered = graph.nodes.filter((n) => {
           if (focusPath.nodeIds.has(n.id)) return true;
           if (n.type === "sectionLabel" && n.id.startsWith("lbl:")) {
             const kind = n.id.slice(4);
@@ -379,6 +380,10 @@ export function GameEventRulesCanvas({
           }
           return false;
         });
+        // repackVisible: sem isso, os nodes filtrados mantêm as coordenadas Y
+        // calculadas pro arquétipo inteiro — vãos enormes onde ficavam os
+        // nodes escondidos (achado do Vitor testando o foco na prática).
+        visibleNodes = repackVisible(filtered);
         visibleEdges = graph.edges.filter((e) => focusPath.edgeIds.has(e.id));
       }
     }
