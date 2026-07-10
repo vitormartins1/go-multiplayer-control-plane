@@ -40,3 +40,28 @@ sem esses listeners os dois passariam batidos como timeout genérico):
 Reverificado após as correções: prévia por métrica mostra os 2 nós corretos (source STAT →
 achievement), "Ver regra" (global) e "Editar regra" (jogo) navegam e abrem o form/overlay
 esperado, sem erros de console/pageerror.
+
+## Follow-up: prévia por métrica não agrupava os achievements irmãos do mesmo stat
+
+Achado do Vitor testando ao vivo: pra evento, expandir qualquer achievement de um event type
+mostra TODOS os achievements que escutam aquele type (visão em grupo, útil). Pra métrica, cada
+achievement mostrava só ele mesmo + a fonte — mesmo quando 5 achievements do catálogo
+compartilhavam o mesmo `statKey` (ex.: `animals_saved` com 5 tiers).
+
+Causa: `pathHighlight` faz dois caminhos UNIDIRECIONAIS independentes a partir do nó focado (um
+"upstream", outro "downstream") — não é uma busca bidirecional real que pivota em nós
+intermediários. Pro lado de evento, o foco já era o nó do EVENT TYPE (o ponto de ramificação,
+com uma edge de saída pra cada achievement que o escuta), então o caminho "downstream" pegava
+todos os irmãos de graça. Pro lado de métrica, o foco era o nó do ACHIEVEMENT individual (uma
+folha, sem saída) — nenhum dos dois caminhos unidirecionais a partir de uma folha alcança outra
+folha do mesmo "galho".
+
+Corrigido (`GameAchievements.tsx`): o foco da prévia por métrica passou do nó do achievement
+(`achId(a.id)`) pro nó da FONTE do stat (`srcId(STAT_PREFIX + a.statKey)`) — o mesmo padrão já
+usado pro lado de evento (focar no nó de ramificação, não na folha). Verificado com dado real:
+stat só-métrica (`animals_saved`, 5 achievements) mostra os 6 nós certos (fonte + 5 irmãos);
+stat também usado numa condição de regra (`deaths`, com a regra `flawless_invasion` usando
+`stat.deaths ≤ 0`) mostra 9 nós — fonte, a regra, seu event type, o achievement por evento
+dela E os 5 achievements de métrica — sem explodir, e revelando uma relação genuinamente útil
+(a mesma prévia já mostraria isso pro lado de evento também, via caminho reverso a partir da
+regra).

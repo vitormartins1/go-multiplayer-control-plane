@@ -55,7 +55,15 @@ import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 import { FlowCanvas } from "../components/flow/FlowCanvas";
 import { AchievementNode, EventTypeNode, RuleNode, SectionLabelNode, SourceNode } from "../components/flow/nodes";
-import { achId, buildRulesGraph, pathHighlight, repackVisible, type StatInfo, typeId } from "../lib/rulesGraph";
+import {
+  buildRulesGraph,
+  pathHighlight,
+  repackVisible,
+  srcId,
+  STAT_PREFIX,
+  type StatInfo,
+  typeId,
+} from "../lib/rulesGraph";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
@@ -628,7 +636,13 @@ export function GameAchievements({
                             <RuleFocusMiniCanvas
                               rules={relevantEventRules}
                               catalog={catalog ?? []}
-                              focusNodeId={a.statKey ? achId(a.id) : typeId(a.eventType)}
+                              // foca na FONTE do stat (não no achievement individual) — mesmo
+                              // padrão do lado de evento (foca no event type, não no achievement):
+                              // pathHighlight faz dois caminhos unidirecionais a partir do foco, então
+                              // só alcança os "irmãos" quando o foco é o nó de ramificação (source/type),
+                              // nunca a folha (achievement) — achado do Vitor testando com um stat com
+                              // 5 achievements ligados, só o próprio aparecia na prévia.
+                              focusNodeId={a.statKey ? srcId(STAT_PREFIX + a.statKey) : typeId(a.eventType)}
                             />
                           )}
                           {!a.statKey && rule && (
