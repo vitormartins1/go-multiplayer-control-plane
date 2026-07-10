@@ -9,7 +9,7 @@ import {
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, type DragEvent, type ReactNode } from "react";
 import "./flow.css";
 
 const FIT_MARGIN = 24; // respiro (px) além da área reservada pro dock/overlay.
@@ -70,6 +70,7 @@ export function FlowCanvas({
   onPaneClick,
   onDrop,
   dock,
+  dockReservedWidth,
   overlay,
   fitKey,
   height,
@@ -83,6 +84,14 @@ export function FlowCanvas({
   // dock flutua no canto oposto ao overlay (Panel top-left) — painel de
   // navegação/controles do canvas (spec 058), mesmo mecanismo do overlay.
   dock?: ReactNode;
+  // dockReservedWidth (spec 058, achado do Vitor): largura (px) que o
+  // fitView deve reservar à esquerda — NEM sempre é a largura inteira do
+  // `dock` (ex.: um rail de ações ao lado da lista não bloqueia nós por
+  // baixo dele, só a lista bloqueia; reservar a largura toda empurrava o
+  // grafo mais pra direita do que precisava). Quem sabe a estrutura interna
+  // do `dock` é o chamador — ele mede só a parte que realmente precisa
+  // ficar livre e passa o número aqui. 0/undefined = sem reserva.
+  dockReservedWidth?: number;
   // overlay flutua sobre o canvas (Panel top-right) — detalhe do nó
   // selecionado etc., sem coluna lateral roubando largura (spec 044).
   overlay?: ReactNode;
@@ -92,23 +101,6 @@ export function FlowCanvas({
   // (ex.: "calc(100vh - 340px)" pro canvas ocupar a altura da aba, spec 047).
   height?: number | string;
 }) {
-  // dockWidth: largura REAL medida do painel (ResizeObserver, não um número
-  // fixo torcido pra bater com o CSS do chamador) — usada pelo AutoFit pra
-  // reservar exatamente o espaço que o dock ocupa. 0 quando não há `dock`
-  // (GamePipeline/mini-canvas de Achievements não passam essa prop).
-  const dockWrapRef = useRef<HTMLDivElement>(null);
-  const [dockWidth, setDockWidth] = useState(0);
-  useEffect(() => {
-    const el = dockWrapRef.current;
-    if (!el) {
-      setDockWidth(0);
-      return;
-    }
-    const ro = new ResizeObserver((entries) => setDockWidth(entries[0].contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [dock]);
-
   return (
     <div
       className="flow-wrap"
@@ -132,12 +124,8 @@ export function FlowCanvas({
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#232c3a" gap={22} />
-        {fitKey !== undefined && <AutoFit fitKey={fitKey} reservedLeft={dockWidth} />}
-        {dock && (
-          <Panel position="top-left">
-            <div ref={dockWrapRef}>{dock}</div>
-          </Panel>
-        )}
+        {fitKey !== undefined && <AutoFit fitKey={fitKey} reservedLeft={dockReservedWidth ?? 0} />}
+        {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
         <Controls showInteractive={false} />
         <MiniMap
