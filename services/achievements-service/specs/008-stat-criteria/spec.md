@@ -77,3 +77,21 @@ no SQS: um envelope permanentemente malformado nunca marcaria
 `processed_matches`, causando redelivery infinito). Testes novos:
 `TestApplyMatchResult_StatCumulative_DeltaNegativo_NaoDecrementa` e
 `TestApplyMatchResult_StatCumulative_DeltaNegativoNaPrimeiraPartida_NaoGravaNegativo`.
+
+## Follow-up — N+1 queries em ApplyMatchResult/ApplyParticipationEvent
+
+Achado no `/code-review` do projeto como um todo (2026-07-10): `ApplyMatchResult`
+rodava `findByEventType`/`findByStatKey` **dentro** do loop por jogador ×
+event type/stat — numa partida com P jogadores e E/S critérios cada, isso é
+P×(E+S) SELECTs sequenciais dentro da mesma transação (mais lock time,
+round-trips seriais ao Postgres). `ApplyParticipationEvent` tinha o mesmo
+padrão (sem o loop por jogador, mas ainda uma query por event type/stat).
+
+Adicionadas `findByEventTypes`/`findByStatKeys` (uma query com
+`= ANY($2::text[])`, agrupando o resultado por chave em Go) e
+`distinctEventTypes`/`distinctStatKeys` (agregam as chaves de todos os
+jogadores antes do batch). As duas funções agora buscam o catálogo casado
+**uma vez por transação**, independente do número de jogadores. Teste novo
+`TestApplyMatchResult_MultiJogadorMultiCriterio_CadaUmSoRecebeOSeu` prova que
+o agrupamento em memória continua atribuindo o progresso ao jogador certo
+(p2 não herda o stat que só p1 reportou).

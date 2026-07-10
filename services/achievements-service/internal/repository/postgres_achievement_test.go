@@ -129,6 +129,37 @@ func TestApplyMatchResult_Reprocessada_NaoDobraProgresso(t *testing.T) {
 	assert.False(t, prog["first_win"].UnlockedAt.IsZero(), "first_win desbloqueada")
 }
 
+// TestApplyMatchResult_MultiJogadorMultiCriterio_CadaUmSoRecebeOSeu prova que
+// o batch de findByEventTypes/findByStatKeys (achado no /code-review — N+1:
+// antes rodava uma query por jogador × event type/stat) continua atribuindo o
+// progresso ao jogador certo depois de agrupar o catálogo por chave — p2 não
+// pode herdar o progresso de kills/match_won que só p1 reportou.
+func TestApplyMatchResult_MultiJogadorMultiCriterio_CadaUmSoRecebeOSeu(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	players := []domain.PlayerMatchInput{
+		{PlayerID: "p1", EventTypes: []string{"match_won"}, Stats: map[string]int64{"kills": 50}},
+		{PlayerID: "p2", EventTypes: []string{"match_played"}},
+	}
+	_, err := repo.ApplyMatchResult(ctx, sandbox, "m1", players, at)
+	require.NoError(t, err)
+
+	p1 := mustProgress(t, repo, sandbox, "p1")
+	assert.Equal(t, 1, p1["first_win"].Progress, "p1 venceu")
+	assert.Equal(t, 50, p1["sharpshooter"].Progress, "p1 reportou 50 kills")
+	_, p1TemFirstMatch := p1["first_match"]
+	assert.False(t, p1TemFirstMatch, "p1 não reportou match_played")
+
+	p2 := mustProgress(t, repo, sandbox, "p2")
+	assert.Equal(t, 1, p2["first_match"].Progress, "p2 jogou")
+	_, p2TemFirstWin := p2["first_win"]
+	assert.False(t, p2TemFirstWin, "p2 não reportou match_won")
+	_, p2TemSharpshooter := p2["sharpshooter"]
+	assert.False(t, p2TemSharpshooter, "p2 não reportou kills — não pode herdar o stat de p1")
+}
+
 // Uma NOVA partida do mesmo jogador incrementa normalmente (matchID diferente).
 func TestApplyMatchResult_PartidasDistintas_Acumulam(t *testing.T) {
 	repo := NewPostgresAchievementRepository(newTestPool(t))
