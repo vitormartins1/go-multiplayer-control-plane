@@ -12,3 +12,7 @@
 ## Achado corrigido durante a implementação (fora do plan.md original)
 
 O canvas tem seu próprio seletor de arquétipo interno (`arch`/`archetype`), e o grafo só é construído para o arquétipo ativo (`archRules = rules.filter(r => r.archetype === arch)`) — mas a lista nova mostra regras de **todos** os arquétipos juntas. Selecionar uma regra de um arquétipo diferente do que estava ativo no canvas esvaziava o grafo inteiro (a regra focada nem existia no `graph` construído). Corrigido: o `useEffect` que sincroniza `focusRuleId` também troca `setArchetype` para o arquétipo da regra focada quando diverge.
+
+## Follow-up: repack de posições no subgrafo filtrado (2026-07-10)
+
+Achado do Vitor testando na prática: os achievements de uma regra focada apareciam isolados uns dos outros mesmo já filtrados — `buildRulesGraph` posiciona pensando no arquétipo **inteiro**; filtrar nodes sem recalcular Y deixa vãos enormes onde ficavam os nodes escondidos. Corrigido com `repackVisible(nodes)` (`rulesGraph.ts`) — reempacota cada coluna do subconjunto visível do zero (mesma lógica de `stackColumn`, alturas reais por tipo de node via `heightOf`), preservando a ordem relativa e recentralizando pela coluna mais alta. Só roda no ramo `focusPath` ativo (nunca com draft — nesse caso o filtro já está desligado, grafo completo). Confirmado visualmente via Playwright/screenshot: gaps entre nodes consecutivos caíram de potencialmente centenas de px pra ~10–25px (máximo observado 78px).
