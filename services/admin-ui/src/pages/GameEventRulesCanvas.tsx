@@ -130,7 +130,6 @@ export function GameEventRulesCanvas({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [showStats, setShowStats] = useState(true);
   // relatedKinds (2026-07-10): "regras relacionadas" por kind de source
   // (facts/modo/stats) em vez de um switch único — vazio = desligado (achado
   // do Vitor: facts genéricos tipo outcome=SUCCESS sozinhos já geram muito
@@ -238,12 +237,8 @@ export function GameEventRulesCanvas({
   }, [draft]);
 
   const graph = useMemo(
-    () =>
-      buildRulesGraph(archRules, catalog, {
-        stats: showStats ? statsForArch : undefined,
-        draft: draftInput,
-      }),
-    [archRules, catalog, showStats, statsForArch, draftInput],
+    () => buildRulesGraph(archRules, catalog, { stats: statsForArch, draft: draftInput }),
+    [archRules, catalog, statsForArch, draftInput],
   );
 
   // effectiveFocusId (spec 056): durante edição, foca na regra sendo editada
@@ -658,7 +653,6 @@ export function GameEventRulesCanvas({
         >
           Nova regra
         </Button>
-        <Switch size="xs" label="Stats" checked={showStats} onChange={(e) => setShowStats(e.currentTarget.checked)} />
         <Group gap={4} wrap="nowrap">
           <Text size="xs" c="dimmed">
             Regras relacionadas:
