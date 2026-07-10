@@ -828,9 +828,11 @@ export function GameEventRulesCanvas({
 }
 
 // EventRulesToolbarRail (spec 058, achado do Vitor: queria os controles ao
-// LADO da lista, não empilhados em cima dela): rail vertical compacto de
-// ícones — cada um abre um popover com o conteúdo que antes era uma barra
-// de toolbar fixa. Mesmos dados/callbacks de antes, só reembalados pro
+// lado DIREITO da lista, em fileira horizontal — não mais empilhados à
+// esquerda dela): rail horizontal compacto de ícones — cada um abre um
+// popover (pra baixo, já que os ícones estão lado a lado — abrir pra direita
+// sobreporia o próximo ícone da fileira) com o conteúdo que antes era uma
+// barra de toolbar fixa. Mesmos dados/callbacks de antes, só reembalados pro
 // contexto flutuante (o Vitor liberou usar layout de botão/input diferente
 // aqui).
 function EventRulesToolbarRail({
@@ -860,13 +862,13 @@ function EventRulesToolbarRail({
 }) {
   return (
     <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)" }}>
-      <Stack gap={4}>
-        <Tooltip label={draft ? "Salve ou cancele o rascunho atual" : "Nova regra"} position="right" withinPortal>
+      <Group gap={4} wrap="nowrap">
+        <Tooltip label={draft ? "Salve ou cancele o rascunho atual" : "Nova regra"} position="bottom" withinPortal>
           <ActionIcon size="md" variant="filled" disabled={!!draft} onClick={onNewRule} aria-label="Nova regra">
             <IconPlus size={16} />
           </ActionIcon>
         </Tooltip>
-        <Popover width={240} withArrow position="right-start" withinPortal>
+        <Popover width={240} withArrow position="bottom-start" withinPortal>
           <Popover.Target>
             <ActionIcon
               size="md"
@@ -898,7 +900,7 @@ function EventRulesToolbarRail({
             </Stack>
           </Popover.Dropdown>
         </Popover>
-        <Popover width={220} withArrow position="right-start" withinPortal>
+        <Popover width={220} withArrow position="bottom-start" withinPortal>
           <Popover.Target>
             <ActionIcon
               size="md"
@@ -938,7 +940,7 @@ function EventRulesToolbarRail({
             </Stack>
           </Popover.Dropdown>
         </Popover>
-      </Stack>
+      </Group>
     </Paper>
   );
 }
@@ -991,19 +993,6 @@ function EventRulesDock({
   const filtered = rules.filter(matchesListFilter(listFilter));
   return (
     <Group align="flex-start" gap={8} wrap="nowrap">
-      <EventRulesToolbarRail
-        focusRuleId={focusRuleId}
-        listFilter={listFilter}
-        onListFilter={onListFilter}
-        draft={draft}
-        onNewRule={onNewRule}
-        relatedKinds={relatedKinds}
-        onRelatedKinds={onRelatedKinds}
-        statIgnoreValue={statIgnoreValue}
-        onStatIgnoreValue={onStatIgnoreValue}
-        search={search}
-        onSearch={onSearch}
-      />
       <Paper
         withBorder
         shadow="md"
@@ -1108,6 +1097,19 @@ function EventRulesDock({
           </ScrollArea>
         </Collapse>
       </Paper>
+      <EventRulesToolbarRail
+        focusRuleId={focusRuleId}
+        listFilter={listFilter}
+        onListFilter={onListFilter}
+        draft={draft}
+        onNewRule={onNewRule}
+        relatedKinds={relatedKinds}
+        onRelatedKinds={onRelatedKinds}
+        statIgnoreValue={statIgnoreValue}
+        onStatIgnoreValue={onStatIgnoreValue}
+        search={search}
+        onSearch={onSearch}
+      />
     </Group>
   );
 }
