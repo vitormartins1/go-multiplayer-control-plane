@@ -62,3 +62,17 @@ func TestInternalKeyTransport_InjetaHeader(t *testing.T) {
 	_ = resp.Body.Close()
 	assert.Equal(t, "segredo", got)
 }
+
+func TestInternalKeyTransport_ChaveVazia_FalhaLocalSemRede(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	client := &http.Client{Transport: InternalKeyTransport("", nil)}
+	_, err := client.Get(srv.URL + "/admin/x")
+	require.Error(t, err, "chave vazia deve falhar antes de sair pra rede, não virar header vazio")
+	assert.Contains(t, err.Error(), "INTERNAL_API_KEY")
+	assert.False(t, called, "requisição não deveria nem chegar no servidor")
+}
