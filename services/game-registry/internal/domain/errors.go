@@ -24,4 +24,10 @@ var (
 	ErrModeNotFound         = errors.New("game-registry: modo não encontrado")
 	ErrDefaultModeProtected = errors.New("game-registry: o modo default não pode ser removido")
 	ErrTooManyModes         = errors.New("game-registry: limite de modos do jogo atingido")
+	// ErrModeConflict sinaliza controle de concorrência otimista em SetModes
+	// (achado no /code-review, revisão do trade-off "last-write-wins aceito"
+	// da spec 009/plan.md): outra escrita mudou os modos do jogo entre o
+	// FindByID e este SetModes — a mudança local não foi salva, refaça a
+	// leitura e tente de novo.
+	ErrModeConflict = errors.New("game-registry: modos do jogo mudaram por outra escrita concorrente — recarregue e tente de novo")
 )

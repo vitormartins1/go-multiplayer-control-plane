@@ -34,6 +34,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/005_add_multiplayer_profile.sql",
 			"../../migrations/006_add_deleted_at.sql",
 			"../../migrations/007_add_fleet.sql",
+			"../../migrations/008_add_modes_version.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -199,7 +200,7 @@ func TestPostgresGameRepository_SetModes_RoundTrip(t *testing.T) {
 	require.NoError(t, repo.Create(ctx, g))
 
 	p := teamsProfile()
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: p}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: p}}, 1))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -208,6 +209,24 @@ func TestPostgresGameRepository_SetModes_RoundTrip(t *testing.T) {
 	assert.Equal(t, domain.TopologyDedicated, got.MultiplayerProfile.Topology)
 	require.NotNil(t, got.MultiplayerProfile.QueueArena)
 	assert.Equal(t, *p.QueueArena, *got.MultiplayerProfile.QueueArena)
+	assert.Equal(t, int64(2), got.MultiplayerModesVersion, "versão avança a cada write bem-sucedido")
+}
+
+// TestPostgresGameRepository_SetModes_VersaoDesatualizada_ErrModeConflict
+// prova a concorrência otimista (achado no /code-review — revisão do
+// "last-write-wins aceito" da spec 009/plan.md): duas escritas concorrentes
+// que leram a mesma versão não podem as duas vencer silenciosamente.
+func TestPostgresGameRepository_SetModes_VersaoDesatualizada_ErrModeConflict(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("conc", "Concorrente")
+	require.NoError(t, repo.Create(ctx, g))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}, 1))
+
+	// Reusa a versão 1 (já superada pelo write acima) -> simula um segundo
+	// request que leu o jogo antes da primeira escrita vencer a corrida.
+	err := repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}, 1)
+	assert.ErrorIs(t, err, domain.ErrModeConflict)
 }
 
 func TestPostgresGameRepository_SetModes_Substitui(t *testing.T) {
@@ -215,7 +234,7 @@ func TestPostgresGameRepository_SetModes_Substitui(t *testing.T) {
 	ctx := context.Background()
 	g := newGame("arena", "Arena")
 	require.NoError(t, repo.Create(ctx, g))
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}, 1))
 
 	ffa := domain.MultiplayerProfile{
 		Archetype: domain.ArchetypeQueueArena, Topology: domain.TopologyDedicated,
@@ -224,7 +243,7 @@ func TestPostgresGameRepository_SetModes_Substitui(t *testing.T) {
 			WinCondition: "highest_at_time", DurationSeconds: 300, MatchStructure: "single",
 		},
 	}
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: ffa}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: ffa}}, 2))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -247,7 +266,7 @@ func TestPostgresGameRepository_SetModes_BattleRoyale_RoundTrip(t *testing.T) {
 			ScoringStats: []string{"kills"},
 		},
 	}
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: p}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: p}}, 1))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -263,13 +282,13 @@ func TestPostgresGameRepository_SetModes_TrocaArquetipo(t *testing.T) {
 	ctx := context.Background()
 	g := newGame("mut", "Mut")
 	require.NoError(t, repo.Create(ctx, g))
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}, 1))
 
 	br := domain.MultiplayerProfile{
 		Archetype: domain.ArchetypeBattleRoyale, Topology: domain.TopologyDedicated,
 		BattleRoyale: &domain.BattleRoyaleParams{LobbySize: 100, TeamSize: 1, RespawnMode: domain.RespawnOneLife},
 	}
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: br}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: br}}, 2))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -292,7 +311,7 @@ func TestPostgresGameRepository_SetModes_CoopMission_RoundTrip(t *testing.T) {
 			ScoringStats: []string{"kills", "revives"},
 		},
 	}
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: p}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: p}}, 1))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -312,13 +331,13 @@ func TestPostgresGameRepository_SetModes_TrocaParaCoopMission(t *testing.T) {
 		Archetype: domain.ArchetypeBattleRoyale, Topology: domain.TopologyDedicated,
 		BattleRoyale: &domain.BattleRoyaleParams{LobbySize: 100, TeamSize: 1, RespawnMode: domain.RespawnOneLife},
 	}
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: br}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: br}}, 1))
 
 	cm := domain.MultiplayerProfile{
 		Archetype: domain.ArchetypeCoopMission, Topology: domain.TopologyDedicated,
 		CoopMission: &domain.CoopMissionParams{TeamSize: 4, BotfillEnabled: true},
 	}
-	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: cm}}))
+	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: cm}}, 2))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -341,7 +360,7 @@ func TestPostgresGameRepository_FindByID_SemPerfil_Nil(t *testing.T) {
 func TestPostgresGameRepository_SetModes_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := NewPostgresGameRepository(newTestPool(t))
 	err := repo.SetModes(context.Background(), "00000000-0000-0000-0000-000000000000",
-		[]domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}})
+		[]domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}, 1)
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 
@@ -360,7 +379,7 @@ func TestPostgresGameRepository_SetModes_MultiModo_RoundTripOrdenado(t *testing.
 	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{
 		{ModeID: "warzone", DisplayName: "Warzone", Profile: warzone},
 		{ModeID: domain.DefaultModeID, DisplayName: "TDM", Profile: teamsProfile()},
-	}))
+	}, 1))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)
@@ -397,7 +416,7 @@ func TestPostgresGameRepository_DecodeModes_UpgradeLazyDeV1(t *testing.T) {
 	assert.Equal(t, 4, got.MultiplayerProfile.QueueArena.PlayerCount)
 
 	// O próximo write persiste v2 (upgrade lazy): regrava e relê.
-	require.NoError(t, repo.SetModes(ctx, g.ID, got.MultiplayerModes))
+	require.NoError(t, repo.SetModes(ctx, g.ID, got.MultiplayerModes, got.MultiplayerModesVersion))
 	var raw []byte
 	require.NoError(t, pool.QueryRow(ctx, `SELECT multiplayer_profile FROM games WHERE id = $1`, g.ID).Scan(&raw))
 	assert.Contains(t, string(raw), `"modes"`, "coluna reescrita no formato v2")
@@ -425,7 +444,7 @@ func TestPostgresGameRepository_SoftDelete_PreservaLinhaESomeDasLeituras(t *test
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 	assert.ErrorIs(t, repo.UpdateName(ctx, g.ID, "X"), domain.ErrGameNotFound)
 	assert.ErrorIs(t, repo.SetModes(ctx, g.ID,
-		[]domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}), domain.ErrGameNotFound)
+		[]domain.MultiplayerMode{{ModeID: domain.DefaultModeID, Profile: teamsProfile()}}, 1), domain.ErrGameNotFound)
 
 	list, err := repo.List(ctx)
 	require.NoError(t, err)
@@ -464,11 +483,11 @@ func TestPostgresGameRepository_SetModes_DeletePersiste(t *testing.T) {
 	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{
 		{ModeID: domain.DefaultModeID, Profile: teamsProfile()},
 		{ModeID: "ranked", Profile: teamsProfile()},
-	}))
+	}, 1))
 	// Simula o DeleteMode do service: replace sem o modo removido.
 	require.NoError(t, repo.SetModes(ctx, g.ID, []domain.MultiplayerMode{
 		{ModeID: domain.DefaultModeID, Profile: teamsProfile()},
-	}))
+	}, 2))
 
 	got, err := repo.FindByID(ctx, g.ID)
 	require.NoError(t, err)

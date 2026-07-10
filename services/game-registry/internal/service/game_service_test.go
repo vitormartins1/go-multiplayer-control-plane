@@ -33,8 +33,8 @@ func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
 func (m *mockRepo) UpdateFleet(ctx context.Context, id, fleet string) error {
 	return m.Called(ctx, id, fleet).Error(0)
 }
-func (m *mockRepo) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
-	return m.Called(ctx, gameID, modes).Error(0)
+func (m *mockRepo) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode, expectedVersion int64) error {
+	return m.Called(ctx, gameID, modes, expectedVersion).Error(0)
 }
 func (m *mockRepo) SoftDelete(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)

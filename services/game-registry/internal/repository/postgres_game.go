@@ -119,7 +119,7 @@ func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*doma
 	// FindByID também carrega o perfil de multiplayer (coluna JSONB); List não o
 	// faz (spec 006 — lista não infla). Por isso a query/scan são próprios, sem
 	// reusar scanGame.
-	const q = `SELECT ` + selectCols + `, multiplayer_profile FROM games WHERE id = $1 AND deleted_at IS NULL`
+	const q = `SELECT ` + selectCols + `, multiplayer_profile, multiplayer_profile_version FROM games WHERE id = $1 AND deleted_at IS NULL`
 	var g domain.Game
 	var profileRaw []byte
 	err := r.pool.QueryRow(ctx, q, id).Scan(
@@ -127,6 +127,7 @@ func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*doma
 		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle,
 		&g.Fleet,
 		&profileRaw,
+		&g.MultiplayerModesVersion,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrGameNotFound
