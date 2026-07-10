@@ -149,9 +149,7 @@ func (c *Client) PlayerAchievements(ctx context.Context, gameID, playerID string
 		pa := domain.PlayerAchievement{
 			ID: a.ID, Name: a.Name, Description: a.Description,
 			Target: a.Target, Progress: a.Progress, Unlocked: a.Unlocked,
-		}
-		if a.UnlockedAt != nil {
-			pa.UnlockedAt = *a.UnlockedAt
+			UnlockedAt: a.UnlockedAt,
 		}
 		out = append(out, pa)
 	}
@@ -334,11 +332,9 @@ func (c *Client) AchievementProgress(ctx context.Context, gameID, achievementID 
 	}
 	out := make([]domain.AchievementProgressEntry, 0, len(body.Progress))
 	for _, p := range body.Progress {
-		e := domain.AchievementProgressEntry{PlayerID: p.PlayerID, Progress: p.Progress, Unlocked: p.Unlocked}
-		if p.UnlockedAt != nil {
-			e.UnlockedAt = *p.UnlockedAt
-		}
-		out = append(out, e)
+		out = append(out, domain.AchievementProgressEntry{
+			PlayerID: p.PlayerID, Progress: p.Progress, Unlocked: p.Unlocked, UnlockedAt: p.UnlockedAt,
+		})
 	}
 	return out, nil
 }
