@@ -9,37 +9,38 @@ import {
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
+import type { Padding } from "@xyflow/system";
 import { useEffect, type DragEvent, type ReactNode } from "react";
 import "./flow.css";
 
 const FIT_MARGIN = 90; // respiro (px) além da área reservada pro dock/overlay.
 
+// reservedFitOptions monta o `fitViewOptions` com padding ASSIMÉTRICO
+// reservando `reservedLeft` px do lado esquerdo (área do dock) — usado
+// tanto pelo AutoFit (reenquadre automático) quanto pelo botão nativo de
+// fit-view do React Flow (Controls), que por padrão IGNORA o fitViewOptions
+// passado ao <ReactFlow> raiz — Controls tem o PRÓPRIO prop fitViewOptions,
+// separado (achado do Vitor: clicar no botão do canto inferior esquerdo
+// enquadrava sem considerar a área reservada pro dock).
+function reservedFitOptions(reservedLeft: number): { padding: Padding; maxZoom: number } {
+  return {
+    padding: {
+      left: `${reservedLeft + FIT_MARGIN}px`,
+      right: `${FIT_MARGIN}px`,
+      top: `${FIT_MARGIN}px`,
+      bottom: `${FIT_MARGIN}px`,
+    },
+    maxZoom: 1,
+  };
+}
+
 // AutoFit re-enquadra o grafo quando `fitKey` muda (nó rascunho adicionado,
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
 // mount. Filho de <ReactFlow>, então tem acesso ao store interno.
-// `reservedLeft` (spec 058, achado do Vitor): o fitView padrão considera o
-// canvas INTEIRO, sem saber que o dock flutuante cobre uma faixa da
-// esquerda — nós acabavam posicionados por baixo da lista. O padding do
-// fitView aceita valores ASSIMÉTRICOS por lado (reserva real de espaço, não
-// só respiro visual) — reserva a largura MEDIDA do dock (ResizeObserver, não
-// um número chutado) só do lado esquerdo.
 function AutoFit({ fitKey, reservedLeft }: { fitKey: unknown; reservedLeft: number }) {
   const rf = useReactFlow();
   useEffect(() => {
-    const t = setTimeout(
-      () =>
-        rf.fitView({
-          padding: {
-            left: `${reservedLeft + FIT_MARGIN}px`,
-            right: `${FIT_MARGIN}px`,
-            top: `${FIT_MARGIN}px`,
-            bottom: `${FIT_MARGIN}px`,
-          },
-          maxZoom: 1,
-          duration: 250,
-        }),
-      50,
-    );
+    const t = setTimeout(() => rf.fitView({ ...reservedFitOptions(reservedLeft), duration: 250 }), 50);
     return () => clearTimeout(t);
   }, [fitKey, reservedLeft, rf]);
   return null;
@@ -127,7 +128,7 @@ export function FlowCanvas({
         {fitKey !== undefined && <AutoFit fitKey={fitKey} reservedLeft={dockReservedWidth ?? 0} />}
         {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false} fitViewOptions={reservedFitOptions(dockReservedWidth ?? 0)} />
         <MiniMap
           pannable
           zoomable
