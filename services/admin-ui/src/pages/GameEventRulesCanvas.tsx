@@ -406,10 +406,13 @@ export function GameEventRulesCanvas({
         if (n.type === "source") return referencedKeys.has((n.data as unknown as SourceNodeData).sourceKey);
         return false;
       });
-      visibleNodes = filtered;
-      visibleEdges = graph.edges.filter(
-        (e) => filtered.some((n) => n.id === e.source) && filtered.some((n) => n.id === e.target),
-      );
+      // repackVisible (achado do Vitor testando na prática): sem isso as
+      // sources que vão aparecendo mantêm a posição Y calculada pra coluna
+      // inteira, em vez de se organizarem só com base no que está na tela —
+      // mesmo raciocínio do follow-up da spec 055.
+      visibleNodes = repackVisible(filtered);
+      const visibleIds = new Set(filtered.map((n) => n.id));
+      visibleEdges = graph.edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
     } else if (focusPath) {
       const r = applyFocusFilter(focusPath);
       visibleNodes = r.nodes;

@@ -11,3 +11,7 @@
 ## Nota da verificação
 
 As duas primeiras rodadas do smoke test "falharam" por erros do próprio script, não da implementação: (1) `Escape` pra fechar o dropdown do Autocomplete na verdade cancela o rascunho inteiro (comportamento correto e já existente, spec 048) — troquei por selecionar a sugestão via clique; (2) o seletor `.mantine-Combobox-option` estava errado — a classe real é `.mantine-Autocomplete-option`. Depois de corrigir o script, todos os comportamentos da spec confirmaram certos.
+
+## Follow-up: repack também no ramo de criação pura (2026-07-10)
+
+O plan.md original decidiu deliberadamente **não** repacotar o ramo de criação ("são poucas sources, repacotar traria pouco ganho") — errado na prática: o Vitor testou e as sources apareciam nas coordenadas Y da coluna inteira, não organizadas com base só no que está na tela. Corrigido aplicando `repackVisible(filtered)` também nesse ramo (mesma função já usada pela spec 055/pelo foco) — confirmado visualmente com 3 sources (event/role/stat.kills) ficando empacotadas e centralizadas junto da regra e do ghost de tipo.
