@@ -286,11 +286,11 @@ func TestApplyParticipationEvent_Reprocessado_NaoDobra(t *testing.T) {
 	}))
 
 	types := []string{domain.EventInvasionWon}
-	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, at)
+	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, nil, at)
 	require.NoError(t, err)
 	assert.False(t, dup)
 
-	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, at)
+	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "", types, nil, at)
 	require.NoError(t, err)
 	assert.True(t, dup, "reentrega do mesmo evento (sem eventId) é no-op via fallback determinístico")
 
@@ -311,9 +311,9 @@ func TestApplyParticipationEvent_EventIDsDiferentes_ContaDuasVezes(t *testing.T)
 	}))
 	types := []string{domain.EventCoopBossHelped}
 
-	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-a", types, at)
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-a", types, nil, at)
 	require.NoError(t, err)
-	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-b", types, at)
+	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-b", types, nil, at)
 	require.NoError(t, err)
 
 	prog := mustProgress(t, repo, sandbox, "coop-1")
@@ -332,10 +332,10 @@ func TestApplyParticipationEvent_MesmoEventID_NaoDobra(t *testing.T) {
 	}))
 	types := []string{domain.EventCoopBossHelped}
 
-	dup1, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, at)
+	dup1, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, nil, at)
 	require.NoError(t, err)
 	assert.False(t, dup1)
-	dup2, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, at)
+	dup2, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "BOSS_DEFEATED", "evt-retry", types, nil, at)
 	require.NoError(t, err)
 	assert.True(t, dup2, "retry do mesmo eventId é no-op")
 
@@ -354,13 +354,50 @@ func TestApplyParticipationEvent_SessoesDistintas_Acumulam(t *testing.T) {
 	}))
 	types := []string{domain.EventWorldJoined}
 
-	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "JOINED", "", types, at)
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "coop-1", "JOINED", "", types, nil, at)
 	require.NoError(t, err)
-	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-2", "coop-1", "JOINED", "", types, at)
+	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-2", "coop-1", "JOINED", "", types, nil, at)
 	require.NoError(t, err)
 
 	prog := mustProgress(t, repo, sandbox, "coop-1")
 	assert.Equal(t, 2, prog["social_butterfly"].Progress, "duas sessões somam")
+}
+
+// Stats no participation_event (spec 018) avançam achievements por métrica na
+// MESMA transação do evento — fecha a assimetria com ApplyMatchResult. Usa o
+// seed "sharpshooter" (kills, cumulativo, 100).
+func TestApplyParticipationEvent_Stats_AvancaCriterioPorMetrica(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "evt-1",
+		nil, map[string]int64{"kills": 40}, at)
+	require.NoError(t, err)
+	prog := mustProgress(t, repo, sandbox, "inv-1")
+	assert.Equal(t, 40, prog["sharpshooter"].Progress, "stat chegou via participation_event, sem event type nenhum")
+	assert.True(t, prog["sharpshooter"].UnlockedAt.IsZero())
+
+	_, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-1", "inv-1", "HOST_KILLED", "evt-2",
+		nil, map[string]int64{"kills": 70}, at)
+	require.NoError(t, err)
+	prog = mustProgress(t, repo, sandbox, "inv-1")
+	assert.Equal(t, 100, prog["sharpshooter"].Progress, "acumulado trava no threshold")
+	assert.False(t, prog["sharpshooter"].UnlockedAt.IsZero(), "110 >= 100: desbloqueada")
+}
+
+// Sem stats (envelope antigo) continua sem tocar achievements por métrica —
+// zero regressão pro comportamento anterior a esta spec.
+func TestApplyParticipationEvent_SemStats_NaoTocaCriterioPorMetrica(t *testing.T) {
+	repo := NewPostgresAchievementRepository(newTestPool(t))
+	ctx := context.Background()
+	at := time.Now().UTC()
+
+	_, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-3", "inv-2", "HOST_KILLED", "evt-3", nil, nil, at)
+	require.NoError(t, err)
+	prog := mustProgress(t, repo, sandbox, "inv-2")
+	_, hasSharp := prog["sharpshooter"]
+	assert.False(t, hasSharp, "sem stats no envelope -> sharpshooter sem progresso")
 }
 
 // Evento sem event type (ex.: LEFT) é marcado processado sem tocar progresso.
@@ -369,11 +406,11 @@ func TestApplyParticipationEvent_SemEventType_ProcessaSemProgresso(t *testing.T)
 	ctx := context.Background()
 	at := time.Now().UTC()
 
-	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", "", nil, at)
+	dup, err := repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", "", nil, nil, at)
 	require.NoError(t, err)
 	assert.False(t, dup)
 	// reprocessar continua no-op idempotente.
-	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", "", nil, at)
+	dup, err = repo.ApplyParticipationEvent(ctx, sandbox, "world-9", "p-9", "LEFT", "", nil, nil, at)
 	require.NoError(t, err)
 	assert.True(t, dup)
 

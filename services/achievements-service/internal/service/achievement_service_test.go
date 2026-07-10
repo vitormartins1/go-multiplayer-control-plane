@@ -47,8 +47,8 @@ func (m *mockRepo) ApplyMatchResult(ctx context.Context, gameID, matchID string,
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *mockRepo) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, at time.Time) (bool, error) {
-	args := m.Called(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, at)
+func (m *mockRepo) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, stats map[string]int64, at time.Time) (bool, error) {
+	args := m.Called(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, stats, at)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -379,9 +379,9 @@ func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := new(mockRepo)
 			svc := New(repo, fakeEventRules{})
-			repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", c.event, mock.Anything, c.want, mock.Anything).Return(false, nil)
+			repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", c.event, mock.Anything, c.want, mock.Anything, mock.Anything).Return(false, nil)
 
-			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "", c.role, c.event, c.outcome, "evt-1")
+			dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "", c.role, c.event, c.outcome, "evt-1", nil)
 			require.NoError(t, err)
 			assert.False(t, dup)
 			repo.AssertExpectations(t)
@@ -392,11 +392,46 @@ func TestApplyParticipationEvent_TraduzPorPapel(t *testing.T) {
 func TestApplyParticipationEvent_Duplicado_PropagaDup(t *testing.T) {
 	repo := new(mockRepo)
 	svc := New(repo, fakeEventRules{})
-	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
+	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 
-	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "", "invader", "HOST_KILLED", "SUCCESS", "evt-2")
+	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "", "invader", "HOST_KILLED", "SUCCESS", "evt-2", nil)
 	require.NoError(t, err)
 	assert.True(t, dup)
+}
+
+// spyStatRules captura os facts recebidos por EvaluateRules indiretamente:
+// aqui usamos uma regra real com comparador (spec 018) pra provar que
+// stat.deaths chega como fact — a MESMA regra global de battle_royale
+// (RulesForArchetype) devolveria host_world_dropin vazio no fake, então o
+// teste usa um fakeEventRules que devolve uma regra HWD com comparador.
+type hwdStatRules struct{ fakeEventRules }
+
+func (hwdStatRules) RulesForArchetype(_ context.Context, _, archetype string) ([]domain.EventRule, error) {
+	if archetype != domain.ArchetypeHostWorldDropIn {
+		return nil, nil
+	}
+	return []domain.EventRule{
+		{Archetype: archetype, Match: map[string]domain.MatchCond{
+			"role": domain.Eq("invader"), "event": domain.Eq("HOST_KILLED"), "outcome": domain.Eq("SUCCESS"),
+			"stat.deaths": {Op: domain.OpLte, Value: float64(0)},
+		}, EventTypes: []string{"flawless_invasion"}},
+	}, nil
+}
+
+// stats (spec 018) viram facts stat.* — uma regra com comparador em
+// host_world_dropin passa a casar (antes desta spec, HWD nunca recebia
+// stats, então essa regra nunca teria como bater).
+func TestApplyParticipationEvent_StatsViramFacts_RegraComComparadorCasa(t *testing.T) {
+	repo := new(mockRepo)
+	svc := New(repo, hwdStatRules{})
+	repo.On("ApplyParticipationEvent", mock.Anything, gameID, "world-1", "p1", "HOST_KILLED",
+		mock.Anything, []string{"flawless_invasion"}, map[string]int64{"deaths": 0}, mock.Anything).Return(false, nil)
+
+	dup, err := svc.ApplyParticipationEvent(context.Background(), gameID, "world-1", "p1", "",
+		"invader", "HOST_KILLED", "SUCCESS", "evt-3", map[string]int64{"deaths": 0})
+	require.NoError(t, err)
+	assert.False(t, dup)
+	repo.AssertExpectations(t)
 }
 
 // Partida já processada -> o repo devolve dup=true; o service propaga (no-op).

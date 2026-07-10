@@ -128,8 +128,10 @@ type AchievementRepository interface {
 	// (host_world_dropin, spec 013/009/012) numa única transação, idempotente por
 	// eventID (follow-up #4; vazio → fallback determinístico por
 	// sessionID/playerID/event, ver effectiveEventID). eventTypes vazio → marca
-	// processado sem progresso. dup=true se o evento já havia sido processado.
-	ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, at time.Time) (dup bool, err error)
+	// processado sem progresso. stats (spec 018) avança achievements por
+	// métrica na MESMA transação — nil/vazio é no-op. dup=true se o evento já
+	// havia sido processado.
+	ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, stats map[string]int64, at time.Time) (dup bool, err error)
 	// CreateAchievement persiste uma conquista no catálogo do jogo;
 	// ErrAchievementExists em violação de unicidade (game_id, id).
 	CreateAchievement(ctx context.Context, a *Achievement) error
