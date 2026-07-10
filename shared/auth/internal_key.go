@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -59,6 +60,15 @@ type internalKeyTransport struct {
 }
 
 func (t internalKeyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	// Chave vazia (INTERNAL_API_KEY não configurada) antes só resultava num
+	// header X-Internal-Key vazio saindo pra rede — o outro serviço rejeita
+	// com 401 (fail closed, validInternalKey), mas essa falha só aparece nos
+	// logs do RECEPTOR, sem contexto de qual chamada/serviço originou. Falha
+	// aqui, local e imediata, com uma mensagem que aponta a causa (env var
+	// ausente) — sem exigir uma volta de rede pra descobrir.
+	if t.key == "" {
+		return nil, fmt.Errorf("auth: INTERNAL_API_KEY não configurado — chamada interna pra %s bloqueada antes de sair", r.URL)
+	}
 	r2 := r.Clone(r.Context())
 	r2.Header.Set(InternalKeyHeader, t.key)
 	return t.base.RoundTrip(r2)
