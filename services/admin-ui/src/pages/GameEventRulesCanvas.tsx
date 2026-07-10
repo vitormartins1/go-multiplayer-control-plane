@@ -154,6 +154,11 @@ export function GameEventRulesCanvas({
   // toolbar + info) que hoje fica flutuando sobre o canvas — mesmo padrão
   // recolher/expandir do painel de detalhe do node.
   const [dockCollapsed, setDockCollapsed] = useState(false);
+  // listPanelWidth (achado do Vitor: o fit reservava a largura do dock
+  // INTEIRO — lista + rail de ações — mas o rail nunca fica atrás de nenhum
+  // node, só a lista tapa área de verdade). Medida só do painel da lista
+  // (ver EventRulesDock), repassada pro FlowCanvas via dockReservedWidth.
+  const [listPanelWidth, setListPanelWidth] = useState(0);
   const [listFilter, setListFilter] = useState("");
   // draftArchetype (spec 058): o seletor de arquétipo saiu da toolbar fixa —
   // só importa no momento de CRIAR uma regra num jogo com mais de um
@@ -733,6 +738,7 @@ export function GameEventRulesCanvas({
         onPaneClick={() => setSelectedId(null)}
         fitKey={`${arch}|${focusRuleId ?? "none"}|${[...relatedKinds].sort().join(",")}|${statIgnoreValue}|${!!draft}|${nodes.length}`}
         height="calc(100vh - 224px)"
+        dockReservedWidth={listPanelWidth}
         dock={
           <EventRulesDock
             rules={rules}
@@ -753,6 +759,7 @@ export function GameEventRulesCanvas({
             onDelete={(r) => setDeleting(r)}
             onToggleSuppress={toggleSuppress}
             onReload={reload}
+            onListPanelWidthChange={setListPanelWidth}
           />
         }
         overlay={
@@ -829,12 +836,14 @@ export function GameEventRulesCanvas({
 
 // EventRulesToolbarRail (spec 058, achado do Vitor: queria os controles ao
 // lado DIREITO da lista, em fileira horizontal — não mais empilhados à
-// esquerda dela): rail horizontal compacto de ícones — cada um abre um
-// popover (pra baixo, já que os ícones estão lado a lado — abrir pra direita
-// sobreporia o próximo ícone da fileira) com o conteúdo que antes era uma
-// barra de toolbar fixa. Mesmos dados/callbacks de antes, só reembalados pro
-// contexto flutuante (o Vitor liberou usar layout de botão/input diferente
-// aqui).
+// esquerda dela): rail horizontal compacto de ícones. "Nova regra" e
+// "filtrar/buscar" abrem um popover (pra baixo, já que os ícones estão lado
+// a lado — abrir pra direita sobreporia o próximo ícone da fileira);
+// "regras relacionadas" é um TOGGLE que expande INLINE pra direita (achado
+// do Vitor: queria os chips/switch de relacionadas direto na fileira, não
+// num balãozinho flutuante) — mesmos dados/callbacks de antes, só
+// reembalados pro contexto flutuante (o Vitor liberou usar layout de
+// botão/input diferente aqui).
 function EventRulesToolbarRail({
   focusRuleId,
   listFilter,
@@ -860,6 +869,7 @@ function EventRulesToolbarRail({
   search: string;
   onSearch: (v: string) => void;
 }) {
+  const [relatedOpen, setRelatedOpen] = useState(false);
   return (
     <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)" }}>
       <Group gap={4} wrap="nowrap">
@@ -900,46 +910,48 @@ function EventRulesToolbarRail({
             </Stack>
           </Popover.Dropdown>
         </Popover>
-        <Popover width={220} withArrow position="bottom-start" withinPortal>
-          <Popover.Target>
-            <ActionIcon
-              size="md"
-              variant={relatedKinds.size > 0 ? "light" : "subtle"}
-              color={relatedKinds.size > 0 ? "blue" : "gray"}
-              aria-label="Regras relacionadas"
-            >
-              <IconAdjustments size={16} />
-            </ActionIcon>
-          </Popover.Target>
-          <Popover.Dropdown>
-            <Stack gap={8}>
-              <Text size="xs" fw={600}>
-                Regras relacionadas {!focusRuleId && "(selecione uma regra)"}
+        <Tooltip label="Regras relacionadas" position="bottom" withinPortal>
+          <ActionIcon
+            size="md"
+            variant={relatedOpen || relatedKinds.size > 0 ? "light" : "subtle"}
+            color={relatedOpen || relatedKinds.size > 0 ? "blue" : "gray"}
+            onClick={() => setRelatedOpen((o) => !o)}
+            aria-label="Regras relacionadas"
+            aria-expanded={relatedOpen}
+          >
+            <IconAdjustments size={16} />
+          </ActionIcon>
+        </Tooltip>
+        {relatedOpen && (
+          <Group gap={6} wrap="nowrap" pl={6} style={{ borderLeft: "1px solid #2a3340" }}>
+            <Chip.Group multiple value={[...relatedKinds]} onChange={(v) => onRelatedKinds(new Set(v as SourceKind[]))}>
+              <Group gap={4} wrap="nowrap">
+                <Chip size="xs" value="structural" disabled={!focusRuleId}>
+                  Facts
+                </Chip>
+                <Chip size="xs" value="mode" disabled={!focusRuleId}>
+                  Modo
+                </Chip>
+                <Chip size="xs" value="stat" disabled={!focusRuleId}>
+                  Stats
+                </Chip>
+              </Group>
+            </Chip.Group>
+            {relatedKinds.has("stat") && (
+              <Switch
+                size="xs"
+                label="qualquer limiar"
+                checked={statIgnoreValue}
+                onChange={(e) => onStatIgnoreValue(e.currentTarget.checked)}
+              />
+            )}
+            {!focusRuleId && (
+              <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                selecione uma regra
               </Text>
-              <Chip.Group multiple value={[...relatedKinds]} onChange={(v) => onRelatedKinds(new Set(v as SourceKind[]))}>
-                <Group gap={4} wrap="wrap">
-                  <Chip size="xs" value="structural" disabled={!focusRuleId}>
-                    Facts
-                  </Chip>
-                  <Chip size="xs" value="mode" disabled={!focusRuleId}>
-                    Modo
-                  </Chip>
-                  <Chip size="xs" value="stat" disabled={!focusRuleId}>
-                    Stats
-                  </Chip>
-                </Group>
-              </Chip.Group>
-              {relatedKinds.has("stat") && (
-                <Switch
-                  size="xs"
-                  label="qualquer limiar"
-                  checked={statIgnoreValue}
-                  onChange={(e) => onStatIgnoreValue(e.currentTarget.checked)}
-                />
-              )}
-            </Stack>
-          </Popover.Dropdown>
-        </Popover>
+            )}
+          </Group>
+        )}
       </Group>
     </Paper>
   );
@@ -970,6 +982,7 @@ function EventRulesDock({
   onDelete,
   onToggleSuppress,
   onReload,
+  onListPanelWidthChange,
 }: {
   rules: EventRule[];
   focusRuleId: string | null;
@@ -989,11 +1002,26 @@ function EventRulesDock({
   onDelete: (r: EventRule) => void;
   onToggleSuppress: (r: EventRule) => void;
   onReload: () => void;
+  // onListPanelWidthChange (achado do Vitor): só a largura da LISTA conta
+  // pra área que o fitView reserva — o rail de ações (ao lado) nunca fica
+  // atrás de node nenhum, reservar a largura dele também só empurrava o
+  // grafo mais longe do que precisava.
+  onListPanelWidthChange: (w: number) => void;
 }) {
   const filtered = rules.filter(matchesListFilter(listFilter));
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => onListPanelWidthChange(entries[0].contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <Group align="flex-start" gap={8} wrap="nowrap">
       <Paper
+        ref={listRef}
         withBorder
         shadow="md"
         w={320}
