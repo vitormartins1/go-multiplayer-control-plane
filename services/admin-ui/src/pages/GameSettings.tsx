@@ -15,6 +15,7 @@ import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { api, HttpError, type Game } from "../lib/api";
 import { GameCover } from "../components/GameCover";
+import { GamePipeline } from "./GamePipeline";
 import { MultiplayerSettings } from "./MultiplayerSettings";
 
 export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () => void }) {
@@ -108,6 +109,15 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
         Por ora, apenas um perfil por jogo.
       */}
       <MultiplayerSettings gameId={game.id} />
+
+      {/* Pipeline (spec 046, movido da aba Analytics — spec 053): mapa
+          modos->envelope->consumers é sobre CONFIGURAÇÃO (o que este jogo
+          tem cadastrado), não sobre métricas — faz mais sentido aqui, logo
+          abaixo da listagem de modos, do que na aba de números. */}
+      <Title order={5} mt="md">
+        Pipeline de dados
+      </Title>
+      <GamePipeline gameId={game.id} />
 
       <Divider my="md" />
 
