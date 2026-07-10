@@ -59,3 +59,11 @@ Dois ajustes finos pedidos pelo Vitor:
 1. **`FIT_MARGIN` foi de 24px pra 90px** — o respiro mínimo teórico (garantido pelo `padding` assimétrico do fitView) ficou visualmente apertado depois da calibração do follow-up 3 (a reserva agora é exata, só da lista, sem sobra). Ajustado por iteração visual (medir `listRect.right` vs. `firstNodeLeft` via Playwright, comparar com o screenshot) até ficar confortável.
 
 2. **Filtro de lista migrou pro header do painel da lista** — antes vivia escondido dentro do popover "filtrar/buscar" do rail, junto com a busca no subgrafo. Removido o texto "Event Rules" e o header agora é `[TextInput "filtrar…"] [Badge dinâmico] [info] ... [atualizar] [recolher]` — o Badge deixou de mostrar `rules.length` (total fixo) e passou a mostrar `filtered.length` (dinâmico, reflete o filtro ativo). O popover do rail ficou só com "Buscar no subgrafo" (a busca que destaca nodes no canvas, conceito diferente do filtro da lista). Verificado: filtrar "boss" no jogo de teste reduz a contagem de 13 pra 4 em tempo real.
+
+## Follow-up 5: lista deixa de ser colapsável + alinhamento do filtro + contraste do zebrado
+
+Três ajustes pedidos pelo Vitor:
+
+1. **Lista deixou de ser colapsável** — removido `dockCollapsed`/`onToggleCollapsed`, o botão de chevron no header e o `Collapse` em volta da tabela. A lista agora está sempre visível por completo (só o scroll interno controla o que aparece, quando excede a altura do painel).
+2. **Alinhamento do header** — `Group` do header ganhou `align="center"` explícito (o filtro, o badge de contagem, o info e o atualizar não estavam centralizados verticalmente entre si de forma consistente).
+3. **Contraste do zebrado** — o `striped` padrão do Mantine `Table` usa uma cor pensada pra fundo claro; contra o painel escuro (`rgba(18,24,33,0.95)`) as linhas ficavam quase indistinguíveis. Trocado por uma listra manual (`i % 2 === 1 ? "rgba(255,255,255,0.045)" : undefined`) — sobreposição branca bem sutil, sempre visível independente da cor de fundo por trás.

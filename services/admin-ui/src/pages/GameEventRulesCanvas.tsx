@@ -150,10 +150,6 @@ export function GameEventRulesCanvas({
   const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(archetypeOptions[0]);
   const arch = archetypeOptions.includes(archetype) ? archetype : archetypeOptions[0];
 
-  // dockCollapsed (spec 058): o painel único de navegação/controles (lista +
-  // toolbar + info) que hoje fica flutuando sobre o canvas — mesmo padrão
-  // recolher/expandir do painel de detalhe do node.
-  const [dockCollapsed, setDockCollapsed] = useState(false);
   // listPanelWidth (achado do Vitor: o fit reservava a largura do dock
   // INTEIRO — lista + rail de ações — mas o rail nunca fica atrás de nenhum
   // node, só a lista tapa área de verdade). Medida só do painel da lista
@@ -746,8 +742,6 @@ export function GameEventRulesCanvas({
             onFocusRule={onFocusRule}
             listFilter={listFilter}
             onListFilter={setListFilter}
-            collapsed={dockCollapsed}
-            onToggleCollapsed={() => setDockCollapsed((c) => !c)}
             draft={draft}
             onNewRule={startCreate}
             relatedKinds={relatedKinds}
@@ -957,8 +951,6 @@ function EventRulesDock({
   onFocusRule,
   listFilter,
   onListFilter,
-  collapsed,
-  onToggleCollapsed,
   draft,
   onNewRule,
   relatedKinds,
@@ -977,8 +969,6 @@ function EventRulesDock({
   onFocusRule: (ruleId: string | null) => void;
   listFilter: string;
   onListFilter: (v: string) => void;
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
   draft: DraftState | null;
   onNewRule: () => void;
   relatedKinds: Set<SourceKind>;
@@ -1020,8 +1010,8 @@ function EventRulesDock({
           flexDirection: "column",
         }}
       >
-        <Group justify="space-between" wrap="nowrap" p="xs" pb={collapsed ? "xs" : 4}>
-          <Group gap={6} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+        <Group justify="space-between" wrap="nowrap" align="center" p="xs">
+          <Group gap={6} wrap="nowrap" align="center" style={{ flex: 1, minWidth: 0 }}>
             <TextInput
               size="xs"
               placeholder="filtrar…"
@@ -1051,72 +1041,64 @@ function EventRulesDock({
               </Popover.Dropdown>
             </Popover>
           </Group>
-          <Group gap={2} wrap="nowrap">
-            <ActionIcon size="sm" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar">
-              <IconRefresh size={14} />
-            </ActionIcon>
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              onClick={onToggleCollapsed}
-              aria-label={collapsed ? "Expandir painel" : "Recolher painel"}
-            >
-              {collapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
-            </ActionIcon>
-          </Group>
+          <ActionIcon size="xs" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar" style={{ flexShrink: 0 }}>
+            <IconRefresh size={14} />
+          </ActionIcon>
         </Group>
-        <Collapse in={!collapsed} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-          <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-            <Table striped highlightOnHover fz="xs">
-              <Table.Tbody>
-                {filtered.map((r) => (
-                  <Table.Tr
-                    key={r.id}
-                    onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
-                    style={{
-                      cursor: "pointer",
-                      opacity: r.suppressed ? 0.5 : undefined,
-                      background: r.id === focusRuleId ? "var(--mantine-color-blue-light)" : undefined,
-                    }}
-                  >
-                    <Table.Td style={{ whiteSpace: "nowrap" }}>
-                      <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
-                        {r.scope === "global" ? "global" : "jogo"}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap={3} wrap="wrap">
-                        {r.eventTypes.map((et) => (
-                          <Badge key={et} size="xs" variant="light" color={ARCHETYPE_META[r.archetype].color}>
-                            {et}
-                          </Badge>
-                        ))}
-                      </Group>
-                    </Table.Td>
-                    <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
-                      {r.scope === "game" ? (
-                        <ActionIcon size="xs" variant="subtle" color="red" onClick={() => onDelete(r)} aria-label="Remover">
-                          <IconTrash size={13} />
-                        </ActionIcon>
-                      ) : (
-                        <ActionIcon
-                          size="xs"
-                          variant="subtle"
-                          color={r.suppressed ? "teal" : "orange"}
-                          onClick={() => onToggleSuppress(r)}
-                          aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
-                        >
-                          {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
-                        </ActionIcon>
-                      )}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
-        </Collapse>
+        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+          <Table highlightOnHover fz="xs">
+            <Table.Tbody>
+              {filtered.map((r, i) => (
+                <Table.Tr
+                  key={r.id}
+                  onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
+                  style={{
+                    cursor: "pointer",
+                    opacity: r.suppressed ? 0.5 : undefined,
+                    background:
+                      r.id === focusRuleId
+                        ? "var(--mantine-color-blue-light)"
+                        : i % 2 === 1
+                          ? "rgba(255, 255, 255, 0.045)"
+                          : undefined,
+                  }}
+                >
+                  <Table.Td style={{ whiteSpace: "nowrap" }}>
+                    <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                      {r.scope === "global" ? "global" : "jogo"}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={3} wrap="wrap">
+                      {r.eventTypes.map((et) => (
+                        <Badge key={et} size="xs" variant="light" color={ARCHETYPE_META[r.archetype].color}>
+                          {et}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
+                    {r.scope === "game" ? (
+                      <ActionIcon size="xs" variant="subtle" color="red" onClick={() => onDelete(r)} aria-label="Remover">
+                        <IconTrash size={13} />
+                      </ActionIcon>
+                    ) : (
+                      <ActionIcon
+                        size="xs"
+                        variant="subtle"
+                        color={r.suppressed ? "teal" : "orange"}
+                        onClick={() => onToggleSuppress(r)}
+                        aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+                      >
+                        {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
+                      </ActionIcon>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
       </Paper>
       <EventRulesToolbarRail
         focusRuleId={focusRuleId}
