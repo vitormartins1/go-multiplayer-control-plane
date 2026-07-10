@@ -64,6 +64,10 @@ export function GamePipeline({ gameId }: { gameId: string }) {
         fitKey={graph.nodes.length}
         onNodeClick={setSelectedId}
         onPaneClick={() => setSelectedId(null)}
+        // fitMargin menor que o default (90px, calibrado pro canvas de Event
+        // Rules) — pedido do Vitor: o pipeline tem só 3 colunas curtas, o
+        // respiro grande deixava os nodes pequenos demais.
+        fitMargin={32}
         overlay={
           selectedNode ? (
             <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>

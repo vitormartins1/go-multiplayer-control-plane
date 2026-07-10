@@ -106,7 +106,20 @@
   font-size: 9px;
   line-height: 1.25;
 }
-/* consumers da vista de pipeline (spec 046) */
+/* consumers da vista de pipeline (spec 046). Largura FIXA (achado do Vitor,
+   spec 046 follow-up): sem isso o card tem só min/max-width e o navegador
+   encolhe pra caber o conteúdo — a lista de scoringStats do leaderboard (uma
+   linha só, pode ter 15+ stats) então quebra num ponto imprevisível (a
+   largura real varia por jogo), e o cálculo de altura do layout (pipelineGraph.ts)
+   não tem como estimar quantas linhas vai dar. Largura fixa = ponto de quebra
+   previsível = altura calculável. */
+.flow-card--consumer-ach,
+.flow-card--consumer-lb,
+.flow-card--consumer-an {
+  width: 260px;
+  min-width: 260px;
+  max-width: 260px;
+}
 .flow-card--consumer-ach .flow-card__header {
   color: #fab005;
   background: rgba(250, 176, 5, 0.08);
