@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -35,8 +36,19 @@ type Verifier struct {
 }
 
 // NewVerifier cria um verificador que busca o JWKS em jwksURL e mantém as
-// chaves em cache por ttl (com refetch sob kid desconhecido).
-func NewVerifier(jwksURL string, ttl time.Duration) *Verifier {
+// chaves em cache por ttl (com refetch sob kid desconhecido). jwksURL vem de
+// configuração de deploy (IDENTITY_JWKS_URL, env var do operador — não é
+// input de request) — mas uma URL vazia ou malformada não falhava aqui no
+// boot (achado no /code-review): só aparecia tarde, dentro de refresh() no
+// primeiro request autenticado, como um 401 genérico (ErrUnauthorized)
+// sem pista de que a causa é configuração quebrada. Validado aqui, fail-fast,
+// mesmo espírito de envOrFile (shared/config) — erro de deploy não deve
+// degradar silenciosamente pra "toda autenticação falha".
+func NewVerifier(jwksURL string, ttl time.Duration) (*Verifier, error) {
+	u, err := url.Parse(jwksURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, fmt.Errorf("auth: jwksURL inválida (%q) — precisa ser uma URL http(s) completa (ex.: http://identity-service:8080/.well-known/jwks.json)", jwksURL)
+	}
 	return &Verifier{
 		jwksURL: jwksURL,
 		// otelhttp propaga o trace context ao buscar o JWKS — o fetch vira um
@@ -48,7 +60,7 @@ func NewVerifier(jwksURL string, ttl time.Duration) *Verifier {
 		},
 		ttl:  ttl,
 		keys: map[string]ed25519.PublicKey{},
-	}
+	}, nil
 }
 
 // Verify valida a assinatura e a expiração do token e devolve o sub (playerID).

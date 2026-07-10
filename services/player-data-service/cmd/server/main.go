@@ -70,10 +70,10 @@ func run(log *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	if cfg.IdentityJWKSURL == "" {
-		log.Warn("IDENTITY_JWKS_URL ausente — a validação de token vai falhar; aponte para o JWKS do identity")
+	verifier, err := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
+	if err != nil {
+		return fmt.Errorf("IDENTITY_JWKS_URL: %w", err)
 	}
-	verifier := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
 
 	repo := repository.NewPostgresPlayerDataRepository(pool)
 	svc := service.New(repo)
