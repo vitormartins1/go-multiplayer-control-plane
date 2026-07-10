@@ -33,9 +33,10 @@ import {
   IconRefresh,
   IconTrash,
   IconUpload,
+  IconX,
 } from "@tabler/icons-react";
 import type { NodeTypes } from "@xyflow/react";
-import { Fragment, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Fragment, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   api,
   HttpError,
@@ -80,7 +81,6 @@ const NO_SUGGESTIONS: Suggestions = { values: [], origin: new Map() };
 function statSuggestions(modes: MultiplayerMode[]): Suggestions {
   const declaredBy = new Map<string, string[]>();
   for (const m of modes) {
-    if (m.archetype === "host_world_dropin") continue; // não declara scoringStats
     // defensivo: respostas antigas do registry omitiam o array vazio (omitempty)
     for (const s of m.params.scoringStats ?? []) {
       declaredBy.set(s, [...(declaredBy.get(s) ?? []), m.modeId]);
@@ -143,10 +143,15 @@ function RuleFocusMiniCanvas({
   rules,
   catalog,
   focusNodeId,
+  overlay,
 }: {
   rules: EventRule[];
   catalog: CatalogAchievement[];
   focusNodeId: string;
+  // overlay flutua no canto do mini-canvas (Panel top-right do FlowCanvas) —
+  // mesmo padrão do canvas de Event Rules, em vez de um Group abaixo do
+  // canvas ocupando espaço vertical à toa.
+  overlay?: ReactNode;
 }) {
   // buildRulesGraph só cria nós de achievement por MÉTRICA (metricAchs) quando
   // recebe `opts.stats` — sem isso, um achievement por stat nem aparece no
@@ -182,7 +187,9 @@ function RuleFocusMiniCanvas({
     return { nodes: repacked, edges: graph.edges.filter((e) => path.edgeIds.has(e.id)) };
   }, [graph, focusNodeId]);
 
-  return <FlowCanvas nodes={nodes} edges={edges} nodeTypes={MINI_NODE_TYPES} height={280} fitKey={focusNodeId} />;
+  return (
+    <FlowCanvas nodes={nodes} edges={edges} nodeTypes={MINI_NODE_TYPES} height={280} fitKey={focusNodeId} overlay={overlay} />
+  );
 }
 
 // SuggestInput é o Autocomplete com origem esmaecida por opção — texto fora da
@@ -597,7 +604,7 @@ export function GameAchievements({
                           style={{ cursor: "pointer" }}
                           onClick={() => setExpandedCriteriaId(expanded ? null : a.id)}
                         >
-                          <Badge variant="light" color="grape">
+                          <Badge variant="light" color="grape" style={{ cursor: "pointer" }}>
                             {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
                           </Badge>
                           {!statDeclared(a.statKey) && (
@@ -614,7 +621,7 @@ export function GameAchievements({
                           style={{ cursor: "pointer" }}
                           onClick={() => setExpandedCriteriaId(expanded ? null : a.id)}
                         >
-                          <Badge variant="light" color="violet">
+                          <Badge variant="light" color="violet" style={{ cursor: "pointer" }}>
                             {a.eventType}
                           </Badge>
                           {!!a.eventType && !eventKnown(a.eventType) && (
@@ -641,11 +648,11 @@ export function GameAchievements({
                       </Group>
                     </Table.Td>
                   </Table.Tr>
-                  <Table.Tr key={`${a.id}-preview`}>
-                    <Table.Td colSpan={7} p={0} style={{ border: expanded ? undefined : "none" }}>
-                      <Collapse in={expanded}>
-                        <Box p="sm" bg="var(--mantine-color-dark-8)">
-                          {expanded && (
+                  {expanded && (
+                    <Table.Tr key={`${a.id}-preview`}>
+                      <Table.Td colSpan={7} p={0}>
+                        <Collapse in={expanded}>
+                          <Box p="sm" bg="var(--mantine-color-dark-8)">
                             <RuleFocusMiniCanvas
                               rules={relevantEventRules}
                               catalog={catalog ?? []}
@@ -656,23 +663,33 @@ export function GameAchievements({
                               // nunca a folha (achievement) — achado do Vitor testando com um stat com
                               // 5 achievements ligados, só o próprio aparecia na prévia.
                               focusNodeId={a.statKey ? srcId(STAT_PREFIX + a.statKey) : typeId(a.eventType)}
+                              overlay={
+                                <Group gap={6}>
+                                  {!a.statKey && rule && (
+                                    <Button
+                                      size="xs"
+                                      variant="light"
+                                      onClick={() => onNavigateToRule?.(rule.id, { edit: rule.scope === "game" })}
+                                    >
+                                      {rule.scope === "game" ? "Editar regra" : "Ver regra"}
+                                    </Button>
+                                  )}
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    onClick={() => setExpandedCriteriaId(null)}
+                                    aria-label="Fechar prévia"
+                                  >
+                                    <IconX size={16} />
+                                  </ActionIcon>
+                                </Group>
+                              }
                             />
-                          )}
-                          {!a.statKey && rule && (
-                            <Group justify="flex-end" mt="xs">
-                              <Button
-                                size="xs"
-                                variant="light"
-                                onClick={() => onNavigateToRule?.(rule.id, { edit: rule.scope === "game" })}
-                              >
-                                {rule.scope === "game" ? "Editar regra" : "Ver regra"}
-                              </Button>
-                            </Group>
-                          )}
-                        </Box>
-                      </Collapse>
-                    </Table.Td>
-                  </Table.Tr>
+                          </Box>
+                        </Collapse>
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
                 </Fragment>
               );
             })}
