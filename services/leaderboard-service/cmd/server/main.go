@@ -65,10 +65,10 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("redis: %w", err)
 	}
 
-	if cfg.IdentityJWKSURL == "" {
-		log.Warn("IDENTITY_JWKS_URL ausente — a validação de token vai falhar; aponte para o JWKS do identity")
+	verifier, err := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
+	if err != nil {
+		return fmt.Errorf("IDENTITY_JWKS_URL: %w", err)
 	}
-	verifier := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
 
 	svc := service.New(store)
 	handler := transport.NewHandler(svc, verifier)

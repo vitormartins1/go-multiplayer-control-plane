@@ -61,12 +61,46 @@ func jwksServer(body []byte, hits *int32) *httptest.Server {
 	}))
 }
 
+func mustVerifier(t *testing.T, jwksURL string, ttl time.Duration) *Verifier {
+	t.Helper()
+	v, err := NewVerifier(jwksURL, ttl)
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
+	}
+	return v
+}
+
+// TestNewVerifier_JwksURLInvalida_Erro prova o fail-fast (achado no
+// /code-review): antes, uma jwksURL vazia/malformada só falhava tarde, no
+// primeiro request autenticado, como um 401 genérico sem pista da causa.
+func TestNewVerifier_JwksURLInvalida_Erro(t *testing.T) {
+	casos := []string{"", "not a url", "ftp://identity/jwks.json", "identity-service/jwks.json"}
+	for _, jwksURL := range casos {
+		t.Run(jwksURL, func(t *testing.T) {
+			if _, err := NewVerifier(jwksURL, time.Minute); err == nil {
+				t.Fatalf("NewVerifier(%q) = nil error, quer erro de validação", jwksURL)
+			}
+		})
+	}
+}
+
+func TestNewVerifier_JwksURLValida_SemErro(t *testing.T) {
+	casos := []string{"http://identity-service:8080/.well-known/jwks.json", "https://identity.example.com/jwks.json"}
+	for _, jwksURL := range casos {
+		t.Run(jwksURL, func(t *testing.T) {
+			if _, err := NewVerifier(jwksURL, time.Minute); err != nil {
+				t.Fatalf("NewVerifier(%q) erro inesperado: %v", jwksURL, err)
+			}
+		})
+	}
+}
+
 func TestVerify_TokenValido_RetornaPlayerID(t *testing.T) {
 	priv, kid := testKey(t)
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
 	defer srv.Close()
 
-	v := NewVerifier(srv.URL, time.Minute)
+	v := mustVerifier(t, srv.URL, time.Minute)
 	token := signToken(t, priv, kid, "player-123", time.Now().Add(time.Minute))
 
 	sub, err := v.Verify(context.Background(), token)
@@ -83,7 +117,7 @@ func TestVerify_TokenExpirado_ErrUnauthorized(t *testing.T) {
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
 	defer srv.Close()
 
-	v := NewVerifier(srv.URL, time.Minute)
+	v := mustVerifier(t, srv.URL, time.Minute)
 	token := signToken(t, priv, kid, "player-123", time.Now().Add(-time.Minute))
 
 	_, err := v.Verify(context.Background(), token)
@@ -98,7 +132,7 @@ func TestVerify_AssinaturaInvalida_ErrUnauthorized(t *testing.T) {
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
 	defer srv.Close()
 
-	v := NewVerifier(srv.URL, time.Minute)
+	v := mustVerifier(t, srv.URL, time.Minute)
 	token := signToken(t, other, kid, "player-123", time.Now().Add(time.Minute))
 
 	_, err := v.Verify(context.Background(), token)
@@ -112,7 +146,7 @@ func TestVerify_KidDesconhecido_ErrUnauthorized(t *testing.T) {
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
 	defer srv.Close()
 
-	v := NewVerifier(srv.URL, time.Minute)
+	v := mustVerifier(t, srv.URL, time.Minute)
 	token := signToken(t, priv, "kid-fantasma", "player-123", time.Now().Add(time.Minute))
 
 	_, err := v.Verify(context.Background(), token)
@@ -126,7 +160,7 @@ func TestVerify_TokenMalformado_ErrUnauthorized(t *testing.T) {
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
 	defer srv.Close()
 
-	v := NewVerifier(srv.URL, time.Minute)
+	v := mustVerifier(t, srv.URL, time.Minute)
 
 	_, err := v.Verify(context.Background(), "nao-eh-um-jwt")
 	if !errors.Is(err, ErrUnauthorized) {
@@ -140,7 +174,7 @@ func TestVerify_Cacheia_NaoRebuscaPorRequest(t *testing.T) {
 	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), &hits)
 	defer srv.Close()
 
-	v := NewVerifier(srv.URL, time.Minute)
+	v := mustVerifier(t, srv.URL, time.Minute)
 	for i := 0; i < 3; i++ {
 		token := signToken(t, priv, kid, "player-123", time.Now().Add(time.Minute))
 		if _, err := v.Verify(context.Background(), token); err != nil {
