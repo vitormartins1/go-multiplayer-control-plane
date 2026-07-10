@@ -90,3 +90,9 @@ Redesenhado do zero, por cenário:
 - **Achievement**: reestruturado de uma frase corrida ("Progride pela stat X (modo) · target N. Gerenciado na aba Achievements.") pra 3 linhas separadas — mecanismo de progresso, badge "meta: N" (consistente com o padrão de badge dos outros 3 tipos), e nota de rodapé em itálico ("Gerenciado na aba Achievements.").
 
 Verificado visualmente nos 4 tipos de node + estado recolhido (o cabeçalho sozinho continua autoexplicativo sem o corpo).
+
+## Follow-up 9: nodes atrás do dock ficavam bloqueados pra clique mesmo em área "vazia"
+
+Achado do Vitor: às vezes não dava pra clicar em alguns facts/regras. Causa: o `Panel` do React Flow não tem `pointer-events: none` por padrão — e o dock (`EventRulesDock`) é um `<Group>` flexbox com dois filhos de alturas diferentes (lista alta, rail curto). O retângulo delimitador desse Group (e do Panel que o envolve) é tão alto quanto o filho mais alto (a lista) para a largura TOTAL (lista + rail) — mesmo na faixa à direita do rail curto, onde visualmente só se vê o canvas vazio. Essa faixa "vazia" fazia parte do retângulo do Group (que, mesmo transparente, ainda intercepta clique por padrão) e bloqueava nodes por baixo — coerente com o próprio raciocínio do follow-up 7 (fit não reserva a largura do rail, só da lista) esbarrando numa lacuna que não tínhamos coberto: nós podiam legitimamente acabar nessa faixa sem estarem cobertos visualmente, mas ainda assim ficavam inclicáveis.
+
+Corrigido: `pointer-events: none` no `Group` externo do dock; `pointer-events: auto` nos dois cards de verdade (`Paper` da lista e `Paper` do rail) — só a área realmente visível volta a bloquear clique, o resto deixa passar pro canvas por baixo. Verificado clicando num ponto exato dessa faixa (mesma altura do rail, X logo depois dele): antes bloqueava, depois do fix o clique chega no pane (limpa a seleção do overlay).
