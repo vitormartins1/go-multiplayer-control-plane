@@ -106,12 +106,15 @@ type dailyDTO struct {
 	Matches int64  `json:"matches"`
 }
 
-// participationStatDTO é a contagem por papel/evento do host_world_dropin (spec
-// 004). Vazio no queue_arena.
+// participationStatDTO é a contagem por papel/evento/outcome do host_world_dropin
+// (spec 004/007). Vazio no queue_arena. Outcome estava sendo perdido aqui —
+// o repositório já lia a coluna (query agrupa por role/event/outcome), só o
+// DTO não expunha.
 type participationStatDTO struct {
-	Role  string `json:"role"`
-	Event string `json:"event"`
-	Count int64  `json:"count"`
+	Role    string `json:"role"`
+	Event   string `json:"event"`
+	Outcome string `json:"outcome"`
+	Count   int64  `json:"count"`
 }
 
 func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +135,7 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
 	}
 	for _, p := range ga.RoleParticipations {
-		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{Role: p.Role, Event: p.Event, Count: p.Count})
+		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{Role: p.Role, Event: p.Event, Outcome: p.Outcome, Count: p.Count})
 	}
 	if pd := ga.Placement; pd != nil {
 		dto.Placement = &placementDTO{
