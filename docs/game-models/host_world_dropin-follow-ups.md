@@ -11,11 +11,11 @@
 Control plane **ponta a ponta**, validável com server mockado (`static` allocator + cliente de teste):
 declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por papel** (H1a invasão `session/012`+`matchmaking/006`; H1b co-op por sinais `matchmaking/007`) → **reportar eventos por participante** (H2 produtor `session/013`) → **colher** (H2 sinks `achievements/009` + `analytics/004`).
 
-Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Agones + Unity). E os itens abaixo.
+**H3 (surfacing no console) também já está feito** (`session/014` + `admin-bff/014` + `admin-ui/020` — ver "Próximo passo estrutural" no fim deste doc, que já registrava isso; esta linha estava desatualizada). Falta só o **contrato + e2e real** cross-repo (Agones + Unity) e os itens abaixo.
 
 ---
 
-## 1. Play-with-friends por senha (o mais pedido)
+## 1. Play-with-friends por senha (o mais pedido) — ✅ FEITO (2026-07-09)
 
 - **O quê:** casar co-op/invasão por **senha** que **ignora** as faixas de nível/arma (ficha 01 §4 — "se as senhas batem, casam"). A flag `PasswordEnabled` já existe no perfil (game-registry), mas nenhum serviço a consome.
 - **Por que adiado:** manter H1a/H1b focadas na descoberta por faixa. Senha é aditiva mas atravessa produtor+matchmaking+token.
@@ -26,6 +26,7 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
 - **Destrava:** jogar com amigos ignorando o range — o caso de uso social nº 1 do arquétipo.
 - **Fonte:** "Fora de escopo" de `session/012`, `matchmaking/006`, `matchmaking/007`.
 - **Evidência (2026-07-08):** o Capoeira Souls tem o modo `batizado` cadastrado com `passwordEnabled=true` e faixas desligadas (catálogo em `unity-host-world-dropin-data-plane/docs/MODES.md`) — o modo existe e espera este follow-up para funcionar de verdade.
+- **Implementado (`session/020-password-world-matching`, `matchmaking/011-password-matching`):** hash SHA-256 da senha gravado no `OpenWorld`; `Invade`/`PostSummonSign`/`ListSigns` bypassam a faixa de nível/arma quando a senha do candidato bate com a do mundo. Destrava o modo `batizado` do Capoeira Souls de verdade.
 
 ## 2. Pools / área / região no quadro de sinais
 
@@ -62,13 +63,14 @@ Falta: **H3** (surfacing no console) e o **contrato + e2e real** cross-repo (Ago
 - **Fonte:** "Fora de escopo" de `analytics/004`.
 - **Implementado (`analytics/007`, mesma migration 006 do item 4):** `game_participation_rollup` ganha `outcome` na PK (`game_id, role, event, outcome`); linhas antigas ficam sob `outcome=''` (não reconstituível sem os eventos originais). Evidência real: a spec 004 do Unity introduz `HOST_KILLED`·`FAIL` (o boss mata o host sem invasor por perto) — sem esta dimensão, ficaria indistinguível de um `HOST_KILLED` normal no rollup.
 
-## 6. Critério de conquista por **stat** para participação
+## 6. Critério de conquista por **stat** para participação — ✅ FEITO (2026-07-10)
 
 - **O quê:** `achievements/009` só usa critério por **event_type** (`invasion_won`, etc.). Não há "cause N mortes como invasor" (critério por stat), porque o `participation_event` não carrega stats.
 - **Por que adiado:** o produtor não manda stats no evento de participação.
 - **Onde mexe:** `session/013` incluir stats no `ParticipationEvent`/envelope; `achievements/009` reusar `findByStatKey`/`recordStatProgress` (A1) no caminho de participação.
 - **Destrava:** conquistas cumulativas por métrica no host_world (paridade com o queue_arena A1).
 - **Fonte:** "Fora de escopo" de `achievements/009`.
+- **Implementado (`achievements/018-participation-stats`):** achado durante o estresse-teste do motor de regras com o jogo "Achievements Test" — `host_world_dropin` era o único arquétipo sem stats no envelope. Envelope `participation_event` ganhou campo `stats` opcional; `Service.ApplyParticipationEvent` soma via `Facts.WithStats`; repositório roda `recordStatProgress` na mesma transação idempotente do evento — espelha `ApplyMatchResult` dos outros 3 arquétipos. `game-registry/011` fechou o gap irmão (`HostWorldDropInParams` ganhou `ScoringStats`, que faltava pro canvas parar de marcar stat de HWD como "drift").
 
 ## 7. Seed de catálogo de conquistas de invasão/co-op
 

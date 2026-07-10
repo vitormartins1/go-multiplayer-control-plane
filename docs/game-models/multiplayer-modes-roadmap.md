@@ -22,7 +22,7 @@
 
 ---
 
-## M0 — Modos nomeados no game-registry + console
+## M0 — Modos nomeados no game-registry + console ✅ main (2026-07-07)
 
 **Objetivo:** o jogo cadastra N perfis nomeados; o console lista/edita modos; tudo que existe continua funcionando via alias `default`.
 
@@ -34,7 +34,7 @@
 
 **Depende de:** nada. **Tamanho:** M. **Destrava:** M1.
 
-## M1 — Matchmaking/session por modo + snapshot + manifest
+## M1 — Matchmaking/session por modo + snapshot + manifest ✅ main (2026-07-07)
 
 **Objetivo:** o modo flui ponta a ponta: ticket → formação → sessão (snapshot) → connect token → manifest → resultado validado → envelope.
 

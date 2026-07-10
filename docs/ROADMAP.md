@@ -27,7 +27,7 @@ A trilha foi percorrida em ordem de complexidade crescente; **toda a trilha de s
 | 10 | session-service + realtime (control/data plane, Agones) — capstone | ✅ (control plane; data plane cross-repo) |
 | 11 | **Comparação Go vs. AWS** (entregável de tese: custo/latência/throughput) | ⬜ pendente (precisa do deploy prod) |
 
-Além da trilha, o projeto generalizou o multiplayer por **arquétipo** (ADR-0023): `queue_arena` e `host_world_dropin` completos no control plane; `battle_royale`/`coop_mission` planejados. Fases seguintes vivem em `NEXT-STEPS.md` (backlog priorizado) e nos roadmaps por arquétipo em `game-models/`.
+Além da trilha, o projeto generalizou o multiplayer por **arquétipo** (ADR-0023): os 4 arquétipos (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) estão completos no control plane — só `queue_arena` tem data plane Unity de verdade hoje (`go-game-dataplane`); os outros 3 têm contrato pronto, aguardando repo Unity próprio (ver `UNITY-INTEGRATION.md`). Fases seguintes vivem em `NEXT-STEPS.md` (backlog priorizado) e nos roadmaps por arquétipo em `game-models/`.
 
 ## Práticas transversais — desde o serviço 1
 

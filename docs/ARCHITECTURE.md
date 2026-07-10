@@ -101,8 +101,8 @@ A generalização é dirigida por **engenharia reversa de jogos reais** (não po
 |---|---|---|---|
 | `queue_arena` | partida simétrica formada por fila (FFA / NvN) | win/loss/draw por jogador/time + stats | ✅ completo |
 | `host_world_dropin` | mundo persistente de um host; phantoms co-op/invasor entram/saem por papel | por **evento/participante** (não placar terminal) | ✅ completo (H0–H3) |
-| `battle_royale` | lobby grande, eliminação progressiva | colocação ordinal (1º..Nº) | ⬜ planejado |
-| `coop_mission` | co-op puro vs. ambiente | coletivo (sucesso/falha por sessão) | ⬜ planejado |
+| `battle_royale` | lobby grande, eliminação progressiva | colocação ordinal (1º..Nº) | ✅ completo (BR0–BR4) |
+| `coop_mission` | co-op puro vs. ambiente | coletivo (sucesso/falha por sessão) | ✅ completo (C0–C4) |
 
 Como o perfil orienta cada serviço, o estado por fatia e os roadmaps por arquétipo vivem em **`docs/game-models/README.md`** (fonte única do estado de implementação). Contratos control↔data plane por arquétipo: `docs/game-models/<archetype>-dataplane-contract.md`.
 
