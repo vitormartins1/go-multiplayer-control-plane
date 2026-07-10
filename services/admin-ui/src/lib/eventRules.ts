@@ -27,3 +27,18 @@ export function filterRulesForGame(
   if (archetypes.size === 0) return rules;
   return rules.filter((r) => r.scope === "game" || archetypes.has(r.archetype));
 }
+
+// matchesListFilter (spec 055, movida pra cá na 058 — o dock de regras vive
+// dentro do canvas agora): filtro de texto da lista — busca em arquétipo,
+// chaves/valores do match e event types. Case-insensitive.
+export function matchesListFilter(term: string) {
+  const t = term.trim().toLowerCase();
+  return (r: EventRule) => {
+    if (!t) return true;
+    if (r.archetype.toLowerCase().includes(t)) return true;
+    if (r.eventTypes.some((et) => et.toLowerCase().includes(t))) return true;
+    return Object.entries(r.match).some(
+      ([k, v]) => k.toLowerCase().includes(t) || String(v).toLowerCase().includes(t),
+    );
+  };
+}

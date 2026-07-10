@@ -48,6 +48,7 @@ export function FlowCanvas({
   onNodeClick,
   onPaneClick,
   onDrop,
+  dock,
   overlay,
   fitKey,
   height,
@@ -58,6 +59,9 @@ export function FlowCanvas({
   onNodeClick?: (nodeId: string) => void;
   onPaneClick?: () => void;
   onDrop?: (e: DragEvent) => void;
+  // dock flutua no canto oposto ao overlay (Panel top-left) — painel de
+  // navegação/controles do canvas (spec 058), mesmo mecanismo do overlay.
+  dock?: ReactNode;
   // overlay flutua sobre o canvas (Panel top-right) — detalhe do nó
   // selecionado etc., sem coluna lateral roubando largura (spec 044).
   overlay?: ReactNode;
@@ -91,6 +95,7 @@ export function FlowCanvas({
       >
         <Background color="#232c3a" gap={22} />
         {fitKey !== undefined && <AutoFit fitKey={fitKey} />}
+        {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
         <Controls showInteractive={false} />
         <MiniMap
