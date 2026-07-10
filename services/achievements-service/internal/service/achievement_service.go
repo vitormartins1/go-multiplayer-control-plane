@@ -230,13 +230,17 @@ func (s *Service) ApplyCollectiveResult(ctx context.Context, gameID, matchID, mo
 // (spec 013/009) nos event types de gameplay por papel e delega ao repo a
 // aplicação idempotente por eventID (follow-up #4, spec 012). Consumido pelo
 // fan-out durável (SQS). dup=true quando o evento já havia sido processado.
-func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, modeID, role, event, outcome, eventID string) (bool, error) {
+// stats (spec 018) soma facts stat.* pra regras com comparador E avança
+// achievements por métrica — mesmo tratamento que ApplyMatchResult já dá aos
+// outros 3 arquétipos; nil/vazio é no-op (compat total com envelopes antigos).
+func (s *Service) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, modeID, role, event, outcome, eventID string, stats map[string]int64) (bool, error) {
 	rules, err := s.rules.RulesForArchetype(ctx, gameID, domain.ArchetypeHostWorldDropIn)
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply participation event: rules: %w", err)
 	}
-	eventTypes := domain.EvaluateRules(rules, gameID, domain.ParticipationFacts(role, event, outcome).WithMode(modeID))
-	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, s.now().UTC())
+	facts := domain.ParticipationFacts(role, event, outcome).WithMode(modeID).WithStats(stats)
+	eventTypes := domain.EvaluateRules(rules, gameID, facts)
+	dup, err := s.repo.ApplyParticipationEvent(ctx, gameID, sessionID, playerID, event, eventID, eventTypes, stats, s.now().UTC())
 	if err != nil {
 		return false, fmt.Errorf("achievements service: apply participation event: %w", err)
 	}

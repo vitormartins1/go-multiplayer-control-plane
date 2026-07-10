@@ -57,7 +57,7 @@ func (r *PostgresAchievementRepository) FindByEventType(ctx context.Context, gam
 }
 
 // findByEventType roda a busca num querier (pool ou tx). Só critérios por evento
-// (event_type <> '' — as conquistas por stat têm event_type vazio).
+// (event_type <> ” — as conquistas por stat têm event_type vazio).
 func findByEventType(ctx context.Context, q querier, gameID, eventType string) ([]domain.Achievement, error) {
 	const sql = `SELECT ` + achievementCols + `
 	             FROM achievements WHERE game_id = $1 AND event_type = $2 ORDER BY id`
@@ -228,7 +228,7 @@ func (r *PostgresAchievementRepository) ApplyMatchResult(ctx context.Context, ga
 // do ApplyMatchResult): reprocessar é no-op e um crash no meio não deixa o
 // evento "processado" sem efeito. eventTypes vazio (evento sem conquista, ex.:
 // LEFT) → só marca processado.
-func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, at time.Time) (bool, error) {
+func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Context, gameID, sessionID, playerID, event, eventID string, eventTypes []string, stats map[string]int64, at time.Time) (bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("achievements repository: apply participation: begin: %w", err)
@@ -254,6 +254,19 @@ func (r *PostgresAchievementRepository) ApplyParticipationEvent(ctx context.Cont
 		}
 		for _, a := range matches {
 			if _, err := recordProgress(ctx, tx, gameID, playerID, a.ID, a.Target, at); err != nil {
+				return false, err
+			}
+		}
+	}
+	// critério por stat (spec 018): mesmo loop de ApplyMatchResult — fecha a
+	// assimetria do host_world_dropin com os outros 3 arquétipos.
+	for statKey, value := range stats {
+		matches, err := findByStatKey(ctx, tx, gameID, statKey)
+		if err != nil {
+			return false, err
+		}
+		for _, a := range matches {
+			if _, err := recordStatProgress(ctx, tx, gameID, playerID, a.ID, a.Target, value, a.StatMode, at); err != nil {
 				return false, err
 			}
 		}

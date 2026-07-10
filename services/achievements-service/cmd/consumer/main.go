@@ -247,19 +247,20 @@ func handleCollective(ctx context.Context, svc *service.Service, log *slog.Logge
 // idempotente por (sessionId, playerId, event).
 func handleParticipation(ctx context.Context, svc *service.Service, log *slog.Logger, body []byte) (bool, error) {
 	var env struct {
-		GameID    string `json:"gameId"`
-		SessionID string `json:"sessionId"`
-		PlayerID  string `json:"playerId"`
-		ModeID    string `json:"modeId"` // ADR-0024; vira o fact `mode` (spec 013)
-		Role      string `json:"role"`
-		Event     string `json:"event"`
-		Outcome   string `json:"outcome"`
-		EventID   string `json:"eventId"`
+		GameID    string           `json:"gameId"`
+		SessionID string           `json:"sessionId"`
+		PlayerID  string           `json:"playerId"`
+		ModeID    string           `json:"modeId"` // ADR-0024; vira o fact `mode` (spec 013)
+		Role      string           `json:"role"`
+		Event     string           `json:"event"`
+		Outcome   string           `json:"outcome"`
+		EventID   string           `json:"eventId"`
+		Stats     map[string]int64 `json:"stats"` // spec 018; ausente/vazio = compat total
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		return false, fmt.Errorf("unmarshal participation envelope: %w", err)
 	}
-	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.ModeID, env.Role, env.Event, env.Outcome, env.EventID)
+	dup, err := svc.ApplyParticipationEvent(ctx, env.GameID, env.SessionID, env.PlayerID, env.ModeID, env.Role, env.Event, env.Outcome, env.EventID, env.Stats)
 	if err != nil {
 		return false, err
 	}
