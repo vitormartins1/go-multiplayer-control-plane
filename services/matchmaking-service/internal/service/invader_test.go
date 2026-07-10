@@ -21,13 +21,30 @@ func (f *fakePolicies) InvasionPolicy(context.Context, string, string) (domain.I
 	return f.policy, f.err
 }
 
+// fakeDirectory devolve worlds em toda chamada (compat com os testes de
+// mundo único); quando responses está setado, devolve uma lista diferente
+// por chamada (índice além do fim repete a última) — usado pra provar o
+// refetch de Invade (achado no /code-review — "JoinWorld race").
 type fakeDirectory struct {
-	worlds []domain.InvadableWorld
-	err    error
+	worlds    []domain.InvadableWorld
+	responses [][]domain.InvadableWorld
+	err       error
+	calls     int
 }
 
 func (f *fakeDirectory) ListInvadableWorlds(context.Context, string) ([]domain.InvadableWorld, error) {
-	return f.worlds, f.err
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.responses == nil {
+		return f.worlds, nil
+	}
+	idx := f.calls - 1
+	if idx >= len(f.responses) {
+		idx = len(f.responses) - 1
+	}
+	return f.responses[idx], nil
 }
 
 // fakeInjector devolve, por sessionID, o erro configurado (nil = sucesso) e
@@ -83,11 +100,13 @@ func TestInvade_InvasaoDesligada_ErrInvasionNotSupported(t *testing.T) {
 }
 
 func TestInvade_ListaVazia_ErrNoEligibleWorld(t *testing.T) {
-	in := NewInvader(&fakePolicies{policy: invasionOn()}, &fakeDirectory{worlds: nil}, &fakeInjector{})
+	dir := &fakeDirectory{worlds: nil}
+	in := NewInvader(&fakePolicies{policy: invasionOn()}, dir, &fakeInjector{})
 
 	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
 	assert.Equal(t, float64(1), in.InvasionsTotal(resultNoWorld))
+	assert.Equal(t, 1, dir.calls, "lista vazia não é corrida: sem refetch, evita dobrar a latência do caso comum")
 }
 
 func TestInvade_NenhumNaFaixa_ErrNoEligibleWorld(t *testing.T) {
@@ -198,7 +217,28 @@ func TestInvade_TodosCheios_ErrNoEligibleWorld(t *testing.T) {
 
 	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
 	assert.ErrorIs(t, err, domain.ErrNoEligibleWorld)
-	assert.Equal(t, []string{"w1", "w2"}, inj.calls, "tentou os dois antes de desistir")
+	assert.Equal(t, []string{"w1", "w2", "w1", "w2"}, inj.calls,
+		"tentou os dois, rebuscou a lista (bounded, achado no /code-review) e tentou os dois de novo antes de desistir")
+	assert.Equal(t, 2, dir.calls, "refetch é bounded a 2 chamadas de lista, não retry indefinido")
+}
+
+// Achado no /code-review ("JoinWorld race"): se TODOS os candidatos da 1ª
+// lista perderem a corrida listar→injetar, um mundo elegível pode ter aberto
+// nesse meio-tempo — sem o refetch isso seria um falso-negativo
+// (ErrNoEligibleWorld mesmo havendo mundo disponível).
+func TestInvade_TodosPerdemNaPrimeiraLista_RebuscaEAchaNaSegunda(t *testing.T) {
+	pol := &fakePolicies{policy: invasionOn()}
+	dir := &fakeDirectory{responses: [][]domain.InvadableWorld{
+		{{SessionID: "w1", FreeInvaderSlots: 1}}, // 1ª lista: só w1, que perde a corrida
+		{{SessionID: "w2", FreeInvaderSlots: 1}}, // 2ª lista (refetch): w2 abriu nesse meio-tempo
+	}}
+	inj := &fakeInjector{byWorld: map[string]error{"w1": domain.ErrRoleFull}}
+	in := NewInvader(pol, dir, inj)
+
+	got, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{SoulLevel: 100})
+	require.NoError(t, err)
+	assert.Equal(t, "w2", got.SessionID, "achou o mundo que abriu depois do 1º snapshot")
+	assert.Equal(t, 2, dir.calls, "precisou rebuscar a lista pra achar w2")
 }
 
 func TestInvade_PerfilIndisponivel_Propaga(t *testing.T) {
