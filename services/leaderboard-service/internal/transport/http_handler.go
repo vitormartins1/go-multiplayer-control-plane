@@ -11,6 +11,7 @@ import (
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/leaderboard-service/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // Handler expõe os endpoints HTTP do leaderboard-service.
@@ -44,12 +45,12 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := auth.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		playerID, err := h.verifier.Verify(r.Context(), token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		ctx := context.WithValue(r.Context(), playerIDKey, playerID)
@@ -60,14 +61,14 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 	gameID := gameFromHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	var req struct {
 		Score *int64 `json:"score"` // ponteiro: distingue ausente de zero
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
-		writeError(w, http.StatusBadRequest, "invalid_score")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
 	entry, err := h.svc.Submit(r.Context(), gameID, boardFromQuery(r), playerID(r.Context()), *req.Score)
@@ -75,13 +76,13 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toDTO(entry))
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(entry))
 }
 
 func (h *Handler) top(w http.ResponseWriter, r *http.Request) {
 	gameID := gameFromHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit")) // 0/erro -> service aplica o default
@@ -90,13 +91,13 @@ func (h *Handler) top(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	gameID := gameFromHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	k := -1 // ausente -> service aplica o default; "0" é válido (só o jogador)
@@ -110,7 +111,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
 }
 
 // adminSubmit aplica o highscore de um jogador no ranking do jogo
@@ -120,7 +121,7 @@ func (h *Handler) adminSubmit(w http.ResponseWriter, r *http.Request) {
 		Score *int64 `json:"score"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
-		writeError(w, http.StatusBadRequest, "invalid_score")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
 	entry, err := h.svc.Submit(r.Context(), r.PathValue("gameId"), boardFromQuery(r), r.PathValue("playerID"), *req.Score)
@@ -128,7 +129,7 @@ func (h *Handler) adminSubmit(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toDTO(entry))
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(entry))
 }
 
 // adminForceScore substitui o score do jogador independente do valor atual (admin override).
@@ -137,7 +138,7 @@ func (h *Handler) adminForceScore(w http.ResponseWriter, r *http.Request) {
 		Score *int64 `json:"score"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
-		writeError(w, http.StatusBadRequest, "invalid_score")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}
 	entry, err := h.svc.ForceSubmit(r.Context(), r.PathValue("gameId"), boardFromQuery(r), r.PathValue("playerID"), *req.Score)
@@ -145,7 +146,7 @@ func (h *Handler) adminForceScore(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toDTO(entry))
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(entry))
 }
 
 // adminTop devolve o top-N do jogo (consumo do painel).
@@ -156,7 +157,7 @@ func (h *Handler) adminTop(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"entries": toDTOs(entries)})
 }
 
 // --- helpers ---
@@ -213,27 +214,17 @@ func toDTOs(in []domain.Entry) []entryDTO {
 	return out
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
-}
-
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotRanked):
-		writeError(w, http.StatusNotFound, "not_ranked")
+		httpkit.WriteError(w, http.StatusNotFound, "not_ranked")
 	case errors.Is(err, domain.ErrInvalidScore):
-		writeError(w, http.StatusBadRequest, "invalid_score")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_score")
 	case errors.Is(err, domain.ErrInvalidBoard):
-		writeError(w, http.StatusBadRequest, "invalid_board")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_board")
 	case errors.Is(err, domain.ErrInvalidWindow):
-		writeError(w, http.StatusBadRequest, "invalid_window")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_window")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
 }

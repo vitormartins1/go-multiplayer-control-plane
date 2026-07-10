@@ -4,11 +4,11 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 const defaultDailyDays = 30
@@ -59,7 +59,7 @@ type overviewDTO struct {
 func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
 	ov, err := h.reader.Overview(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	var dto overviewDTO
@@ -74,7 +74,7 @@ func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
 	for _, d := range ov.Daily {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
 	}
-	writeJSON(w, http.StatusOK, dto)
+	httpkit.WriteJSON(w, http.StatusOK, dto)
 }
 
 type gameAnalyticsDTO struct {
@@ -127,7 +127,7 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 	ga, err := h.reader.GameAnalytics(r.Context(), gameID, days)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	dto := gameAnalyticsDTO{gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{}}
@@ -145,7 +145,7 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	if md := ga.Mission; md != nil {
 		dto.Mission = &missionDTO{Successes: md.Successes, Failures: md.Failures, SuccessRate: md.SuccessRate}
 	}
-	writeJSON(w, http.StatusOK, dto)
+	httpkit.WriteJSON(w, http.StatusOK, dto)
 }
 
 func toGameStatDTO(g domain.GameStat) gameStatDTO {
@@ -159,14 +159,4 @@ func toGameStatDTO(g domain.GameStat) gameStatDTO {
 		Draws:          g.Draws,
 		AvgScore:       g.AvgScore,
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
 }

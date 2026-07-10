@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // SessionDirectory é o recorte do service que o admin consome (interface do
@@ -131,12 +132,12 @@ func (h *AdminHandler) list(w http.ResponseWriter, r *http.Request) {
 	gameID := r.PathValue("gameId")
 	state := r.URL.Query().Get("state")
 	if !validState(state) {
-		writeError(w, http.StatusBadRequest, "invalid_state")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_state")
 		return
 	}
 
 	active, closed := h.sessions.SessionsByGame(gameID)
-	writeJSON(w, http.StatusOK, filterByState(active, closed, state))
+	httpkit.WriteJSON(w, http.StatusOK, filterByState(active, closed, state))
 }
 
 // listAll responde as sessões de TODOS os jogos (board global do console, 007).
@@ -144,11 +145,11 @@ func (h *AdminHandler) list(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) listAll(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	if !validState(state) {
-		writeError(w, http.StatusBadRequest, "invalid_state")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_state")
 		return
 	}
 	active, closed := h.sessions.AllSessions()
-	writeJSON(w, http.StatusOK, filterByState(active, closed, state))
+	httpkit.WriteJSON(w, http.StatusOK, filterByState(active, closed, state))
 }
 
 // close encerra uma sessão ativa por ação do operador (CLOSED/admin, 007).
@@ -156,14 +157,14 @@ func (h *AdminHandler) close(w http.ResponseWriter, r *http.Request) {
 	matchID := r.PathValue("matchId")
 	sess, err := h.sessions.CloseByAdmin(r.Context(), matchID)
 	if errors.Is(err, domain.ErrSessionNotFound) {
-		writeError(w, http.StatusNotFound, "not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "not_found")
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "close_failed")
+		httpkit.WriteError(w, http.StatusInternalServerError, "close_failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, toSessionDTO(*sess))
+	httpkit.WriteJSON(w, http.StatusOK, toSessionDTO(*sess))
 }
 
 func validState(state string) bool {
@@ -280,14 +281,4 @@ func roleSlotsDTO(slots map[string]*domain.RoleSlot) []roleSlotDTO {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Role < out[j].Role })
 	return out
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
 }

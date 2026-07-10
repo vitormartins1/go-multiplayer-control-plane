@@ -12,6 +12,7 @@ import (
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/player-data-service/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
 )
 
 // Handler expõe os endpoints HTTP do player-data-service.
@@ -46,12 +47,12 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := auth.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		playerID, err := h.verifier.Verify(r.Context(), token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpkit.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		ctx := context.WithValue(r.Context(), playerIDKey, playerID)
@@ -62,16 +63,16 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
 	if !json.Valid(body) {
-		writeError(w, http.StatusBadRequest, "invalid_value")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_value")
 		return
 	}
 	if err := h.svc.Put(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key"), body); err != nil {
@@ -84,7 +85,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	v, err := h.svc.Get(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key"))
@@ -99,7 +100,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getNamespace(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	m, err := h.svc.GetNamespace(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"))
@@ -111,13 +112,13 @@ func (h *Handler) getNamespace(w http.ResponseWriter, r *http.Request) {
 	for k, v := range m {
 		out[k] = json.RawMessage(v)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpkit.WriteJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) del(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "missing_game")
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
 	if err := h.svc.Delete(r.Context(), gameID, playerID(r.Context()), r.PathValue("namespace"), r.PathValue("key")); err != nil {
@@ -136,7 +137,7 @@ func (h *Handler) adminListForPlayer(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": toEntryDTOs(entries)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"data": toEntryDTOs(entries)})
 }
 
 // --- helpers ---
@@ -167,26 +168,16 @@ func toEntryDTOs(entries []domain.Entry) []entryDTO {
 	return out
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
-}
-
 // writeDomainError mapeia erros de domínio para HTTP status + código estável.
 func writeDomainError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidKey):
-		writeError(w, http.StatusBadRequest, "invalid_key")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_key")
 	case errors.Is(err, domain.ErrInvalidValue):
-		writeError(w, http.StatusBadRequest, "invalid_value")
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_value")
 	case errors.Is(err, domain.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found")
+		httpkit.WriteError(w, http.StatusNotFound, "not_found")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal")
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}
 }
