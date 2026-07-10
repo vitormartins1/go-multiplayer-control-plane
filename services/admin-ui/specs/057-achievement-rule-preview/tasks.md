@@ -59,9 +59,24 @@ folha do mesmo "galho".
 Corrigido (`GameAchievements.tsx`): o foco da prévia por métrica passou do nó do achievement
 (`achId(a.id)`) pro nó da FONTE do stat (`srcId(STAT_PREFIX + a.statKey)`) — o mesmo padrão já
 usado pro lado de evento (focar no nó de ramificação, não na folha). Verificado com dado real:
-stat só-métrica (`animals_saved`, 5 achievements) mostra os 6 nós certos (fonte + 5 irmãos);
-stat também usado numa condição de regra (`deaths`, com a regra `flawless_invasion` usando
-`stat.deaths ≤ 0`) mostra 9 nós — fonte, a regra, seu event type, o achievement por evento
-dela E os 5 achievements de métrica — sem explodir, e revelando uma relação genuinamente útil
-(a mesma prévia já mostraria isso pro lado de evento também, via caminho reverso a partir da
-regra).
+stat só-métrica (`animals_saved`, 5 achievements) mostra os 6 nós certos (fonte + 5 irmãos).
+
+### Follow-up 2: fonte de stat também trazia regras que só coincidem na chave (sem alimentar o achievement)
+
+Testando o caso `deaths` (também usado como condição `stat.deaths ≤ 0` na regra
+`flawless_invasion`), a prévia trazia 9 nós: os 5 achievements de métrica certos, MAS também a
+regra, o event type dela e o achievement por evento dela — feedback do Vitor: essa regra "não
+tem a ver com esse achievement específico", ele não queria essa relação aparecendo aqui (é
+diferente do caso de evento, onde a regra realmente EMITE o event type focado — aqui a regra só
+usa o mesmo stat como um dos vários filtros, coincidência de chave, não uma relação de
+alimentação).
+
+Causa: com o foco na fonte, `pathHighlight` seguia TODAS as edges que saem dela — tanto as de
+MÉTRICA (fonte→achievement, a relação que importa aqui) quanto as de CONDIÇÃO DE REGRA
+(fonte→regra, usada só pro lado de Event Rules). Corrigido: quando o nó focado é uma fonte de
+kind `"stat"`, as edges candidatas ao `pathHighlight` são filtradas pra excluir qualquer edge
+saindo da fonte que NÃO seja `className === "is-metric-edge"` — mantém só fonte→achievement
+direto. Lado de evento inalterado (o foco continua no event type, sem essa restrição).
+Reverificado: `deaths` volta a mostrar só 6 nós (fonte + 5 achievements); `animals_saved`
+continua igual; o subgrafo por evento (`COOP_BOSS_HELPED`, com fact/regra/type/5 achievements)
+não foi afetado.
