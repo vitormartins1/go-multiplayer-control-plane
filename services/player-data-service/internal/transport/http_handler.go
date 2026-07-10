@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/player-data-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
 )
 
 // Handler expõe os endpoints HTTP do player-data-service.
@@ -43,7 +44,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
 func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r)
+		token := auth.BearerToken(r.Header.Get("Authorization"))
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -139,15 +140,6 @@ func (h *Handler) adminListForPlayer(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
-
-func bearerToken(r *http.Request) string {
-	const prefix = "Bearer "
-	h := r.Header.Get("Authorization")
-	if len(h) > len(prefix) && strings.EqualFold(h[:len(prefix)], prefix) {
-		return h[len(prefix):]
-	}
-	return ""
-}
 
 func playerID(ctx context.Context) string {
 	id, _ := ctx.Value(playerIDKey).(string)

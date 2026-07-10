@@ -5,7 +5,6 @@ package transport
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -14,6 +13,7 @@ import (
 
 	pb "github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/gen/matchmaking/v1"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/matchmaking-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
 )
 
 // Server implementa o serviço gRPC Matchmaking.
@@ -267,9 +267,5 @@ func bearerFromMetadata(ctx context.Context) string {
 	if len(vals) == 0 {
 		return ""
 	}
-	const prefix = "Bearer "
-	if h := vals[0]; len(h) > len(prefix) && strings.EqualFold(h[:len(prefix)], prefix) {
-		return h[len(prefix):]
-	}
-	return ""
+	return auth.BearerToken(vals[0])
 }
