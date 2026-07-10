@@ -383,6 +383,7 @@ services:
       - ../../services/game-registry/migrations/005_add_multiplayer_profile.sql:/docker-entrypoint-initdb.d/005_add_multiplayer_profile.sql:ro
       - ../../services/game-registry/migrations/006_add_deleted_at.sql:/docker-entrypoint-initdb.d/006_add_deleted_at.sql:ro
       - ../../services/game-registry/migrations/007_add_fleet.sql:/docker-entrypoint-initdb.d/007_add_fleet.sql:ro
+      - ../../services/game-registry/migrations/008_add_modes_version.sql:/docker-entrypoint-initdb.d/008_add_modes_version.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s

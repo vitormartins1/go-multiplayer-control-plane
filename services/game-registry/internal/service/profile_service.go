@@ -78,7 +78,10 @@ func (s *service) SetMode(ctx context.Context, gameID, modeID, displayName strin
 
 // setMode valida e faz upsert de um modo. displayName == nil preserva o do modo
 // existente (caminho do alias legado). Read-modify-write via FindByID +
-// SetModes — last-write-wins aceito (plan da spec 009).
+// SetModes — protegido por concorrência otimista (MultiplayerModesVersion):
+// ErrModeConflict se outra escrita mudou os modos nesse meio tempo, em vez
+// de sobrescrever silenciosamente (revisão do "last-write-wins aceito"
+// original da spec 009/plan.md — achado no /code-review).
 func (s *service) setMode(ctx context.Context, gameID, modeID string, displayName *string, p domain.MultiplayerProfile) (*domain.MultiplayerMode, error) {
 	if !modeIDRE.MatchString(modeID) {
 		return nil, domain.ErrInvalidModeID
@@ -124,7 +127,7 @@ func (s *service) setMode(ctx context.Context, gameID, modeID string, displayNam
 		modes = append(modes, mode)
 	}
 
-	if err := s.repo.SetModes(ctx, gameID, modes); err != nil {
+	if err := s.repo.SetModes(ctx, gameID, modes, g.MultiplayerModesVersion); err != nil {
 		return nil, fmt.Errorf("game-registry service: set mode: %w", err)
 	}
 	return &mode, nil
@@ -174,7 +177,7 @@ func (s *service) DeleteMode(ctx context.Context, gameID, modeID string) error {
 		return domain.ErrModeNotFound
 	}
 	modes = append(modes[:idx], modes[idx+1:]...)
-	if err := s.repo.SetModes(ctx, gameID, modes); err != nil {
+	if err := s.repo.SetModes(ctx, gameID, modes, g.MultiplayerModesVersion); err != nil {
 		return fmt.Errorf("game-registry service: delete mode: %w", err)
 	}
 	return nil

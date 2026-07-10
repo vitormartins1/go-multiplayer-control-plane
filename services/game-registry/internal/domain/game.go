@@ -33,6 +33,12 @@ type Game struct {
 	// MultiplayerModes é a coleção de modos do jogo (ADR-0024): "default"
 	// primeiro, demais por ModeID asc. Carregada por FindByID; List não a carrega.
 	MultiplayerModes []MultiplayerMode
+	// MultiplayerModesVersion é o contador de concorrência otimista da coleção
+	// de modos (achado no /code-review — revisão do "last-write-wins aceito"
+	// da spec 009/plan.md): SetModes só persiste se a versão ainda bater com a
+	// lida por este FindByID; senão devolve ErrModeConflict em vez de
+	// sobrescrever silenciosamente uma edição concorrente.
+	MultiplayerModesVersion int64
 	// Fleet é o nome da Fleet Agones (label `agones.dev/fleet`) que aloca os game
 	// servers deste jogo (ADR-0026). Por JOGO, não por modo: todos os modos do
 	// mesmo jogo compartilham o mesmo binário/Fleet (o server lê `params_json` no
@@ -253,7 +259,11 @@ type GameRepository interface {
 	SoftDelete(ctx context.Context, id string) error
 	// SetModes substitui a coleção de modos do jogo (ADR-0024); ErrGameNotFound
 	// se o jogo não existir. A validação é responsabilidade do service (o
-	// repositório só persiste). O service faz read-modify-write via FindByID —
-	// last-write-wins aceito (único escritor é o console; ver plan da spec 009).
-	SetModes(ctx context.Context, gameID string, modes []MultiplayerMode) error
+	// repositório só persiste). O service faz read-modify-write via FindByID;
+	// expectedVersion (lido do mesmo FindByID) protege essa janela por
+	// concorrência otimista — ErrModeConflict se outra escrita mudou os modos
+	// nesse meio tempo, em vez de sobrescrever silenciosamente (revisão do
+	// "last-write-wins aceito" original da spec 009/plan.md — achado no
+	// /code-review).
+	SetModes(ctx context.Context, gameID string, modes []MultiplayerMode, expectedVersion int64) error
 }

@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/game-registry/internal/jsonparams"
@@ -95,17 +98,35 @@ type storedHostWorldDropIn struct {
 	ScoringStats      []string `json:"scoringStats,omitempty"`
 }
 
-func (r *PostgresGameRepository) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode) error {
+// SetModes persiste com concorrência otimista (achado no /code-review —
+// revisão do "last-write-wins aceito" da spec 009/plan.md): o UPDATE só
+// aplica se multiplayer_profile_version ainda bater com expectedVersion (a
+// versão lida pelo FindByID que originou este write); a versão avança junto.
+// RowsAffected 0 é ambíguo (jogo sumiu OU perdeu a corrida) — uma segunda
+// leitura, fora da janela de escrita, distingue as duas causas.
+func (r *PostgresGameRepository) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode, expectedVersion int64) error {
 	raw, err := encodeModes(modes)
 	if err != nil {
 		return fmt.Errorf("game-registry repository: set modes: encode: %w", err)
 	}
-	tag, err := r.pool.Exec(ctx, `UPDATE games SET multiplayer_profile = $2 WHERE id = $1 AND deleted_at IS NULL`, gameID, raw)
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE games SET multiplayer_profile = $2, multiplayer_profile_version = multiplayer_profile_version + 1
+		 WHERE id = $1 AND deleted_at IS NULL AND multiplayer_profile_version = $3`,
+		gameID, raw, expectedVersion)
 	if err != nil {
 		return fmt.Errorf("game-registry repository: set modes: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.ErrGameNotFound
+		var exists bool
+		if err := r.pool.QueryRow(ctx,
+			`SELECT true FROM games WHERE id = $1 AND deleted_at IS NULL`, gameID,
+		).Scan(&exists); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.ErrGameNotFound
+			}
+			return fmt.Errorf("game-registry repository: set modes: check exists: %w", err)
+		}
+		return domain.ErrModeConflict
 	}
 	return nil
 }

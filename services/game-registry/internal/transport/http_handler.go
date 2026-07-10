@@ -563,6 +563,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "default_mode_protected")
 	case errors.Is(err, domain.ErrTooManyModes):
 		writeError(w, http.StatusBadRequest, "too_many_modes")
+	case errors.Is(err, domain.ErrModeConflict):
+		writeError(w, http.StatusConflict, "mode_conflict")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal")
 	}

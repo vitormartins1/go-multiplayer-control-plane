@@ -25,7 +25,7 @@ func TestSetMode_Novo_CriaEDevolve(t *testing.T) {
 	repo.On("FindByID", mock.Anything, "g1").Return(gameWithModes(), nil)
 	repo.On("SetModes", mock.Anything, "g1", mock.MatchedBy(func(modes []domain.MultiplayerMode) bool {
 		return len(modes) == 1 && modes[0].ModeID == "tdm" && modes[0].DisplayName == "Team Deathmatch"
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	m, err := New(repo).SetMode(context.Background(), "g1", "tdm", "  Team Deathmatch  ", validProfile())
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestSetMode_Existente_SubstituiSemDuplicar(t *testing.T) {
 	repo.On("FindByID", mock.Anything, "g1").Return(gameWithModes(existing), nil)
 	repo.On("SetModes", mock.Anything, "g1", mock.MatchedBy(func(modes []domain.MultiplayerMode) bool {
 		return len(modes) == 1 && modes[0].ModeID == "tdm" && modes[0].DisplayName == "New"
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	_, err := New(repo).SetMode(context.Background(), "g1", "tdm", "New", validProfile())
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestSetMode_LimiteNaoBloqueiaUpdate(t *testing.T) {
 	}
 	repo := new(mockRepo)
 	repo.On("FindByID", mock.Anything, "g1").Return(gameWithModes(full...), nil)
-	repo.On("SetModes", mock.Anything, "g1", mock.Anything).Return(nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything, mock.Anything).Return(nil)
 
 	_, err := New(repo).SetMode(context.Background(), "g1", "m-00", "atualizado", validProfile())
 	assert.NoError(t, err, "upsert de modo existente não conta contra o cap")
@@ -158,7 +158,7 @@ func TestDeleteMode_Valido_RemoveEPersiste(t *testing.T) {
 	), nil)
 	repo.On("SetModes", mock.Anything, "g1", mock.MatchedBy(func(modes []domain.MultiplayerMode) bool {
 		return len(modes) == 1 && modes[0].ModeID == domain.DefaultModeID
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	require.NoError(t, New(repo).DeleteMode(context.Background(), "g1", "tdm"))
 	repo.AssertExpectations(t)
@@ -173,7 +173,7 @@ func TestSetMultiplayerProfile_Legado_PreservaDisplayNameDoDefault(t *testing.T)
 	), nil)
 	repo.On("SetModes", mock.Anything, "g1", mock.MatchedBy(func(modes []domain.MultiplayerMode) bool {
 		return len(modes) == 1 && modes[0].DisplayName == "Partida Padrão"
-	})).Return(nil)
+	}), mock.Anything).Return(nil)
 
 	_, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", validProfile())
 	require.NoError(t, err)
