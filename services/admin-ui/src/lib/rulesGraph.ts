@@ -384,3 +384,18 @@ export function pathHighlight(
   walk(rev, (e) => e.source);
   return { nodeIds, edgeIds };
 }
+
+// siblingRuleIds devolve os ids de nós `rule`/`ruleDraft` que têm uma edge
+// direta pra qualquer node em focusNodeIds (tipicamente o resultado de
+// pathHighlight de uma regra) — usado pelo toggle "regras relacionadas"
+// (spec 055): acha quem mais escuta a mesma source/eventType da regra
+// focada. Um salto só, por design — não expande recursivamente (senão
+// reintroduz a poluição visual que o foco existe pra evitar).
+export function siblingRuleIds(edges: Edge[], focusNodeIds: Set<string>): Set<string> {
+  const siblings = new Set<string>();
+  for (const e of edges) {
+    if (focusNodeIds.has(e.source) && e.target.startsWith("r:")) siblings.add(e.target);
+    if (focusNodeIds.has(e.target) && e.source.startsWith("r:")) siblings.add(e.source);
+  }
+  return siblings;
+}

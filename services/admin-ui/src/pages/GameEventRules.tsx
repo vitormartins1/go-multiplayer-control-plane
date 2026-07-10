@@ -2,11 +2,13 @@ import {
   ActionIcon,
   Alert,
   Badge,
+  Box,
   Button,
+  CloseButton,
   Group,
   Loader,
   Modal,
-  SegmentedControl,
+  ScrollArea,
   Select,
   Stack,
   Table,
@@ -17,7 +19,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconBan, IconPlus, IconRefresh, IconRotate2, IconTrash } from "@tabler/icons-react";
+import { IconBan, IconPlus, IconRefresh, IconRotate2, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { api, HttpError, type EventRule, type MultiplayerProfile } from "../lib/api";
 import { condLabel } from "../lib/matchCond";
@@ -47,6 +49,20 @@ function matchLabel(match: EventRule["match"]): string {
   return entries.length === 0 ? "(sempre)" : entries.map(([k, v]) => condLabel(k, v)).join(", ");
 }
 
+// matchesListFilter (spec 055): filtro de texto da lista — busca em
+// arquétipo, chaves/valores do match e event types. Case-insensitive.
+function matchesListFilter(term: string) {
+  const t = term.trim().toLowerCase();
+  return (r: EventRule) => {
+    if (!t) return true;
+    if (r.archetype.toLowerCase().includes(t)) return true;
+    if (r.eventTypes.some((et) => et.toLowerCase().includes(t))) return true;
+    return Object.entries(r.match).some(
+      ([k, v]) => k.toLowerCase().includes(t) || String(v).toLowerCase().includes(t),
+    );
+  };
+}
+
 // GameEventRules é o CRUD das regras de mapeamento evento->achievement-event-
 // type (migration 008 do achievements-service) — substitui as antigas funções
 // Go hardcoded por arquétipo (ParticipationEventTypes/PlacementEventTypes/
@@ -71,8 +87,13 @@ export function GameEventRules({ gameId }: { gameId: string }) {
   const archetypeOptions = archetypes.size > 0 ? [...archetypes] : ALL_ARCHETYPES;
   const visibleRules = filterRulesForGame(rules ?? [], archetypes);
 
-  // Canvas (spec 043) é a view principal; a tabela permanece como alternativa.
-  const [view, setView] = useState<"canvas" | "table">("canvas");
+  // Lista + canvas lado a lado (spec 055): a lista reaproveita as colunas da
+  // antiga view "table"; selecionar uma linha foca o canvas no subgrafo dela
+  // (canvas fica vazio até uma seleção — resolve a poluição visual com muitos
+  // achievements, achado no estresse-teste de 66 regras).
+  const [focusRuleId, setFocusRuleId] = useState<string | null>(null);
+  const [listFilter, setListFilter] = useState("");
+  const filteredRules = visibleRules.filter(matchesListFilter(listFilter));
 
   const [opened, { open, close }] = useDisclosure(false);
   const [deleting, setDeleting] = useState<EventRule | null>(null);
@@ -158,123 +179,140 @@ export function GameEventRules({ gameId }: { gameId: string }) {
     <Stack>
       <Group justify="space-between">
         <Text fw={600}>Regras de mapeamento evento → conquista</Text>
-        <Group>
-          <SegmentedControl
-            size="xs"
-            value={view}
-            onChange={(v) => setView(v as "canvas" | "table")}
-            data={[
-              { value: "canvas", label: "Canvas" },
-              { value: "table", label: "Tabela" },
-            ]}
-          />
-          <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reloadAll}>
-            Atualizar
-          </Button>
-          {view === "table" && (
-            <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openCreate}>
-              Nova regra
-            </Button>
-          )}
-        </Group>
+        <Button variant="default" size="xs" leftSection={<IconRefresh size={14} />} onClick={reloadAll}>
+          Atualizar
+        </Button>
       </Group>
 
-      {view === "table" && (
-        <Text size="sm" c="dimmed">
-          Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome no
-          host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event types listados
-          ao progresso das conquistas cadastradas na aba Achievements. Regras <b>globais</b> valem pra todo jogo
-          com o arquétipo (semeadas por padrão, não editáveis aqui) — só as dos arquétipos que <b>este jogo</b>{" "}
-          tem cadastrado aparecem abaixo; regras do <b>jogo</b> só valem pra este jogo.
-        </Text>
-      )}
+      <Text size="sm" c="dimmed">
+        Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome no
+        host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event types listados ao
+        progresso das conquistas cadastradas na aba Achievements. Regras <b>globais</b> valem pra todo jogo com o
+        arquétipo (semeadas por padrão, não editáveis aqui) — só as dos arquétipos que <b>este jogo</b> tem
+        cadastrado aparecem abaixo; regras do <b>jogo</b> só valem pra este jogo. Selecione uma regra na lista pra
+        ver o subgrafo dela no canvas.
+      </Text>
 
       {loading && !rules && <Loader />}
       {!!error && <Alert color="red">achievements indisponível.</Alert>}
       {rules && visibleRules.length === 0 && (
         <Text c="dimmed">Nenhuma regra cadastrada para os arquétipos deste jogo.</Text>
       )}
-      {view === "canvas" && rules && visibleRules.length > 0 && (
-        <GameEventRulesCanvas
-          gameId={gameId}
-          rules={visibleRules}
-          catalog={catalog ?? []}
-          archetypeOptions={archetypeOptions}
-          modes={modes ?? []}
-          reload={reloadAll}
-        />
-      )}
-      {view === "table" && rules && visibleRules.length > 0 && (
-        <Table striped highlightOnHover withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Escopo</Table.Th>
-              <Table.Th>Arquétipo</Table.Th>
-              <Table.Th>Match</Table.Th>
-              <Table.Th>Event types</Table.Th>
-              <Table.Th w={50}></Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {visibleRules.map((r) => (
-              <Table.Tr key={r.id} style={r.suppressed ? { opacity: 0.5 } : undefined}>
-                <Table.Td>
-                  <Group gap={4} wrap="nowrap">
-                    <Badge variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
-                      {r.scope === "global" ? "global" : "jogo"}
-                    </Badge>
-                    {r.suppressed && (
-                      <Badge variant="light" color="orange" leftSection={<IconBan size={10} />}>
-                        suprimida
-                      </Badge>
-                    )}
-                  </Group>
-                </Table.Td>
-                <Table.Td c="dimmed">{r.archetype}</Table.Td>
-                <Table.Td>
-                  {Object.keys(r.match).length === 0 ? (
-                    <Text c="dimmed" size="sm">
-                      (sempre)
-                    </Text>
-                  ) : (
-                    <Group gap={4} wrap="wrap">
-                      {Object.entries(r.match).map(([k, v]) => (
-                        <Badge key={k} variant="light" color="gray" tt="none">
-                          {condLabel(k, v)}
-                        </Badge>
-                      ))}
-                    </Group>
-                  )}
-                </Table.Td>
-                <Table.Td>
-                  <Group gap={4} wrap="wrap">
-                    {r.eventTypes.map((et) => (
-                      <Badge key={et} variant="light" color="violet">
-                        {et}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Table.Td>
-                <Table.Td>
-                  {r.scope === "game" ? (
-                    <ActionIcon variant="subtle" color="red" onClick={() => setDeleting(r)} aria-label="Remover">
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  ) : (
-                    <ActionIcon
-                      variant="subtle"
-                      color={r.suppressed ? "teal" : "orange"}
-                      onClick={() => toggleSuppress(r)}
-                      aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+
+      {rules && visibleRules.length > 0 && (
+        <Group align="flex-start" gap="md" wrap="nowrap">
+          <Box w={380} style={{ flexShrink: 0 }}>
+            <Group justify="space-between" mb={6}>
+              <TextInput
+                size="xs"
+                style={{ flex: 1 }}
+                placeholder="filtrar regras…"
+                leftSection={<IconSearch size={13} />}
+                value={listFilter}
+                onChange={(e) => setListFilter(e.currentTarget.value)}
+                rightSection={listFilter ? <CloseButton size="xs" onClick={() => setListFilter("")} /> : undefined}
+              />
+              <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openCreate}>
+                Nova regra
+              </Button>
+            </Group>
+            <ScrollArea h="calc(100vh - 420px)" type="auto">
+              <Table striped highlightOnHover withTableBorder stickyHeader>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Escopo</Table.Th>
+                    <Table.Th>Match</Table.Th>
+                    <Table.Th>Event types</Table.Th>
+                    <Table.Th w={40}></Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {filteredRules.map((r) => (
+                    <Table.Tr
+                      key={r.id}
+                      onClick={() => setFocusRuleId((cur) => (cur === r.id ? null : r.id))}
+                      style={{
+                        cursor: "pointer",
+                        opacity: r.suppressed ? 0.5 : undefined,
+                        background: r.id === focusRuleId ? "var(--mantine-color-blue-light)" : undefined,
+                      }}
                     >
-                      {r.suppressed ? <IconRotate2 size={16} /> : <IconBan size={16} />}
-                    </ActionIcon>
-                  )}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+                      <Table.Td>
+                        <Stack gap={4}>
+                          <Group gap={4} wrap="nowrap">
+                            <Badge variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                              {r.scope === "global" ? "global" : "jogo"}
+                            </Badge>
+                            {r.suppressed && (
+                              <Badge variant="light" color="orange" leftSection={<IconBan size={10} />}>
+                                suprimida
+                              </Badge>
+                            )}
+                          </Group>
+                          <Text size="xs" c="dimmed">
+                            {r.archetype}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        {Object.keys(r.match).length === 0 ? (
+                          <Text c="dimmed" size="sm">
+                            (sempre)
+                          </Text>
+                        ) : (
+                          <Group gap={4} wrap="wrap">
+                            {Object.entries(r.match).map(([k, v]) => (
+                              <Badge key={k} variant="light" color="gray" tt="none">
+                                {condLabel(k, v)}
+                              </Badge>
+                            ))}
+                          </Group>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4} wrap="wrap">
+                          {r.eventTypes.map((et) => (
+                            <Badge key={et} variant="light" color="violet">
+                              {et}
+                            </Badge>
+                          ))}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td onClick={(e) => e.stopPropagation()}>
+                        {r.scope === "game" ? (
+                          <ActionIcon variant="subtle" color="red" onClick={() => setDeleting(r)} aria-label="Remover">
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        ) : (
+                          <ActionIcon
+                            variant="subtle"
+                            color={r.suppressed ? "teal" : "orange"}
+                            onClick={() => toggleSuppress(r)}
+                            aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+                          >
+                            {r.suppressed ? <IconRotate2 size={16} /> : <IconBan size={16} />}
+                          </ActionIcon>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          </Box>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <GameEventRulesCanvas
+              gameId={gameId}
+              rules={visibleRules}
+              catalog={catalog ?? []}
+              archetypeOptions={archetypeOptions}
+              modes={modes ?? []}
+              reload={reloadAll}
+              focusRuleId={focusRuleId}
+              onFocusRule={setFocusRuleId}
+            />
+          </Box>
+        </Group>
       )}
 
       {/* Nova regra */}
