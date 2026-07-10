@@ -8,7 +8,7 @@ import {
   IconTrophy,
   IconUsers,
 } from "@tabler/icons-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
@@ -41,6 +41,13 @@ export function GameDetail() {
   const { data: gameModes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
 
   const game = games?.find((g) => g.id === gameId);
+
+  // Navegação Achievements -> Event Rules com uma regra já focada (spec 057):
+  // Tabs vira controlado só por causa disso; pendingRuleFocus viaja pra
+  // GameEventRules, que foca e (se edit) dispara o form de edição, depois
+  // se auto-limpa (onConsumePendingRuleFocus) pra não re-disparar.
+  const [activeTab, setActiveTab] = useState<string | null>("achievements");
+  const [pendingRuleFocus, setPendingRuleFocus] = useState<{ ruleId: string; edit: boolean } | null>(null);
 
   const onlinePlayerIds = useMemo(() => {
     if (!sessions) return null;
@@ -85,7 +92,7 @@ export function GameDetail() {
 
       {/* keepMounted=false: painel desmontado ao trocar de aba — o polling da
           aba Sessions só roda com ela visível. */}
-      <Tabs defaultValue="achievements" keepMounted={false}>
+      <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab
             value="achievements"
@@ -136,10 +143,20 @@ export function GameDetail() {
         </Tabs.List>
 
         <Tabs.Panel value="achievements" pt="md">
-          <GameAchievements gameId={gameId} />
+          <GameAchievements
+            gameId={gameId}
+            onNavigateToRule={(ruleId, opts) => {
+              setPendingRuleFocus({ ruleId, ...opts });
+              setActiveTab("event-rules");
+            }}
+          />
         </Tabs.Panel>
         <Tabs.Panel value="event-rules" pt="md">
-          <GameEventRules gameId={gameId} />
+          <GameEventRules
+            gameId={gameId}
+            pendingRuleFocus={pendingRuleFocus}
+            onConsumePendingRuleFocus={() => setPendingRuleFocus(null)}
+          />
         </Tabs.Panel>
         <Tabs.Panel value="leaderboards" pt="md">
           <GameLeaderboards gameId={gameId} />

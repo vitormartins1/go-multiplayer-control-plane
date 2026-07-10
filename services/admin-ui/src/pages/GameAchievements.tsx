@@ -3,7 +3,9 @@ import {
   Alert,
   Autocomplete,
   Badge,
+  Box,
   Button,
+  Collapse,
   Drawer,
   Group,
   List,
@@ -32,7 +34,8 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useRef, useState, type ChangeEvent } from "react";
+import type { NodeTypes } from "@xyflow/react";
+import { Fragment, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   api,
   HttpError,
@@ -50,6 +53,9 @@ import { useAsync } from "../lib/useAsync";
 import { AchievementIcon } from "../components/AchievementIcon";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
+import { FlowCanvas } from "../components/flow/FlowCanvas";
+import { AchievementNode, EventTypeNode, RuleNode, SectionLabelNode, SourceNode } from "../components/flow/nodes";
+import { achId, buildRulesGraph, pathHighlight, repackVisible, type StatInfo, typeId } from "../lib/rulesGraph";
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
@@ -107,6 +113,55 @@ function DriftBadge({ label, tooltip }: { label: string; tooltip: string }) {
       />
     </Tooltip>
   );
+}
+
+// MINI_NODE_TYPES (spec 057): só os 5 tipos "estáveis" — a prévia nunca
+// mostra rascunho/ghost (não edita nada ali).
+const MINI_NODE_TYPES: NodeTypes = {
+  sectionLabel: SectionLabelNode,
+  source: SourceNode,
+  rule: RuleNode,
+  eventType: EventTypeNode,
+  achievement: AchievementNode,
+};
+
+// RuleFocusMiniCanvas (spec 057): prévia read-only do subgrafo de um event
+// type ou achievement — mesmo pathHighlight/repackVisible do canvas de Event
+// Rules (055/056), sem toolbar e sem nenhuma interação (nodes forçados
+// selectable/draggable false). `rules` chega SEM filtro de arquétipo — o
+// achievement não sabe o arquétipo, e quem emite o event type é quem importa.
+function RuleFocusMiniCanvas({
+  rules,
+  catalog,
+  focusNodeId,
+}: {
+  rules: EventRule[];
+  catalog: CatalogAchievement[];
+  focusNodeId: string;
+}) {
+  // buildRulesGraph só cria nós de achievement por MÉTRICA (metricAchs) quando
+  // recebe `opts.stats` — sem isso, um achievement por stat nem aparece no
+  // grafo (achado testando: prévia vinha totalmente vazia, nem o próprio
+  // achievement). Não precisamos da distinção declarado/drift aqui (isso já
+  // aparece na própria linha da tabela) — `declared: true` sempre, só pra
+  // garantir que a source e a edge existam.
+  const statsInput = useMemo<StatInfo[]>(
+    () =>
+      [...new Set(catalog.map((a) => a.statKey).filter((k): k is string => !!k))].map((key) => ({
+        key,
+        declared: true,
+      })),
+    [catalog],
+  );
+  const graph = useMemo(() => buildRulesGraph(rules, catalog, { stats: statsInput }), [rules, catalog, statsInput]);
+  const { nodes, edges } = useMemo(() => {
+    const path = pathHighlight(graph.edges, focusNodeId);
+    const filtered = graph.nodes.filter((n) => path.nodeIds.has(n.id));
+    const repacked = repackVisible(filtered).map((n) => ({ ...n, selectable: false, draggable: false }));
+    return { nodes: repacked, edges: graph.edges.filter((e) => path.edgeIds.has(e.id)) };
+  }, [graph, focusNodeId]);
+
+  return <FlowCanvas nodes={nodes} edges={edges} nodeTypes={MINI_NODE_TYPES} height={280} fitKey={focusNodeId} />;
 }
 
 // SuggestInput é o Autocomplete com origem esmaecida por opção — texto fora da
@@ -222,7 +277,16 @@ function CriterionFields<T extends CriterionValues>({
   );
 }
 
-export function GameAchievements({ gameId }: { gameId: string }) {
+export function GameAchievements({
+  gameId,
+  onNavigateToRule,
+}: {
+  gameId: string;
+  // onNavigateToRule (spec 057): pedido de navegação pra aba Event Rules com
+  // a regra já focada — edit=true só faz sentido pra regra do jogo (a global
+  // é sempre read-only lá).
+  onNavigateToRule?: (ruleId: string, opts: { edit: boolean }) => void;
+}) {
   const { data: catalog, loading, error, reload } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
   // modos do jogo p/ sugestões de stat (027); falha → sem sugestões.
   const { data: modes } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
@@ -244,6 +308,17 @@ export function GameAchievements({ gameId }: { gameId: string }) {
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<CatalogAchievement | null>(null);
   const [deleting, setDeleting] = useState<CatalogAchievement | null>(null);
+  // expandedCriteriaId (spec 057): prévia em canvas da tag de critério — mesmo
+  // padrão de expander de GameSessions.tsx (uma linha por vez).
+  const [expandedCriteriaId, setExpandedCriteriaId] = useState<string | null>(null);
+
+  // targetRuleFor: a regra que emite o event type do achievement — prioriza
+  // scope=game (primeiro encontrado), senão a primeira global. Sem
+  // desambiguação de múltiplas regras (fora de escopo, spec 057 item 6).
+  function targetRuleFor(a: CatalogAchievement): EventRule | undefined {
+    const candidates = relevantEventRules.filter((r) => r.eventTypes.includes(a.eventType));
+    return candidates.find((r) => r.scope === "game") ?? candidates[0];
+  }
 
   // Importação CSV
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -477,61 +552,103 @@ export function GameAchievements({ gameId }: { gameId: string }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {catalog.map((a) => (
-              <Table.Tr key={a.id}>
-                <Table.Td>
-                  <AchievementIcon seed={a.id} />
-                </Table.Td>
-                <Table.Td c="dimmed">{a.id}</Table.Td>
-                <Table.Td>
-                  <Text truncate="end" maw={200} title={a.name}>
-                    {a.name}
-                  </Text>
-                </Table.Td>
-                <Table.Td c="dimmed">{a.description}</Table.Td>
-                <Table.Td>
-                  {a.statKey ? (
-                    <Group gap={6} wrap="nowrap">
-                      <Badge variant="light" color="grape">
-                        {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
-                      </Badge>
-                      {!statDeclared(a.statKey) && (
-                        <DriftBadge
-                          label="não declarado"
-                          tooltip={`O stat "${a.statKey}" não consta dos scoringStats de nenhum modo do jogo. O data plane ainda pode reportá-lo, mas confira se não é typo ou resto de um rename.`}
-                        />
+            {catalog.map((a) => {
+              const expanded = expandedCriteriaId === a.id;
+              const rule = a.statKey ? undefined : targetRuleFor(a);
+              return (
+                <Fragment key={a.id}>
+                  <Table.Tr>
+                    <Table.Td>
+                      <AchievementIcon seed={a.id} />
+                    </Table.Td>
+                    <Table.Td c="dimmed">{a.id}</Table.Td>
+                    <Table.Td>
+                      <Text truncate="end" maw={200} title={a.name}>
+                        {a.name}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td c="dimmed">{a.description}</Table.Td>
+                    <Table.Td>
+                      {a.statKey ? (
+                        <Group
+                          gap={6}
+                          wrap="nowrap"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => setExpandedCriteriaId(expanded ? null : a.id)}
+                        >
+                          <Badge variant="light" color="grape">
+                            {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
+                          </Badge>
+                          {!statDeclared(a.statKey) && (
+                            <DriftBadge
+                              label="não declarado"
+                              tooltip={`O stat "${a.statKey}" não consta dos scoringStats de nenhum modo do jogo. O data plane ainda pode reportá-lo, mas confira se não é typo ou resto de um rename.`}
+                            />
+                          )}
+                        </Group>
+                      ) : (
+                        <Group
+                          gap={6}
+                          wrap="nowrap"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => setExpandedCriteriaId(expanded ? null : a.id)}
+                        >
+                          <Badge variant="light" color="violet">
+                            {a.eventType}
+                          </Badge>
+                          {!!a.eventType && !eventKnown(a.eventType) && (
+                            <DriftBadge
+                              label="fora do vocabulário"
+                              tooltip={`O evento "${a.eventType}" não faz parte do vocabulário dos arquétipos cadastrados neste jogo — a conquista pode nunca disparar. Confira se não é typo.`}
+                            />
+                          )}
+                        </Group>
                       )}
-                    </Group>
-                  ) : (
-                    <Group gap={6} wrap="nowrap">
-                      <Badge variant="light" color="violet">
-                        {a.eventType}
-                      </Badge>
-                      {!!a.eventType && !eventKnown(a.eventType) && (
-                        <DriftBadge
-                          label="fora do vocabulário"
-                          tooltip={`O evento "${a.eventType}" não faz parte do vocabulário dos arquétipos cadastrados neste jogo — a conquista pode nunca disparar. Confira se não é typo.`}
-                        />
-                      )}
-                    </Group>
-                  )}
-                </Table.Td>
-                <Table.Td>{a.target}</Table.Td>
-                <Table.Td>
-                  <Group gap={4} wrap="nowrap">
-                    <ActionIcon variant="subtle" color="blue" onClick={() => openProgress(a)} aria-label="Ver progresso">
-                      <IconChartBar size={16} />
-                    </ActionIcon>
-                    <ActionIcon variant="subtle" color="gray" onClick={() => openEdit(a)} aria-label="Editar">
-                      <IconPencil size={16} />
-                    </ActionIcon>
-                    <ActionIcon variant="subtle" color="red" onClick={() => setDeleting(a)} aria-label="Remover">
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            ))}
+                    </Table.Td>
+                    <Table.Td>{a.target}</Table.Td>
+                    <Table.Td>
+                      <Group gap={4} wrap="nowrap">
+                        <ActionIcon variant="subtle" color="blue" onClick={() => openProgress(a)} aria-label="Ver progresso">
+                          <IconChartBar size={16} />
+                        </ActionIcon>
+                        <ActionIcon variant="subtle" color="gray" onClick={() => openEdit(a)} aria-label="Editar">
+                          <IconPencil size={16} />
+                        </ActionIcon>
+                        <ActionIcon variant="subtle" color="red" onClick={() => setDeleting(a)} aria-label="Remover">
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr key={`${a.id}-preview`}>
+                    <Table.Td colSpan={7} p={0} style={{ border: expanded ? undefined : "none" }}>
+                      <Collapse in={expanded}>
+                        <Box p="sm" bg="var(--mantine-color-dark-8)">
+                          {expanded && (
+                            <RuleFocusMiniCanvas
+                              rules={relevantEventRules}
+                              catalog={catalog ?? []}
+                              focusNodeId={a.statKey ? achId(a.id) : typeId(a.eventType)}
+                            />
+                          )}
+                          {!a.statKey && rule && (
+                            <Group justify="flex-end" mt="xs">
+                              <Button
+                                size="xs"
+                                variant="light"
+                                onClick={() => onNavigateToRule?.(rule.id, { edit: rule.scope === "game" })}
+                              >
+                                {rule.scope === "game" ? "Editar regra" : "Ver regra"}
+                              </Button>
+                            </Group>
+                          )}
+                        </Box>
+                      </Collapse>
+                    </Table.Td>
+                  </Table.Tr>
+                </Fragment>
+              );
+            })}
           </Table.Tbody>
         </Table>
       )}
