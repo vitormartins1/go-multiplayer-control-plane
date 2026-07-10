@@ -30,9 +30,11 @@ Três decisões estruturais que atravessam as fatias. **Recomendação anotada; 
 
 3. **Resultado por evento ≠ outcome terminal (dona de H2).** `MatchOutcome`/`WinLossDraw` é um payload **único no fim**. O host_world_dropin reporta `ParticipationEvent{playerID, role, event, outcome}` **ao longo da vida** da sessão (`JOINED`/`BOSS_DEFEATED`/`HOST_KILLED`/`DIED`/`LEFT`). → Nova operação `ReportParticipationEvent` (streaming/incremental), **não** um novo `Kind` do `MatchOutcome` terminal. **Recomendação:** publicar cada evento no mesmo tópico de fan-out (`match-results`) com um **envelope discriminado por tipo** (`kind: participation_event`), retrocompatível — os consumers atuais ignoram o que não entendem, novos sinks reagem.
 
-## Realidade cross-repo: o data plane não existe ainda
+## Realidade cross-repo no momento em que este roadmap foi escrito
 
-O `unity-host-world-dropin-data-plane` (Unity) é **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — não há server que encarne o "mundo do host" nem emita `ParticipationEvent`. Consequência (igual ao princípio do `queue_arena`: **control plane primeiro**):
+> **Atualização (2026-07-09):** o `unity-host-world-dropin-data-plane` **já existe e está nas Fases 0–4 done** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — o texto abaixo descreve a situação de quando H0–H2 foram desenhados (validação só com server mockado, sem repo Unity), mantido como registro histórico de por que o roadmap ficou escopado só ao control plane.
+
+O `unity-host-world-dropin-data-plane` (Unity) era, até então, **⬜ planejado** — não havia server que encarnasse o "mundo do host" nem emitisse `ParticipationEvent`. Consequência (igual ao princípio do `queue_arena`: **control plane primeiro**):
 
 - Todo H0–H2 se **valida no control plane** com o adapter `static` do `ServerAllocator` (server mockado) e um **cliente de teste** simulando o server do mundo (chama `JoinWorld`/`ReportParticipationEvent` como o Unity chamaria). É o mesmo padrão que fechou o `queue_arena` antes do Unity.
 - A validação **end-to-end real** (Agones + Unity encarnando o mundo, drop-in de verdade) é etapa **cross-repo posterior**, no novo repo de data plane. Este roadmap entrega o **contrato** que ela vai consumir — candidato a um `host_world_dropin-dataplane-contract.md` (par do que existe para o `queue_arena`) na fatia H2.

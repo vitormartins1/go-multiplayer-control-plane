@@ -10,12 +10,12 @@
 
 ## Estado atual por arquétipo (2026-07-10)
 
-Os 4 arquétipos estão **completos no control plane** (ADR-0023), mas o data plane Unity é cross-repo e evolui em ritmo próprio — hoje só um está de pé de verdade:
+Os 4 arquétipos estão **completos no control plane** (ADR-0023), mas o data plane Unity é cross-repo e evolui em ritmo próprio — dois estão de pé, dois ainda não:
 
 | Arquétipo | Data plane Unity | Estado |
 |---|---|---|
 | `queue_arena` | `unity-queue-arena-data-plane` (ex-`go-game-dataplane`) | **Rodando de verdade** — Fases 0-7: Dedicated Server ARM64 orquestrado por Agones (k3d local → homelab Pi 5), handshake completo `login → FindMatch → session aloca via Agones → connect token Ed25519 → partida → ReportResult`. É o exemplo canônico. **Tem dívida de contrato pendente** — ver seção abaixo. |
-| `host_world_dropin` | `unity-host-world-dropin-data-plane` | ⬜ Repo ainda não criado. Contrato pronto; é a próxima prioridade cross-repo (backlog `NEXT-STEPS.md`). |
+| `host_world_dropin` | `unity-host-world-dropin-data-plane` | 🟡 **Em andamento** — repo real no GitHub, 28 commits. **Fases 0–4 done**, verificado ao vivo (server ARM64 real + clients headless): mundo do host, phantoms entrando no meio da sessão por papel, invasão + quadro de sinais via matchmaking (incluindo bypass por senha), combate com boss e ciclo de vida completo (host morto, boss derrotado, mundo fecha). Falta **Fase 5** (e2e orquestrado k3d→Pi 5 — ainda sem Fleet Agones própria, usa a do `queue_arena`) e **Fase 6+** (refinamento). Ainda não exerceu `achievements/018`/`game-registry/011` (stats no HWD, 2026-07-10 — posterior ao último commit deste repo). |
 | `battle_royale` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
 | `coop_mission` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
 
