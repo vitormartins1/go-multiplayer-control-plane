@@ -73,6 +73,13 @@ const draftHeight = (rows: number) => 72 + 32 * Math.max(1, rows);
 
 const COL_X = [0, 300, 640, 920];
 const GAP_Y = 18;
+// DRAFT_COL_SHIFT: a caixinha em edição/criação (.flow-card--editing) tem
+// 340px, contra os 260px máximos de uma regra normal — sem isso ela cola na
+// coluna de event types (o gap de 340px entre COL_X[1]/COL_X[2] já é
+// calibrado só pro card normal). Desloca as colunas à DIREITA da regra
+// (event types + achievements) pra restaurar o mesmo respiro que existe fora
+// do draft (achado do Vitor testando os fluxos de criar/editar).
+const DRAFT_COL_SHIFT = 80;
 const LABEL_H = 14;
 
 // Ordem fixa dos grupos da coluna de fontes (spec 049).
@@ -288,12 +295,13 @@ export function buildRulesGraph(
   const maxH = Math.max(...colHeights, 0);
 
   const isGhost = (id: string) => id === formNodeID || id.startsWith("t:__new__:");
+  const colX = (li: number) => COL_X[li] + (draft && li >= 2 ? DRAFT_COL_SHIFT : 0);
 
   const nodes: Node[] = columns.flatMap((col, li) =>
     col.map((m) => ({
       id: m.id,
       type: m.type,
-      position: { x: COL_X[li], y: (yByID.get(m.id) ?? 0) + (maxH - colHeights[li]) / 2 },
+      position: { x: colX(li), y: (yByID.get(m.id) ?? 0) + (maxH - colHeights[li]) / 2 },
       data: m.data,
       connectable: false,
       selectable: m.type !== "sectionLabel",
