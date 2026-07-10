@@ -572,7 +572,19 @@ export function GameEventRulesCanvas({
               ? {
                   value: draftArchetype,
                   options: archetypeOptions.map((a) => ({ value: a, label: ARCHETYPE_META[a].label })),
-                  onChange: (v) => setDraftArchetype(v as MultiplayerProfile["archetype"]),
+                  // trocar de arquétipo limpa o form pro estado inicial
+                  // (achado do Vitor: o que já estava preenchido — chave,
+                  // valor, event types ligados — provavelmente se referia
+                  // ao arquétipo anterior; vocabulário muda junto, então o
+                  // conteúdo antigo deixaria de fazer sentido). Obriga a
+                  // pessoa a recadastrar do zero no arquétipo novo, em vez
+                  // de manter condição/type potencialmente inválido.
+                  onChange: (v) => {
+                    setDraftArchetype(v as MultiplayerProfile["archetype"]);
+                    setDraft((d) =>
+                      d ? { ...d, rows: [EMPTY_ROW], linked: [], news: newGhost(), error: null } : d,
+                    );
+                  },
                 }
               : undefined,
         }
