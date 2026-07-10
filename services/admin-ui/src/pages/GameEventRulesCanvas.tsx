@@ -52,6 +52,7 @@ import {
 import {
   buildRulesGraph,
   pathHighlight,
+  siblingRuleIds,
   STAT_PREFIX,
   type AchievementNodeData,
   type DraftGraphInput,
@@ -105,6 +106,8 @@ export function GameEventRulesCanvas({
   archetypeOptions,
   modes,
   reload,
+  focusRuleId,
+  onFocusRule,
 }: {
   gameId: string;
   rules: EventRule[];
@@ -112,6 +115,10 @@ export function GameEventRulesCanvas({
   archetypeOptions: MultiplayerProfile["archetype"][];
   modes: MultiplayerMode[];
   reload: () => void;
+  // focusRuleId (spec 055): regra selecionada na lista externa — canvas some
+  // vazio até uma regra ser focada, e mostra só o subgrafo dela.
+  focusRuleId: string | null;
+  onFocusRule: (ruleId: string | null) => void;
 }) {
   const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(archetypeOptions[0]);
   const arch = archetypeOptions.includes(archetype) ? archetype : archetypeOptions[0];
@@ -119,11 +126,26 @@ export function GameEventRulesCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showStats, setShowStats] = useState(true);
+  const [showRelated, setShowRelated] = useState(false);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [deleting, setDeleting] = useState<EventRule | null>(null);
   // event type órfão a partir do qual criar um achievement (quick-create).
   const [quickAchType, setQuickAchType] = useState<string | null>(null);
   const ghostSeq = useRef(0);
+
+  // sincroniza o overlay de detalhes com a regra focada externamente (lista);
+  // nunca o contrário — onFocusRule só é chamado a partir do clique real (mais
+  // abaixo), pra não criar ciclo entre prop e state interno. Também troca a
+  // aba de arquétipo do canvas se a regra focada for de outro arquétipo — a
+  // lista mostra todos juntos, mas o grafo só constrói o arquétipo ativo
+  // (senão a regra focada nem existiria no `graph` e o filtro esvaziaria tudo).
+  useEffect(() => {
+    setSelectedId(focusRuleId ? `r:${focusRuleId}` : null);
+    if (focusRuleId) {
+      const rule = rules.find((r) => r.id === focusRuleId);
+      if (rule && rule.archetype !== archetype) setArchetype(rule.archetype);
+    }
+  }, [focusRuleId, rules, archetype]);
 
   const archRules = useMemo(() => rules.filter((r) => r.archetype === arch), [rules, arch]);
 
@@ -209,6 +231,23 @@ export function GameEventRulesCanvas({
       }),
     [archRules, catalog, showStats, statsForArch, draftInput],
   );
+
+  // focusPath (spec 055): subgrafo da regra focada. Um draft ativo (criar ou
+  // editar) desliga o filtro — o fluxo de criação/edição in-canvas (specs
+  // 050/052) continua vendo o grafo cheio, sem mudança nenhuma nesse ramo.
+  const focusPath = useMemo(() => {
+    if (!focusRuleId || draft) return null;
+    const base = pathHighlight(graph.edges, `r:${focusRuleId}`);
+    if (!showRelated) return base;
+    const nodeIds = new Set(base.nodeIds);
+    const edgeIds = new Set(base.edgeIds);
+    for (const siblingId of siblingRuleIds(graph.edges, base.nodeIds)) {
+      const p = pathHighlight(graph.edges, siblingId);
+      p.nodeIds.forEach((id) => nodeIds.add(id));
+      p.edgeIds.forEach((id) => edgeIds.add(id));
+    }
+    return { nodeIds, edgeIds };
+  }, [graph, focusRuleId, showRelated, draft]);
 
   // --- callbacks do rascunho (injetados no node.data) ---
   function patchDraft(patch: Partial<DraftState>) {
@@ -314,7 +353,37 @@ export function GameEventRulesCanvas({
   // --- decoração: injeta data do rascunho e aplica busca/seleção ---
   const { nodes, edges } = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const path = !term && selectedId && !draft ? pathHighlight(graph.edges, selectedId) : null;
+
+    // spec 055: sem regra focada (e fora de um draft), canvas vazio — o
+    // grafo completo só aparece dentro do fluxo de criação/edição (draft),
+    // que fica intocado. Com foco, corta pro subgrafo (+ vizinhas, se
+    // showRelated) — sectionLabel só sobrevive se alguma source do grupo
+    // dela estiver visível (evita cabeçalho de seção órfão).
+    let visibleNodes = graph.nodes;
+    let visibleEdges = graph.edges;
+    if (!draft) {
+      if (!focusPath) {
+        visibleNodes = [];
+        visibleEdges = [];
+      } else {
+        visibleNodes = graph.nodes.filter((n) => {
+          if (focusPath.nodeIds.has(n.id)) return true;
+          if (n.type === "sectionLabel" && n.id.startsWith("lbl:")) {
+            const kind = n.id.slice(4);
+            return graph.nodes.some(
+              (s) =>
+                s.type === "source" &&
+                (s.data as unknown as SourceNodeData).kind === kind &&
+                focusPath.nodeIds.has(s.id),
+            );
+          }
+          return false;
+        });
+        visibleEdges = graph.edges.filter((e) => focusPath.edgeIds.has(e.id));
+      }
+    }
+
+    const path = !term && selectedId && !draft ? pathHighlight(visibleEdges, selectedId) : null;
 
     const draftData: RuleDraftData | null = draft
       ? {
@@ -346,7 +415,7 @@ export function GameEventRulesCanvas({
     };
     const cls = (...parts: Array<string | undefined | false>) => parts.filter(Boolean).join(" ") || undefined;
 
-    const nodes: Node[] = graph.nodes.map((n) => {
+    const nodes: Node[] = visibleNodes.map((n) => {
       let node = n;
       if (draftData && n.type === "ruleDraft") {
         // cobre o rascunho de criação (r:__draft__) E a regra em edição
@@ -387,8 +456,8 @@ export function GameEventRulesCanvas({
       return { ...node, className: cls(n.className, extra) };
     });
 
-    const matchedNodeIds = term ? new Set(graph.nodes.filter(matches).map((n) => n.id)) : null;
-    const edges: Edge[] = graph.edges.map((e) => {
+    const matchedNodeIds = term ? new Set(visibleNodes.filter(matches).map((n) => n.id)) : null;
+    const edges: Edge[] = visibleEdges.map((e) => {
       if (e.className === "is-draft-edge") {
         return { ...e, animated: true, style: { stroke: "#fab005", strokeWidth: 1.5 } };
       }
@@ -413,7 +482,7 @@ export function GameEventRulesCanvas({
     });
     return { nodes, edges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, selectedId, draft, search, keySuggestions, knownValues, modeIdSuggestions, typeSuggestions]);
+  }, [graph, selectedId, draft, search, keySuggestions, knownValues, modeIdSuggestions, typeSuggestions, focusPath]);
 
   const selectedNode = useMemo(
     () => graph.nodes.find((n) => n.id === selectedId) ?? null,
@@ -427,6 +496,13 @@ export function GameEventRulesCanvas({
     if (node?.type === "sectionLabel") return; // rótulo de seção não é selecionável
     if (!draft) {
       setSelectedId(id);
+      // spec 055: clicar numa regra (a focada, ou uma vizinha trazida pelo
+      // toggle "relacionadas") refoca o canvas nela e sincroniza a lista —
+      // só regra dispara isso; clicar em source/eventType/achievement só
+      // abre o overlay de detalhes, sem mudar o que está visível.
+      if (node?.type === "rule" || node?.type === "ruleDraft") {
+        onFocusRule(id.startsWith("r:") ? id.slice(2) : id);
+      }
       return;
     }
     if (node?.type === "source") {
@@ -493,6 +569,7 @@ export function GameEventRulesCanvas({
               setArchetype(v as MultiplayerProfile["archetype"]);
               setSelectedId(null);
               setDraft(null);
+              onFocusRule(null); // regra focada pode não pertencer ao arquétipo novo
             }
           }}
           allowDeselect={false}
@@ -509,10 +586,17 @@ export function GameEventRulesCanvas({
           Nova regra
         </Button>
         <Switch size="xs" label="Stats" checked={showStats} onChange={(e) => setShowStats(e.currentTarget.checked)} />
+        <Switch
+          size="xs"
+          label="Regras relacionadas"
+          checked={showRelated}
+          disabled={!focusRuleId}
+          onChange={(e) => setShowRelated(e.currentTarget.checked)}
+        />
         <TextInput
           size="xs"
           w={200}
-          placeholder="buscar no grafo…"
+          placeholder="buscar no subgrafo…"
           leftSection={<IconSearch size={13} />}
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
@@ -525,34 +609,40 @@ export function GameEventRulesCanvas({
         )}
       </Group>
 
-      <FlowCanvas
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={NODE_TYPES}
-        onNodeClick={onNodeClick}
-        onPaneClick={() => setSelectedId(null)}
-        fitKey={`${arch}|${graph.nodes.length}|${!!draft}`}
-        height="calc(100vh - 345px)"
-        overlay={
-          selectedNode && !draft ? (
-            <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
-              <CloseButton
-                size="sm"
-                onClick={() => setSelectedId(null)}
-                style={{ position: "absolute", top: 8, right: 8 }}
-                aria-label="Fechar detalhe"
-              />
-              <NodeDetails
-                node={selectedNode}
-                unconditionalTypes={unconditionalTypes}
-                onDelete={(r) => setDeleting(r)}
-                onToggleSuppress={toggleSuppress}
-                onQuickAch={(et) => setQuickAchType(et)}
-              />
-            </Paper>
-          ) : undefined
-        }
-      />
+      {!draft && !focusRuleId ? (
+        <Text c="dimmed" ta="center" py={80}>
+          Selecione uma regra na lista para visualizar.
+        </Text>
+      ) : (
+        <FlowCanvas
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={NODE_TYPES}
+          onNodeClick={onNodeClick}
+          onPaneClick={() => setSelectedId(null)}
+          fitKey={`${arch}|${focusRuleId ?? "none"}|${showRelated}|${!!draft}`}
+          height="calc(100vh - 345px)"
+          overlay={
+            selectedNode && !draft ? (
+              <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
+                <CloseButton
+                  size="sm"
+                  onClick={() => setSelectedId(null)}
+                  style={{ position: "absolute", top: 8, right: 8 }}
+                  aria-label="Fechar detalhe"
+                />
+                <NodeDetails
+                  node={selectedNode}
+                  unconditionalTypes={unconditionalTypes}
+                  onDelete={(r) => setDeleting(r)}
+                  onToggleSuppress={toggleSuppress}
+                  onQuickAch={(et) => setQuickAchType(et)}
+                />
+              </Paper>
+            ) : undefined
+          }
+        />
+      )}
 
       {/* Quick-create de achievement a partir de um event type órfão (spec
           048) — mesmos campos/validação do form da aba Achievements, critério
