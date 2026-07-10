@@ -32,3 +32,9 @@ Pergunta do Vitor: pra stats, o critério de "mesmo valor" leva em conta o valor
 Decisão do Vitor: relaxar esse critério **só pra stats**, com controle do usuário (não hardcoded) — `statIgnoreValue: boolean`, um `Switch` "qualquer limiar" na toolbar, habilitado só quando o chip "Stats" está ativo. Quando ligado, `siblingRuleIds` passa a considerar "relacionada" qualquer regra que toque a MESMA CHAVE de stat, ignorando o valor; facts/modo continuam exigindo valor exato sempre (não configurável, não foi pedido).
 
 Verificado criando uma regra temporária via API (`stat.kills ≥ 50`, mesma chave da regra existente `pacifist_clear` com `stat.kills ≤ 0`, mesmo arquétipo) — sem "qualquer limiar" ela não aparece como vizinha (9 nós); com o switch ligado, aparece (11 nós). Regra temporária removida depois do teste (`DELETE /admin/.../event-rules/{id}`, sem resíduo no jogo de demo).
+
+## Follow-up: removido o switch "Stats" original (showStats) (2026-07-10)
+
+Pergunta do Vitor: com as evoluções da tela (canvas focado por regra desde a 055/056), o switch "Stats" original (que ligava/desligava a coluna de métricas no `buildRulesGraph`) ainda era necessário? Investiguei e não — rastreando `buildRulesGraph`, a source de um stat usado por QUALQUER regra (focada ou vizinha) já nasce sempre, pelo mesmo loop que lê o `match` de cada regra, independente desse switch. A única coisa que ele de fato controlava era o aviso de "drift" (stat não declarado em nenhum modo) na source — e ainda por cima tinha o mesmo nome ("Stats") do chip novo de regras relacionadas, o que confundia.
+
+Removido: `showStats` (state, dependência do `useMemo` do grafo, e o `<Switch>` da toolbar) — `buildRulesGraph` agora sempre recebe `statsForArch` (drift sempre computado). Confirmado via Playwright: switch antigo sumiu da toolbar, source de stat de uma regra focada (`pacifist_clear`/`stat.kills`) continua aparecendo normalmente.
