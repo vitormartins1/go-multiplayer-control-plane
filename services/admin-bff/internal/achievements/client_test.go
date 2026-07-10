@@ -70,7 +70,25 @@ func TestPlayerAchievements_Mapeia(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.True(t, got[0].Unlocked)
+	require.NotNil(t, got[0].UnlockedAt)
 	assert.False(t, got[0].UnlockedAt.IsZero())
+}
+
+// Conquista em progresso (não desbloqueada) não deve trazer UnlockedAt nenhum
+// — nem o zero-time do Go (0001-01-01). Regressão do nit registrado em
+// memória: sem o ponteiro, `omitempty` não omite struct time.Time e o zero
+// vazava pro front como data "desbloqueada em 0001".
+func TestPlayerAchievements_EmProgresso_UnlockedAtNil(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"achievements":[{"id":"first_win","name":"P","description":"x","progress":0,"target":1,"unlocked":false}]}`))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).PlayerAchievements(context.Background(), "g1", "p1")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.False(t, got[0].Unlocked)
+	assert.Nil(t, got[0].UnlockedAt)
 }
 
 func TestCreateAchievement_201(t *testing.T) {

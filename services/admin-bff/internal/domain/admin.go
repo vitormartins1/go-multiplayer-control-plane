@@ -48,14 +48,18 @@ type LiveMetrics struct {
 }
 
 // PlayerAchievement é uma conquista do catálogo anotada com o estado do jogador.
+// UnlockedAt é ponteiro: time.Time não-ponteiro nunca é omitido por
+// `omitempty` (encoding/json só considera "vazio" nil/zero de tipos
+// básicos/slice/map, nunca struct) — sem o ponteiro, toda conquista em
+// progresso vazava o zero-time do Go (0001-01-01) pro front.
 type PlayerAchievement struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Target      int       `json:"target"`
-	Progress    int       `json:"progress"`
-	Unlocked    bool      `json:"unlocked"`
-	UnlockedAt  time.Time `json:"unlockedAt,omitempty"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Target      int        `json:"target"`
+	Progress    int        `json:"progress"`
+	Unlocked    bool       `json:"unlocked"`
+	UnlockedAt  *time.Time `json:"unlockedAt,omitempty"`
 }
 
 // Player é uma conta de jogador na visão admin (User base). Nunca carrega
@@ -202,11 +206,12 @@ type LeaderboardReader interface {
 
 // AchievementProgressEntry é uma linha do relatório de progresso de uma conquista:
 // todos os jogadores com seu progresso/desbloqueio naquela conquista.
+// UnlockedAt é ponteiro pelo mesmo motivo de PlayerAchievement.UnlockedAt.
 type AchievementProgressEntry struct {
-	PlayerID   string    `json:"playerId"`
-	Progress   int       `json:"progress"`
-	Unlocked   bool      `json:"unlocked"`
-	UnlockedAt time.Time `json:"unlockedAt,omitempty"`
+	PlayerID   string     `json:"playerId"`
+	Progress   int        `json:"progress"`
+	Unlocked   bool       `json:"unlocked"`
+	UnlockedAt *time.Time `json:"unlockedAt,omitempty"`
 }
 
 // AchievementsReader é a Port de saída para a API admin do achievements-service,
