@@ -203,6 +203,17 @@ func (s *Service) DeleteEventRule(ctx context.Context, gameID, id string) error 
 	return s.reader.DeleteEventRule(ctx, gameID, id)
 }
 
+// SuppressEventRule desliga uma regra global para o jogo gameID (spec 017,
+// V2b do ADR-0028).
+func (s *Service) SuppressEventRule(ctx context.Context, gameID, id string) error {
+	return s.reader.SuppressEventRule(ctx, gameID, id)
+}
+
+// UnsuppressEventRule restaura uma regra global suprimida.
+func (s *Service) UnsuppressEventRule(ctx context.Context, gameID, id string) error {
+	return s.reader.UnsuppressEventRule(ctx, gameID, id)
+}
+
 // GamePlayers lê a player base do jogo (presença, ADR-0019).
 func (s *Service) GamePlayers(ctx context.Context, gameID string) ([]domain.GamePlayer, error) {
 	return s.registry.PlayersOf(ctx, gameID)

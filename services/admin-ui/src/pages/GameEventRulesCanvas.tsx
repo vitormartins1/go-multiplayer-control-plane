@@ -15,7 +15,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconPlus, IconSearch, IconTrash, IconTrophy } from "@tabler/icons-react";
+import { IconBan, IconPlus, IconRotate2, IconSearch, IconTrash, IconTrophy } from "@tabler/icons-react";
 import type { Edge, Node, NodeTypes } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlowCanvas } from "../components/flow/FlowCanvas";
@@ -170,10 +170,14 @@ export function GameEventRulesCanvas({
   );
   // event types emitidos por regras INCONDICIONAIS (match vazio) — o hint de
   // redundância do painel (o motor deduplica; emissão repetida é inócua).
+  // Regra suprimida (spec 017/051) não emite nada — não pode tornar outra
+  // regra "redundante".
   const unconditionalTypes = useMemo(
     () =>
       new Set(
-        archRules.filter((r) => Object.keys(r.match).length === 0).flatMap((r) => r.eventTypes),
+        archRules
+          .filter((r) => !r.suppressed && Object.keys(r.match).length === 0)
+          .flatMap((r) => r.eventTypes),
       ),
     [archRules],
   );
@@ -457,6 +461,24 @@ export function GameEventRulesCanvas({
     }
   }
 
+  // toggleSuppress liga/desliga a supressão de uma regra GLOBAL pra este jogo
+  // (spec achievements/017, V2b) — reversível com um clique, sem modal (ao
+  // contrário do delete de override, que é destrutivo).
+  async function toggleSuppress(rule: EventRule) {
+    try {
+      if (rule.suppressed) {
+        await api.unsuppressEventRule(gameId, rule.id);
+        notifications.show({ color: "green", message: "Regra restaurada." });
+      } else {
+        await api.suppressEventRule(gameId, rule.id);
+        notifications.show({ color: "orange", message: "Regra suprimida para este jogo." });
+      }
+      reload();
+    } catch {
+      notifications.show({ color: "red", message: "Falha ao atualizar a supressão (serviço indisponível?)." });
+    }
+  }
+
   return (
     <Stack gap="xs">
       <Group gap="xs">
@@ -523,6 +545,7 @@ export function GameEventRulesCanvas({
                 node={selectedNode}
                 unconditionalTypes={unconditionalTypes}
                 onDelete={(r) => setDeleting(r)}
+                onToggleSuppress={toggleSuppress}
                 onQuickAch={(et) => setQuickAchType(et)}
               />
             </Paper>
@@ -594,16 +617,19 @@ function NodeDetails({
   node,
   unconditionalTypes,
   onDelete,
+  onToggleSuppress,
   onQuickAch,
 }: {
   node: Node;
   unconditionalTypes: Set<string>;
   onDelete: (r: EventRule) => void;
+  onToggleSuppress: (r: EventRule) => void;
   onQuickAch: (eventType: string) => void;
 }) {
   if (node.type === "rule") {
     const { rule } = node.data as unknown as RuleNodeData;
     const global = rule.scope === "global";
+    const suppressed = global && rule.suppressed;
     const redundant =
       Object.keys(rule.match).length > 0
         ? rule.eventTypes.filter((et) => unconditionalTypes.has(et))
@@ -651,9 +677,22 @@ function NodeDetails({
           </Text>
         )}
         {global ? (
-          <Text size="xs" c="dimmed">
-            Regra global do arquétipo (semeada por migration) — somente leitura.
-          </Text>
+          <>
+            <Text size="xs" c="dimmed">
+              {suppressed
+                ? "Suprimida — não contribui para as avaliações deste jogo."
+                : "Regra global do arquétipo (semeada por migration) — somente leitura, mas pode ser suprimida para este jogo."}
+            </Text>
+            <Button
+              variant="light"
+              color={suppressed ? "teal" : "orange"}
+              size="xs"
+              leftSection={suppressed ? <IconRotate2 size={14} /> : <IconBan size={14} />}
+              onClick={() => onToggleSuppress(rule)}
+            >
+              {suppressed ? "Restaurar" : "Suprimir para este jogo"}
+            </Button>
+          </>
         ) : (
           <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => onDelete(rule)}>
             Remover regra

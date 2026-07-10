@@ -17,7 +17,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconPlus, IconRefresh, IconTrash } from "@tabler/icons-react";
+import { IconBan, IconPlus, IconRefresh, IconRotate2, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { api, HttpError, type EventRule, type MultiplayerProfile } from "../lib/api";
 import { condLabel } from "../lib/matchCond";
@@ -137,6 +137,23 @@ export function GameEventRules({ gameId }: { gameId: string }) {
     }
   }
 
+  // toggleSuppress: paridade com o canvas (spec achievements/017, V2b) —
+  // mesma ação, mesma reversibilidade sem modal.
+  async function toggleSuppress(r: EventRule) {
+    try {
+      if (r.suppressed) {
+        await api.unsuppressEventRule(gameId, r.id);
+        notifications.show({ color: "green", message: "Regra restaurada." });
+      } else {
+        await api.suppressEventRule(gameId, r.id);
+        notifications.show({ color: "orange", message: "Regra suprimida para este jogo." });
+      }
+      reload();
+    } catch {
+      notifications.show({ color: "red", message: "Falha ao atualizar a supressão (serviço indisponível?)." });
+    }
+  }
+
   return (
     <Stack>
       <Group justify="space-between">
@@ -200,11 +217,18 @@ export function GameEventRules({ gameId }: { gameId: string }) {
           </Table.Thead>
           <Table.Tbody>
             {visibleRules.map((r) => (
-              <Table.Tr key={r.id}>
+              <Table.Tr key={r.id} style={r.suppressed ? { opacity: 0.5 } : undefined}>
                 <Table.Td>
-                  <Badge variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
-                    {r.scope === "global" ? "global" : "jogo"}
-                  </Badge>
+                  <Group gap={4} wrap="nowrap">
+                    <Badge variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                      {r.scope === "global" ? "global" : "jogo"}
+                    </Badge>
+                    {r.suppressed && (
+                      <Badge variant="light" color="orange" leftSection={<IconBan size={10} />}>
+                        suprimida
+                      </Badge>
+                    )}
+                  </Group>
                 </Table.Td>
                 <Table.Td c="dimmed">{r.archetype}</Table.Td>
                 <Table.Td>
@@ -232,9 +256,18 @@ export function GameEventRules({ gameId }: { gameId: string }) {
                   </Group>
                 </Table.Td>
                 <Table.Td>
-                  {r.scope === "game" && (
+                  {r.scope === "game" ? (
                     <ActionIcon variant="subtle" color="red" onClick={() => setDeleting(r)} aria-label="Remover">
                       <IconTrash size={16} />
+                    </ActionIcon>
+                  ) : (
+                    <ActionIcon
+                      variant="subtle"
+                      color={r.suppressed ? "teal" : "orange"}
+                      onClick={() => toggleSuppress(r)}
+                      aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+                    >
+                      {r.suppressed ? <IconRotate2 size={16} /> : <IconBan size={16} />}
                     </ActionIcon>
                   )}
                 </Table.Td>

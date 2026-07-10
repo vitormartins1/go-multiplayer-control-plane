@@ -39,6 +39,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/006_processed_participations.sql",
 			"../../migrations/007_participation_event_id.sql",
 			"../../migrations/008_event_rules.sql",
+			"../../migrations/010_event_rule_suppressions.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)

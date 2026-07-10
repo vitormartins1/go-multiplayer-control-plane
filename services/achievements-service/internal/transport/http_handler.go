@@ -59,6 +59,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/games/{gameId}/event-rules", h.adminCreateEventRule)
 	mux.HandleFunc("PUT /admin/games/{gameId}/event-rules/{id}", h.adminUpdateEventRule)
 	mux.HandleFunc("DELETE /admin/games/{gameId}/event-rules/{id}", h.adminDeleteEventRule)
+	// Supressão de regra global por jogo (spec 017, V2b do ADR-0028).
+	mux.HandleFunc("POST /admin/games/{gameId}/event-rules/{id}/suppress", h.adminSuppressEventRule)
+	mux.HandleFunc("DELETE /admin/games/{gameId}/event-rules/{id}/suppress", h.adminUnsuppressEventRule)
 }
 
 // auth valida o Bearer JWT (via TokenVerifier) e injeta o playerID no contexto.
@@ -305,6 +308,28 @@ func (h *Handler) adminDeleteEventRule(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// adminSuppressEventRule desliga uma regra GLOBAL para o jogo {gameId} (spec
+// 017, V2b) — a linha da regra não é tocada; só deixa de contribuir event
+// types nas avaliações deste jogo. Idempotente (204 mesmo se já suprimida).
+// ErrEventRuleNotFound (regra inexistente ou não-global) -> 404.
+func (h *Handler) adminSuppressEventRule(w http.ResponseWriter, r *http.Request) {
+	if err := h.rules.SuppressEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminUnsuppressEventRule restaura uma regra global suprimida. Sem
+// supressão ativa para o par (gameId, id) -> ErrEventRuleNotFound -> 404.
+func (h *Handler) adminUnsuppressEventRule(w http.ResponseWriter, r *http.Request) {
+	if err := h.rules.UnsuppressEventRule(r.Context(), r.PathValue("gameId"), r.PathValue("id")); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // adminListCatalog devolve o catálogo de conquistas do jogo {gameId} (sem JWT).
 func (h *Handler) adminListCatalog(w http.ResponseWriter, r *http.Request) {
 	cat, err := h.svc.ListCatalog(r.Context(), r.PathValue("gameId"))
@@ -359,6 +384,10 @@ type eventRuleDTO struct {
 	Archetype  string                      `json:"archetype"`
 	Match      map[string]domain.MatchCond `json:"match"` // eq serializa como string (compat ADR-0027)
 	EventTypes []string                    `json:"eventTypes"`
+	// Suppressed (spec 017, V2b): sempre presente; só relevante pra scope
+	// "global" — regras de jogo nunca são suprimíveis (o conceito não se
+	// aplica a overrides, que são removíveis via DELETE).
+	Suppressed bool `json:"suppressed"`
 }
 
 func toEventRuleDTO(r domain.EventRule) eventRuleDTO {
@@ -370,7 +399,7 @@ func toEventRuleDTO(r domain.EventRule) eventRuleDTO {
 	if match == nil {
 		match = map[string]domain.MatchCond{}
 	}
-	return eventRuleDTO{ID: r.ID, Scope: scope, Archetype: r.Archetype, Match: match, EventTypes: r.EventTypes}
+	return eventRuleDTO{ID: r.ID, Scope: scope, Archetype: r.Archetype, Match: match, EventTypes: r.EventTypes, Suppressed: r.Suppressed}
 }
 
 func toEventRuleDTOs(in []domain.EventRule) []eventRuleDTO {

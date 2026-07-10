@@ -243,6 +243,16 @@ func (f *fakeService) DeleteEventRule(_ context.Context, gameID, id string) erro
 	return f.eventRulesErr
 }
 
+func (f *fakeService) SuppressEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotEventRuleID = gameID, id
+	return f.eventRulesErr
+}
+
+func (f *fakeService) UnsuppressEventRule(_ context.Context, gameID, id string) error {
+	f.gotGameID, f.gotEventRuleID = gameID, id
+	return f.eventRulesErr
+}
+
 func newServer(svc AdminService) *httptest.Server {
 	mux := http.NewServeMux()
 	NewHandler(svc).Register(mux)

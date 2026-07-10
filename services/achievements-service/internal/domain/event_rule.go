@@ -131,6 +131,13 @@ type EventRule struct {
 	Archetype  string
 	Match      map[string]MatchCond
 	EventTypes []string
+	// Suppressed diz se esta regra global foi desligada para o jogo da
+	// consulta (spec 017, V2b do ADR-0028) — só populado por
+	// EventRuleRepository.ListEffective (leitura do admin); regras devolvidas
+	// por RulesForArchetype (caminho de avaliação) já vêm sem as suprimidas,
+	// então o campo fica no zero-value (false) ali. Sempre false pra regras
+	// de jogo (o conceito não se aplica a overrides, que são removíveis).
+	Suppressed bool
 }
 
 // Facts é o mapa normalizado de um envelope recebido, independente do kind —
@@ -240,6 +247,13 @@ func EvaluateRules(rules []EventRule, gameID string, facts Facts) []string {
 	seen := make(map[string]struct{})
 	var out []string
 	for _, r := range rules {
+		if r.Suppressed {
+			// Defensivo: RulesForArchetype já exclui as globais suprimidas
+			// deste jogo antes de chegar aqui — esta guarda só protege contra
+			// um uso futuro indevido (ex.: passar o resultado de
+			// ListEffective direto pro avaliador).
+			continue
+		}
 		if r.GameID != nil && *r.GameID != gameID {
 			continue
 		}
@@ -301,6 +315,18 @@ type EventRuleService interface {
 	// existir OU se for uma regra global (não editável por este endpoint —
 	// mesma resposta pras duas situações, não vaza a distinção).
 	DeleteEventRule(ctx context.Context, gameID, id string) error
+	// SuppressEventRule desliga uma regra GLOBAL para o jogo gameID (spec
+	// 017, V2b) — a linha da regra não é tocada; só deixa de contribuir
+	// event types nas avaliações DESTE jogo (outros jogos do arquétipo
+	// continuam recebendo normalmente). Idempotente (suprimir uma regra já
+	// suprimida é um no-op). ErrEventRuleNotFound se a regra não existir ou
+	// não for global (override de jogo não é suprimível — é removível via
+	// DeleteEventRule).
+	SuppressEventRule(ctx context.Context, gameID, id string) error
+	// UnsuppressEventRule restaura uma regra global suprimida (volta a valer
+	// para gameID). ErrEventRuleNotFound se não havia supressão ativa para o
+	// par (gameID, id) — mesma semântica de "não existe" do DeleteEventRule.
+	UnsuppressEventRule(ctx context.Context, gameID, id string) error
 }
 
 // EventRuleRepository é a Port de saída de persistência das regras.
@@ -320,4 +346,11 @@ type EventRuleRepository interface {
 	// DeleteRule remove a regra (gameID, ruleID). ErrEventRuleNotFound se não
 	// existir ou se for global (WHERE game_id = $2 nunca casa NULL).
 	DeleteRule(ctx context.Context, gameID, ruleID string) error
+	// Suppress grava a supressão (gameID, ruleID) — idempotente (ON CONFLICT
+	// DO NOTHING). ErrEventRuleNotFound se ruleID não existir ou não for
+	// global.
+	Suppress(ctx context.Context, gameID, ruleID string) error
+	// Unsuppress remove a supressão (gameID, ruleID). ErrEventRuleNotFound se
+	// não havia nenhuma.
+	Unsuppress(ctx context.Context, gameID, ruleID string) error
 }

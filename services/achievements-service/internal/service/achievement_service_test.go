@@ -116,7 +116,9 @@ func (fakeEventRules) ListEffective(context.Context, string) ([]domain.EventRule
 }
 func (fakeEventRules) CreateRule(context.Context, *domain.EventRule) error { return nil }
 func (fakeEventRules) UpdateRule(context.Context, *domain.EventRule) error { return nil }
-func (fakeEventRules) DeleteRule(context.Context, string, string) error   { return nil }
+func (fakeEventRules) DeleteRule(context.Context, string, string) error    { return nil }
+func (fakeEventRules) Suppress(context.Context, string, string) error      { return nil }
+func (fakeEventRules) Unsuppress(context.Context, string, string) error    { return nil }
 
 // spyEventRules estende o fake capturando o que chega no UpdateRule (spec
 // 016) — valida a orquestração do service (id/gameID do path, validação de
@@ -173,6 +175,63 @@ func TestUpdateEventRule_GlobalOuInexistente_PropagaNotFound(t *testing.T) {
 	_, err := svc.UpdateEventRule(context.Background(), gameID, "global-1", domain.EventRule{
 		EventTypes: []string{"x"},
 	})
+	require.ErrorIs(t, err, domain.ErrEventRuleNotFound)
+}
+
+// spySuppressRules estende o fake capturando o que chega em
+// Suppress/Unsuppress (spec 017) — valida que o service repassa gameID/id do
+// path sem alteração (sem conteúdo pra validar, ao contrário de Create/
+// Update) e propaga o erro do repo tal como veio.
+type spySuppressRules struct {
+	fakeEventRules
+	suppressErr, unsuppressErr         error
+	gotSuppressGame, gotSuppressID     string
+	gotUnsuppressGame, gotUnsuppressID string
+}
+
+func (s *spySuppressRules) Suppress(_ context.Context, gameID, id string) error {
+	s.gotSuppressGame, s.gotSuppressID = gameID, id
+	return s.suppressErr
+}
+
+func (s *spySuppressRules) Unsuppress(_ context.Context, gameID, id string) error {
+	s.gotUnsuppressGame, s.gotUnsuppressID = gameID, id
+	return s.unsuppressErr
+}
+
+func TestSuppressEventRule_RepassaGameIDEId(t *testing.T) {
+	rules := &spySuppressRules{}
+	svc := New(new(mockRepo), rules)
+
+	err := svc.SuppressEventRule(context.Background(), gameID, "global-1")
+	require.NoError(t, err)
+	assert.Equal(t, gameID, rules.gotSuppressGame)
+	assert.Equal(t, "global-1", rules.gotSuppressID)
+}
+
+func TestSuppressEventRule_PropagaErroDoRepo(t *testing.T) {
+	rules := &spySuppressRules{suppressErr: domain.ErrEventRuleNotFound}
+	svc := New(new(mockRepo), rules)
+
+	err := svc.SuppressEventRule(context.Background(), gameID, "override-1")
+	require.ErrorIs(t, err, domain.ErrEventRuleNotFound)
+}
+
+func TestUnsuppressEventRule_RepassaGameIDEId(t *testing.T) {
+	rules := &spySuppressRules{}
+	svc := New(new(mockRepo), rules)
+
+	err := svc.UnsuppressEventRule(context.Background(), gameID, "global-1")
+	require.NoError(t, err)
+	assert.Equal(t, gameID, rules.gotUnsuppressGame)
+	assert.Equal(t, "global-1", rules.gotUnsuppressID)
+}
+
+func TestUnsuppressEventRule_PropagaErroDoRepo(t *testing.T) {
+	rules := &spySuppressRules{unsuppressErr: domain.ErrEventRuleNotFound}
+	svc := New(new(mockRepo), rules)
+
+	err := svc.UnsuppressEventRule(context.Background(), gameID, "global-1")
 	require.ErrorIs(t, err, domain.ErrEventRuleNotFound)
 }
 

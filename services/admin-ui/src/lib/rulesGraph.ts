@@ -314,8 +314,15 @@ export function buildRulesGraph(
     });
 
   for (const e of srcRuleEdges) push(srcId(e.key), e.ruleID, e.label);
+  // Edges regra→type de uma regra global suprimida (spec 017/051, V2b)
+  // renderizam tracejadas — a regra continua existindo (achável pra
+  // restaurar), só não está no caminho ativo desta avaliação.
   for (const [et, idx] of typeSources) {
-    for (const ri of idx) push(ruleMetas[ri].id, typeId(et));
+    for (const ri of idx) {
+      const meta = ruleMetas[ri];
+      const suppressed = meta.type === "rule" && (meta.data as RuleNodeData).rule.suppressed;
+      push(meta.id, typeId(et), undefined, suppressed ? "is-suppressed-edge" : undefined);
+    }
   }
   if (draft) {
     for (const g of draft.newTypes) push(formNodeID!, draftTypeId(g.id));

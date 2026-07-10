@@ -57,7 +57,7 @@ func (r *dispatchRepo) RecordProgress(context.Context, string, string, string, i
 }
 func (r *dispatchRepo) CreateAchievement(context.Context, *domain.Achievement) error { return nil }
 func (r *dispatchRepo) UpdateAchievement(context.Context, *domain.Achievement) error { return nil }
-func (r *dispatchRepo) DeleteAchievement(context.Context, string, string) error       { return nil }
+func (r *dispatchRepo) DeleteAchievement(context.Context, string, string) error      { return nil }
 
 // seedRulesRepo é um stub de domain.EventRuleRepository com as MESMAS regras
 // do seed da migration 008 — o dispatch por kind (o que este arquivo testa)
@@ -100,7 +100,9 @@ func (seedRulesRepo) ListEffective(context.Context, string) ([]domain.EventRule,
 }
 func (seedRulesRepo) CreateRule(context.Context, *domain.EventRule) error { return nil }
 func (seedRulesRepo) UpdateRule(context.Context, *domain.EventRule) error { return nil }
-func (seedRulesRepo) DeleteRule(context.Context, string, string) error   { return nil }
+func (seedRulesRepo) DeleteRule(context.Context, string, string) error    { return nil }
+func (seedRulesRepo) Suppress(context.Context, string, string) error      { return nil }
+func (seedRulesRepo) Unsuppress(context.Context, string, string) error    { return nil }
 
 func newHandler(t *testing.T) (*dispatchRepo, func(body []byte) (bool, error)) {
 	t.Helper()

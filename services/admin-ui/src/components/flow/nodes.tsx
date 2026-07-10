@@ -10,6 +10,7 @@ import {
 } from "@mantine/core";
 import {
   IconAlertTriangle,
+  IconBan,
   IconBolt,
   IconChartBar,
   IconCheck,
@@ -79,15 +80,26 @@ export function SourceNode({ data }: NodeProps) {
 export function RuleNode({ data }: NodeProps) {
   const { rule, onEdit } = data as unknown as RuleNodeData;
   const global = rule.scope === "global";
+  const suppressed = global && rule.suppressed;
   const pairs = Object.entries(rule.match);
   return (
-    <div className={`flow-card ${global ? "flow-card--rule-global" : "flow-card--rule-game"}`}>
+    <div
+      className={`flow-card ${global ? "flow-card--rule-global" : "flow-card--rule-game"} ${
+        suppressed ? "flow-card--suppressed" : ""
+      }`}
+    >
       <div className="flow-card__header">
         {global ? <IconWorld size={12} /> : <IconGitBranch size={12} />}
         {global ? "Regra global" : "Regra do jogo"}
         {global || !onEdit ? (
-          <Badge size="xs" variant="outline" color={global ? "gray" : "teal"} ml="auto">
-            {global ? "read-only" : "editável"}
+          <Badge
+            size="xs"
+            variant="outline"
+            color={suppressed ? "orange" : global ? "gray" : "teal"}
+            leftSection={suppressed ? <IconBan size={10} /> : undefined}
+            ml="auto"
+          >
+            {suppressed ? "suprimida" : global ? "read-only" : "editável"}
           </Badge>
         ) : (
           // hover troca o badge pela ação (spec 050) — swap via CSS.

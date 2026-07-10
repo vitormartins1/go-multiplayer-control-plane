@@ -187,6 +187,9 @@ export interface EventRule {
   // (spec achievements/014) — ver lib/matchCond.ts.
   match: Record<string, MatchValue>;
   eventTypes: string[];
+  // suppressed (spec achievements/017, V2b): sempre presente; só relevante
+  // pra scope "global" — regra de jogo nunca é suprimível (é removível).
+  suppressed: boolean;
 }
 
 export interface NewEventRule {
@@ -424,6 +427,13 @@ async function del(path: string): Promise<void> {
   if (!resp.ok) throw new HttpError(resp.status);
 }
 
+// postEmpty é o POST sem corpo/sem resposta (204) — mesmo shape de del, só
+// muda o verbo (usado pelo suppressEventRule, spec 017).
+async function postEmpty(path: string): Promise<void> {
+  const resp = await fetch(path, { method: "POST" });
+  if (!resp.ok) throw new HttpError(resp.status);
+}
+
 export const api = {
   topology: (signal?: AbortSignal) => getJSON<Topology>("/api/topology", signal),
   liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
@@ -544,6 +554,15 @@ export const api = {
     ),
   deleteEventRule: (gameId: string, id: string) =>
     del(`/api/games/${encodeURIComponent(gameId)}/event-rules/${encodeURIComponent(id)}`),
+  // Supressão de regra global por jogo (spec achievements/017, V2b).
+  suppressEventRule: (gameId: string, id: string) =>
+    postEmpty(
+      `/api/games/${encodeURIComponent(gameId)}/event-rules/${encodeURIComponent(id)}/suppress`,
+    ),
+  unsuppressEventRule: (gameId: string, id: string) =>
+    del(
+      `/api/games/${encodeURIComponent(gameId)}/event-rules/${encodeURIComponent(id)}/suppress`,
+    ),
   playerData: (gameId: string, playerID: string, signal?: AbortSignal) =>
     getJSON<PlayerDataEntry[]>(
       `/api/games/${encodeURIComponent(gameId)}/players/${encodeURIComponent(playerID)}/data`,
