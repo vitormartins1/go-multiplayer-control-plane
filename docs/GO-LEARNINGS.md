@@ -1296,3 +1296,28 @@ Dois detalhes de design que valem guardar:
 2. **Receiver pointer no Unmarshal, value no Marshal** — `*MatchCond` porque o decode escreve no receiver; `MatchCond` no encode porque só lê. O `encoding/json` acha os dois via interface, inclusive pra valores dentro de `map[string]MatchCond`.
 
 **Gotcha (vs C#):** números JSON viram `float64` no `any` — a comparação numérica do avaliador converte o fact com `strconv.ParseFloat` pro mesmo domínio antes de comparar, nunca compara string com número.
+
+---
+
+## 37 — `omitempty` não omite `struct` (nem `time.Time`)
+
+**O que é / por que importa:** `encoding/json`'s `omitempty` só considera "vazio" os zero-values de tipos **básicos** (`""`, `0`, `false`), **ponteiro/interface nil**, e **slice/map/array de tamanho zero**. Um campo `struct` — `time.Time` incluído — **nunca** é omitido, mesmo no zero-value, porque o pacote não sabe comparar structs arbitrários com "vazio" (não existe um `IsZero()` genérico que `encoding/json` chame por você). É fácil escrever `UnlockedAt time.Time \`json:"unlockedAt,omitempty"\`` esperando que ele suma quando não desbloqueado — e ele nunca some.
+
+**Onde no projeto:** `admin-bff/021-unlocked-at-zero-date-fix` — `domain.PlayerAchievement.UnlockedAt` e `domain.AchievementProgressEntry.UnlockedAt` eram `time.Time` não-ponteiro; toda conquista **em progresso** (não desbloqueada) vazava o zero-time do Go (`0001-01-01T00:00:00Z`) pro admin-ui, que renderizava "Desbloqueado em 0001" numa linha que devia mostrar "—". O achievements-service (upstream) já fazia certo — `*time.Time` com `omitempty` — só a reserialização do admin-bff usava o tipo errado.
+
+```go
+// ERRADO: omitempty não tem efeito nenhum aqui — o campo SEMPRE aparece no JSON,
+// com o zero-time quando não setado.
+type PlayerAchievement struct {
+	Unlocked   bool      `json:"unlocked"`
+	UnlockedAt time.Time `json:"unlockedAt,omitempty"` // sempre serializa
+}
+
+// CERTO: ponteiro nil É um dos "vazios" que omitempty reconhece.
+type PlayerAchievement struct {
+	Unlocked   bool       `json:"unlocked"`
+	UnlockedAt *time.Time `json:"unlockedAt,omitempty"` // nil -> campo ausente
+}
+```
+
+**Pegadinha (vs C#):** em C#, `System.Text.Json` tem o mesmo problema com `DateTime` (não é nullable por padrão) — a solução é a mesma: usar `DateTime?` (nullable) em vez de `DateTime`. A diferença é que em Go isso não é opcional/configurável por atributo (não existe um `[JsonIgnoreDefaultValue]` equivalente que funcione pra struct) — o **tipo** é que precisa ser ponteiro. Regra prática: qualquer campo `omitempty` que não seja `string`/número/`bool`/ponteiro/slice/map **não faz o que parece fazer** — vale desconfiar toda vez que `omitempty` aparecer num campo de tipo struct.

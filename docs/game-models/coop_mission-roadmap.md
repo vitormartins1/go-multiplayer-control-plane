@@ -137,11 +137,9 @@ O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPO
 | C1 — formação do time co-op ✅ main | matchmaking/009 | S (session intacto — confirmado) | C0 |
 | C2 — resultado coletivo **(núcleo)** ✅ main | session/016 | M | C1 |
 | C3 — colher (3 sinks) ✅ main | achievements/011 + leaderboard/006 + analytics/006 | L | C2 |
-| C4 — console + contrato ✅ branch | admin-bff/016 + admin-ui/022 + doc | M | C1, C3 |
+| C4 — console + contrato ✅ main | admin-bff/016 + admin-ui/022 + doc | M | C1, C3 |
 
-✅ **C0–C4 concluídas (C0–C3 na main, C4 na branch)** — o `coop_mission` está **completo no control plane** (declarar → formar time → reportar desfecho coletivo → colher → console), validado com server mockado. Com o kind `collective`, os **quatro modelos de resultado** do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos. Próxima etapa (cross-repo): o `unity-coop-mission-data-plane` (Unity) com AI Director/objetivo/wipe, consumindo o [contrato de C4](./coop_mission-dataplane-contract.md).
-
-Ao fim de C0–C4 o `coop_mission` estará **completo no control plane** (declarar → formar time → reportar desfecho coletivo → colher → console), validado com server mockado — e os **quatro modelos de resultado** do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos. Próxima etapa (cross-repo): o `unity-coop-mission-data-plane` (Unity) com AI Director/objetivo/wipe, consumindo o contrato de C4.
+✅ **C0–C4 concluídas (todas na main)** — o `coop_mission` está **completo no control plane** (declarar → formar time → reportar desfecho coletivo → colher → console), validado com server mockado. Com o kind `collective`, os **quatro modelos de resultado** do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos. Próxima etapa (cross-repo): o `unity-coop-mission-data-plane` (Unity) com AI Director/objetivo/wipe, consumindo o [contrato de C4](./coop_mission-dataplane-contract.md).
 
 ## Aberturas que este roadmap **não** cobre (declaradas, adiadas)
 

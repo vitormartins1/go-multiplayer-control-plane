@@ -9,19 +9,19 @@ O loop MVP (`login → find match → aloca server + connect token → partida �
 | Serviço | Features futuras (não construídas) |
 |---|---|
 | identity | login federado (Steam/Google); account linking (guest → conta) |
-| achievements | conquistas secretas / recompensas associadas; **critério por stat para participação** (host_world_dropin, ver follow-ups) |
+| achievements | conquistas secretas / recompensas associadas |
 | player-data | controle de concorrência (optimistic locking); quota por jogador; bulk get/set |
 | cloud-save | múltiplos slots; compressão / sync delta |
-| leaderboard | janelas temporais (diário/semanal, TTL); múltiplos boards por modo/temporada; **ranking de invasões/co-ops** (host_world_dropin, cauda); anti-cheat de score |
-| analytics | telemetria genérica (`POST /events`); sessionization / funis / retenção; dimensão `outcome` nas participações (follow-up) |
-| matchmaking | agrupamento por latência/região; relaxamento progressivo; party/grupos, backfill; **senha/pools** (host_world_dropin, follow-up) |
+| leaderboard | múltiplos boards por modo/temporada; **ranking de invasões/co-ops** (host_world_dropin, cauda); anti-cheat de score; seasons nomeadas (adiado, precisa de ADR sobre onde vive a config) |
+| analytics | telemetria genérica (`POST /events`); sessionization / funis / retenção; série temporal + stats brutos pros arquétipos além de `queue_arena` (Fase 2 do dashboard por jogo, gated por evidência) |
+| matchmaking | agrupamento por latência/região; relaxamento progressivo; party/grupos, backfill; **pools por região** (host_world_dropin, follow-up) |
 | session | alocação de server **sob demanda** (host_world_dropin, follow-up); reconnection / spectator / migração de sessão |
-| game-registry | **delete de jogo** (cascata cross-service — precisa de ADR) |
+| game-registry | purge assíncrono do soft delete (ADR-0025, Opção C — gated por evidência) |
 
 ## Backlog por arquétipo (ADR-0023)
 
 Features de multiplayer que ainda não têm arquétipo implementado, ou evoluções dos que têm:
 
-- **Arquétipos planejados:** `battle_royale` (colocação ordinal), `coop_mission` (resultado coletivo) — ver `game-models/README.md` (matriz de cobertura) e as fichas `03`/`04`.
-- **Evoluções do `host_world_dropin`:** consolidadas em [`game-models/host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md) (senha, pools, Redis, `eventId`, alocação sob demanda, etc.).
+- **Os 4 arquétipos estão completos no control plane** (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) — ver `game-models/README.md` (matriz de cobertura). O que falta é **cross-repo**: só `queue_arena` tem data plane Unity de verdade; os outros 3 têm contrato pronto, sem repo Unity ainda (`UNITY-INTEGRATION.md`).
+- **Evoluções do `host_world_dropin`:** consolidadas em [`game-models/host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md) (pools por região, Redis+pub/sub, alocação sob demanda, etc. — senha e critério por stat já foram fechados).
 - **Topologia `p2p`:** campo no perfil (ADR-0023); implementação = ADR futuro + data plane próprio.

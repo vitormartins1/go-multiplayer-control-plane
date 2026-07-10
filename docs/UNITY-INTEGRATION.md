@@ -3,8 +3,25 @@
 > Setup **genérico** de um data plane Unity contra o control plane Go. O **handshake concreto e os claims do connect token são por arquétipo** — a fonte de verdade é o contrato de cada um:
 > - `queue_arena` → [`game-models/queue_arena-dataplane-contract.md`](game-models/queue_arena-dataplane-contract.md)
 > - `host_world_dropin` → [`game-models/host_world_dropin-dataplane-contract.md`](game-models/host_world_dropin-dataplane-contract.md)
+> - `battle_royale` → [`game-models/battle_royale-dataplane-contract.md`](game-models/battle_royale-dataplane-contract.md)
+> - `coop_mission` → [`game-models/coop_mission-dataplane-contract.md`](game-models/coop_mission-dataplane-contract.md)
 >
 > Este doc guarda só o que é **comum a todos os arquétipos** (requisitos do projeto Unity, Agones, canais). Topologia de repos: [`REPO-TOPOLOGY.md`](REPO-TOPOLOGY.md) (um `go-multiplayer-control-plane` + N `unity-<archetype>-data-plane`).
+
+## Estado atual por arquétipo (2026-07-10)
+
+Os 4 arquétipos estão **completos no control plane** (ADR-0023), mas o data plane Unity é cross-repo e evolui em ritmo próprio — hoje só um está de pé de verdade:
+
+| Arquétipo | Data plane Unity | Estado |
+|---|---|---|
+| `queue_arena` | `unity-queue-arena-data-plane` (ex-`go-game-dataplane`) | **Rodando de verdade** — Fases 0-7: Dedicated Server ARM64 orquestrado por Agones (k3d local → homelab Pi 5), handshake completo `login → FindMatch → session aloca via Agones → connect token Ed25519 → partida → ReportResult`. É o exemplo canônico. **Tem dívida de contrato pendente** — ver seção abaixo. |
+| `host_world_dropin` | `unity-host-world-dropin-data-plane` | ⬜ Repo ainda não criado. Contrato pronto; é a próxima prioridade cross-repo (backlog `NEXT-STEPS.md`). |
+| `battle_royale` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
+| `coop_mission` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
+
+## ⚠️ Dívida de contrato no `queue_arena` — prioridade Alta
+
+O `ReportResult` mudou na spec `session/009` (resultado polimórfico, ADR-0023): o formato antigo `PlayerResult{player_id, score, won bool}` foi substituído por `win_loss_draw{players: [PlayerOutcome{player_id, team_id, outcome string, score, stats}]}` (`outcome` = `"win"|"loss"|"draw"`, permite empate explícito; `stats` carrega as métricas declaradas em `scoringStats`). **O `unity-queue-arena-data-plane` ainda reporta o formato antigo** — o contrato já quebrou, não é uma migração cosmética. Detalhe completo (5 mudanças necessárias, priorizadas) em [`queue_arena-dataplane-contract.md`](game-models/queue_arena-dataplane-contract.md#mudanças-necessárias-no-go-game-dataplane-queue_arena). Isso **não bloqueia o control plane** (os serviços Go funcionam e são testados isoladamente) — é trabalho pendente só do lado Unity.
 
 ## Visão geral
 
@@ -36,4 +53,4 @@
 
 ## O que cada data plane Unity precisa implementar
 
-Depende do arquétipo — a tabela concreta está em cada contrato (`…-dataplane-contract.md`). Em comum: gerar os stubs C# do `.proto`, ler o claim do token no connection approval, e reportar ao backend (resultado terminal no `queue_arena`; eventos de participação no `host_world_dropin`). O `unity-queue-arena-data-plane` (ex-`go-game-dataplane`) é o exemplo de referência já existente.
+Depende do arquétipo — a tabela concreta está em cada contrato (`…-dataplane-contract.md`). Em comum: gerar os stubs C# do `.proto`, ler o claim do token no connection approval, e reportar ao backend (resultado terminal no `queue_arena`/colocação no `battle_royale`/desfecho coletivo no `coop_mission`; eventos de participação no `host_world_dropin`). O `unity-queue-arena-data-plane` é o único exemplo de referência já rodando (ver "Estado atual por arquétipo" no topo) — os outros 3 ainda não têm repo.

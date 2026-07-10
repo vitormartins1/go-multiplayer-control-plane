@@ -129,6 +129,8 @@ O `unity-host-world-dropin-data-plane` (Unity) é **⬜ planejado** ([REPO-TOPOL
 
 Concluídas H0–H3, o `host_world_dropin` está **completo no control plane** (declarar → abrir mundo → descobrir/injetar por papel → reportar eventos → colher → console), validado com server mockado. Próxima etapa (cross-repo): o `unity-host-world-dropin-data-plane` (Unity) encarnando o mundo de verdade, consumindo o contrato de H2.
 
+A senha (play-with-friends, adiada acima em H1a/H1b) foi resolvida depois — `session/020-password-world-matching` + `matchmaking/011-password-matching` (2026-07-09). Detalhe em [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md#1-play-with-friends-por-senha-o-mais-pedido---feito-2026-07-09).
+
 ## Aberturas que este roadmap **não** cobre (declaradas, adiadas)
 
 - **Topologia `p2p`** (host como listen-server + relay/NAT): a ficha §"topologia" mostra que este arquétipo tem afinidade estrutural com P2P, mas é investimento (transport + TURN + repo Unity próprio). Fica como slot no perfil (`topology: p2p`), implementação = ADR futuro. Dedicated primeiro (é onde está a tese de autoridade neutra, ADR-0008).
