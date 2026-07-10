@@ -18,9 +18,11 @@ import {
   Text,
   Textarea,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
+  IconAdjustments,
   IconBan,
   IconChevronDown,
   IconChevronUp,
@@ -825,10 +827,125 @@ export function GameEventRulesCanvas({
   );
 }
 
-// EventRulesDock (spec 058): painel único flutuando sobre o canvas — lista
-// de regras + toolbar (nova regra, relacionadas, busca) + texto explicativo
-// (popover de info), tudo recolhível junto (mesmo padrão do painel de
-// detalhe do node). Antes disso, lista/toolbar/texto eram chrome FIXO em
+// EventRulesToolbarRail (spec 058, achado do Vitor: queria os controles ao
+// LADO da lista, não empilhados em cima dela): rail vertical compacto de
+// ícones — cada um abre um popover com o conteúdo que antes era uma barra
+// de toolbar fixa. Mesmos dados/callbacks de antes, só reembalados pro
+// contexto flutuante (o Vitor liberou usar layout de botão/input diferente
+// aqui).
+function EventRulesToolbarRail({
+  focusRuleId,
+  listFilter,
+  onListFilter,
+  draft,
+  onNewRule,
+  relatedKinds,
+  onRelatedKinds,
+  statIgnoreValue,
+  onStatIgnoreValue,
+  search,
+  onSearch,
+}: {
+  focusRuleId: string | null;
+  listFilter: string;
+  onListFilter: (v: string) => void;
+  draft: DraftState | null;
+  onNewRule: () => void;
+  relatedKinds: Set<SourceKind>;
+  onRelatedKinds: (kinds: Set<SourceKind>) => void;
+  statIgnoreValue: boolean;
+  onStatIgnoreValue: (v: boolean) => void;
+  search: string;
+  onSearch: (v: string) => void;
+}) {
+  return (
+    <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)" }}>
+      <Stack gap={4}>
+        <Tooltip label={draft ? "Salve ou cancele o rascunho atual" : "Nova regra"} position="right" withinPortal>
+          <ActionIcon size="md" variant="filled" disabled={!!draft} onClick={onNewRule} aria-label="Nova regra">
+            <IconPlus size={16} />
+          </ActionIcon>
+        </Tooltip>
+        <Popover width={240} withArrow position="right-start" withinPortal>
+          <Popover.Target>
+            <ActionIcon
+              size="md"
+              variant={listFilter || search ? "light" : "subtle"}
+              color={listFilter || search ? "blue" : "gray"}
+              aria-label="Filtrar/buscar"
+            >
+              <IconSearch size={16} />
+            </ActionIcon>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <Stack gap={8}>
+              <TextInput
+                size="xs"
+                label="Filtrar lista"
+                placeholder="arquétipo, evento, condição…"
+                value={listFilter}
+                onChange={(e) => onListFilter(e.currentTarget.value)}
+                rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
+              />
+              <TextInput
+                size="xs"
+                label="Buscar no subgrafo"
+                placeholder="destaca no canvas…"
+                value={search}
+                onChange={(e) => onSearch(e.currentTarget.value)}
+                rightSection={search ? <CloseButton size="xs" onClick={() => onSearch("")} /> : undefined}
+              />
+            </Stack>
+          </Popover.Dropdown>
+        </Popover>
+        <Popover width={220} withArrow position="right-start" withinPortal>
+          <Popover.Target>
+            <ActionIcon
+              size="md"
+              variant={relatedKinds.size > 0 ? "light" : "subtle"}
+              color={relatedKinds.size > 0 ? "blue" : "gray"}
+              aria-label="Regras relacionadas"
+            >
+              <IconAdjustments size={16} />
+            </ActionIcon>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <Stack gap={8}>
+              <Text size="xs" fw={600}>
+                Regras relacionadas {!focusRuleId && "(selecione uma regra)"}
+              </Text>
+              <Chip.Group multiple value={[...relatedKinds]} onChange={(v) => onRelatedKinds(new Set(v as SourceKind[]))}>
+                <Group gap={4} wrap="wrap">
+                  <Chip size="xs" value="structural" disabled={!focusRuleId}>
+                    Facts
+                  </Chip>
+                  <Chip size="xs" value="mode" disabled={!focusRuleId}>
+                    Modo
+                  </Chip>
+                  <Chip size="xs" value="stat" disabled={!focusRuleId}>
+                    Stats
+                  </Chip>
+                </Group>
+              </Chip.Group>
+              {relatedKinds.has("stat") && (
+                <Switch
+                  size="xs"
+                  label="qualquer limiar"
+                  checked={statIgnoreValue}
+                  onChange={(e) => onStatIgnoreValue(e.currentTarget.checked)}
+                />
+              )}
+            </Stack>
+          </Popover.Dropdown>
+        </Popover>
+      </Stack>
+    </Paper>
+  );
+}
+
+// EventRulesDock (spec 058): painel flutuando sobre o canvas — rail de
+// controles (acima) + lista de regras, lado a lado, ambos flutuando juntos
+// no canto do canvas. Antes disso, lista/toolbar/texto eram chrome FIXO em
 // GameEventRules.tsx, disputando espaço permanente com o canvas — a mudança
 // migrou tudo isso pra dentro do canvas, deixando a aba sem scroll de
 // página (o scroll que sobra é só o interno da lista, dentro do painel).
@@ -873,164 +990,125 @@ function EventRulesDock({
 }) {
   const filtered = rules.filter(matchesListFilter(listFilter));
   return (
-    <Paper
-      withBorder
-      shadow="md"
-      w={320}
-      style={{
-        background: "rgba(18, 24, 33, 0.95)",
-        maxHeight: "calc(100vh - 190px)",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <Group justify="space-between" wrap="nowrap" p="xs" pb={collapsed ? "xs" : 4}>
-        <Group gap={6} wrap="nowrap">
-          <Text size="xs" fw={700}>
-            Event Rules
-          </Text>
-          <Badge size="xs" variant="light" color="gray">
-            {rules.length}
-          </Badge>
-          <Popover width={300} withArrow position="bottom-start" withinPortal>
-            <Popover.Target>
-              <ActionIcon size="xs" variant="subtle" color="gray" aria-label="Como funciona">
-                <IconInfoCircle size={13} />
-              </ActionIcon>
-            </Popover.Target>
-            <Popover.Dropdown>
-              <Text size="xs">
-                Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome
-                no host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event
-                types listados ao progresso das conquistas cadastradas na aba Achievements. Regras{" "}
-                <b>globais</b> valem pra todo jogo com o arquétipo (semeadas por padrão, não editáveis
-                aqui); regras do <b>jogo</b> só valem pra este jogo. Selecione uma regra pra ver o subgrafo
-                dela no canvas.
-              </Text>
-            </Popover.Dropdown>
-          </Popover>
-        </Group>
-        <Group gap={2} wrap="nowrap">
-          <ActionIcon size="sm" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar">
-            <IconRefresh size={14} />
-          </ActionIcon>
-          <ActionIcon
-            size="sm"
-            variant="subtle"
-            color="gray"
-            onClick={onToggleCollapsed}
-            aria-label={collapsed ? "Expandir painel" : "Recolher painel"}
-          >
-            {collapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
-          </ActionIcon>
-        </Group>
-      </Group>
-      <Collapse in={!collapsed} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <Stack gap={6} px="xs" pb="xs">
+    <Group align="flex-start" gap={8} wrap="nowrap">
+      <EventRulesToolbarRail
+        focusRuleId={focusRuleId}
+        listFilter={listFilter}
+        onListFilter={onListFilter}
+        draft={draft}
+        onNewRule={onNewRule}
+        relatedKinds={relatedKinds}
+        onRelatedKinds={onRelatedKinds}
+        statIgnoreValue={statIgnoreValue}
+        onStatIgnoreValue={onStatIgnoreValue}
+        search={search}
+        onSearch={onSearch}
+      />
+      <Paper
+        withBorder
+        shadow="md"
+        w={320}
+        style={{
+          background: "rgba(18, 24, 33, 0.95)",
+          maxHeight: "calc(100vh - 190px)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <Group justify="space-between" wrap="nowrap" p="xs" pb={collapsed ? "xs" : 4}>
           <Group gap={6} wrap="nowrap">
-            <Button size="xs" leftSection={<IconPlus size={13} />} disabled={!!draft} onClick={onNewRule}>
-              Nova
-            </Button>
-            <TextInput
-              size="xs"
-              placeholder="filtrar…"
-              style={{ flex: 1 }}
-              value={listFilter}
-              onChange={(e) => onListFilter(e.currentTarget.value)}
-              rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
-            />
-          </Group>
-          <Group gap={4} wrap="nowrap">
-            <Text size="xs" c="dimmed">
-              Relacionadas:
+            <Text size="xs" fw={700}>
+              Event Rules
             </Text>
-            <Chip.Group multiple value={[...relatedKinds]} onChange={(v) => onRelatedKinds(new Set(v as SourceKind[]))}>
-              <Group gap={4} wrap="nowrap">
-                <Chip size="xs" value="structural" disabled={!focusRuleId}>
-                  Facts
-                </Chip>
-                <Chip size="xs" value="mode" disabled={!focusRuleId}>
-                  Modo
-                </Chip>
-                <Chip size="xs" value="stat" disabled={!focusRuleId}>
-                  Stats
-                </Chip>
-              </Group>
-            </Chip.Group>
+            <Badge size="xs" variant="light" color="gray">
+              {rules.length}
+            </Badge>
+            <Popover width={300} withArrow position="bottom-start" withinPortal>
+              <Popover.Target>
+                <ActionIcon size="xs" variant="subtle" color="gray" aria-label="Como funciona">
+                  <IconInfoCircle size={13} />
+                </ActionIcon>
+              </Popover.Target>
+              <Popover.Dropdown>
+                <Text size="xs">
+                  Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome
+                  no host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event
+                  types listados ao progresso das conquistas cadastradas na aba Achievements. Regras{" "}
+                  <b>globais</b> valem pra todo jogo com o arquétipo (semeadas por padrão, não editáveis
+                  aqui); regras do <b>jogo</b> só valem pra este jogo. Selecione uma regra pra ver o subgrafo
+                  dela no canvas.
+                </Text>
+              </Popover.Dropdown>
+            </Popover>
           </Group>
-          {relatedKinds.has("stat") && (
-            <Switch
-              size="xs"
-              label="qualquer limiar"
-              checked={statIgnoreValue}
-              onChange={(e) => onStatIgnoreValue(e.currentTarget.checked)}
-            />
-          )}
-          <TextInput
-            size="xs"
-            placeholder="buscar no subgrafo…"
-            leftSection={<IconSearch size={12} />}
-            value={search}
-            onChange={(e) => onSearch(e.currentTarget.value)}
-            rightSection={search ? <CloseButton size="xs" onClick={() => onSearch("")} /> : undefined}
-          />
-          {draft && (
-            <Text size="xs" c="dimmed">
-              Montando rascunho — clique numa fonte pra adicionar condição; num event type pra ligar.
-            </Text>
-          )}
-        </Stack>
-        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-          <Table striped highlightOnHover fz="xs">
-            <Table.Tbody>
-              {filtered.map((r) => (
-                <Table.Tr
-                  key={r.id}
-                  onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
-                  style={{
-                    cursor: "pointer",
-                    opacity: r.suppressed ? 0.5 : undefined,
-                    background: r.id === focusRuleId ? "var(--mantine-color-blue-light)" : undefined,
-                  }}
-                >
-                  <Table.Td style={{ whiteSpace: "nowrap" }}>
-                    <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
-                      {r.scope === "global" ? "global" : "jogo"}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={3} wrap="wrap">
-                      {r.eventTypes.map((et) => (
-                        <Badge key={et} size="xs" variant="light" color={ARCHETYPE_META[r.archetype].color}>
-                          {et}
-                        </Badge>
-                      ))}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
-                    {r.scope === "game" ? (
-                      <ActionIcon size="xs" variant="subtle" color="red" onClick={() => onDelete(r)} aria-label="Remover">
-                        <IconTrash size={13} />
-                      </ActionIcon>
-                    ) : (
-                      <ActionIcon
-                        size="xs"
-                        variant="subtle"
-                        color={r.suppressed ? "teal" : "orange"}
-                        onClick={() => onToggleSuppress(r)}
-                        aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
-                      >
-                        {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
-                      </ActionIcon>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      </Collapse>
-    </Paper>
+          <Group gap={2} wrap="nowrap">
+            <ActionIcon size="sm" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar">
+              <IconRefresh size={14} />
+            </ActionIcon>
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? "Expandir painel" : "Recolher painel"}
+            >
+              {collapsed ? <IconChevronDown size={14} /> : <IconChevronUp size={14} />}
+            </ActionIcon>
+          </Group>
+        </Group>
+        <Collapse in={!collapsed} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+            <Table striped highlightOnHover fz="xs">
+              <Table.Tbody>
+                {filtered.map((r) => (
+                  <Table.Tr
+                    key={r.id}
+                    onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
+                    style={{
+                      cursor: "pointer",
+                      opacity: r.suppressed ? 0.5 : undefined,
+                      background: r.id === focusRuleId ? "var(--mantine-color-blue-light)" : undefined,
+                    }}
+                  >
+                    <Table.Td style={{ whiteSpace: "nowrap" }}>
+                      <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                        {r.scope === "global" ? "global" : "jogo"}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={3} wrap="wrap">
+                        {r.eventTypes.map((et) => (
+                          <Badge key={et} size="xs" variant="light" color={ARCHETYPE_META[r.archetype].color}>
+                            {et}
+                          </Badge>
+                        ))}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
+                      {r.scope === "game" ? (
+                        <ActionIcon size="xs" variant="subtle" color="red" onClick={() => onDelete(r)} aria-label="Remover">
+                          <IconTrash size={13} />
+                        </ActionIcon>
+                      ) : (
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color={r.suppressed ? "teal" : "orange"}
+                          onClick={() => onToggleSuppress(r)}
+                          aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+                        >
+                          {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
+                        </ActionIcon>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        </Collapse>
+      </Paper>
+    </Group>
   );
 }
 

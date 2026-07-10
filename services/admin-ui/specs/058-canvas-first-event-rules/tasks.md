@@ -25,3 +25,13 @@
 ## Follow-up: calibração de `height` (spec item 1)
 
 Estimativa inicial (`calc(100vh - 200px)`) deixava ~21px de sobra (scroll de página residual). Medido via `getBoundingClientRect()` do `.flow-wrap` + `document.documentElement.scrollHeight`: o offset real até o topo do canvas nessa página é ~205px, mais ~16px de padding/margin abaixo do canvas (contexto do `Tabs.Panel`/`Stack` do `GameDetail`). Ajustado pra `calc(100vh - 224px)` — zero scroll confirmado. Mesma disciplina de calibração por medição (não achismo) já usada nas alturas de `rulesGraph.ts`.
+
+## Follow-up: rail de controles ao lado da lista + fit considerando a área reservada do dock
+
+Dois ajustes pedidos pelo Vitor testando a v1 do dock (lista + toolbar empilhados num painel único, em cima da lista):
+
+1. **Toolbar virou um rail vertical compacto** (`EventRulesToolbarRail`), flutuando ao LADO da lista (não mais empilhado acima dela) — três `ActionIcon`s (Nova regra / filtrar+buscar / regras relacionadas), cada um abrindo um `Popover` com o conteúdo que antes ocupava a barra fixa. `EventRulesDock` passou a ser só um `<Group>` horizontal com o rail + a lista, os dois dentro do mesmo `dock` (dá pra usar layout de botão/input diferente nesse contexto flutuante, sem amarrar no padrão de formulário de página comum).
+
+2. **`fitView` passou a reservar o espaço real do dock**: antes, o autofit do canvas (`AutoFit` em `FlowCanvas.tsx`) considerava a área INTEIRA do canvas pra centralizar os nós — como o dock é um painel flutuante por CIMA do canvas (não reduz o espaço "de verdade"), nós focados podiam acabar posicionados por baixo da lista. Descoberta: o `padding` do `fitView` do React Flow aceita valores ASSIMÉTRICOS por lado (`{ left, right, top, bottom }`, não só um número uniforme) — é o mecanismo oficial pra reservar espaço de UI sobreposta. `FlowCanvas.tsx` agora mede a largura REAL do dock via `ResizeObserver` (não um número fixo torcido pra bater com o CSS) e passa isso como `padding.left` do fitView. Verificado numericamente: dock ocupa até x=628px, primeiro node do canvas some só a partir de x=637px — zero sobreposição.
+
+Verificado visualmente e por medição (`getBoundingClientRect` de `.react-flow__panel` vs `.react-flow__node`): 0 nós sobrepondo o dock após focar uma regra; popovers do rail (filtro/busca e regras relacionadas) abrem e funcionam.
