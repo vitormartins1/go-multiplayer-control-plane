@@ -28,15 +28,10 @@ var statKeyRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 const maxAchievementNameLen = 100
 
-// Eventos de gameplay derivados do resultado da partida (fan-out durável,
-// ADR-0020). Devem casar com o event_type cadastrado no catálogo (spec 002).
+// vocabulário do outcome no envelope (ADR-0023). A tradução outcome/stats ->
+// event_type do catálogo é feita por domain.EvaluateRules (motor de event
+// rules, ADR-0028) — não por constantes fixas aqui.
 const (
-	eventMatchPlayed = "match_played"
-	eventMatchWon    = "match_won"
-	eventMatchLost   = "match_lost"  // ADR-0023: outcome=loss
-	eventMatchDrawn  = "match_drawn" // ADR-0023: outcome=draw
-
-	// vocabulário do outcome no envelope (ADR-0023).
 	outcomeWin  = "win"
 	outcomeLoss = "loss"
 	outcomeDraw = "draw"
