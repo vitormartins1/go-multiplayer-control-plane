@@ -46,6 +46,43 @@ const modeId_ = (m: string) => `m:${m}`;
 const kindId = (k: string) => `k:${k}`;
 const consumerId = (c: string) => `c:${c}`;
 
+// Altura do card de consumer (achado do Vitor): uma linha só de scoringStats
+// pode listar 15+ stats e quebrar em várias linhas — um `h` fixo (era 96)
+// deixa o card vizinho da mesma coluna (analytics) sobrepondo o leaderboard
+// quando ele cresce. CALIBRADO com offsetHeight real via Playwright (jogo
+// Achievements Test, 16 stats numa linha só): card de largura fixa 260px
+// (flow.css) + fonte monospace 11px -> ~34 caracteres cabem por linha.
+// wrappedLines simula o word-wrap greedy do navegador (exato pra monospace,
+// já que cada caractere tem a mesma largura — ceil(len/max) sozinho erra
+// porque o navegador quebra na palavra, não no caractere, sobrando espaço no
+// fim de cada linha).
+const CONSUMER_MAX_CHARS_PER_LINE = 34;
+const CONSUMER_LINE_H = 17;
+const CONSUMER_HEADER_H = 31;
+const CONSUMER_BODY_PADDING = 16; // 8px topo + 8px base (.flow-card__body)
+const CONSUMER_ROW_GAP = 4; // .flow-card__body gap, entre as linhas de data.lines
+
+function wrappedLines(text: string, maxChars = CONSUMER_MAX_CHARS_PER_LINE): number {
+  const words = text.split(" ");
+  let lines = 1;
+  let cur = 0;
+  for (const w of words) {
+    const add = cur === 0 ? w.length : w.length + 1;
+    if (cur + add > maxChars) {
+      lines += 1;
+      cur = w.length;
+    } else {
+      cur += add;
+    }
+  }
+  return lines;
+}
+
+function consumerHeight(lines: string[]): number {
+  const rows = lines.reduce((sum, l) => sum + wrappedLines(l) * CONSUMER_LINE_H, 0);
+  return CONSUMER_HEADER_H + CONSUMER_BODY_PADDING + rows + CONSUMER_ROW_GAP * Math.max(0, lines.length - 1);
+}
+
 export function buildPipelineGraph(
   modes: MultiplayerMode[],
   rules: EventRule[],
@@ -120,7 +157,7 @@ export function buildPipelineGraph(
     id: consumerId(c.id),
     type: "pipelineConsumer",
     data: c.data,
-    h: 96,
+    h: consumerHeight(c.data.lines),
   }));
 
   // Posições: colunas fixas, empilhamento simples, centralizado na mais alta.
