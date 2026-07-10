@@ -49,10 +49,21 @@ func NewInvader(policies domain.InvasionPolicyProvider, directory domain.WorldDi
 	}
 }
 
+// invadeListAttempts limita quantas vezes Invade rebusca ListInvadableWorlds
+// dentro de uma mesma chamada (achado no /code-review — "JoinWorld race"): se
+// TODOS os candidatos da 1ª lista perderem a corrida listar→injetar (mundo
+// encheu/fechou), um mundo elegível pode ter aberto nesse meio-tempo. Sem um
+// refetch, isso é um falso-negativo: ErrNoEligibleWorld mesmo havendo mundo
+// disponível. Bounded a 2 (não é retry indefinido) e só dispara quando a
+// lista teve candidatos que perderam a corrida — lista vazia não é corrida,
+// não vale re-tentar (evita dobrar a latência do caso comum "sem mundos").
+const invadeListAttempts = 2
+
 // Invade lê a política do jogo, lista os mundos invadíveis, filtra por faixa
 // (domain.Eligible) e injeta o invasor no primeiro elegível. A corrida
 // listar→injetar (mundo encheu: ErrRoleFull) ou o mundo que fechou
-// (ErrWorldNotFound) apenas descartam o candidato e seguem para o próximo.
+// (ErrWorldNotFound) apenas descartam o candidato e seguem para o próximo;
+// ver invadeListAttempts para o que acontece quando a lista inteira perde.
 func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, crit domain.InvaderCriteria) (domain.Invaded, error) {
 	policy, err := in.policyOf(ctx, gameID, modeID)
 	if err != nil {
@@ -63,11 +74,33 @@ func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, 
 		return domain.Invaded{}, fmt.Errorf("invader: %w", domain.ErrInvasionNotSupported)
 	}
 
-	worlds, err := in.listWorlds(ctx, gameID)
-	if err != nil {
-		return domain.Invaded{}, fmt.Errorf("invader: list worlds: %w", err)
+	for attempt := 0; attempt < invadeListAttempts; attempt++ {
+		worlds, err := in.listWorlds(ctx, gameID)
+		if err != nil {
+			return domain.Invaded{}, fmt.Errorf("invader: list worlds: %w", err)
+		}
+		invaded, injected, err := in.tryInject(ctx, worlds, playerID, crit, policy)
+		if err != nil {
+			return domain.Invaded{}, err
+		}
+		if injected {
+			in.count(resultInjected)
+			return invaded, nil
+		}
+		if len(worlds) == 0 {
+			break // sem candidatos: não é corrida, não vale rebuscar
+		}
 	}
 
+	in.count(resultNoWorld)
+	return domain.Invaded{}, fmt.Errorf("invader: %w", domain.ErrNoEligibleWorld)
+}
+
+// tryInject percorre os mundos elegíveis (faixa ou bypass de senha) e tenta
+// injetar no primeiro que aceitar. ErrRoleFull/ErrWorldNotFound descartam o
+// candidato (corrida listar→injetar) e seguem para o próximo, sem propagar
+// erro — só um erro inesperado (default) interrompe a busca.
+func (in *Invader) tryInject(ctx context.Context, worlds []domain.InvadableWorld, playerID string, crit domain.InvaderCriteria, policy domain.InvasionPolicy) (domain.Invaded, bool, error) {
 	for _, w := range worlds {
 		// Bypass por senha (follow-up #1, matchmaking/011): senha bate → elegível
 		// independente da faixa. Eligible continua só faixa, inalterada.
@@ -79,17 +112,14 @@ func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, 
 		injected, err := in.inject(ctx, w.SessionID, playerID)
 		switch {
 		case err == nil:
-			in.count(resultInjected)
-			return domain.Invaded{SessionID: w.SessionID, ServerAddress: injected.ServerAddress, ConnectToken: injected.ConnectToken}, nil
+			return domain.Invaded{SessionID: w.SessionID, ServerAddress: injected.ServerAddress, ConnectToken: injected.ConnectToken}, true, nil
 		case errors.Is(err, domain.ErrRoleFull), errors.Is(err, domain.ErrWorldNotFound):
 			continue // corrida: mundo encheu/fechou entre listar e injetar → tenta o próximo
 		default:
-			return domain.Invaded{}, fmt.Errorf("invader: inject: %w", err)
+			return domain.Invaded{}, false, fmt.Errorf("invader: inject: %w", err)
 		}
 	}
-
-	in.count(resultNoWorld)
-	return domain.Invaded{}, fmt.Errorf("invader: %w", domain.ErrNoEligibleWorld)
+	return domain.Invaded{}, false, nil
 }
 
 // policyOf lê a política com timeout próprio.

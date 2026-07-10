@@ -27,3 +27,27 @@ Fatia H1a (lado matchmaking) do `host_world_dropin` (ADR-0023). O segundo modo d
 
 - [x] **T7 — main.go.** Constrói o `Invader` (policy = registryclient cru; directory/injector = sessionclient sobre o `sessionv1.SessionClient` já conectado); registra `grpc.ChainUnaryInterceptor(UnaryAuthInterceptor(verifier))`; 3× `CounterFunc` `invasions_total{result}`.
 - [x] **T8 — verde + lint + docs.** `go test ./services/matchmaking-service/... -race -cover` (≥80% service/domain). `golangci-lint run`. `FindMatch` sem regressão. GO-LEARNINGS se surgir algo (candidato: orquestração stateless list→filter→inject com retry; struct satisfazendo múltiplas Ports). Atualizar a tabela de estado do `README` de game-models (H1a).
+
+## Follow-up — Invade rebusca a lista se todos os candidatos perderem a corrida
+
+Achado no `/code-review` do projeto como um todo (2026-07-10), descrito como
+"JoinWorld race". Investigação: `JoinWorld` em si é seguro (mutex no
+session-service, sem estouro de slot/corrupção). A corrida real é um TOCTOU
+entre duas RPCs — `ListInvadableWorlds` (matchmaking lê um snapshot) e
+`JoinWorld` (injeta) — já tratado com fallback: `ErrRoleFull`/
+`ErrWorldNotFound` descartam o candidato e tentam o próximo da lista já
+obtida (T4 acima). Esse fallback, porém, tinha um gap: se **todos** os
+candidatos da lista inicial perderem a corrida, `Invade` desistia
+(`ErrNoEligibleWorld`) mesmo que um mundo elegível tivesse aberto no
+meio-tempo — um falso-negativo.
+
+`Invade` agora rebusca `ListInvadableWorlds` **uma vez** (bounded —
+`invadeListAttempts = 2`, não retry indefinido) antes de desistir, mas só
+quando a lista teve candidatos que perderam a corrida — lista vazia não é
+corrida, não vale rebuscar (evita dobrar a latência do caso comum "sem
+mundos"). Extraído `tryInject` (percorre uma lista e tenta o primeiro
+elegível) reusado pelas duas tentativas. Testes novos:
+`TestInvade_TodosPerdemNaPrimeiraLista_RebuscaEAchaNaSegunda` (prova o
+refetch achando o mundo que abriu depois do 1º snapshot) e assserções de
+`dir.calls` em `TestInvade_ListaVazia_ErrNoEligibleWorld` (1 chamada, sem
+refetch) e `TestInvade_TodosCheios_ErrNoEligibleWorld` (2 chamadas, bounded).
