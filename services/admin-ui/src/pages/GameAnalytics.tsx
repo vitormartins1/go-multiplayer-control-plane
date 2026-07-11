@@ -1,8 +1,9 @@
-import { Alert, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Loader, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
-import { api } from "../lib/api";
+import { api, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
+import { FormSection } from "../components/FormSection";
 import { formatDuration } from "../lib/format";
 
 // rótulos amigáveis dos eventos de participação (host_world_dropin).
@@ -14,17 +15,53 @@ const EVENT_LABELS: Record<string, string> = {
   LEFT: "Saiu",
 };
 
+// paleta fixa por evento (categórica/domínio — não é status do sistema, é
+// vocabulário do jogo, mesmo espírito do TEAM_COLORS em SessionMatchDetail).
+const EVENT_COLORS: Record<string, string> = {
+  JOINED: "blue.4",
+  BOSS_DEFEATED: "teal.4",
+  HOST_KILLED: "grape.4",
+  DIED: "orange.4",
+  LEFT: "gray.4",
+};
+
 const ROLE_LABELS: Record<string, string> = {
   host: "Host",
   coop: "Co-op",
   invader: "Invasor",
 };
+const ROLE_ORDER = ["host", "coop", "invader"];
 
 const OUTCOME_LABELS: Record<string, string> = {
   SUCCESS: "Sucesso",
   FAILURE: "Falha",
   NEUTRAL: "Neutro",
 };
+
+// participationByRole agrupa por papel (Host/Co-op/Invasor) com um campo por
+// tipo de evento — vira um bar chart empilhado de 3 categorias em vez de uma
+// combinação "papel · evento" (achado do Vitor: com dado real, 10 combinações
+// de rótulo longo colidiam e ficavam ilegíveis no eixo).
+function participationByRole(stats: ParticipationStat[]) {
+  const events = [...new Set(stats.map((s) => s.event))];
+  const byRole = new Map<string, Record<string, number>>();
+  for (const s of stats) {
+    const row = byRole.get(s.role) ?? {};
+    row[s.event] = (row[s.event] ?? 0) + s.count;
+    byRole.set(s.role, row);
+  }
+  const roles = [...byRole.keys()].sort(
+    (a, b) => (ROLE_ORDER.indexOf(a) === -1 ? 99 : ROLE_ORDER.indexOf(a)) -
+      (ROLE_ORDER.indexOf(b) === -1 ? 99 : ROLE_ORDER.indexOf(b)),
+  );
+  const data = roles.map((role) => ({ role: ROLE_LABELS[role] ?? role, ...byRole.get(role) }));
+  const series = events.map((e) => ({
+    name: e,
+    label: EVENT_LABELS[e] ?? e,
+    color: EVENT_COLORS[e] ?? "gray.4",
+  }));
+  return { data, series };
+}
 
 export function GameAnalytics({ gameId }: { gameId: string }) {
   const { data, loading, error } = useAsync((s) => api.gameAnalytics(gameId, s), [gameId]);
@@ -33,6 +70,7 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
   const participations = data?.roleParticipations ?? [];
   // total por partida (independente de arquétipo) — só some se não houver nenhum resultado.
   const hasOutcomes = !!data && data.wins + data.losses + data.draws > 0;
+  const roleChart = participations.length > 0 ? participationByRole(participations) : null;
 
   return (
     <Stack>
@@ -59,127 +97,132 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
           {/* Partidas por dia (queue_arena, migration game_daily) — o dado já
               vinha da API e não era renderizado em lugar nenhum. */}
           {data.daily.length > 0 && (
-            <Stack gap="xs">
-              <Title order={5}>Partidas por dia</Title>
+            <FormSection label="Partidas por dia">
               <LineChart
                 h={220}
                 data={data.daily}
                 dataKey="day"
-                series={[{ name: "matches", label: "Partidas", color: "blue.5" }]}
+                series={[{ name: "matches", label: "Partidas", color: "signal.5" }]}
                 curveType="monotone"
                 withDots={data.daily.length < 40}
                 tickLine="x"
                 gridAxis="xy"
               />
-            </Stack>
+            </FormSection>
           )}
 
           {hasOutcomes && (
-            <Stack gap="xs">
-              <Title order={5}>Vitórias × derrotas × empates</Title>
+            <FormSection label="Vitórias × derrotas × empates">
               <DonutChart
                 size={160}
                 thickness={22}
                 withLabelsLine
                 withLabels
                 data={[
-                  { name: "Vitórias", value: data.wins, color: "teal.6" },
+                  { name: "Vitórias", value: data.wins, color: "green.6" },
                   { name: "Derrotas", value: data.losses, color: "red.6" },
-                  { name: "Empates", value: data.draws, color: "gray.5" },
+                  { name: "Empates", value: data.draws, color: "yellow.6" },
                 ]}
               />
-            </Stack>
+            </FormSection>
           )}
         </>
       )}
 
       {/* host_world_dropin (spec 020): participações por papel/evento/outcome.
-          Só aparece quando o jogo reportou eventos de participação. */}
-      {participations.length > 0 && (
-        <Stack gap="xs">
-          <Title order={5}>Participações por papel</Title>
-          <BarChart
-            h={Math.max(160, participations.length * 34)}
-            data={participations.map((p) => ({
-              label: `${ROLE_LABELS[p.role] ?? p.role} · ${EVENT_LABELS[p.event] ?? p.event}`,
-              count: p.count,
-            }))}
-            dataKey="label"
-            series={[{ name: "count", label: "Total", color: "violet.5" }]}
-            orientation="vertical"
-            gridAxis="x"
-            xAxisProps={{ allowDecimals: false }}
-          />
-          <Table striped withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Papel</Table.Th>
-                <Table.Th>Evento</Table.Th>
-                <Table.Th>Desfecho</Table.Th>
-                <Table.Th ta="right">Total</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {participations.map((p) => (
-                <Table.Tr key={`${p.role}-${p.event}-${p.outcome}`}>
-                  <Table.Td>{ROLE_LABELS[p.role] ?? p.role}</Table.Td>
-                  <Table.Td>{EVENT_LABELS[p.event] ?? p.event}</Table.Td>
-                  <Table.Td c="dimmed">{OUTCOME_LABELS[p.outcome] ?? (p.outcome || "—")}</Table.Td>
-                  <Table.Td ta="right" ff="monospace">{p.count}</Table.Td>
+          Só aparece quando o jogo reportou eventos de participação. Agrupado
+          por papel (Host/Co-op/Invasor) com evento como série — granularidade
+          hoje é por ARQUÉTIPO, não por modo nomeado (ADR-0024): um jogo com
+          vários modos host_world_dropin não distingue "Roda Aberta" de
+          "Batizado" aqui. Evolução em aberto, não implementada. */}
+      {roleChart && (
+        <FormSection label="Participações por papel">
+          <Stack gap="md">
+            <BarChart
+              h={Math.max(160, roleChart.data.length * 70)}
+              data={roleChart.data}
+              dataKey="role"
+              series={roleChart.series}
+              type="stacked"
+              orientation="vertical"
+              gridAxis="x"
+              xAxisProps={{ allowDecimals: false }}
+              withLegend
+              legendProps={{ verticalAlign: "bottom" }}
+            />
+            <Table striped withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Papel</Table.Th>
+                  <Table.Th>Evento</Table.Th>
+                  <Table.Th>Desfecho</Table.Th>
+                  <Table.Th ta="right">Total</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Stack>
+              </Table.Thead>
+              <Table.Tbody>
+                {participations.map((p) => (
+                  <Table.Tr key={`${p.role}-${p.event}-${p.outcome}`}>
+                    <Table.Td>{ROLE_LABELS[p.role] ?? p.role}</Table.Td>
+                    <Table.Td>{EVENT_LABELS[p.event] ?? p.event}</Table.Td>
+                    <Table.Td c="dimmed">{OUTCOME_LABELS[p.outcome] ?? (p.outcome || "—")}</Table.Td>
+                    <Table.Td ta="right" ff="monospace">{p.count}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Stack>
+        </FormSection>
       )}
 
       {/* battle_royale (BR4): distribuição de colocação. Só aparece quando o jogo
           reportou resultados por colocação (placement). */}
       {data?.placement && (
-        <Stack gap="xs">
-          <Title order={5}>Distribuição de colocação</Title>
-          <SimpleGrid cols={{ base: 2, sm: 3 }}>
-            <StatCard label="1º lugar" value={String(data.placement.winners)} />
-            <StatCard label="Top 10" value={String(data.placement.topN)} />
-            <StatCard label="Resto" value={String(data.placement.rest)} />
-            <StatCard label="Participações" value={String(data.placement.entries)} />
-            <StatCard label="Sobrevivência média" value={formatDuration(data.placement.avgSurvivedMs)} />
-          </SimpleGrid>
-          <DonutChart
-            size={160}
-            thickness={22}
-            withLabelsLine
-            withLabels
-            data={[
-              { name: "1º lugar", value: data.placement.winners, color: "yellow.6" },
-              { name: "Top 10", value: data.placement.topN, color: "blue.5" },
-              { name: "Resto", value: data.placement.rest, color: "gray.5" },
-            ]}
-          />
-        </Stack>
+        <FormSection label="Distribuição de colocação">
+          <Stack gap="md">
+            <SimpleGrid cols={{ base: 2, sm: 3 }}>
+              <StatCard label="1º lugar" value={String(data.placement.winners)} />
+              <StatCard label="Top 10" value={String(data.placement.topN)} />
+              <StatCard label="Resto" value={String(data.placement.rest)} />
+              <StatCard label="Participações" value={String(data.placement.entries)} />
+              <StatCard label="Sobrevivência média" value={formatDuration(data.placement.avgSurvivedMs)} />
+            </SimpleGrid>
+            <DonutChart
+              size={160}
+              thickness={22}
+              withLabelsLine
+              withLabels
+              data={[
+                { name: "1º lugar", value: data.placement.winners, color: "yellow.6" },
+                { name: "Top 10", value: data.placement.topN, color: "blue.5" },
+                { name: "Resto", value: data.placement.rest, color: "gray.5" },
+              ]}
+            />
+          </Stack>
+        </FormSection>
       )}
 
       {/* coop_mission (C4): desfecho coletivo da missão. Só aparece quando o jogo
           reportou resultados coletivos (mission). */}
       {data?.mission && (
-        <Stack gap="xs">
-          <Title order={5}>Desfecho das missões</Title>
-          <SimpleGrid cols={{ base: 2, sm: 3 }}>
-            <StatCard label="Missões cumpridas" value={String(data.mission.successes)} />
-            <StatCard label="Missões falhas" value={String(data.mission.failures)} />
-            <StatCard label="Taxa de sucesso" value={`${(data.mission.successRate * 100).toFixed(1)}%`} />
-          </SimpleGrid>
-          <DonutChart
-            size={160}
-            thickness={22}
-            withLabelsLine
-            withLabels
-            data={[
-              { name: "Cumpridas", value: data.mission.successes, color: "teal.6" },
-              { name: "Falhas", value: data.mission.failures, color: "red.6" },
-            ]}
-          />
-        </Stack>
+        <FormSection label="Desfecho das missões">
+          <Stack gap="md">
+            <SimpleGrid cols={{ base: 2, sm: 3 }}>
+              <StatCard label="Missões cumpridas" value={String(data.mission.successes)} />
+              <StatCard label="Missões falhas" value={String(data.mission.failures)} />
+              <StatCard label="Taxa de sucesso" value={`${(data.mission.successRate * 100).toFixed(1)}%`} />
+            </SimpleGrid>
+            <DonutChart
+              size={160}
+              thickness={22}
+              withLabelsLine
+              withLabels
+              data={[
+                { name: "Cumpridas", value: data.mission.successes, color: "green.6" },
+                { name: "Falhas", value: data.mission.failures, color: "red.6" },
+              ]}
+            />
+          </Stack>
+        </FormSection>
       )}
     </Stack>
   );
