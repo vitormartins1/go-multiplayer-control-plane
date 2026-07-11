@@ -48,6 +48,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /games/{id}", h.delete)
 	// Fleet Agones (ADR-0026, spec 012).
 	mux.HandleFunc("PUT /games/{id}/fleet", h.setFleet)
+	// Descrição do jogo (spec 013).
+	mux.HandleFunc("PUT /games/{id}/description", h.setDescription)
 	// Perfil de multiplayer — alias legado do modo "default" (ADR-0023/0024).
 	mux.HandleFunc("PUT /games/{id}/multiplayer-profile", h.setProfile)
 	mux.HandleFunc("GET /games/{id}/multiplayer-profile", h.getProfile)
@@ -75,6 +77,8 @@ type gameDTO struct {
 	GeneratedImageStyle string `json:"generatedImageStyle"` // default = "shapes"
 	// Fleet Agones do jogo (ADR-0026, spec 012); "" = sem Agones real habilitado.
 	Fleet string `json:"fleet"`
+	// Description é um texto curto livre sobre o jogo (spec 013); "" = sem descrição.
+	Description string `json:"description"`
 }
 
 func toDTO(g *domain.Game) gameDTO {
@@ -85,6 +89,7 @@ func toDTO(g *domain.Game) gameDTO {
 		GeneratedImageSeed:  g.GeneratedImageSeed,
 		GeneratedImageStyle: g.GeneratedImageStyle,
 		Fleet:               g.Fleet,
+		Description:         g.Description,
 	}
 }
 
@@ -455,6 +460,23 @@ func (h *Handler) setFleet(w http.ResponseWriter, r *http.Request) {
 	httpkit.WriteJSON(w, http.StatusOK, toDTO(g))
 }
 
+// setDescription atualiza a descrição do jogo (spec 013).
+func (h *Handler) setDescription(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Description string `json:"description"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.games.SetDescription(r.Context(), r.PathValue("id"), req.Description)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(g))
+}
+
 // delete marca o jogo como removido (soft delete, ADR-0025, spec 010): 204;
 // inexistente ou já deletado -> 404.
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -538,6 +560,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		httpkit.WriteError(w, http.StatusNotFound, "not_found")
 	case errors.Is(err, domain.ErrInvalidFleet):
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_fleet")
+	case errors.Is(err, domain.ErrInvalidDescription):
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_description")
 	case errors.Is(err, domain.ErrUnsupportedArchetype):
 		httpkit.WriteError(w, http.StatusBadRequest, "unsupported_archetype")
 	case errors.Is(err, domain.ErrUnsupportedTopology):

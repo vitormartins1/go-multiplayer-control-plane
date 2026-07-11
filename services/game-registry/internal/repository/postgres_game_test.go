@@ -35,6 +35,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/006_add_deleted_at.sql",
 			"../../migrations/007_add_fleet.sql",
 			"../../migrations/008_add_modes_version.sql",
+			"../../migrations/009_add_description.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -178,6 +179,47 @@ func TestPostgresGameRepository_UpdateFleet_RoundTrip(t *testing.T) {
 func TestPostgresGameRepository_UpdateFleet_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := NewPostgresGameRepository(newTestPool(t))
 	err := repo.UpdateFleet(context.Background(), "00000000-0000-0000-0000-000000000000", "packet-arena")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+// TestPostgresGameRepository_UpdateDescription_RoundTrip (spec 013): jogo
+// nasce sem descrição ("" na leitura, coluna NULL); UpdateDescription seta e
+// limpa, e a List também devolve o campo (mesma query do fleet).
+func TestPostgresGameRepository_UpdateDescription_RoundTrip(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	ctx := context.Background()
+	g := newGame("orb", "Orb Rush")
+	require.NoError(t, repo.Create(ctx, g))
+
+	got, err := repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Description, "jogo novo nasce sem descrição")
+
+	require.NoError(t, repo.UpdateDescription(ctx, g.ID, "Um jogo de capoeira."))
+	got, err = repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Um jogo de capoeira.", got.Description)
+
+	list, err := repo.List(ctx)
+	require.NoError(t, err)
+	found := false
+	for _, lg := range list {
+		if lg.ID == g.ID {
+			assert.Equal(t, "Um jogo de capoeira.", lg.Description)
+			found = true
+		}
+	}
+	assert.True(t, found, "jogo deve aparecer na List")
+
+	require.NoError(t, repo.UpdateDescription(ctx, g.ID, ""))
+	got, err = repo.FindByID(ctx, g.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Description, "descrição vazia limpa o campo")
+}
+
+func TestPostgresGameRepository_UpdateDescription_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := NewPostgresGameRepository(newTestPool(t))
+	err := repo.UpdateDescription(context.Background(), "00000000-0000-0000-0000-000000000000", "x")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 

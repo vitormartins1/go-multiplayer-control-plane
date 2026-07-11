@@ -145,6 +145,12 @@ export function FlowCanvas({
         zoomOnScroll={interactive}
         zoomOnPinch={interactive}
         zoomOnDoubleClick={interactive}
+        // preventScrolling (achado do Vitor, pipeline): o ReactFlow chama
+        // event.preventDefault() em QUALQUER wheel sobre o canvas por padrão,
+        // mesmo com zoomOnScroll desligado — sem isso, um canvas read-only
+        // (interactive=false) trava o scroll da página quando o mouse passa
+        // por cima dele.
+        preventScrolling={interactive}
         edgesFocusable={false}
         deleteKeyCode={null}
         onNodeClick={onNodeClick ? (_, n) => onNodeClick(n.id) : undefined}

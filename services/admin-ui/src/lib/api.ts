@@ -59,6 +59,8 @@ export interface Game {
   // Fleet Agones do jogo (ADR-0026); "" = sem fleet cadastrada. Exposto pelo
   // BFF só a partir da spec 059 — o game-registry já devolvia desde a 012.
   fleet?: string;
+  // Descrição curta do jogo (spec 013); "" = sem descrição.
+  description?: string;
 }
 
 // Perfis de multiplayer do jogo (ADR-0023). Union discriminada por `archetype`.
@@ -465,6 +467,9 @@ export const api = {
   // Fleet Agones do jogo (ADR-0026, aba Fleet — spec 059).
   setFleet: (gameId: string, fleet: string) =>
     putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}/fleet`, { fleet }),
+  // Descrição do jogo (spec 013).
+  setGameDescription: (gameId: string, description: string) =>
+    putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}/description`, { description }),
   // Soft delete no registry (ADR-0025): o jogo some do console; dados nos
   // demais serviços ficam órfãos e inacessíveis. 404 = já removido.
   deleteGame: (gameId: string) => del(`/api/games/${encodeURIComponent(gameId)}`),

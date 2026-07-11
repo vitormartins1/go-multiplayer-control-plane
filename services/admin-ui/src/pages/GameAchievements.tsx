@@ -658,7 +658,7 @@ export function GameAchievements({
                     <Table.Td>
                       <AchievementIcon seed={a.id} />
                     </Table.Td>
-                    <Table.Td c="dimmed">{a.id}</Table.Td>
+                    <Table.Td c="dimmed" ff="monospace">{a.id}</Table.Td>
                     <Table.Td>
                       <Text truncate="end" maw={200} title={a.name}>
                         {a.name}

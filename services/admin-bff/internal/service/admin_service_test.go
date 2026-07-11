@@ -97,16 +97,17 @@ func (f *fakeReader) UnsuppressEventRule(_ context.Context, gameID, id string) e
 }
 
 type fakeRegistry struct {
-	games       []domain.Game
-	players     []domain.GamePlayer
-	err         error
-	gotSlug     string
-	gotName     string
-	gotFleet    string
-	gotGameID   string
-	gotPlayerID string
-	profile     json.RawMessage
-	gotProfile  json.RawMessage
+	games          []domain.Game
+	players        []domain.GamePlayer
+	err            error
+	gotSlug        string
+	gotName        string
+	gotFleet       string
+	gotDescription string
+	gotGameID      string
+	gotPlayerID    string
+	profile        json.RawMessage
+	gotProfile     json.RawMessage
 }
 
 func (f *fakeRegistry) ListGames(_ context.Context) ([]domain.Game, error) {
@@ -140,6 +141,13 @@ func (f *fakeRegistry) SetFleet(_ context.Context, id, fleet string) (*domain.Ga
 		return nil, f.err
 	}
 	return &domain.Game{ID: id, Fleet: fleet}, nil
+}
+func (f *fakeRegistry) SetDescription(_ context.Context, id, description string) (*domain.Game, error) {
+	f.gotGameID, f.gotDescription = id, description
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &domain.Game{ID: id, Description: description}, nil
 }
 func (f *fakeRegistry) DeleteGame(_ context.Context, id string) error {
 	f.gotGameID = id
@@ -371,6 +379,15 @@ func TestSetFleet_Delega(t *testing.T) {
 	assert.Equal(t, "g1", reg.gotGameID)
 	assert.Equal(t, "packet-arena", reg.gotFleet)
 	assert.Equal(t, "packet-arena", g.Fleet)
+}
+
+func TestSetDescription_Delega(t *testing.T) {
+	reg := &fakeRegistry{}
+	g, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).SetDescription(context.Background(), "g1", "Um jogo de capoeira.")
+	require.NoError(t, err)
+	assert.Equal(t, "g1", reg.gotGameID)
+	assert.Equal(t, "Um jogo de capoeira.", reg.gotDescription)
+	assert.Equal(t, "Um jogo de capoeira.", g.Description)
 }
 
 func TestMultiplayerProfile_DelegaAoRegistry(t *testing.T) {

@@ -5,8 +5,10 @@ import {
   Divider,
   Group,
   Modal,
+  SimpleGrid,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
 } from "@mantine/core";
@@ -16,29 +18,41 @@ import { api, HttpError, type Game } from "../lib/api";
 import { GameCover } from "../components/GameCover";
 import { FormSection } from "../components/FormSection";
 import { GamePipeline } from "./GamePipeline";
-import { MultiplayerSettings } from "./MultiplayerSettings";
+import { FieldLabel, MultiplayerSettings } from "./MultiplayerSettings";
+
+const MAX_DESCRIPTION_LEN = 500;
 
 export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () => void }) {
   const navigate = useNavigate();
   const [name, setName] = useState(game.name);
+  const [description, setDescription] = useState(game.description ?? "");
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   const trimmed = name.trim();
-  const canSave = trimmed !== "" && trimmed !== game.name && !saving;
+  const nameChanged = trimmed !== "" && trimmed !== game.name;
+  const descriptionChanged = description !== (game.description ?? "");
+  const descriptionTooLong = description.length > MAX_DESCRIPTION_LEN;
+  const canSave = (nameChanged || descriptionChanged) && !descriptionTooLong && !saving;
   // Confirmação destrutiva (spec 038): digitar o nome exato do jogo.
   const canDelete = confirmName === game.name && !deleting;
 
+  // Nome e descrição são independentes (2 endpoints) — dispara os dois juntos
+  // quando ambos mudaram, em vez de sequencial (achado do /code-review: não
+  // serializar chamadas que não dependem uma da outra).
   async function save() {
     setSaving(true);
     try {
-      await api.renameGame(game.id, trimmed);
-      notifications.show({ color: "nominal", message: "Jogo renomeado." });
+      await Promise.all([
+        nameChanged ? api.renameGame(game.id, trimmed) : Promise.resolve(),
+        descriptionChanged ? api.setGameDescription(game.id, description) : Promise.resolve(),
+      ]);
+      notifications.show({ color: "nominal", message: "Jogo atualizado." });
       onRenamed();
     } catch {
-      notifications.show({ color: "critical", message: "Falha ao renomear (nome inválido ou serviço fora?)." });
+      notifications.show({ color: "critical", message: "Falha ao salvar (dados inválidos ou serviço fora?)." });
     } finally {
       setSaving(false);
     }
@@ -62,33 +76,48 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
     }
   }
 
-  // Capa DENTRO de Dados do jogo (036, 3ª iteração do layout): a capa é conteúdo
-  // de identidade, não merece coluna própria. Multiplayer/pipeline usam a
-  // largura toda da página (revisão de layout, 2026-07-11) — só o formulário
-  // de identidade fica com largura de leitura confortável (maw no Stack interno).
+  // Capa quadrada à esquerda dos campos (revisão de layout, 2026-07-11 — 5ª
+  // iteração: o banner de largura total ficou grande demais). Descrição +
+  // "Criado em" preenchem o card com conteúdo real (spec 013); texto de ajuda
+  // do Slug virou tooltip (FieldLabel), igual ao resto do formulário.
   return (
     <Stack>
       <Title order={4}>Identidade</Title>
       <FormSection label="Dados do jogo">
         <Group align="flex-start" gap="xl" wrap="wrap">
-          <Box w={150} style={{ flexShrink: 0 }}>
-            <GameCover game={game} withName={false} />
+          <Box w={160} style={{ flexShrink: 0 }}>
+            <GameCover game={game} withName={false} ratio={1} />
           </Box>
-          <Stack gap="sm" style={{ flex: 1, minWidth: 260, maxWidth: 420 }}>
-            <TextInput
-              label="Nome"
-              value={name}
-              onChange={(e) => setName(e.currentTarget.value)}
-              maxLength={100}
+          <Stack gap="sm" style={{ flex: 1, minWidth: 260 }}>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <TextInput
+                label="Nome"
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+                maxLength={100}
+              />
+              <TextInput
+                label={<FieldLabel label="Slug" help="Chave estável — não muda." />}
+                value={game.slug}
+                readOnly
+                disabled
+              />
+            </SimpleGrid>
+            <Textarea
+              label="Descrição"
+              placeholder="Do que se trata este jogo? (opcional)"
+              value={description}
+              onChange={(e) => setDescription(e.currentTarget.value)}
+              autosize
+              minRows={2}
+              maxRows={6}
+              error={descriptionTooLong ? `Máximo de ${MAX_DESCRIPTION_LEN} caracteres.` : undefined}
+              description={`${description.length}/${MAX_DESCRIPTION_LEN}`}
             />
-            <TextInput
-              label="Slug"
-              value={game.slug}
-              readOnly
-              disabled
-              description="Chave estável — não muda."
-            />
-            <Group>
+            <Group justify="space-between" align="center">
+              <Text size="xs" c="dimmed">
+                Criado em {new Date(game.createdAt).toLocaleDateString("pt-BR")}
+              </Text>
               <Button onClick={save} disabled={!canSave} loading={saving}>
                 Salvar
               </Button>
