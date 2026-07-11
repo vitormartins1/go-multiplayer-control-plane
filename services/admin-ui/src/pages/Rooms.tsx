@@ -15,6 +15,8 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { useLocalStorage } from "@mantine/hooks";
+import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Game } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
@@ -25,6 +27,89 @@ import { ROLE_META, SessionMatchDetail } from "../components/SessionMatchDetail"
 import { archetypeMetaOf } from "../lib/archetypeMeta";
 
 const POLL_MS = 5000;
+
+// Ordenação (spec 060): única, compartilhada entre a visão Geral e cada
+// seção da visão Por jogo (item 9 da spec) — evita um estado de sort por
+// jogo, que combinaria mal com N jogos.
+type SortKey = "game" | "archetype" | "mode" | "state" | "players" | "time";
+type SortDir = "asc" | "desc";
+
+// compareSessions é o comparador puro usado tanto pela tabela Geral quanto
+// por cada seção Por jogo. `gamesById` só é necessário pro sortBy "game"
+// (nome do jogo pode não estar na própria sessão em toda resposta antiga).
+function compareSessions(
+  a: GameSession,
+  b: GameSession,
+  sortBy: SortKey,
+  sortDir: SortDir,
+  gamesById: Map<string, Game>,
+): number {
+  const dir = sortDir === "asc" ? 1 : -1;
+  switch (sortBy) {
+    case "game": {
+      const an = a.gameName || gamesById.get(a.gameId ?? "")?.name || a.gameId || "";
+      const bn = b.gameName || gamesById.get(b.gameId ?? "")?.name || b.gameId || "";
+      return an.localeCompare(bn) * dir;
+    }
+    case "archetype": {
+      // Item 13 da spec: sem arquétipo conhecido vai pro fim SEMPRE, nos dois
+      // sentidos — não inverte com a direção (por isso não multiplica por `dir`).
+      const al = archetypeMetaOf(a.archetype)?.label;
+      const bl = archetypeMetaOf(b.archetype)?.label;
+      if (!al && !bl) return 0;
+      if (!al) return 1;
+      if (!bl) return -1;
+      return al.localeCompare(bl) * dir;
+    }
+    case "mode":
+      return (a.modeId || "default").localeCompare(b.modeId || "default") * dir;
+    case "state": {
+      // Item 12: open antes de closed, não alfabético ("closed" < "open" seria
+      // contra-intuitivo — quem abre a aba geralmente quer as vivas primeiro).
+      const rank = (s: GameSession) => (s.state === "open" ? 0 : 1);
+      return (rank(a) - rank(b)) * dir;
+    }
+    case "players":
+      return (a.players.length - b.players.length) * dir;
+    case "time":
+      // Item 15: só openedAt, sempre — nunca compara duração (fechada) com
+      // "há quanto tempo está aberta" (unidades diferentes, ver spec/plan).
+      return (Date.parse(a.openedAt) - Date.parse(b.openedAt)) * dir;
+    default:
+      return 0;
+  }
+}
+
+// SortableTh é um <Table.Th> clicável com seta de direção quando ativo —
+// usado nos 6 cabeçalhos ordenáveis (spec 060, item 7/8).
+function SortableTh({
+  label,
+  sortKey,
+  active,
+  dir,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  active: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+}) {
+  const isActive = active === sortKey;
+  return (
+    <Table.Th
+      style={{ cursor: "pointer", userSelect: "none" }}
+      onClick={() => onSort(sortKey)}
+    >
+      <Group gap={4} wrap="nowrap">
+        <Text size="sm" fw={isActive ? 700 : undefined}>
+          {label}
+        </Text>
+        {isActive && (dir === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />)}
+      </Group>
+    </Table.Th>
+  );
+}
 
 // Rooms é o board global de salas do console: as sessões ativas de TODOS os
 // jogos (spec 009), com detalhe e a ação de encerrar uma sala travada. A aba
@@ -37,6 +122,22 @@ export function Rooms() {
   // o mesmo), não vale a pena buscar jogo por jogo.
   const { data: games } = useAsync((s) => api.games(s), []);
   const gamesById = useMemo(() => new Map((games ?? []).map((g) => [g.id, g])), [games]);
+  // Visão (Geral/Por jogo) + ordenação: uma preferência só, persistida
+  // (spec 060) — sobrevive a reload, não é reset por padrão a cada visita.
+  const [view, setView] = useLocalStorage<"unified" | "grouped">({
+    key: "rooms:view",
+    defaultValue: "unified",
+  });
+  const [sortBy, setSortBy] = useLocalStorage<SortKey>({ key: "rooms:sort-by", defaultValue: "time" });
+  const [sortDir, setSortDir] = useLocalStorage<SortDir>({ key: "rooms:sort-dir", defaultValue: "desc" });
+  function toggleSort(key: SortKey) {
+    if (key === sortBy) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+  }
   const [filter, setFilter] = useState<"all" | "open" | "closed">("open");
   const [modeFilter, setModeFilter] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -112,10 +213,35 @@ export function Rooms() {
 
   // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
   const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
-  const rows = useMemo(
-    () => (modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows),
-    [allRows, modeFilter],
-  );
+  const rows = useMemo(() => {
+    const filtered = modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows;
+    // Array.prototype.sort é estável (ECMA2019+) — itens iguais no critério
+    // mantêm a ordem original da API, de propósito (spec 060, item 11).
+    return [...filtered].sort((a, b) => compareSessions(a, b, sortBy, sortDir, gamesById));
+  }, [allRows, modeFilter, sortBy, sortDir, gamesById]);
+
+  // Agrupamento por jogo (spec 060, visão "Por jogo") — só sobre `rows` já
+  // filtradas/ordenadas; jogo sem sessão no filtro atual não gera seção
+  // (item 3). Seções ordenadas por contagem desc, empate por nome (item 5).
+  const groupedRows = useMemo(() => {
+    const byGame = new Map<string, { game: Game | undefined; gameName: string; sessions: GameSession[] }>();
+    for (const s of rows) {
+      const gid = s.gameId || "—";
+      const entry = byGame.get(gid);
+      if (entry) {
+        entry.sessions.push(s);
+      } else {
+        byGame.set(gid, {
+          game: s.gameId ? gamesById.get(s.gameId) : undefined,
+          gameName: s.gameName || s.gameId || "Jogo desconhecido",
+          sessions: [s],
+        });
+      }
+    }
+    return [...byGame.values()].sort(
+      (a, b) => b.sessions.length - a.sessions.length || a.gameName.localeCompare(b.gameName),
+    );
+  }, [rows, gamesById]);
 
   async function confirmClose() {
     if (!closing) return;
@@ -171,6 +297,15 @@ export function Rooms() {
               { label: "Todas", value: "all" },
             ]}
           />
+          <SegmentedControl
+            size="xs"
+            value={view}
+            onChange={(v) => setView(v as typeof view)}
+            data={[
+              { label: "Geral", value: "unified" },
+              { label: "Por jogo", value: "grouped" },
+            ]}
+          />
         </Group>
       </Group>
 
@@ -182,37 +317,48 @@ export function Rooms() {
           aparecem ao vivo quando um match é formado.
         </Text>
       )}
-      {rows.length > 0 && (
-        <Table.ScrollContainer minWidth={720}>
-          <Table striped withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th />
-                <Table.Th>Jogo</Table.Th>
-                <Table.Th>Match</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th>Players</Table.Th>
-                <Table.Th>Server</Table.Th>
-                <Table.Th>Tempos</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {rows.map((s) => (
-                <RoomRow
-                  key={s.sessionId}
-                  session={s}
-                  game={s.gameId ? gamesById.get(s.gameId) : undefined}
-                  br={brInfo(s)}
-                  coop={coopInfo(s)}
-                  expanded={expandedId === s.sessionId}
-                  onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
-                  onClose={() => setClosing(s)}
-                />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+      {rows.length > 0 && view === "unified" && (
+        <RoomsTable
+          rows={rows}
+          showGameColumn
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={toggleSort}
+          gamesById={gamesById}
+          brInfo={brInfo}
+          coopInfo={coopInfo}
+          expandedId={expandedId}
+          onToggle={(id) => setExpandedId((prev) => (prev === id ? null : id))}
+          onCloseRequest={setClosing}
+        />
+      )}
+      {rows.length > 0 && view === "grouped" && (
+        <Stack gap="lg">
+          {groupedRows.map((g) => (
+            <Stack key={g.game?.id ?? g.gameName} gap="xs">
+              <Group gap="sm">
+                {g.game && <GameCover game={g.game} variant="mini" />}
+                <Text fw={600}>{g.gameName}</Text>
+                <Badge variant="light" color="gray">
+                  {g.sessions.length}
+                </Badge>
+              </Group>
+              <RoomsTable
+                rows={g.sessions}
+                showGameColumn={false}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={toggleSort}
+                gamesById={gamesById}
+                brInfo={brInfo}
+                coopInfo={coopInfo}
+                expandedId={expandedId}
+                onToggle={(id) => setExpandedId((prev) => (prev === id ? null : id))}
+                onCloseRequest={setClosing}
+              />
+            </Stack>
+          ))}
+        </Stack>
       )}
 
       <Modal opened={!!closing} onClose={() => setClosing(null)} title="Encerrar sala" centered>
@@ -240,9 +386,77 @@ export function Rooms() {
   );
 }
 
+// RoomsTable é a tabela reutilizável (spec 060) — mesma renderização servindo
+// a visão Geral (`showGameColumn=true`) e cada seção da visão Por jogo
+// (`showGameColumn=false`, sem repetir a coluna "Jogo" já no cabeçalho da seção).
+function RoomsTable({
+  rows,
+  showGameColumn,
+  sortBy,
+  sortDir,
+  onSort,
+  gamesById,
+  brInfo,
+  coopInfo,
+  expandedId,
+  onToggle,
+  onCloseRequest,
+}: {
+  rows: GameSession[];
+  showGameColumn: boolean;
+  sortBy: SortKey;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
+  gamesById: Map<string, Game>;
+  brInfo: (s: GameSession) => { lobbySize: number; mode: string } | null;
+  coopInfo: (s: GameSession) => { teamSize: number } | null;
+  expandedId: string | null;
+  onToggle: (id: string) => void;
+  onCloseRequest: (s: GameSession) => void;
+}) {
+  return (
+    <Table.ScrollContainer minWidth={720}>
+      <Table striped withTableBorder>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th />
+            {showGameColumn && (
+              <SortableTh label="Jogo" sortKey="game" active={sortBy} dir={sortDir} onSort={onSort} />
+            )}
+            <SortableTh label="Arquétipo" sortKey="archetype" active={sortBy} dir={sortDir} onSort={onSort} />
+            <SortableTh label="Modo" sortKey="mode" active={sortBy} dir={sortDir} onSort={onSort} />
+            <Table.Th>Match</Table.Th>
+            <SortableTh label="Estado" sortKey="state" active={sortBy} dir={sortDir} onSort={onSort} />
+            <SortableTh label="Players" sortKey="players" active={sortBy} dir={sortDir} onSort={onSort} />
+            <Table.Th>Server</Table.Th>
+            <SortableTh label="Tempos" sortKey="time" active={sortBy} dir={sortDir} onSort={onSort} />
+            <Table.Th />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((s) => (
+            <RoomRow
+              key={s.sessionId}
+              session={s}
+              game={s.gameId ? gamesById.get(s.gameId) : undefined}
+              showGameColumn={showGameColumn}
+              br={brInfo(s)}
+              coop={coopInfo(s)}
+              expanded={expandedId === s.sessionId}
+              onToggle={() => onToggle(s.sessionId)}
+              onClose={() => onCloseRequest(s)}
+            />
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  );
+}
+
 function RoomRow({
   session: s,
   game,
+  showGameColumn,
   br,
   coop,
   expanded,
@@ -251,6 +465,7 @@ function RoomRow({
 }: {
   session: GameSession;
   game: Game | undefined;
+  showGameColumn: boolean;
   br: { lobbySize: number; mode: string } | null;
   coop: { teamSize: number } | null;
   expanded: boolean;
@@ -258,6 +473,7 @@ function RoomRow({
   onClose: () => void;
 }) {
   const modeMeta = archetypeMetaOf(s.archetype);
+  const colSpan = showGameColumn ? 10 : 9;
   return (
     <>
       <Table.Tr
@@ -285,18 +501,26 @@ function RoomRow({
             <SessionAvatar seed={s.profileHash || s.sessionId} size={16} />
           )}
         </Table.Td>
+        {showGameColumn && (
+          <Table.Td>
+            <Text size="sm" fw={500}>
+              {s.gameName || truncate(s.gameId || "—")}
+            </Text>
+          </Table.Td>
+        )}
         <Table.Td>
-          <Text size="sm" fw={500}>
-            {s.gameName || truncate(s.gameId || "—")}
-          </Text>
-          <Badge
-            size="xs"
-            variant="light"
-            color="gray"
-            mt={2}
-            mr={4}
-            leftSection={modeMeta && <modeMeta.icon size={10} />}
-          >
+          {modeMeta ? (
+            <Badge size="xs" variant="light" color="gray" leftSection={<modeMeta.icon size={10} />}>
+              {modeMeta.label}
+            </Badge>
+          ) : (
+            <Text size="sm" c="dimmed">
+              —
+            </Text>
+          )}
+        </Table.Td>
+        <Table.Td>
+          <Badge size="xs" variant="light" color="gray">
             {s.modeId || "default"}
           </Badge>
           {br && (
@@ -360,7 +584,7 @@ function RoomRow({
       </Table.Tr>
       {expanded && (
         <Table.Tr>
-          <Table.Td colSpan={7} p={0}>
+          <Table.Td colSpan={colSpan} p={0}>
             <Collapse in={expanded}>
               <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
                 <Stack gap="xs">

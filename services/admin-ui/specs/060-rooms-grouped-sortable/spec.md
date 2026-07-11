@@ -1,7 +1,7 @@
 # Spec 060 — Rooms: agrupamento por jogo + ordenação por coluna
 
 **Serviço:** admin-ui (só frontend — sem mudança de contrato/backend)
-**Status:** Draft
+**Status:** Done (2026-07-11) — validado pelo usuário no browser, imagem Docker do admin-ui recriada com o build final
 **Data:** 2026-07-11
 **Relaciona:** admin-bff/022 (ícone de partida + capa do jogo na 1ª coluna, base visual reaproveitada aqui)
 
