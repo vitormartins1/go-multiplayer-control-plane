@@ -1,0 +1,48 @@
+# kube-prometheus-stack — cluster k3d local (espelha infra/agones/pi5).
+# Grafana desligado: os dashboards vivem no Grafana do compose (Mac). O
+# Prometheus daqui fica exposto via NodePort 32090 (mapeado pro host em
+# 39091 por tools/up.sh/k3d cluster edit) para o Prometheus do compose puxar
+# via federation (job local-federation, infra/docker/prometheus.yml).
+
+grafana:
+  enabled: false
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 32090
+  prometheusSpec:
+    # Retenção curta: cluster efêmero, recriado com frequência — sem valor em
+    # manter histórico longo (diferente do Pi 5, que é o node permanente).
+    retention: 1d
+    additionalScrapeConfigs:
+      # Descoberta por endpoints (cada pod vira um target): os Services de
+      # métricas do Agones balanceiam entre as réplicas HA e SÓ O LÍDER
+      # exporta as métricas de estado (agones_gameservers_count,
+      # agones_fleets_replicas_count) — raspar pelo DNS do Service alterna
+      # líder/standby a cada scrape e as séries somem por staleness.
+      - job_name: agones
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [agones-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: agones-(controller|extensions|allocator)-metrics-service
+            action: keep
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: agones-(.+)-metrics-service
+            target_label: job
+            replacement: agones-$1
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+# Alertmanager desnecessário no dev local.
+alertmanager:
+  enabled: false
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true

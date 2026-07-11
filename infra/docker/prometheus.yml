@@ -104,3 +104,24 @@ scrape_configs:
       - targets: ["host.docker.internal:39090"]
         labels:
           cluster: pi5
+
+  # k3d local — federation equivalente ao Pi 5 (infra/agones/k3d/install-monitoring.sh
+  # instala o mesmo kube-prometheus-stack, sem Grafana). NodePort 32090 do
+  # cluster mapeado pro host em 39091 (infra/agones/k3d/up.sh / k3d cluster
+  # edit --port-add). Ambos os clusters têm Fleets com o MESMO nome
+  # (packet-arena/capoeira-souls) — o label `cluster` abaixo é o que
+  # diferencia nas queries dos dashboards (cluster="pi5" vs cluster="local"),
+  # sem ele as duas fleets homônimas se somariam.
+  - job_name: local-federation
+    honor_labels: true
+    metrics_path: /federate
+    params:
+      match[]:
+        - '{__name__=~"node_.+"}'
+        - '{__name__=~"kube_.+"}'
+        - '{__name__=~"agones_.+"}'
+        - '{__name__=~"container_.+"}'
+    static_configs:
+      - targets: ["host.docker.internal:39091"]
+        labels:
+          cluster: local

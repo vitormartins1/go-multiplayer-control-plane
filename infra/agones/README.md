@@ -27,6 +27,26 @@ alcança o cluster de dentro do container). `up.sh` gera
 o compose do backend monta quando `ALLOCATOR_MODE=agones`
 (`infra/docker/docker-compose.agones.yml`).
 
+### Monitoramento (dashboard "Local (k3d)" no Grafana do compose)
+
+```sh
+infra/agones/k3d/install-monitoring.sh   # kube-prometheus-stack, sem Grafana (Prometheus NodePort 32090 → host 39091)
+```
+
+Mesmo espírito do Pi 5 (ver abaixo): sem Grafana local — o Prometheus do
+compose (Mac) federa este Prometheus via `job_name: local-federation`
+(`infra/docker/prometheus.yml`, alvo `host.docker.internal:39091`, label
+`cluster: local`). Dashboard: `infra/docker/grafana/provisioning/dashboards/local-agones-fleet.json`.
+O NodePort→host (`39091:32090@server:0`) já é criado pelo `up.sh` em clusters
+novos; num cluster k3d já existente sem essa porta, `up.sh` adiciona via
+`k3d cluster edit --port-add` (idempotente, não recria o cluster nem perde
+Fleets/GameServers já aplicados).
+
+**Cuidado com nomes de Fleet iguais nos dois clusters:** k3d e Pi 5 costumam ter
+Fleets com o mesmo nome (`packet-arena`, `capoeira-souls`) — toda query dos
+dois dashboards filtra por `cluster="local"`/`cluster="pi5"` de propósito; uma
+query nova sem esse filtro soma os dois clusters junto, silenciosamente.
+
 ## Pi 5 (homelab dedicado)
 
 ```sh
@@ -39,7 +59,7 @@ infra/agones/pi5/fetch-kubeconfig.sh   # gera pi5/kubeconfig-pi5.yaml (+ compose
 infra/agones/pi5/install-agones.sh     # Agones 1.58.0 via helm (range 7100-7139)
 # em cada data plane: ./push-image.sh (docker save | ssh | k3s ctr images import)
 MAC_HOST=${MAC_HOST} infra/agones/apply-fleet.sh packet-arena
-infra/agones/pi5/install-monitoring.sh # Prometheus + Grafana (dashboards Agones/Node)
+infra/agones/pi5/install-monitoring.sh # Prometheus (sem Grafana — dashboard "Pi 5" vive no Grafana do compose, ver abaixo)
 ```
 
 Aceites parciais:
@@ -86,6 +106,12 @@ no modo Pi).
 
 ## Notas
 
+- **Grafana é sempre o do compose** (`http://localhost:3000`, serviço `grafana`
+  em `infra/docker/docker-compose.yml`) — nem k3d nem Pi 5 rodam Grafana
+  próprio (`grafana.enabled: false` nos dois `monitoring-values.yaml`); cada
+  cluster só roda Prometheus (+ node-exporter/kube-state-metrics), federado
+  pelo Prometheus do compose. Dois dashboards: `pi5-agones-fleet.json` e
+  `local-agones-fleet.json` (`infra/docker/grafana/provisioning/dashboards/`).
 - `kubeconfig-*.yaml` em `k3d/` e `pi5/` são **gitignored** (credenciais do
   cluster).
 - O IP do Mac fica gravado na Fleet aplicada no Pi — mudou o IP, rode
