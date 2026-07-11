@@ -8,7 +8,7 @@ metadata:
 data:
   agones-fleet.json: |
     {
-      "title": "Agones Fleet",
+      "title": "Agones Fleets",
       "uid": "agones-fleet-pi5",
       "schemaVersion": 38,
       "version": 1,
@@ -34,7 +34,8 @@ data:
           },
           "targets": [{
             "datasource": {"type": "prometheus"},
-            "expr": "sum(agones_gameservers_count{type=\"Ready\"}) or vector(0)",
+            "expr": "sum by (fleet_name) (agones_gameservers_count{type=\"Ready\"}) or vector(0)",
+            "legendFormat": "{{fleet_name}}",
             "instant": true
           }]
         },
@@ -54,7 +55,8 @@ data:
           },
           "targets": [{
             "datasource": {"type": "prometheus"},
-            "expr": "sum(agones_gameservers_count{type=\"Allocated\"}) or vector(0)",
+            "expr": "sum by (fleet_name) (agones_gameservers_count{type=\"Allocated\"}) or vector(0)",
+            "legendFormat": "{{fleet_name}}",
             "instant": true
           }]
         },
@@ -75,7 +77,8 @@ data:
           },
           "targets": [{
             "datasource": {"type": "prometheus"},
-            "expr": "sum(agones_gameservers_count{type=\"Unhealthy\"}) or vector(0)",
+            "expr": "sum by (fleet_name) (agones_gameservers_count{type=\"Unhealthy\"}) or vector(0)",
+            "legendFormat": "{{fleet_name}}",
             "instant": true
           }]
         },
@@ -89,21 +92,21 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus"},
-              "expr": "sum(agones_fleets_replicas_count{type=\"desired\"}) or vector(0)",
-              "legendFormat": "desired",
+              "expr": "sum by (fleet_name) (agones_fleets_replicas_count{type=\"desired\"}) or vector(0)",
+              "legendFormat": "{{fleet_name}} desired",
               "instant": true
             },
             {
               "datasource": {"type": "prometheus"},
-              "expr": "sum(agones_fleets_replicas_count{type=\"ready\"}) or vector(0)",
-              "legendFormat": "ready",
+              "expr": "sum by (fleet_name) (agones_fleets_replicas_count{type=\"ready\"}) or vector(0)",
+              "legendFormat": "{{fleet_name}} ready",
               "instant": true
             }
           ]
         },
         {
           "type": "timeseries",
-          "title": "GameServer States",
+          "title": "GameServer States por Fleet",
           "id": 5,
           "gridPos": {"h": 8, "w": 24, "x": 0, "y": 4},
           "options": {"tooltip": {"mode": "multi", "sort": "none"}},
@@ -115,8 +118,8 @@ data:
           },
           "targets": [{
             "datasource": {"type": "prometheus"},
-            "expr": "sum by (type) (agones_gameservers_count)",
-            "legendFormat": "{{type}}"
+            "expr": "sum by (fleet_name, type) (agones_gameservers_count)",
+            "legendFormat": "{{fleet_name}} - {{type}}"
           }]
         },
         {
