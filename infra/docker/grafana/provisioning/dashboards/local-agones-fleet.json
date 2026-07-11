@@ -2,7 +2,7 @@
   "title": "Local (k3d) — Agones Fleet",
   "uid": "local-agones-fleet",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -246,7 +246,7 @@
       "type": "stat",
       "title": "GameServers Unhealthy",
       "id": 9,
-      "description": "Sem equivalente em agones_fleets_replicas_count (o status do Fleet não rastreia unhealthy) — fica em agones_gameservers_count, então uma fleet que nunca teve GameServer Unhealthy some do painel em vez de aparecer como 0 (mesma limitação dos outros painéis, sem workaround aqui).",
+      "description": "agones_gameservers_count{type=\"Unhealthy\"} não existe pra uma fleet até ela ter um GameServer Unhealthy de verdade (esparsa, sem equivalente confiável no CRD Fleet). Complementado com um \"backfill\" de zero via agones_fleets_replicas_count (sempre presente por fleet) — o valor real sempre prevalece quando existe; o zero só entra pra fleet que nunca teve Unhealthy.",
       "gridPos": {
         "h": 4,
         "w": 8,
@@ -284,7 +284,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (fleet_name) (agones_gameservers_count{cluster=\"local\",type=\"Unhealthy\"}) or vector(0)",
+          "expr": "sum by (fleet_name) (agones_gameservers_count{cluster=\"local\",type=\"Unhealthy\"} or label_replace(sum by (name) (agones_fleets_replicas_count{cluster=\"local\",type=\"desired\"}) * 0, \"fleet_name\", \"$1\", \"name\", \"(.+)\"))",
           "legendFormat": "{{fleet_name}}",
           "instant": true
         }
