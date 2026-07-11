@@ -1,5 +1,8 @@
 # 013 — Descrição do jogo
 
+**Serviço:** game-registry
+**Status:** Done
+
 ## Contexto
 
 Revisão de layout do admin-ui (2026-07-11): a seção "Identidade" de

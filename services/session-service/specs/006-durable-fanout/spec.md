@@ -1,7 +1,7 @@
 # Spec: 006-durable-fanout
 
 **Serviço:** session-service (produtor) · achievements-service, leaderboard-service (consumidores) · infra
-**Status:** Implementado
+**Status:** Done
 **Data:** 2026-07-04
 **ADR:** [0020](../../../../docs/adr/0020-durable-result-fanout.md) — fan-out durável via SNS→SQS
 

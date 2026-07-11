@@ -1,6 +1,6 @@
 # Spec: 015-battle-royale-placement
 
-**Serviço:** admin-bff · **Status:** Rascunho (aguardando aprovação) · **Data:** 2026-07-07
+**Serviço:** admin-bff · **Status:** Done · **Data:** 2026-07-07
 **ADR:** 0023 — arquétipo `battle_royale` · **Roadmap:** BR4 (surfacing), parte bff
 **Depende de:** BR3 (`analytics/005` — o `GameAnalytics` já expõe `placement`)
 

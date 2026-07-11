@@ -1,7 +1,7 @@
 # Spec: 007-summon-signs
 
 **Serviço:** matchmaking-service
-**Status:** Aprovada (2026-07-07)
+**Status:** Done (2026-07-07)
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — **arquétipo `host_world_dropin`, fatia H1b** (co-op por quadro de sinais)
 **Roadmap:** `docs/game-models/host_world_dropin-roadmap.md` → H1b

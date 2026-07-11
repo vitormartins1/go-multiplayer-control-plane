@@ -1,7 +1,7 @@
 # Spec: 013-board-passthrough
 
 **Serviço:** admin-bff
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-06
 **Parte de:** B2b do roadmap `queue_arena` (ADR-0023). Par: `admin-ui/017-board-selector`.
 

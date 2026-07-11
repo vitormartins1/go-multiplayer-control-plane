@@ -1,7 +1,7 @@
 # Spec: 006-multiplayer-profile
 
 **Serviço:** game-registry
-**Status:** Implementada (2026-07-06)
+**Status:** Done (2026-07-06)
 **Data:** 2026-07-06
 **ADR:** 0023 (perfil de multiplayer por jogo — arquétipo + parâmetros)
 

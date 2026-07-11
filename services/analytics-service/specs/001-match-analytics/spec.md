@@ -1,7 +1,7 @@
 # Spec: 001-match-analytics
 
 **Serviço:** analytics-service (novo)
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-04
 **ADR:** [0021](../../../../docs/adr/0021-analytics-ingestion-aggregation.md)
 **Parte de:** Analytics (pares: `admin-bff/009-analytics`, `admin-ui/011-analytics`)

@@ -1,7 +1,7 @@
 # Spec: 005-admin-sessions
 
 **Serviço:** session-service
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-03
 
 ## Contexto

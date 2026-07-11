@@ -1,7 +1,7 @@
 # Spec: 018-game-delete-passthrough
 
 **Serviço:** admin-bff
-**Status:** Aprovado (2026-07-08)
+**Status:** Done
 **Data:** 2026-07-08
 **ADR:** 0025 (remoção de jogo — soft delete no registry)
 **Companheira de:** `game-registry/010-game-soft-delete`

@@ -1,6 +1,6 @@
 # Spec 043 — Editor visual de Event Rules (canvas low-code)
 
-**Status:** Draft — aguardando aprovação
+**Status:** Superseded by 058-canvas-first-event-rules (fase 1 aprovada e implementada, mas o toggle Tabela/Canvas do R5 foi removido — o canvas passou a ser a única view)
 **Serviço:** admin-ui (fase 1 é UI-only; zero mudança de backend)
 **Relaciona:** ADR-0027 (motor de regras data-driven), ADR-0028 (proposto — editor visual + roadmap do motor rico), spec `achievements-service` migration 008, `GameEventRules.tsx` (CRUD atual em tabela)
 

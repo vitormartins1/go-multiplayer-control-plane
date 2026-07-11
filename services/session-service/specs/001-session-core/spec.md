@@ -1,7 +1,7 @@
 # Spec: 001-session-core
 
 **Serviço:** session-service
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-28
 
 ## Contexto

@@ -1,6 +1,7 @@
 # Spec 056 — criação de regra dinâmica no canvas + foco também na edição
 
 **Serviço:** admin-ui
+**Status:** Done
 **Relaciona:** spec 055 (canvas focado por regra + lista separada)
 **Depende de:** nada (client-side; `saveDraft` já manda `eventTypes` como array plano, sem distinguir "linkado" de "novo" — confirmado, sem risco de duplicar).
 

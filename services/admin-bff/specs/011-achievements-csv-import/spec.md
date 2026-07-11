@@ -1,5 +1,7 @@
 # Spec 011 — Importação em lote de conquistas via CSV (admin-bff)
 
+**Status:** Done
+
 ## Contexto
 
 O admin-ui permite cadastrar conquistas individualmente. Para jogos com muitos achievements, o cadastro manual é lento. Queremos um endpoint de importação em lote que receba um array de conquistas JSON (parsado no frontend a partir de um CSV) e retorne o resultado por linha.

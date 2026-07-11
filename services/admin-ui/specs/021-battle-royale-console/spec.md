@@ -1,6 +1,6 @@
 # Spec: 021-battle-royale-console
 
-**Serviço:** admin-ui · **Status:** Rascunho (aguardando aprovação) · **Data:** 2026-07-07
+**Serviço:** admin-ui · **Status:** Done (2026-07-07) · **Data:** 2026-07-07
 **ADR:** 0023 — arquétipo `battle_royale` · **Roadmap:** BR4 (surfacing) + fecha o gap da BR0-UI
 **Depende de:** BR0 (`game-registry/007` — perfil BR no servidor), BR1 (lobby/squads), BR3 (`analytics/005` — distribuição), `admin-bff/015` (propaga `placement`)
 

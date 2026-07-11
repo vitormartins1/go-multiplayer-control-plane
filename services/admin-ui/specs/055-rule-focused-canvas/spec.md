@@ -1,6 +1,7 @@
 # Spec 055 — canvas focado por regra + lista separada
 
 **Serviço:** admin-ui
+**Status:** Done
 **Relaciona:** specs 043–054 (editor visual de event rules), achievements/017 (V2b suppress)
 **Depende de:** nada (o CRUD de regras já é granular por id — confirmado, seguro esconder nós no canvas). **Não muda nada no backend.**
 

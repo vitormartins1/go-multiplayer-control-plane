@@ -1,7 +1,7 @@
 # Spec 019 — Expand da sessão por arquétipo (layout do console + occupants)
 
 **Serviço:** admin-ui (redesign do painel) + session-service/admin-bff (campo aditivo `occupants`)
-**Status:** Concluída (2026-07-08; pedido do usuário: repensar UX/layout do expand da sessão com um layout por arquétipo)
+**Status:** Done (2026-07-08; pedido do usuário: repensar UX/layout do expand da sessão com um layout por arquétipo)
 **Fatia:** sucessora direta da spec 018 (que trouxe os dados); esta reorganiza a apresentação.
 
 ## Contexto

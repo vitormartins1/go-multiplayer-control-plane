@@ -1,7 +1,7 @@
 # Spec: 002-game-scope
 
 **Serviço:** leaderboard-service
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-30
 
 ## Contexto

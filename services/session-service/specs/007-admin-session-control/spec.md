@@ -1,7 +1,7 @@
 # Spec: 007-admin-session-control
 
 **Serviço:** session-service
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-04
 **Parte de:** Rooms Console (Onda 1) — pares: `admin-bff/008-rooms`, `admin-ui/009-rooms-console`
 

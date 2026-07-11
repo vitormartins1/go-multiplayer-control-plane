@@ -1,7 +1,7 @@
 # Spec: 016-coop-mission-mission
 
 **Serviço:** admin-bff
-**Status:** Aprovado (batch C1–C4)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 — arquétipo `coop_mission`
 **Roadmap:** `docs/game-models/coop_mission-roadmap.md` — fatia **C4** (console)

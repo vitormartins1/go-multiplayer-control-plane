@@ -1,7 +1,7 @@
 # Spec: 001-matchmaking-core
 
 **Serviço:** matchmaking-service
-**Status:** Approved
+**Status:** Done (2026-06-28)
 **Data:** 2026-06-28
 
 ## Contexto

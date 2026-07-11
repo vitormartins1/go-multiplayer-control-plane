@@ -1,7 +1,7 @@
 # Spec: 008-coop-mission-profile
 
 **Serviço:** game-registry
-**Status:** Aprovado
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo — arquétipo + parâmetros)
 **Roadmap:** `docs/game-models/coop_mission-roadmap.md` — fatia **C0**

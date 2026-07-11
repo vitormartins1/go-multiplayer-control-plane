@@ -1,6 +1,6 @@
 # Spec 047 — Drawers à direita (padrão 037) + canvas em altura total
 
-**Status:** Approved (feedback direto do usuário, 2026-07-09)
+**Status:** Superseded by 056-dynamic-creation-canvas (itens 2 e 3 — canvas em altura total e Progresso do achievement em Drawer à direita — vigentes; item 1, Drawer à direita para criação de regra, foi substituído por criação pura no canvas, sem drawer)
 **Serviço:** admin-ui
 **Relaciona:** specs 044 (drawer de criação de regra), 037 (editor de modos em
 Drawer à direita — o padrão a seguir), spec achievements/014 (form com operador)

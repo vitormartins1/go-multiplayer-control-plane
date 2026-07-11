@@ -1,7 +1,7 @@
 # Spec 023 — status real da Fleet Agones (cluster + health)
 
 **Serviço:** session-service (fatia cross-service: admin-bff, admin-ui)
-**Status:** Implemented
+**Status:** Done
 **Data:** 2026-07-11
 **Relaciona:** ADR-0026 (fleet por jogo), ADR-0029 (infra Agones centralizada), admin-ui/specs/059-fleet-tab (Fase C do "Visão de evolução futura" daquela spec — hoje só documentada, não aprovada)
 **Depende de:** nada novo no game-registry (o campo `fleet` por jogo já é exposto de ponta a ponta desde a spec 059 do admin-ui).

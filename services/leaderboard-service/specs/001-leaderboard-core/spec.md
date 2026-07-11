@@ -1,7 +1,7 @@
 # Spec: 001-leaderboard-core
 
 **Serviço:** leaderboard-service
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-28
 
 ## Contexto

@@ -1,7 +1,7 @@
 # Spec: 010-matchmaking-funnel
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Done (2026-07-04)
 **Data:** 2026-07-04
 
 ## Contexto

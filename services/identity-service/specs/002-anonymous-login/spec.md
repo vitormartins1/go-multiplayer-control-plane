@@ -1,6 +1,6 @@
 # Spec: 002-anonymous-login
 **Serviço:** identity-service
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-27
 
 ## Contexto

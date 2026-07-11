@@ -1,7 +1,7 @@
 # Spec: 001-cloud-save-core
 
 **Serviço:** cloud-save-service
-**Status:** Approved
+**Status:** Superseded by 002-game-scope
 **Data:** 2026-06-28
 
 ## Contexto

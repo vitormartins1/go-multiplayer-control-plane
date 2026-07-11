@@ -1,7 +1,7 @@
 # Spec: 011-coop-mission-collective
 
 **Serviço:** achievements-service
-**Status:** Aprovado (batch C1–C4)
+**Status:** Superseded by ADR-0027 (motor genérico de event_rules, migration `008_event_rules.sql`) — o sink `collective`→`ApplyCollectiveResult` está implementado e vivo, mas a função pura hardcoded `CollectiveEventTypes` desta spec foi substituída por `CollectiveFacts`+`EvaluateRules` (regra data-driven, ver spec `013-mode-fact`)
 **Data:** 2026-07-07
 **ADR:** 0023 — arquétipo `coop_mission`
 **Roadmap:** `docs/game-models/coop_mission-roadmap.md` — fatia **C3** (sink)

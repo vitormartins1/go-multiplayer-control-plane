@@ -1,5 +1,7 @@
 # 009 — Quebra por modo nas participações (host_world_dropin)
 
+**Status:** Done
+
 ## Contexto
 
 Revisão da aba Analytics do jogo (admin-ui, 2026-07-11) com Capoeira Souls e

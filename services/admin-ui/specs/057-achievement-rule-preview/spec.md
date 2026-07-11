@@ -1,6 +1,7 @@
 # Spec 057 — prévia de regras/fonte no catálogo de achievements
 
 **Serviço:** admin-ui
+**Status:** Done
 **Relaciona:** spec 055 (canvas focado por regra), spec 056 (criação dinâmica)
 **Depende de:** nada novo — `GameAchievements.tsx` já carrega `eventRules`/`catalog`/`modes`; reaproveita `buildRulesGraph`/`pathHighlight`/`repackVisible` (`rulesGraph.ts`) e `FlowCanvas`.
 

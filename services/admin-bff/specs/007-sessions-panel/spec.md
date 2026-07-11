@@ -1,7 +1,7 @@
 # Spec: 007-sessions-panel
 
 **Serviço:** admin-bff
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-03
 
 ## Contexto

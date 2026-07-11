@@ -1,7 +1,7 @@
 # Spec: 003-generated-cover
 
 **Serviço:** game-registry (metadados) + admin-ui (renderização)
-**Status:** Implementada (2026-06-30)
+**Status:** Done (2026-06-30)
 **Data:** 2026-06-30
 
 ## Contexto

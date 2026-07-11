@@ -1,6 +1,6 @@
 # Spec 044 — Canvas de Event Rules: criação visual + layout de tela cheia
 
-**Status:** Draft — aguardando aprovação
+**Status:** Superseded by 056-dynamic-creation-canvas (layout sem colunas laterais ficou; a criação via Drawer de baixo + nó rascunho foi substituída por criação pura no canvas, sem drawer)
 **Serviço:** admin-ui (UI-only, mesmos endpoints)
 **Relaciona:** spec 043 (fase 1 do canvas), ADR-0028
 

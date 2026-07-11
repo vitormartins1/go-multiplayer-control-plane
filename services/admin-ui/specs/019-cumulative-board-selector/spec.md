@@ -1,7 +1,7 @@
 # Spec: 019-cumulative-board-selector
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Done (2026-07-07)
 **Data:** 2026-07-07
 **Parte de:** cauda da fatia A2 (`leaderboard/004-cumulative-boards`, ADR-0023). Estende o seletor de board da B2b (`017`).
 

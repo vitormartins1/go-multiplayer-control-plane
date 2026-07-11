@@ -1,7 +1,7 @@
 # Spec: 016-analytics-outcome
 
 **Serviço:** admin-ui (+ ajuste no admin-bff)
-**Status:** Draft
+**Status:** Done (2026-07-06)
 **Data:** 2026-07-06
 **Parte de:** B2a do roadmap `queue_arena` (ADR-0023). O analytics-service já agrega `losses`/`draws` (fatia analytics/003).
 

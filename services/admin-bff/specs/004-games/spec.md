@@ -1,7 +1,7 @@
 # Spec: 004-games
 
 **Serviço:** admin-bff
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-29
 
 ## Contexto

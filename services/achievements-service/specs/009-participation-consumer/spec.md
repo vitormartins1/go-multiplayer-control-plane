@@ -1,7 +1,7 @@
 # Spec: 009-participation-consumer
 
 **Serviço:** achievements-service
-**Status:** Aprovada (2026-07-07)
+**Status:** Superseded by ADR-0027 (motor genérico de event_rules, migration `008_event_rules.sql`) — a fatia H2 (dispatch por kind, idempotência por sessionId/playerId/event, sink `participation_event`→`ApplyParticipationEvent`) está implementada e viva, mas a função pura hardcoded `ParticipationEventTypes` desta spec foi substituída por `ParticipationFacts`+`EvaluateRules` (regra data-driven, ver spec `013-mode-fact`)
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — **arquétipo `host_world_dropin`, fatia H2** (sink: conquistas por papel/evento)
 **Roadmap:** `docs/game-models/host_world_dropin-roadmap.md` → H2

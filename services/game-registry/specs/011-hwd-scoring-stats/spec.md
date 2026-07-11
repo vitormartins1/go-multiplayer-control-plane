@@ -1,6 +1,6 @@
 # Spec 011 — ScoringStats no host_world_dropin
 
-> Status: **implementada** (achado registrado durante o estresse-teste do
+> Status: **Done** (achado registrado durante o estresse-teste do
 > motor de achievements/event rules — jogo "Achievements Test" — corrigido a
 > pedido direto do Vitor, 2026-07-10)
 > Fatia: pequena/aditiva — replica um campo que os outros 3 arquétipos já

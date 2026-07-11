@@ -1,7 +1,7 @@
 # Spec: 009-polymorphic-result
 
 **Serviço:** session-service (+ contrato do fan-out com os consumidores)
-**Status:** Implementada (2026-07-06)
+**Status:** Done (2026-07-06)
 **Data:** 2026-07-06
 **ADR:** 0023 (perfil de multiplayer) — **fatia 3** (resultado polimórfico), relaciona ADR-0020 (fan-out)
 

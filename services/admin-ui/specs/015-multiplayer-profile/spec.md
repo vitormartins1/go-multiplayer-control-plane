@@ -1,7 +1,7 @@
 # Spec: 015-multiplayer-profile
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Done (2026-07-06)
 **Data:** 2026-07-06
 **Parte de:** B1 do roadmap `queue_arena` (ADR-0023). Pares: `game-registry/006`, `admin-bff/012`.
 

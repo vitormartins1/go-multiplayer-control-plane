@@ -1,7 +1,7 @@
 # Spec: 002-overview-daily
 
 **Serviço:** analytics-service (+ admin-bff passthrough)
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-04
 **ADR:** 0021 · **Par:** `admin-ui/013-analytics-chart`
 

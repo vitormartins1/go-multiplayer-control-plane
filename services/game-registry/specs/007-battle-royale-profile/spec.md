@@ -1,7 +1,7 @@
 # Spec: 007-battle-royale-profile
 
 **Serviço:** game-registry
-**Status:** Rascunho (aguardando aprovação)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo — arquétipo + parâmetros)
 **Roadmap:** `docs/game-models/battle_royale-roadmap.md` — fatia **BR0**

@@ -1,7 +1,7 @@
 # Spec: 002-game-presence
 
 **Serviço:** game-registry (núcleo) + identity-service, admin-bff, admin-ui (integração)
-**Status:** Implementada (2026-06-30)
+**Status:** Done (2026-06-30)
 **Data:** 2026-06-30
 **ADR:** 0019 (presença por jogo sobre identidade global)
 

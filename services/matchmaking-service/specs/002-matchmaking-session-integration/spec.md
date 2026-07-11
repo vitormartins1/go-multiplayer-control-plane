@@ -1,7 +1,7 @@
 # Spec: 002-matchmaking-session-integration
 
 **Serviço:** matchmaking-service
-**Status:** Approved
+**Status:** Done (2026-06-29)
 **Data:** 2026-06-29
 
 ## Contexto
