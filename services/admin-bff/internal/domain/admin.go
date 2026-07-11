@@ -86,6 +86,18 @@ type Game struct {
 	// exposto pelo BFF — o game-registry já devolve no GET /games desde a
 	// spec 012, mas o campo nunca foi propagado até aqui (spec 059).
 	Fleet string `json:"fleet"`
+	// Resumo dos modos de multiplayer (ADR-0024) — biblioteca de jogos
+	// (revisão de layout, 2026-07-11): omitempty pois é best-effort (fan-out
+	// paralelo em Service.Games, não derruba a listagem se um jogo falhar).
+	MultiplayerModes []ModeSummary `json:"multiplayerModes,omitempty"`
+}
+
+// ModeSummary é o resumo de um modo nomeado (ADR-0024) — só o essencial pra
+// identificar o arquétipo na listagem, sem carregar os params completos.
+type ModeSummary struct {
+	ModeID      string `json:"modeId"`
+	DisplayName string `json:"displayName,omitempty"`
+	Archetype   string `json:"archetype"`
 }
 
 // Achievement é uma entrada do catálogo de conquistas de um jogo. O critério é

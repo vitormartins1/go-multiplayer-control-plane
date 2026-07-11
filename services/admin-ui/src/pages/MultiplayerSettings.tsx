@@ -8,7 +8,6 @@ import {
   Code,
   Divider,
   Drawer,
-  Fieldset,
   Group,
   Loader,
   Modal,
@@ -45,6 +44,7 @@ import {
   type CoopMissionParams,
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
+import { FormSection } from "../components/FormSection";
 
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -95,7 +95,7 @@ const RESPAWN_OPTIONS: { value: BattleRoyaleParams["respawnMode"]; label: string
   { value: "reboot_timer", label: "Reboot com janela" },
 ];
 
-function FieldLabel({ label, help }: { label: string; help: string }) {
+export function FieldLabel({ label, help }: { label: string; help: string }) {
   return (
     <Tooltip label={help} position="right" multiline w={260} withArrow>
       <Group gap={4} style={{ display: "inline-flex", cursor: "default" }}>
@@ -106,7 +106,7 @@ function FieldLabel({ label, help }: { label: string; help: string }) {
   );
 }
 
-function SwitchWithHelp({
+export function SwitchWithHelp({
   label,
   help,
   checked,
@@ -165,7 +165,7 @@ function buildHWDProfile(topology: "dedicated" | "p2p", p: HostWorldDropInParams
 // Layout: dois SimpleGrid externos de 2 colunas (md+).
 //   Row 1: [Composição | Condição de vitória]
 //   Row 2: [Formato    | Métricas           ]
-// Campos dentro de cada Fieldset sempre em Stack (sem grids internos).
+// Campos dentro de cada FormSection sempre em Stack (sem grids internos).
 function QueueArenaForm({
   p,
   set,
@@ -178,7 +178,7 @@ function QueueArenaForm({
   return (
     <>
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Fieldset legend="Composição">
+        <FormSection label="Composição">
           <Stack gap="sm">
             <div>
               <FieldLabel
@@ -237,9 +237,9 @@ function QueueArenaForm({
               </>
             )}
           </Stack>
-        </Fieldset>
+        </FormSection>
 
-        <Fieldset legend="Condição de vitória">
+        <FormSection label="Condição de vitória">
           <Stack gap="sm">
             <Select
               label={
@@ -287,11 +287,11 @@ function QueueArenaForm({
               />
             )}
           </Stack>
-        </Fieldset>
+        </FormSection>
       </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Fieldset legend="Formato">
+        <FormSection label="Formato">
           <Stack gap="sm">
             <div>
               <FieldLabel
@@ -331,9 +331,9 @@ function QueueArenaForm({
               onChange={(v) => set("allowDraw", v)}
             />
           </Stack>
-        </Fieldset>
+        </FormSection>
 
-        <Fieldset legend="Métricas">
+        <FormSection label="Métricas">
           <TagsInput
             label={
               <FieldLabel
@@ -351,7 +351,7 @@ function QueueArenaForm({
             }
             clearable
           />
-        </Fieldset>
+        </FormSection>
       </SimpleGrid>
     </>
   );
@@ -381,7 +381,7 @@ function HostWorldDropInForm({
 
   return (
     <>
-      <Fieldset legend="Papéis e capacidade">
+      <FormSection label="Papéis e capacidade">
         <Stack gap="sm">
           <div>
             <FieldLabel
@@ -440,10 +440,10 @@ function HostWorldDropInForm({
             </SimpleGrid>
           )}
         </Stack>
-      </Fieldset>
+      </FormSection>
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Fieldset legend="Critérios de matchmaking">
+        <FormSection label="Critérios de matchmaking">
           <Stack gap="sm">
             <SwitchWithHelp
               label="Faixa de nível"
@@ -464,9 +464,9 @@ function HostWorldDropInForm({
               onChange={(v) => set("passwordEnabled", v)}
             />
           </Stack>
-        </Fieldset>
+        </FormSection>
 
-        <Fieldset legend="Comportamento">
+        <FormSection label="Comportamento">
           <Stack gap="sm">
             <SwitchWithHelp
               label="Invasão automática"
@@ -475,10 +475,10 @@ function HostWorldDropInForm({
               onChange={(v) => set("invasionEnabled", v)}
             />
           </Stack>
-        </Fieldset>
+        </FormSection>
       </SimpleGrid>
 
-      <Fieldset legend="Métricas">
+      <FormSection label="Métricas">
         <TagsInput
           label={
             <FieldLabel
@@ -496,7 +496,7 @@ function HostWorldDropInForm({
           }
           clearable
         />
-      </Fieldset>
+      </FormSection>
     </>
   );
 }
@@ -517,7 +517,7 @@ function BattleRoyaleForm({
   return (
     <>
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Fieldset legend="Lobby e squads">
+        <FormSection label="Lobby e squads">
           <Stack gap="sm">
             <NumberInput
               label={
@@ -543,9 +543,9 @@ function BattleRoyaleForm({
               onChange={(v) => set("teamSize", typeof v === "number" ? v : 1)}
             />
           </Stack>
-        </Fieldset>
+        </FormSection>
 
-        <Fieldset legend="Respawn">
+        <FormSection label="Respawn">
           <Select
             label={
               <FieldLabel
@@ -558,10 +558,10 @@ function BattleRoyaleForm({
             allowDeselect={false}
             data={RESPAWN_OPTIONS}
           />
-        </Fieldset>
+        </FormSection>
       </SimpleGrid>
 
-      <Fieldset legend="Métricas">
+      <FormSection label="Métricas">
         <TagsInput
           label={
             <FieldLabel
@@ -579,7 +579,7 @@ function BattleRoyaleForm({
           }
           clearable
         />
-      </Fieldset>
+      </FormSection>
     </>
   );
 }
@@ -600,7 +600,7 @@ function CoopMissionForm({
   return (
     <>
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Fieldset legend="Time e bots">
+        <FormSection label="Time e bots">
           <Stack gap="sm">
             <NumberInput
               label={
@@ -620,9 +620,9 @@ function CoopMissionForm({
               onChange={(v) => set("botfillEnabled", v)}
             />
           </Stack>
-        </Fieldset>
+        </FormSection>
 
-        <Fieldset legend="Catálogo (data plane)">
+        <FormSection label="Catálogo (data plane)">
           <Stack gap="sm">
             <TagsInput
               label={
@@ -659,10 +659,10 @@ function CoopMissionForm({
               clearable
             />
           </Stack>
-        </Fieldset>
+        </FormSection>
       </SimpleGrid>
 
-      <Fieldset legend="Métricas">
+      <FormSection label="Métricas">
         <TagsInput
           label={
             <FieldLabel
@@ -680,7 +680,7 @@ function CoopMissionForm({
           }
           clearable
         />
-      </Fieldset>
+      </FormSection>
     </>
   );
 }
@@ -724,36 +724,12 @@ export function modeSummary(m: MultiplayerMode): string {
   }
 }
 
-// --- Editor de um modo (ADR-0024, spec 023) ---
-// Reusa o form por arquétipo como corpo; a moldura adiciona a identidade do
-// modo (modeId estável + displayName). modeId trava na edição (rename de
-// exibição = displayName) e no primeiro cadastro (CTA cria o "default").
-export function ModeEditor({
-  gameId,
-  mode,
-  lockDefault,
-  existingModeIds,
-  onSaved,
-  onCancel,
-  onSubmit,
-  submitLabel = "Salvar modo",
-  cancelLabel = "Cancelar",
-}: {
-  gameId?: string; // obrigatório quando não há onSubmit (save default via API)
-  mode: MultiplayerMode | null; // null = criar
-  lockDefault: boolean; // primeiro cadastro: modeId = "default" travado
-  existingModeIds: string[];
-  onSaved: () => void;
-  onCancel: () => void;
-  // submissão plugável (035): o caller decide o destino — Configurações salva
-  // na API (default), o wizard coleta em memória antes do jogo existir.
-  onSubmit?: (modeId: string, displayName: string, profile: MultiplayerProfile) => Promise<void>;
-  submitLabel?: string;
-  cancelLabel?: string;
-}) {
-  const isEdit = mode !== null;
-  const [modeId, setModeId] = useState(mode?.modeId ?? (lockDefault ? DEFAULT_MODE_ID : ""));
-  const [displayName, setDisplayName] = useState(mode?.displayName ?? "");
+// --- Estado do perfil (arquétipo + topologia + parâmetros) ---
+// Extraído do editor de modo (revisão de layout, 2026-07-11) pra ser
+// reaproveitado também pelo GameCreateWizard (drawer de registro, sem steps):
+// os dois precisam do mesmo estado/validação, só a moldura em volta muda
+// (ModeEditor tem ID/nome do modo + botão próprio; o wizard não).
+export function useModeProfileState(mode: MultiplayerMode | null) {
   const [topology, setTopology] = useState<"dedicated" | "p2p">(mode?.topology ?? "dedicated");
   const [archetype, setArchetype] = useState<MultiplayerProfile["archetype"]>(
     mode?.archetype ?? "queue_arena",
@@ -770,7 +746,6 @@ export function ModeEditor({
   const [cm, setCM] = useState<CoopMissionParams>(
     mode?.archetype === "coop_mission" ? { ...CM_DEFAULTS, ...mode.params } : CM_DEFAULTS,
   );
-  const [saving, setSaving] = useState(false);
 
   function setQAField<K extends keyof QueueArenaParams>(key: K, value: QueueArenaParams[K]) {
     setQA((prev) => ({ ...prev, [key]: value }));
@@ -785,10 +760,6 @@ export function ModeEditor({
     setCM((prev) => ({ ...prev, [key]: value }));
   }
 
-  const modeIdLocked = isEdit || lockDefault;
-  const modeIdInvalid = !MODE_ID_RE.test(modeId);
-  const modeIdTaken = !modeIdLocked && existingModeIds.includes(modeId);
-  const displayNameTooLong = displayName.trim().length > 60;
   const invalidQAStats = qa.scoringStats.filter((st) => !STAT_RE.test(st));
   const hwdRolesEmpty = archetype === "host_world_dropin" && hwd.enabledRoles.length === 0;
   const invalidBRStats = br.scoringStats.filter((st) => !STAT_RE.test(st));
@@ -797,95 +768,55 @@ export function ModeEditor({
     archetype === "coop_mission" &&
     (cm.teamSize < 2 ||
       [...cm.scoringStats, ...cm.missions, ...cm.difficulties].some((st) => !STAT_RE.test(st)));
-  const canSave =
-    !modeIdInvalid &&
-    !modeIdTaken &&
-    !displayNameTooLong &&
-    invalidQAStats.length === 0 &&
-    !hwdRolesEmpty &&
-    invalidBRStats.length === 0 &&
-    !brLobbyInvalid &&
-    !cmFieldsInvalid &&
-    !saving;
+  const valid =
+    invalidQAStats.length === 0 && !hwdRolesEmpty && invalidBRStats.length === 0 && !brLobbyInvalid && !cmFieldsInvalid;
 
-  async function save() {
-    setSaving(true);
-    try {
-      const profile =
-        archetype === "queue_arena"
-          ? buildQueueArenaProfile(topology, qa)
-          : archetype === "host_world_dropin"
-            ? buildHWDProfile(topology, hwd)
-            : archetype === "battle_royale"
-              ? buildBattleRoyaleProfile(topology, br)
-              : buildCoopMissionProfile(topology, cm);
-      const name = displayName.trim();
-      if (onSubmit) {
-        await onSubmit(modeId, name, profile);
-      } else {
-        await api.setMultiplayerMode(gameId ?? "", modeId, {
-          ...profile,
-          ...(name ? { displayName: name } : {}),
-        });
-        notifications.show({ color: "nominal", message: `Modo "${name || modeId}" salvo.` });
-      }
-      onSaved();
-    } catch (err) {
-      const code = err instanceof HttpError ? err.code : undefined;
-      notifications.show({
-        color: "critical",
-        message: code
-          ? `Falha ao salvar (${code}).`
-          : "Falha ao salvar (parâmetros inválidos ou serviço fora?).",
-      });
-    } finally {
-      setSaving(false);
-    }
+  function buildProfile(): MultiplayerProfile {
+    return archetype === "queue_arena"
+      ? buildQueueArenaProfile(topology, qa)
+      : archetype === "host_world_dropin"
+        ? buildHWDProfile(topology, hwd)
+        : archetype === "battle_royale"
+          ? buildBattleRoyaleProfile(topology, br)
+          : buildCoopMissionProfile(topology, cm);
   }
 
-  const archetypeChanged = isEdit && archetype !== mode.archetype;
+  return {
+    archetype,
+    setArchetype,
+    topology,
+    setTopology,
+    qa,
+    setQAField,
+    hwd,
+    setHWDField,
+    br,
+    setBRField,
+    cm,
+    setCMField,
+    valid,
+    buildProfile,
+  };
+}
 
-  // O cabeçalho próprio do editor (026: voltar + ações no topo) saiu na 037 —
-  // o container (Drawer nas Configurações, step no wizard) provê título/fechar.
+type ModeProfileState = ReturnType<typeof useModeProfileState>;
+
+// ModeProfileFields renderiza arquétipo+topologia e o form específico do
+// arquétipo escolhido — sem identidade do modo (ID/nome) nem botão próprio,
+// pra caber tanto no editor de modo quanto no drawer de registro de jogo.
+export function ModeProfileFields({
+  state,
+  archetypeChanged,
+}: {
+  state: ModeProfileState;
+  archetypeChanged?: boolean;
+}) {
+  const { archetype, setArchetype, topology, setTopology, qa, setQAField, hwd, setHWDField, br, setBRField, cm, setCMField } =
+    state;
+
   return (
-    <Stack>
-      <Fieldset legend="Identidade do modo">
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          <TextInput
-            label={
-              <FieldLabel
-                label="ID do modo"
-                help="Identificador estável do modo (vai para matchmaking/token/eventos no M1). Minúsculas, dígitos e hífen, começando com letra; máx. 32. Imutável após criado — para renomear a exibição use o nome abaixo."
-              />
-            }
-            placeholder="ex.: tdm, ranked, warzone"
-            value={modeId}
-            onChange={(e) => setModeId(e.currentTarget.value)}
-            disabled={modeIdLocked}
-            error={
-              !modeIdLocked && modeId.length > 0 && modeIdInvalid
-                ? "Formato: ^[a-z][a-z0-9-]{0,31}$"
-                : modeIdTaken
-                  ? "Já existe um modo com este id."
-                  : undefined
-            }
-          />
-          <TextInput
-            label={
-              <FieldLabel
-                label="Nome de exibição"
-                help="Nome amigável do modo mostrado no console (opcional, até 60 caracteres). Pode mudar a qualquer momento."
-              />
-            }
-            placeholder="ex.: Team Deathmatch"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.currentTarget.value)}
-            error={displayNameTooLong ? "Máximo de 60 caracteres." : undefined}
-          />
-        </SimpleGrid>
-      </Fieldset>
-
-      <Fieldset legend="Arquétipo e topologia">
+    <>
+      <FormSection label="Arquétipo e topologia">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <Select
             label={
@@ -923,7 +854,7 @@ export function ModeEditor({
             />
           </Tooltip>
         </SimpleGrid>
-      </Fieldset>
+      </FormSection>
 
       {archetypeChanged && (
         <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
@@ -943,6 +874,156 @@ export function ModeEditor({
       ) : (
         <CoopMissionForm p={cm} set={setCMField} />
       )}
+    </>
+  );
+}
+
+// --- Estado da identidade do modo (ID + nome de exibição) ---
+// Extraído do editor de modo (revisão de layout, 2026-07-11) pra ser
+// reaproveitado também pelo GameCreateWizard — criar um jogo cadastra o
+// primeiro modo dele, mesma identidade (ID travado em "default" + nome de
+// exibição livre) que o bootstrap de "Configurar multiplayer" em Configurações.
+export function useModeIdentityState(mode: MultiplayerMode | null, lockDefault: boolean, existingModeIds: string[]) {
+  const isEdit = mode !== null;
+  const [modeId, setModeId] = useState(mode?.modeId ?? (lockDefault ? DEFAULT_MODE_ID : ""));
+  const [displayName, setDisplayName] = useState(mode?.displayName ?? "");
+
+  const modeIdLocked = isEdit || lockDefault;
+  const modeIdInvalid = !MODE_ID_RE.test(modeId);
+  const modeIdTaken = !modeIdLocked && existingModeIds.includes(modeId);
+  const displayNameTooLong = displayName.trim().length > 60;
+  const valid = !modeIdInvalid && !modeIdTaken && !displayNameTooLong;
+
+  return {
+    modeId,
+    setModeId,
+    displayName,
+    setDisplayName,
+    modeIdLocked,
+    modeIdInvalid,
+    modeIdTaken,
+    displayNameTooLong,
+    valid,
+  };
+}
+
+type ModeIdentityState = ReturnType<typeof useModeIdentityState>;
+
+// ModeIdentityFields renderiza só os dois campos (ID do modo + nome de
+// exibição) — sem moldura própria, pra caber dentro do FormSection do caller
+// (ModeEditor e GameCreateWizard usam rótulos diferentes ao redor).
+export function ModeIdentityFields({ state }: { state: ModeIdentityState }) {
+  const { modeId, setModeId, displayName, setDisplayName, modeIdLocked, modeIdInvalid, modeIdTaken, displayNameTooLong } =
+    state;
+  return (
+    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+      <TextInput
+        label={
+          <FieldLabel
+            label="ID do modo"
+            help="Identificador estável do modo (vai para matchmaking/token/eventos no M1). Minúsculas, dígitos e hífen, começando com letra; máx. 32. Imutável após criado — para renomear a exibição use o nome abaixo."
+          />
+        }
+        placeholder="ex.: tdm, ranked, warzone"
+        value={modeId}
+        onChange={(e) => setModeId(e.currentTarget.value)}
+        disabled={modeIdLocked}
+        error={
+          !modeIdLocked && modeId.length > 0 && modeIdInvalid
+            ? "Formato: ^[a-z][a-z0-9-]{0,31}$"
+            : modeIdTaken
+              ? "Já existe um modo com este id."
+              : undefined
+        }
+      />
+      <TextInput
+        label={
+          <FieldLabel
+            label="Nome de exibição"
+            help="Nome amigável do modo mostrado no console (opcional, até 60 caracteres). Pode mudar a qualquer momento."
+          />
+        }
+        placeholder="ex.: Team Deathmatch"
+        value={displayName}
+        onChange={(e) => setDisplayName(e.currentTarget.value)}
+        error={displayNameTooLong ? "Máximo de 60 caracteres." : undefined}
+      />
+    </SimpleGrid>
+  );
+}
+
+// --- Editor de um modo (ADR-0024, spec 023) ---
+// Reusa ModeIdentityFields + ModeProfileFields como corpo; a moldura adiciona
+// os FormSection ao redor e o botão de salvar.
+export function ModeEditor({
+  gameId,
+  mode,
+  lockDefault,
+  existingModeIds,
+  onSaved,
+  onCancel,
+  onSubmit,
+  submitLabel = "Salvar modo",
+  cancelLabel = "Cancelar",
+}: {
+  gameId?: string; // obrigatório quando não há onSubmit (save default via API)
+  mode: MultiplayerMode | null; // null = criar
+  lockDefault: boolean; // primeiro cadastro: modeId = "default" travado
+  existingModeIds: string[];
+  onSaved: () => void;
+  onCancel: () => void;
+  // submissão plugável (035): o caller decide o destino — Configurações salva
+  // na API (default), o wizard coleta em memória antes do jogo existir.
+  onSubmit?: (modeId: string, displayName: string, profile: MultiplayerProfile) => Promise<void>;
+  submitLabel?: string;
+  cancelLabel?: string;
+}) {
+  const identity = useModeIdentityState(mode, lockDefault, existingModeIds);
+  const { modeId, displayName } = identity;
+  const [saving, setSaving] = useState(false);
+  const profile = useModeProfileState(mode);
+
+  const canSave = identity.valid && profile.valid && !saving;
+
+  async function save() {
+    setSaving(true);
+    try {
+      const builtProfile = profile.buildProfile();
+      const name = displayName.trim();
+      if (onSubmit) {
+        await onSubmit(modeId, name, builtProfile);
+      } else {
+        await api.setMultiplayerMode(gameId ?? "", modeId, {
+          ...builtProfile,
+          ...(name ? { displayName: name } : {}),
+        });
+        notifications.show({ color: "nominal", message: `Modo "${name || modeId}" salvo.` });
+      }
+      onSaved();
+    } catch (err) {
+      const code = err instanceof HttpError ? err.code : undefined;
+      notifications.show({
+        color: "critical",
+        message: code
+          ? `Falha ao salvar (${code}).`
+          : "Falha ao salvar (parâmetros inválidos ou serviço fora?).",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const archetypeChanged = mode !== null && profile.archetype !== mode.archetype;
+
+  // O cabeçalho próprio do editor (026: voltar + ações no topo) saiu na 037 —
+  // o container (Drawer nas Configurações, step no wizard) provê título/fechar.
+  return (
+    <Stack>
+      <FormSection label="Identidade do modo">
+        <ModeIdentityFields state={identity} />
+      </FormSection>
+
+      <ModeProfileFields state={profile} archetypeChanged={archetypeChanged} />
 
       <Group>
         <Button onClick={save} disabled={!canSave} loading={saving}>
