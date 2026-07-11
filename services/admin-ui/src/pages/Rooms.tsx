@@ -247,7 +247,9 @@ export function Rooms() {
     if (!closing) return;
     setCloseLoading(true);
     try {
-      await api.closeRoom(closing.matchId);
+      // host_world_dropin nunca tem matchId (identidade = sessionId) — sem o
+      // fallback, o force-close dessas salas nunca resolvia (spec 024).
+      await api.closeRoom(closing.matchId || closing.sessionId);
       notifications.show({ color: "nominal", message: "Sala encerrada." });
       setClosing(null);
       reload();

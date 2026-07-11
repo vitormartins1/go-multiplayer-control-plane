@@ -416,3 +416,19 @@ func TestListInvadableWorlds_NenhumElegivel_ListaVaziaSemErro(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, worlds)
 }
+
+// TestCloseByAdmin_MundoHostWorld_FechaPorSessionID cobre o bug da spec 024:
+// mundos host_world_dropin não têm matchID (ver TestOpenWorld_PerfilOk...,
+// "host_world não tem matchID"), então o force-close do operador precisa
+// resolver pelo próprio sessionID, não só pelo matchIndex (caminho legado
+// queue_arena).
+func TestCloseByAdmin_MundoHostWorld_FechaPorSessionID(t *testing.T) {
+	svc, alloc, _, sessionID := openWorldSetup(t)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	sess, err := svc.CloseByAdmin(context.Background(), sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.CloseAdmin, sess.CloseReason)
+	assert.Equal(t, float64(0), svc.ActiveSessions(), "sai das ativas")
+	alloc.AssertExpectations(t)
+}
