@@ -22,6 +22,6 @@ O loop MVP (`login → find match → aloca server + connect token → partida �
 
 Features de multiplayer que ainda não têm arquétipo implementado, ou evoluções dos que têm:
 
-- **Os 4 arquétipos estão completos no control plane** (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) — ver `game-models/README.md` (matriz de cobertura). O que falta é **cross-repo**: só `queue_arena` tem data plane Unity de verdade; os outros 3 têm contrato pronto, sem repo Unity ainda (`UNITY-INTEGRATION.md`).
+- **Os 4 arquétipos estão completos no control plane** (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) — ver `game-models/README.md` (matriz de cobertura). O que falta é **cross-repo**: `queue_arena` e `host_world_dropin` já têm data plane Unity de verdade; `battle_royale`/`coop_mission` têm contrato pronto, sem repo Unity ainda (`UNITY-INTEGRATION.md`).
 - **Evoluções do `host_world_dropin`:** consolidadas em [`game-models/host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md) (pools por região, Redis+pub/sub, alocação sob demanda, etc. — senha e critério por stat já foram fechados).
 - **Topologia `p2p`:** campo no perfil (ADR-0023); implementação = ADR futuro + data plane próprio.

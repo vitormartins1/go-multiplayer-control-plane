@@ -14,11 +14,11 @@ O realtime de gameplay **não** é Go: roda no **Unity Dedicated Server** (data 
 
 O control plane é **agnóstico de tipo de jogo**: cada jogo declara no game-registry um **perfil de multiplayer** (arquétipo + parâmetros), e matchmaking/session/fan-out se pré-configuram a partir dele. A generalização é dirigida por **engenharia reversa de jogos reais** em [`docs/game-models/`](docs/game-models/README.md).
 
-| Arquétipo | Forma | Estado (control plane) |
-|---|---|---|
-| `queue_arena` | partida simétrica FFA/NvN, resultado win/loss/draw + stats | ✅ completo |
-| `host_world_dropin` | Souls-like: mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento | ✅ completo (H0–H3 + contrato) |
-| `battle_royale`, `coop_mission` | colocação ordinal / resultado coletivo | ⬜ planejado |
+| Arquétipo | Forma | Estado (control plane) | Data plane Unity |
+|---|---|---|---|
+| `queue_arena` | partida simétrica FFA/NvN, resultado win/loss/draw + stats | ✅ completo | ✅ rodando de verdade (`unity-queue-arena-data-plane`) |
+| `host_world_dropin` | Souls-like: mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento | ✅ completo | ✅ rodando de verdade (`unity-host-world-dropin-data-plane`, Fases 0–5 done, e2e k3d→Pi 5 + carga) |
+| `battle_royale`, `coop_mission` | colocação ordinal / resultado coletivo | ✅ completo | ⬜ repo Unity ainda não criado |
 
 Estado por fatia: [`docs/game-models/README.md`](docs/game-models/README.md) → "Estado da implementação".
 
@@ -29,6 +29,7 @@ Cada um reimplementa um equivalente AWS e forma um par de comparação. Detalhes
 | Serviço | Equivalente AWS | Protocolo | Storage | Status |
 |---|---|---|---|---|
 | [identity](services/identity-service) | GameKit Identity (Cognito) | REST | Postgres | ✅ |
+| [game-registry](services/game-registry) | (sem equivalente 1:1 — fonte de jogos multi-tenant, ADR-0017) | REST | Postgres | ✅ |
 | [achievements](services/achievements-service) | GameKit Achievements | REST + consumer SQS | Postgres | ✅ |
 | [player-data](services/player-data-service) | GameKit User Gameplay Data | REST | Postgres (JSONB) | ✅ |
 | [cloud-save](services/cloud-save-service) | GameKit Game State Saving | REST | MinIO / S3 | ✅ |
@@ -57,14 +58,14 @@ Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Re
 | [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md) | Control plane + data planes por arquétipo (nomenclatura de repos) |
 | [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | Aprendizados de Go (exemplos comentados) |
 | [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) | Handoff — estado atual e backlog priorizado |
-| [docs/adr/README.md](docs/adr/README.md) | Índice de ADRs (0001–0023) |
+| [docs/adr/README.md](docs/adr/README.md) | Índice de ADRs (0001–0029) |
 | [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) · [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Metodologia SDD · branches/commits |
 | [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) · [infra/docker/README.md](infra/docker/README.md) | Observabilidade local · stack local (portas, dashboards) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) · [docs/FEATURE-MAP.md](docs/FEATURE-MAP.md) | Fases de estudo/FinOps · índice de features por serviço |
 
 ## Status
 
-**Trilha de serviços 100% construída** (8 serviços Go + painel admin), rodando localmente via Docker Compose com observabilidade completa (Prometheus + Grafana + Tempo). **Dois arquétipos de multiplayer completos** no control plane (`queue_arena`, `host_world_dropin`). Decisões em **ADRs 0001–0023**. Deploy em AWS (Terraform) fica para o fim — a prioridade é validar o máximo localmente.
+**Trilha de serviços 100% construída** (10 serviços Go + painel admin), rodando localmente via Docker Compose com observabilidade completa (Prometheus + Grafana + Tempo). **4 arquétipos de multiplayer completos** no control plane (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) — cross-repo, `queue_arena` e `host_world_dropin` já têm data plane Unity rodando de verdade, `battle_royale`/`coop_mission` ainda sem repo Unity. Decisões em **ADRs 0001–0029**. Deploy em AWS (Terraform) fica para o fim — a prioridade é validar o máximo localmente.
 
 ## Comandos
 

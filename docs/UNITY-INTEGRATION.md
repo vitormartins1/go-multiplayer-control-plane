@@ -8,14 +8,14 @@
 >
 > Este doc guarda só o que é **comum a todos os arquétipos** (requisitos do projeto Unity, Agones, canais). Topologia de repos: [`REPO-TOPOLOGY.md`](REPO-TOPOLOGY.md) (um `go-multiplayer-control-plane` + N `unity-<archetype>-data-plane`).
 
-## Estado atual por arquétipo (2026-07-10)
+## Estado atual por arquétipo (2026-07-11)
 
 Os 4 arquétipos estão **completos no control plane** (ADR-0023), mas o data plane Unity é cross-repo e evolui em ritmo próprio — dois estão de pé, dois ainda não:
 
 | Arquétipo | Data plane Unity | Estado |
 |---|---|---|
 | `queue_arena` | `unity-queue-arena-data-plane` (ex-`go-game-dataplane`) | **Rodando de verdade** — Fases 0-7: Dedicated Server ARM64 orquestrado por Agones (k3d local → homelab Pi 5), handshake completo `login → FindMatch → session aloca via Agones → connect token Ed25519 → partida → ReportResult`. É o exemplo canônico. **Tem dívida de contrato pendente** — ver seção abaixo. |
-| `host_world_dropin` | `unity-host-world-dropin-data-plane` | 🟡 **Em andamento** — repo real no GitHub, 28 commits. **Fases 0–4 done**, verificado ao vivo (server ARM64 real + clients headless): mundo do host, phantoms entrando no meio da sessão por papel, invasão + quadro de sinais via matchmaking (incluindo bypass por senha), combate com boss e ciclo de vida completo (host morto, boss derrotado, mundo fecha). Falta **Fase 5** (e2e orquestrado k3d→Pi 5 — ainda sem Fleet Agones própria, usa a do `queue_arena`) e **Fase 6+** (refinamento). Ainda não exerceu `achievements/018`/`game-registry/011` (stats no HWD, 2026-07-10 — posterior ao último commit deste repo). |
+| `host_world_dropin` | `unity-host-world-dropin-data-plane` | ✅ **Fases 0–5 done** (2026-07-11) — mundo do host, phantoms entrando no meio da sessão por papel, invasão + quadro de sinais via matchmaking (incluindo bypass por senha), combate com boss e ciclo de vida completo (host morto, boss derrotado, mundo fecha), **e2e orquestrado k3d→Pi 5 + carga real** (8 mundos/24 processos, GameServers reciclados, fan-out confirmado ponta a ponta). Falta só **Fase 6+** (refinamento: senha/pools por região/reconexão — backlog, sem data fixa). |
 | `battle_royale` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
 | `coop_mission` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
 
@@ -53,4 +53,4 @@ O `ReportResult` mudou na spec `session/009` (resultado polimórfico, ADR-0023):
 
 ## O que cada data plane Unity precisa implementar
 
-Depende do arquétipo — a tabela concreta está em cada contrato (`…-dataplane-contract.md`). Em comum: gerar os stubs C# do `.proto`, ler o claim do token no connection approval, e reportar ao backend (resultado terminal no `queue_arena`/colocação no `battle_royale`/desfecho coletivo no `coop_mission`; eventos de participação no `host_world_dropin`). O `unity-queue-arena-data-plane` é o único exemplo de referência já rodando (ver "Estado atual por arquétipo" no topo) — os outros 3 ainda não têm repo.
+Depende do arquétipo — a tabela concreta está em cada contrato (`…-dataplane-contract.md`). Em comum: gerar os stubs C# do `.proto`, ler o claim do token no connection approval, e reportar ao backend (resultado terminal no `queue_arena`/colocação no `battle_royale`/desfecho coletivo no `coop_mission`; eventos de participação no `host_world_dropin`). O `unity-queue-arena-data-plane` e o `unity-host-world-dropin-data-plane` são os dois exemplos de referência já rodando (ver "Estado atual por arquétipo" no topo) — `battle_royale`/`coop_mission` ainda não têm repo.
