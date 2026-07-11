@@ -1,6 +1,6 @@
 # Spec: 024-close-room-host-world-fix
 **Serviço:** session-service (+ ajuste passivo em admin-ui)
-**Status:** Implementado (código pronto, testes + smoke ao vivo ok; confirmação visual do usuário pendente)
+**Status:** Done (2026-07-11) — validado pelo usuário
 **Data:** 2026-07-11
 
 ## Contexto

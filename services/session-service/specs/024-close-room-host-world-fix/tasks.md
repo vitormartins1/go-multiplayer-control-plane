@@ -17,4 +17,4 @@
 - [x] `go test ./services/session-service/... -race` — 174 testes ok
 - [x] Smoke ao vivo: abrir mundo host_world_dropin de teste, encerrar via admin-bff (`:8089`) usando `sessionId` — 200, `state=closed`, `closeReason=admin`, slot do allocator liberado (reutilizado por outra sessão em seguida)
 - [x] Regressão ao vivo: force-close de sessão queue_arena por `matchId` — 200, continua funcionando
-- [ ] Confirmação do usuário
+- [x] Confirmação do usuário — "validado." (2026-07-11)
