@@ -12,6 +12,8 @@ import {
 } from "@tabler/icons-react";
 import { api } from "./lib/api";
 import { useAsync } from "./lib/useAsync";
+import { FleetLocationBadge } from "./components/FleetLocationBadge";
+import { fleetLocationOf } from "./lib/fleetLocation";
 
 // Rotas carregadas sob demanda (code-splitting): cada página vira um chunk
 // próprio, então os deps pesados (DiceBear nas capas/avatares, @xyflow no mapa
@@ -62,6 +64,36 @@ function HealthStrip() {
   return <Box h={3} style={{ background: color, transition: "background-color 600ms ease" }} />;
 }
 
+// FleetNavBadge (spec 023, follow-up): sinal agregado no item de nav "Fleet" —
+// não é por-jogo (isso já existe dentro da própria aba, por linha), é "onde a
+// nossa frota está rodando agora", de longe. Como só existe UM cluster
+// observável por vez (arquitetura atual, ver spec 023), o cluster de QUALQUER
+// fleet cadastrada já representa o agregado — usa a primeira que achar.
+// Cor/saúde por-fleet dentro do badge fica pra depois (pedido do Vitor,
+// 2026-07-11); por ora é só a localização.
+function FleetNavBadge() {
+  const { data: games, loading: gamesLoading } = useAsync((s) => api.games(s), []);
+  const fleetGameID = games?.find((g) => g.fleet)?.id;
+  const {
+    data: status,
+    loading: statusLoading,
+    error,
+    reload,
+  } = useAsync((s) => (fleetGameID ? api.fleetStatus(fleetGameID, s) : Promise.resolve(undefined)), [fleetGameID]);
+
+  useEffect(() => {
+    if (!fleetGameID) return;
+    const id = setInterval(reload, HEALTH_POLL_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fleetGameID]);
+
+  if (gamesLoading || statusLoading) return null; // sem flicker enquanto carrega
+  if (error) return <FleetLocationBadge location="unknown" />;
+  if (!fleetGameID || !status) return <FleetLocationBadge location="offline" />;
+  return <FleetLocationBadge location={fleetLocationOf(status)} />;
+}
+
 export function App() {
   const { pathname } = useLocation();
   const active = (to: string) => pathname.startsWith(to);
@@ -103,6 +135,10 @@ export function App() {
             to={n.to}
             label={n.label}
             leftSection={<n.icon size={18} />}
+            // Localização agregada da frota (spec 023, follow-up) só no item
+            // Fleet — ícone+texto à esquerda (leftSection, já existente),
+            // badge de onde está rodando à direita.
+            rightSection={n.to === "/fleet" ? <FleetNavBadge /> : undefined}
             active={active(n.to)}
             onClick={closeNav}
           />
