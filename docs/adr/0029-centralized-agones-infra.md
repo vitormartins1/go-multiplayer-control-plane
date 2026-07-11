@@ -1,6 +1,6 @@
 # ADR-0029: Infra Agones centralizada no control plane
 
-**Status:** Proposed
+**Status:** Accepted (2026-07-11)
 **Data:** 2026-07-10
 **Serviço(s) afetado(s):** control plane (`infra/`), todos os `unity-<archetype>-data-plane`
 **Relaciona:** ADR-0010 (control plane orquestra), ADR-0012 (Agones desde o início), ADR-0026 (Fleet por jogo), `REPO-TOPOLOGY.md`
