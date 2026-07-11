@@ -33,6 +33,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/004_placement_rollup.sql",
 			"../../migrations/005_mission_rollup.sql",
 			"../../migrations/006_participation_event_id_and_outcome.sql",
+			"../../migrations/007_participation_mode_id.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -238,6 +239,35 @@ func TestApplyParticipation_MesmoRoleEvento_OutcomesDiferentes_LinhasSeparadas(t
 	}
 	assert.Equal(t, int64(1), byOutcome["SUCCESS"].Count)
 	assert.Equal(t, int64(1), byOutcome["FAIL"].Count)
+}
+
+// Dois modos nomeados do mesmo jogo (spec 009, ADR-0024) -> linhas separadas
+// no rollup; dado sem modo (ModeID="") cai no bucket "sem modo" à parte.
+func TestApplyParticipation_ModosDiferentes_LinhasSeparadas(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	rodaAberta := domain.ParticipationEvent{GameID: "g1", ModeID: "default", SessionID: "w1", PlayerID: "coop-1", Role: "coop", Event: "BOSS_DEFEATED", Outcome: "NEUTRAL"}
+	batizado := domain.ParticipationEvent{GameID: "g1", ModeID: "batizado", SessionID: "w2", PlayerID: "coop-2", Role: "coop", Event: "BOSS_DEFEATED", Outcome: "NEUTRAL"}
+	semModo := domain.ParticipationEvent{GameID: "g1", SessionID: "w3", PlayerID: "coop-3", Role: "coop", Event: "BOSS_DEFEATED", Outcome: "NEUTRAL"} // ModeID="" (dado anterior à spec 009)
+
+	_, err := repo.ApplyParticipation(ctx, rodaAberta)
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, batizado)
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, semModo)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.RoleParticipations, 3, "3 modos distintos (incl. \"sem modo\") -> 3 linhas, nenhuma soma na outra")
+	byMode := map[string]int64{}
+	for _, p := range ga.RoleParticipations {
+		byMode[p.ModeID] = p.Count
+	}
+	assert.Equal(t, int64(1), byMode["default"])
+	assert.Equal(t, int64(1), byMode["batizado"])
+	assert.Equal(t, int64(1), byMode[""], "dado sem modo cai no bucket \"\"")
 }
 
 func TestGameAnalytics_QueueArena_SemParticipacoes(t *testing.T) {

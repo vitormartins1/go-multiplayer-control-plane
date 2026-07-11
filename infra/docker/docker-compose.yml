@@ -538,6 +538,7 @@ services:
       - ../../services/analytics-service/migrations/004_placement_rollup.sql:/docker-entrypoint-initdb.d/004_placement_rollup.sql:ro
       - ../../services/analytics-service/migrations/005_mission_rollup.sql:/docker-entrypoint-initdb.d/005_mission_rollup.sql:ro
       - ../../services/analytics-service/migrations/006_participation_event_id_and_outcome.sql:/docker-entrypoint-initdb.d/006_participation_event_id_and_outcome.sql:ro
+      - ../../services/analytics-service/migrations/007_participation_mode_id.sql:/docker-entrypoint-initdb.d/007_participation_mode_id.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d analytics"]
       interval: 5s

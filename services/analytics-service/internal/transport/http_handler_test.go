@@ -101,3 +101,30 @@ func TestGameAnalytics_QueueArena_RoleParticipationsVazio(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"roleParticipations":[]`, "campo aditivo, vazio no queue_arena")
 }
+
+// modeId (ADR-0024, spec 009): o DTO expõe o modo de cada linha de participação,
+// permitindo o admin-ui filtrar/agrupar por modo nomeado do host_world_dropin.
+func TestGameAnalytics_200_ExpoeModeID(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{
+		GameStat: domain.GameStat{GameID: "g1", Matches: 2},
+		RoleParticipations: []domain.ParticipationStat{
+			{ModeID: "batizado", Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS", Count: 3},
+			{ModeID: "", Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS", Count: 1},
+		},
+	}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		RoleParticipations []struct {
+			ModeID string `json:"modeId"`
+			Role   string `json:"role"`
+			Count  int64  `json:"count"`
+		} `json:"roleParticipations"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.RoleParticipations, 2)
+	assert.Equal(t, "batizado", body.RoleParticipations[0].ModeID)
+	assert.Equal(t, "", body.RoleParticipations[1].ModeID, "sem modo (dado anterior à spec 009) cai no bucket vazio")
+}

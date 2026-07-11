@@ -41,9 +41,11 @@ type AnalyticsOverview struct {
 	Daily  []AnalyticsDaily    `json:"daily"`
 }
 
-// ParticipationStat é a contagem de um (papel, evento, outcome) no detalhe de
-// um jogo host_world_dropin (spec 014/004/007). Vazio no queue_arena.
+// ParticipationStat é a contagem de um (modo, papel, evento, outcome) no
+// detalhe de um jogo host_world_dropin (spec 014/004/007/009). Vazio no
+// queue_arena. ModeID vazio agrupa dados anteriores à spec 009 (sem modo).
 type ParticipationStat struct {
+	ModeID  string `json:"modeId"`
 	Role    string `json:"role"`
 	Event   string `json:"event"`
 	Outcome string `json:"outcome"`

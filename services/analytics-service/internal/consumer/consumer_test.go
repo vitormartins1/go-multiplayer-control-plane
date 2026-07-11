@@ -62,6 +62,15 @@ func TestParseParticipation_LeCampos(t *testing.T) {
 	}, evt)
 }
 
+// modeId (ADR-0024, spec 009): o envelope já publica o campo — sem ele no
+// JSON (envelope antigo), ModeID cai em "" (bucket "sem modo").
+func TestParseParticipation_LeModeID(t *testing.T) {
+	body := []byte(`{"kind":"participation_event","gameId":"g1","modeId":"batizado","sessionId":"w1","playerId":"inv-1","role":"invader","event":"HOST_KILLED","outcome":"SUCCESS"}`)
+	evt, err := parseParticipation(body)
+	require.NoError(t, err)
+	assert.Equal(t, "batizado", evt.ModeID)
+}
+
 // O envelope placement (battle_royale) é lido em colocação + sobrevivência.
 func TestParsePlacement_LeEntradas(t *testing.T) {
 	body := []byte(`{"kind":"placement","matchId":"m1","gameId":"g1","entries":[

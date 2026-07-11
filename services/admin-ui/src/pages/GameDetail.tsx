@@ -171,7 +171,7 @@ export function GameDetail() {
           <GameSessions gameId={gameId} />
         </Tabs.Panel>
         <Tabs.Panel value="analytics" pt="md">
-          <GameAnalytics gameId={gameId} />
+          <GameAnalytics gameId={gameId} modes={gameModes ?? []} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="md">
           {game ? (

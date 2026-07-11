@@ -847,7 +847,7 @@ func TestAnalyticsOverview_Fora_502(t *testing.T) {
 func TestGameAnalytics_200_ComRoleParticipations(t *testing.T) {
 	svc := &fakeService{gameAnalytics: domain.GameAnalyticsDetail{
 		GameID: "hw", GameName: "Souls-like", Matches: 0,
-		RoleParticipations: []domain.ParticipationStat{{Role: "invader", Event: "HOST_KILLED", Count: 3}},
+		RoleParticipations: []domain.ParticipationStat{{ModeID: "batizado", Role: "invader", Event: "HOST_KILLED", Count: 3}},
 	}}
 	srv := newServer(svc)
 	defer srv.Close()
@@ -859,13 +859,15 @@ func TestGameAnalytics_200_ComRoleParticipations(t *testing.T) {
 	var body struct {
 		GameName           string `json:"gameName"`
 		RoleParticipations []struct {
-			Role  string `json:"role"`
-			Count int64  `json:"count"`
+			ModeID string `json:"modeId"`
+			Role   string `json:"role"`
+			Count  int64  `json:"count"`
 		} `json:"roleParticipations"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.Equal(t, "Souls-like", body.GameName)
 	require.Len(t, body.RoleParticipations, 1)
+	assert.Equal(t, "batizado", body.RoleParticipations[0].ModeID, "modeId (spec 009) propagado até o admin-ui")
 	assert.Equal(t, int64(3), body.RoleParticipations[0].Count)
 }
 

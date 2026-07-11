@@ -145,11 +145,16 @@ type ParticipationEvent struct {
 	// EventID identifica a ocorrência (follow-up #4, spec 007); vazio = data
 	// plane antigo, cai no fallback determinístico (ver effectiveEventID).
 	EventID string
+	// ModeID é o modo nomeado do mundo (ADR-0024, spec 009); "" = evento
+	// anterior a essa dimensão existir (bucket "sem modo").
+	ModeID string
 }
 
-// ParticipationStat é a contagem agregada de um (papel, evento, outcome) num
-// jogo (follow-up #5, spec 007: outcome entra na chave, não só um campo solto).
+// ParticipationStat é a contagem agregada de um (modo, papel, evento, outcome)
+// num jogo (spec 009: modeId entra na chave — follow-up #5/spec 007 já tinha
+// feito o mesmo com outcome).
 type ParticipationStat struct {
+	ModeID  string
 	Role    string
 	Event   string
 	Outcome string
