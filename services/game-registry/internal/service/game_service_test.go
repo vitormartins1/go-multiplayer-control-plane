@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,6 +33,9 @@ func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
 }
 func (m *mockRepo) UpdateFleet(ctx context.Context, id, fleet string) error {
 	return m.Called(ctx, id, fleet).Error(0)
+}
+func (m *mockRepo) UpdateDescription(ctx context.Context, id, description string) error {
+	return m.Called(ctx, id, description).Error(0)
 }
 func (m *mockRepo) SetModes(ctx context.Context, gameID string, modes []domain.MultiplayerMode, expectedVersion int64) error {
 	return m.Called(ctx, gameID, modes, expectedVersion).Error(0)
@@ -95,6 +99,51 @@ func TestSetFleet_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("UpdateFleet", mock.Anything, "nao", "packet-arena").Return(domain.ErrGameNotFound)
 	_, err := New(repo).SetFleet(context.Background(), "nao", "packet-arena")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+func TestSetDescription_Valido_Atualiza(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateDescription", mock.Anything, "g1", "Um jogo de capoeira.").Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1", Description: "Um jogo de capoeira."}, nil)
+
+	g, err := New(repo).SetDescription(context.Background(), "g1", "Um jogo de capoeira.")
+	require.NoError(t, err)
+	assert.Equal(t, "Um jogo de capoeira.", g.Description)
+	repo.AssertExpectations(t)
+}
+
+func TestSetDescription_VazioLimpaCampo(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateDescription", mock.Anything, "g1", "").Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+
+	g, err := New(repo).SetDescription(context.Background(), "g1", "")
+	require.NoError(t, err)
+	assert.Empty(t, g.Description)
+	repo.AssertExpectations(t)
+}
+
+func TestSetDescription_AcimaDoLimite_ErrInvalidDescription(t *testing.T) {
+	_, err := New(new(mockRepo)).SetDescription(context.Background(), "g1", strings.Repeat("a", 501))
+	assert.ErrorIs(t, err, domain.ErrInvalidDescription)
+}
+
+func TestSetDescription_NoLimite_Atualiza(t *testing.T) {
+	repo := new(mockRepo)
+	desc := strings.Repeat("a", 500)
+	repo.On("UpdateDescription", mock.Anything, "g1", desc).Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1", Description: desc}, nil)
+
+	g, err := New(repo).SetDescription(context.Background(), "g1", desc)
+	require.NoError(t, err)
+	assert.Equal(t, desc, g.Description)
+}
+
+func TestSetDescription_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateDescription", mock.Anything, "nao", "x").Return(domain.ErrGameNotFound)
+	_, err := New(repo).SetDescription(context.Background(), "nao", "x")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 

@@ -75,6 +75,11 @@ func (m *mockService) SetFleet(ctx context.Context, id, fleet string) (*domain.G
 	g, _ := args.Get(0).(*domain.Game)
 	return g, args.Error(1)
 }
+func (m *mockService) SetDescription(ctx context.Context, id, description string) (*domain.Game, error) {
+	args := m.Called(ctx, id, description)
+	g, _ := args.Get(0).(*domain.Game)
+	return g, args.Error(1)
+}
 
 type mockPresence struct{ mock.Mock }
 
@@ -282,6 +287,34 @@ func TestSetFleet_Inexistente_404(t *testing.T) {
 	svc := new(mockService)
 	svc.On("SetFleet", mock.Anything, "nao", "packet-arena").Return((*domain.Game)(nil), domain.ErrGameNotFound)
 	rr := do(newServer(svc), http.MethodPut, "/games/nao/fleet", `{"fleet":"packet-arena"}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+// Descrição do jogo (spec 013).
+
+func TestSetDescription_200_AtualizaDescricao(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetDescription", mock.Anything, "id-1", "Um jogo de capoeira.").Return(&domain.Game{ID: "id-1", Slug: "orb", Description: "Um jogo de capoeira."}, nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/description", `{"description":"Um jogo de capoeira."}`)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"description":"Um jogo de capoeira."`)
+	svc.AssertExpectations(t)
+}
+
+func TestSetDescription_AcimaDoLimite_400(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetDescription", mock.Anything, "id-1", "x").Return((*domain.Game)(nil), domain.ErrInvalidDescription)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/description", `{"description":"x"}`)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid_description")
+}
+
+func TestSetDescription_Inexistente_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetDescription", mock.Anything, "nao", "x").Return((*domain.Game)(nil), domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodPut, "/games/nao/description", `{"description":"x"}`)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 

@@ -44,8 +44,8 @@ export function PlayerDataView({ playerId, gameId }: { playerId: string; gameId:
               const isPrimitive = e.value === null || typeof e.value !== "object";
               return (
                 <Table.Tr key={`${e.namespace}/${e.key}`}>
-                  <Table.Td>{e.namespace}</Table.Td>
-                  <Table.Td>{e.key}</Table.Td>
+                  <Table.Td ff="monospace">{e.namespace}</Table.Td>
+                  <Table.Td ff="monospace">{e.key}</Table.Td>
                   <Table.Td>
                     {isPrimitive ? (
                       <Code>{String(e.value)}</Code>

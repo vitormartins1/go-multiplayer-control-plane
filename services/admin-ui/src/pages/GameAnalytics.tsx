@@ -125,7 +125,7 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
                   <Table.Td>{ROLE_LABELS[p.role] ?? p.role}</Table.Td>
                   <Table.Td>{EVENT_LABELS[p.event] ?? p.event}</Table.Td>
                   <Table.Td c="dimmed">{OUTCOME_LABELS[p.outcome] ?? (p.outcome || "—")}</Table.Td>
-                  <Table.Td ta="right">{p.count}</Table.Td>
+                  <Table.Td ta="right" ff="monospace">{p.count}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

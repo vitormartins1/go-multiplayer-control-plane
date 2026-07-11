@@ -25,6 +25,7 @@ type AdminService interface {
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
 	RenameGame(ctx context.Context, id, name string) (*domain.Game, error)
 	SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error)
+	SetDescription(ctx context.Context, id, description string) (*domain.Game, error)
 	DeleteGame(ctx context.Context, id string) error
 	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
 	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
@@ -79,6 +80,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
 	mux.HandleFunc("PUT /api/games/{gameId}/fleet", h.setFleet)
+	mux.HandleFunc("PUT /api/games/{gameId}/description", h.setDescription)
 	mux.HandleFunc("DELETE /api/games/{gameId}", h.deleteGame)
 	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profile", h.getMultiplayerProfile)
 	mux.HandleFunc("PUT /api/games/{gameId}/multiplayer-profile", h.setMultiplayerProfile)
@@ -236,6 +238,23 @@ func (h *Handler) setFleet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := h.svc.SetFleet(r.Context(), r.PathValue("gameId"), req.Fleet)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, g)
+}
+
+// setDescription atualiza a descrição do jogo (Configurações, spec 013).
+func (h *Handler) setDescription(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Description string `json:"description"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.svc.SetDescription(r.Context(), r.PathValue("gameId"), req.Description)
 	if err != nil {
 		writeUpstream(w, err)
 		return

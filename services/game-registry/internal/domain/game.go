@@ -46,6 +46,10 @@ type Game struct {
 	// precisa de imagem/Fleet diferente. Vazio = sem Agones real habilitado ainda
 	// (o session-service recusa alocar via Agones nesse caso).
 	Fleet string
+	// Description é um texto curto livre sobre o jogo (spec 013, revisão de
+	// layout do admin-ui — Identidade tinha pouco conteúdo). Opcional, até 500
+	// caracteres; vazio é um estado válido (mesma convenção do Fleet).
+	Description string
 }
 
 // MultiplayerMode é um perfil de multiplayer NOMEADO (ADR-0024): um jogo tem
@@ -216,6 +220,10 @@ type GameService interface {
 	// não-vazio precisa casar o formato de slug (ErrInvalidFleet caso contrário).
 	// ErrGameNotFound se não existir.
 	SetFleet(ctx context.Context, id, fleet string) (*Game, error)
+	// SetDescription atualiza a descrição do jogo (spec 013). Vazio limpa o
+	// campo; acima de 500 caracteres devolve ErrInvalidDescription.
+	// ErrGameNotFound se não existir.
+	SetDescription(ctx context.Context, id, description string) (*Game, error)
 	// SetMultiplayerProfile valida e faz upsert do perfil de multiplayer do jogo
 	// (ADR-0023). ErrUnsupportedArchetype/ErrUnsupportedTopology/
 	// ErrInvalidProfileParams em entrada inválida; ErrGameNotFound se o jogo não
@@ -252,6 +260,9 @@ type GameRepository interface {
 	// UpdateFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012);
 	// ErrGameNotFound se não existir. Vazio limpa o campo.
 	UpdateFleet(ctx context.Context, id, fleet string) error
+	// UpdateDescription atualiza a descrição do jogo (spec 013); ErrGameNotFound
+	// se não existir. Vazio limpa o campo.
+	UpdateDescription(ctx context.Context, id, description string) error
 	// SoftDelete marca deleted_at (ADR-0025); ErrGameNotFound se ausente ou já
 	// deletado. Jogo deletado nunca sai deste repositório: List/FindByID/
 	// UpdateName/SetModes o tratam como inexistente — o domínio não representa

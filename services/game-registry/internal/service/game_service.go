@@ -25,6 +25,7 @@ var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$`)
 var fleetRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
 const maxNameLen = 100
+const maxDescriptionLen = 500
 
 // defaultImageStyle é o estilo do gerador de capa (cliente). Trocar aqui muda
 // o default de novos cadastros; o front mapeia o nome -> coleção (ADR/spec 003).
@@ -92,6 +93,22 @@ func (s *service) SetFleet(ctx context.Context, id, fleet string) (*domain.Game,
 	g, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("game-registry service: set fleet: reload: %w", err)
+	}
+	return g, nil
+}
+
+// SetDescription atualiza a descrição do jogo (spec 013). Vazio limpa o
+// campo; acima de maxDescriptionLen é rejeitado.
+func (s *service) SetDescription(ctx context.Context, id, description string) (*domain.Game, error) {
+	if len(description) > maxDescriptionLen {
+		return nil, domain.ErrInvalidDescription
+	}
+	if err := s.repo.UpdateDescription(ctx, id, description); err != nil {
+		return nil, fmt.Errorf("game-registry service: set description: %w", err)
+	}
+	g, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: set description: reload: %w", err)
 	}
 	return g, nil
 }

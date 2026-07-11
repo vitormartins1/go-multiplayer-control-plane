@@ -86,6 +86,8 @@ type Game struct {
 	// exposto pelo BFF — o game-registry já devolve no GET /games desde a
 	// spec 012, mas o campo nunca foi propagado até aqui (spec 059).
 	Fleet string `json:"fleet"`
+	// Description é um texto curto livre sobre o jogo (spec 013); "" = sem descrição.
+	Description string `json:"description"`
 	// Resumo dos modos de multiplayer (ADR-0024) — biblioteca de jogos
 	// (revisão de layout, 2026-07-11): omitempty pois é best-effort (fan-out
 	// paralelo em Service.Games, não derruba a listagem se um jogo falhar).
@@ -180,6 +182,9 @@ type GameRegistry interface {
 	// SetFleet cadastra/troca a Fleet Agones do jogo (ADR-0026). UpstreamError
 	// (400/404) propagado. "" limpa o campo (sem Agones real habilitado).
 	SetFleet(ctx context.Context, id, fleet string) (*Game, error)
+	// SetDescription atualiza a descrição do jogo (spec 013). UpstreamError
+	// (400/404) propagado. "" limpa o campo.
+	SetDescription(ctx context.Context, id, description string) (*Game, error)
 	// DeleteGame remove o jogo (soft delete no registry, ADR-0025).
 	// UpstreamError(404) se inexistente/já deletado.
 	DeleteGame(ctx context.Context, id string) error

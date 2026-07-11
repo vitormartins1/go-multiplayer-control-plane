@@ -137,6 +137,11 @@ func (s *Service) SetFleet(ctx context.Context, id, fleet string) (*domain.Game,
 	return s.registry.SetFleet(ctx, id, fleet)
 }
 
+// SetDescription atualiza a descrição do jogo (Configurações, spec 013).
+func (s *Service) SetDescription(ctx context.Context, id, description string) (*domain.Game, error) {
+	return s.registry.SetDescription(ctx, id, description)
+}
+
 // DeleteGame remove o jogo (soft delete no registry, ADR-0025, spec 018).
 func (s *Service) DeleteGame(ctx context.Context, id string) error {
 	return s.registry.DeleteGame(ctx, id)

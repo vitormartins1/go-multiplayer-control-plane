@@ -65,6 +65,19 @@ func (r *PostgresGameRepository) UpdateFleet(ctx context.Context, id, fleet stri
 	return nil
 }
 
+// UpdateDescription atualiza a descrição do jogo (spec 013). Vazio persiste
+// NULL (mesma leitura NULL->"" do selectCols, mesmo padrão do fleet).
+func (r *PostgresGameRepository) UpdateDescription(ctx context.Context, id, description string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET description = NULLIF($2, '') WHERE id = $1 AND deleted_at IS NULL`, id, description)
+	if err != nil {
+		return fmt.Errorf("game-registry repository: update description: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGameNotFound
+	}
+	return nil
+}
+
 // SoftDelete marca deleted_at (ADR-0025). O UPDATE condicional cobre
 // inexistente e já deletado com uma query só (RowsAffected 0), sem corrida.
 func (r *PostgresGameRepository) SoftDelete(ctx context.Context, id string) error {
@@ -81,16 +94,16 @@ func (r *PostgresGameRepository) SoftDelete(ctx context.Context, id string) erro
 
 // selectCols robustece a leitura para registros antigos: image NULL -> "",
 // seed NULL -> slug (mesma regra do cadastro), fleet NULL -> "" (migration 007,
-// ADR-0026). Ver migration 004.
+// ADR-0026), description NULL -> "" (migration 009, spec 013). Ver migration 004.
 const selectCols = `id, slug, name, created_at,
 	COALESCE(image, ''), image_source,
 	COALESCE(generated_image_seed, slug), generated_image_style,
-	COALESCE(fleet, '')`
+	COALESCE(fleet, ''), COALESCE(description, '')`
 
 func scanGame(row interface{ Scan(...any) error }, g *domain.Game) error {
 	return row.Scan(&g.ID, &g.Slug, &g.Name, &g.CreatedAt,
 		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle,
-		&g.Fleet)
+		&g.Fleet, &g.Description)
 }
 
 func (r *PostgresGameRepository) List(ctx context.Context) ([]domain.Game, error) {
@@ -125,7 +138,7 @@ func (r *PostgresGameRepository) FindByID(ctx context.Context, id string) (*doma
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&g.ID, &g.Slug, &g.Name, &g.CreatedAt,
 		&g.Image, &g.ImageSource, &g.GeneratedImageSeed, &g.GeneratedImageStyle,
-		&g.Fleet,
+		&g.Fleet, &g.Description,
 		&profileRaw,
 		&g.MultiplayerModesVersion,
 	)

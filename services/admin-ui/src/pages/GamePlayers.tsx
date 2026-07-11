@@ -45,7 +45,7 @@ function PlayerRow({
           <GuestBadge playerId={p.playerId} />
         </Group>
       </Table.Td>
-      <Table.Td c="dimmed">{p.playerId.slice(0, 8)}…</Table.Td>
+      <Table.Td c="dimmed" ff="monospace">{p.playerId.slice(0, 8)}…</Table.Td>
       <Table.Td>{new Date(p.firstSeen).toLocaleString("pt-BR")}</Table.Td>
     </Table.Tr>
   );

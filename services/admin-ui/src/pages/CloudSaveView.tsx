@@ -65,7 +65,7 @@ export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: 
               </Table.Tr>
               <Table.Tr>
                 <Table.Th>Tamanho</Table.Th>
-                <Table.Td>{data.size} bytes</Table.Td>
+                <Table.Td ff="monospace">{data.size} bytes</Table.Td>
               </Table.Tr>
               <Table.Tr>
                 <Table.Th>Atualizado em</Table.Th>

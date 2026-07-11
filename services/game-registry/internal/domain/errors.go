@@ -13,6 +13,9 @@ var (
 	// Fleet Agones (ADR-0026, spec 012).
 	ErrInvalidFleet = errors.New("game-registry: fleet inválida")
 
+	// Descrição do jogo (spec 013).
+	ErrInvalidDescription = errors.New("game-registry: descrição inválida (máximo 500 caracteres)")
+
 	// Perfil de multiplayer (ADR-0023, spec 006).
 	ErrUnsupportedArchetype = errors.New("game-registry: arquétipo de multiplayer não suportado")
 	ErrUnsupportedTopology  = errors.New("game-registry: topologia não suportada")
