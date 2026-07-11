@@ -15,6 +15,11 @@ AGONES_CHART_VERSION="${AGONES_CHART_VERSION:-1.58.0}"
 MIN_PORT=7100
 MAX_PORT=7139
 API_PORT=6550
+# NodePort do Prometheus (install-monitoring.sh) — federado pelo Prometheus do
+# compose (job local-federation, infra/docker/prometheus.yml) em
+# host.docker.internal:39091. Mesmo papel do 32090 do Pi 5.
+MONITORING_PORT=39091
+MONITORING_NODEPORT=32090
 
 if ! k3d cluster list -o json | grep -q "\"name\": *\"${CLUSTER}\""; then
   # --tls-san: o session-service (docker compose) alcança o API server via
@@ -22,9 +27,14 @@ if ! k3d cluster list -o json | grep -q "\"name\": *\"${CLUSTER}\""; then
   k3d cluster create "${CLUSTER}" \
     --api-port "${API_PORT}" \
     --port "${MIN_PORT}-${MAX_PORT}:${MIN_PORT}-${MAX_PORT}/udp@server:0" \
+    --port "${MONITORING_PORT}:${MONITORING_NODEPORT}@server:0" \
     --k3s-arg "--tls-san=host.docker.internal@server:*"
 else
   echo "cluster ${CLUSTER} já existe — seguindo para o Agones"
+  # Cluster criado antes do NodePort de monitoramento existir nesta versão do
+  # script: adiciona o mapeamento sem recriar (k3d cluster edit, experimental
+  # mas idempotente — repetir não duplica). Silencioso se já existir.
+  k3d cluster edit "${CLUSTER}" --port-add "${MONITORING_PORT}:${MONITORING_NODEPORT}@server:0" 2>/dev/null || true
 fi
 
 helm repo add agones https://agones.dev/chart/stable >/dev/null

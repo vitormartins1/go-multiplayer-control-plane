@@ -2,7 +2,7 @@
   "title": "Pi 5 — Agones Fleet",
   "uid": "pi5-agones-fleet",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 5,
   "refresh": "30s",
   "time": {"from": "now-1h", "to": "now"},
   "timezone": "browser",
@@ -24,7 +24,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum(kube_pod_status_phase{phase=\"Running\"})",
+        "expr": "sum(kube_pod_status_phase{cluster=\"pi5\",phase=\"Running\"})",
         "instant": true
       }]
     },
@@ -44,7 +44,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})",
+        "expr": "sum(kube_node_status_condition{cluster=\"pi5\",condition=\"Ready\",status=\"true\"})",
         "instant": true
       }]
     },
@@ -67,7 +67,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[2m])) * 100)",
+        "expr": "100 - (avg(rate(node_cpu_seconds_total{cluster=\"pi5\",job=\"node-exporter\",mode=\"idle\"}[2m])) * 100)",
         "instant": true
       }]
     },
@@ -90,7 +90,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "(1 - node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"}) * 100",
+        "expr": "(1 - node_memory_MemAvailable_bytes{cluster=\"pi5\",job=\"node-exporter\"} / node_memory_MemTotal_bytes{cluster=\"pi5\",job=\"node-exporter\"}) * 100",
         "instant": true
       }]
     },
@@ -113,7 +113,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "node_hwmon_temp_celsius{job=\"node-exporter\",chip=\"thermal_thermal_zone0\",sensor=\"temp0\"}",
+        "expr": "node_hwmon_temp_celsius{cluster=\"pi5\",job=\"node-exporter\",chip=\"thermal_thermal_zone0\",sensor=\"temp0\"}",
         "instant": true
       }]
     },
@@ -131,7 +131,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "time() - node_boot_time_seconds{job=\"node-exporter\"}",
+        "expr": "time() - node_boot_time_seconds{cluster=\"pi5\",job=\"node-exporter\"}",
         "instant": true
       }]
     },
@@ -139,6 +139,7 @@
       "type": "stat",
       "title": "GameServers Ready",
       "id": 7,
+      "description": "agones_fleets_replicas_count (status do CRD Fleet, reconciliado sempre) em vez de agones_gameservers_count: essa é esparsa — só existe uma série pra (fleet,type) depois que aquele estado ocorreu de fato desde que o controller subiu, então uma fleet que nunca alocou/nunca teve GameServer Ready some do painel em vez de aparecer como 0.",
       "gridPos": {"h": 4, "w": 6, "x": 0, "y": 4},
       "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
       "fieldConfig": {
@@ -151,7 +152,8 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum(agones_gameservers_count{type=\"Ready\"}) or vector(0)",
+        "expr": "sum by (name) (agones_fleets_replicas_count{cluster=\"pi5\",type=\"ready\"}) or vector(0)",
+        "legendFormat": "{{name}}",
         "instant": true
       }]
     },
@@ -159,6 +161,7 @@
       "type": "stat",
       "title": "GameServers Allocated",
       "id": 8,
+      "description": "agones_fleets_replicas_count (status do CRD Fleet) — mesmo motivo do painel Ready: reporta 0 de verdade por fleet, em vez de sumir quando a fleet nunca alocou.",
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 4},
       "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
       "fieldConfig": {
@@ -169,7 +172,8 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum(agones_gameservers_count{type=\"Allocated\"}) or vector(0)",
+        "expr": "sum by (name) (agones_fleets_replicas_count{cluster=\"pi5\",type=\"allocated\"}) or vector(0)",
+        "legendFormat": "{{name}}",
         "instant": true
       }]
     },
@@ -177,6 +181,7 @@
       "type": "stat",
       "title": "GameServers Unhealthy",
       "id": 9,
+      "description": "Sem equivalente em agones_fleets_replicas_count (o status do Fleet não rastreia unhealthy) — fica em agones_gameservers_count, então uma fleet que nunca teve GameServer Unhealthy some do painel em vez de aparecer como 0 (mesma limitação dos outros painéis, sem workaround aqui).",
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 4},
       "options": {"colorMode": "background", "reduceOptions": {"calcs": ["lastNotNull"]}},
       "fieldConfig": {
@@ -189,13 +194,14 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum(agones_gameservers_count{type=\"Unhealthy\"}) or vector(0)",
+        "expr": "sum by (fleet_name) (agones_gameservers_count{cluster=\"pi5\",type=\"Unhealthy\"}) or vector(0)",
+        "legendFormat": "{{fleet_name}}",
         "instant": true
       }]
     },
     {
       "type": "stat",
-      "title": "Fleet — Desired / Ready",
+      "title": "Fleet — Desired / Ready (por fleet)",
       "id": 10,
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 4},
       "options": {"colorMode": "value", "textMode": "value_and_name", "reduceOptions": {"calcs": ["lastNotNull"]}},
@@ -205,14 +211,14 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum(agones_fleets_replicas_count{name=\"packet-arena\",type=\"desired\"}) or vector(0)",
-          "legendFormat": "desired",
+          "expr": "sum by (name) (agones_fleets_replicas_count{cluster=\"pi5\",type=\"desired\"}) or vector(0)",
+          "legendFormat": "{{name}} desired",
           "instant": true
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum(agones_fleets_replicas_count{name=\"packet-arena\",type=\"ready\"}) or vector(0)",
-          "legendFormat": "ready",
+          "expr": "sum by (name) (agones_fleets_replicas_count{cluster=\"pi5\",type=\"ready\"}) or vector(0)",
+          "legendFormat": "{{name}} ready",
           "instant": true
         }
       ]
@@ -238,13 +244,13 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum by (type) (agones_gameservers_count)",
-        "legendFormat": "{{type}}"
+        "expr": "sum by (fleet_name, type) (agones_gameservers_count{cluster=\"pi5\"})",
+        "legendFormat": "{{fleet_name}} - {{type}}"
       }]
     },
     {
       "type": "timeseries",
-      "title": "Fleet Replicas — packet-arena",
+      "title": "Fleet Replicas — por fleet",
       "id": 12,
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
       "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
@@ -257,8 +263,8 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum by (type) (agones_fleets_replicas_count{name=\"packet-arena\"})",
-        "legendFormat": "{{type}}"
+        "expr": "sum by (name, type) (agones_fleets_replicas_count{cluster=\"pi5\"})",
+        "legendFormat": "{{name}} - {{type}}"
       }]
     },
     {
@@ -276,7 +282,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\"}[2m])) * 100",
+        "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{cluster=\"pi5\",container!=\"\",container!=\"POD\"}[2m])) * 100",
         "legendFormat": "{{namespace}}"
       }]
     },
@@ -295,7 +301,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\",container!=\"POD\"})",
+        "expr": "sum by (namespace) (container_memory_working_set_bytes{cluster=\"pi5\",container!=\"\",container!=\"POD\"})",
         "legendFormat": "{{namespace}}"
       }]
     },
@@ -317,14 +323,14 @@
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Running\"})",
+          "expr": "sum by (namespace) (kube_pod_status_phase{cluster=\"pi5\",phase=\"Running\"})",
           "legendFormat": "{{namespace}}",
           "instant": true,
           "refId": "Running"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Pending\"})",
+          "expr": "sum by (namespace) (kube_pod_status_phase{cluster=\"pi5\",phase=\"Pending\"})",
           "legendFormat": "{{namespace}}",
           "instant": true,
           "refId": "Pending"
@@ -355,7 +361,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}[2m])) * 100)",
+        "expr": "100 - (avg(rate(node_cpu_seconds_total{cluster=\"pi5\",job=\"node-exporter\",mode=\"idle\"}[2m])) * 100)",
         "instant": true
       }]
     },
@@ -379,7 +385,7 @@
       },
       "targets": [{
         "datasource": {"type": "prometheus", "uid": "prometheus"},
-        "expr": "(1 - node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"}) * 100",
+        "expr": "(1 - node_memory_MemAvailable_bytes{cluster=\"pi5\",job=\"node-exporter\"} / node_memory_MemTotal_bytes{cluster=\"pi5\",job=\"node-exporter\"}) * 100",
         "instant": true
       }]
     }

@@ -1,3 +1,10 @@
+# VESTÍGIO — não aplicado por nenhum script, não lido por nada. O Grafana do
+# Pi está desligado de propósito (monitoring-values.yaml: `grafana.enabled:
+# false`) — os dashboards reais vivem no Grafana do compose (Mac), em
+# infra/docker/grafana/provisioning/dashboards/pi5-agones-fleet.json. Este
+# ConfigMap é de antes dessa decisão; mantido só como histórico, não apagado
+# ainda pra não confundir uma referência antiga. Se ninguém aplicar isto em
+# algum ambiente, é candidato a remoção numa limpeza futura.
 apiVersion: v1
 kind: ConfigMap
 metadata:
