@@ -123,6 +123,25 @@ type SessionsReader interface {
 	// CloseSession encerra a sessão ativa (force-close do operador). 404 do
 	// session -> UpstreamError{Status:404}.
 	CloseSession(ctx context.Context, matchID string) (GameSession, error)
+	// FleetStatus lê o status real de uma Fleet Agones (spec 023): onde está
+	// rodando (cluster) e réplicas desired/current/ready/allocated.
+	// Indisponibilidade -> ErrSessionsUnavailable.
+	FleetStatus(ctx context.Context, fleetName string) (FleetStatus, error)
+}
+
+// FleetStatus é o snapshot de localização/saúde de uma Fleet Agones (spec
+// 023), como devolvido pelo session-service. Cluster="" cobre tanto "sem
+// fleet cadastrada" (o service nem chama o session-service) quanto
+// "session-service sem allocator agones ativo" — distinto de Cluster
+// preenchido com FleetExists=false ("Agones ativo, mas a Fleet não está
+// NESTE cluster").
+type FleetStatus struct {
+	Cluster     string `json:"cluster"`
+	FleetExists bool   `json:"fleetExists"`
+	Desired     int    `json:"desired"`
+	Current     int    `json:"current"`
+	Ready       int    `json:"ready"`
+	Allocated   int    `json:"allocated"`
 }
 
 // FanoutHealth são os sinais do fan-out durável (ADR-0020) via PromQL. Ponteiros:

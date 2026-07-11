@@ -38,8 +38,24 @@ func (f *fakeDirectory) CloseByAdmin(_ context.Context, matchID string) (*domain
 }
 
 func newAdminMux(dir *fakeDirectory) *http.ServeMux {
+	return newAdminMuxWithFleets(dir, nil, "")
+}
+
+// fakeFleetInspector (spec 023) devolve status/erro fixos, sem cluster real.
+type fakeFleetInspector struct {
+	status domain.FleetStatus
+	err    error
+	gotName string
+}
+
+func (f *fakeFleetInspector) FleetStatus(_ context.Context, fleetName string) (domain.FleetStatus, error) {
+	f.gotName = fleetName
+	return f.status, f.err
+}
+
+func newAdminMuxWithFleets(dir *fakeDirectory, fleets domain.FleetInspector, clusterLabel string) *http.ServeMux {
 	mux := http.NewServeMux()
-	NewAdminHandler(dir).Register(mux)
+	NewAdminHandler(dir, fleets, clusterLabel).Register(mux)
 	return mux
 }
 
@@ -187,4 +203,50 @@ func TestAdminClose_Inexistente_404(t *testing.T) {
 	newAdminMux(dir).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/admin/sessions/nao-existe/close", nil))
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestAdminFleetStatus_SemAgones_ClusterVazioSemChamada cobre o caso 2 da spec
+// 023: allocator != agones (fleets nil) — nenhuma chamada ao inspector.
+func TestAdminFleetStatus_SemAgones_ClusterVazioSemChamada(t *testing.T) {
+	mux := newAdminMuxWithFleets(&fakeDirectory{}, nil, "")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/fleet-status/capoeira-souls", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var dto fleetStatusDTO
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &dto))
+	assert.Equal(t, fleetStatusDTO{Cluster: ""}, dto)
+}
+
+// TestAdminFleetStatus_AgonesFleetInexistente cobre o caso 3: Agones ativo,
+// mas a Fleet não existe NESTE cluster — Cluster preenchido, FleetExists=false.
+func TestAdminFleetStatus_AgonesFleetInexistente(t *testing.T) {
+	fleets := &fakeFleetInspector{status: domain.FleetStatus{FleetExists: false}}
+	mux := newAdminMuxWithFleets(&fakeDirectory{}, fleets, "pi5")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/fleet-status/nao-existe", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var dto fleetStatusDTO
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &dto))
+	assert.Equal(t, fleetStatusDTO{Cluster: "pi5", FleetExists: false}, dto)
+	assert.Equal(t, "nao-existe", fleets.gotName)
+}
+
+// TestAdminFleetStatus_AgonesFleetExistente cobre o caso 4: Fleet real, réplicas
+// reais repassadas junto do cluster.
+func TestAdminFleetStatus_AgonesFleetExistente(t *testing.T) {
+	fleets := &fakeFleetInspector{status: domain.FleetStatus{
+		FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1,
+	}}
+	mux := newAdminMuxWithFleets(&fakeDirectory{}, fleets, "local")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/fleet-status/capoeira-souls", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var dto fleetStatusDTO
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &dto))
+	assert.Equal(t, fleetStatusDTO{
+		Cluster: "local", FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1,
+	}, dto)
 }

@@ -128,6 +128,48 @@ func (c *Client) CloseSession(ctx context.Context, matchID string) (domain.GameS
 	return toGameSessions([]sessionDTO{d})[0], nil
 }
 
+// fleetStatusDTO é o shape de GET /admin/fleet-status/{fleetName} do
+// session-service (spec 023) — mesmos campos do domain.FleetStatus.
+type fleetStatusDTO struct {
+	Cluster     string `json:"cluster"`
+	FleetExists bool   `json:"fleetExists"`
+	Desired     int    `json:"desired"`
+	Current     int    `json:"current"`
+	Ready       int    `json:"ready"`
+	Allocated   int    `json:"allocated"`
+}
+
+// FleetStatus lê o status real da Fleet pelo nome (spec 023).
+func (c *Client) FleetStatus(ctx context.Context, fleetName string) (domain.FleetStatus, error) {
+	u := c.baseURL + "/admin/fleet-status/" + url.PathEscape(fleetName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return domain.FleetStatus{}, fmt.Errorf("session: build request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return domain.FleetStatus{}, fmt.Errorf("%w: %v", domain.ErrSessionsUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return domain.FleetStatus{}, fmt.Errorf("%w: status %d", domain.ErrSessionsUnavailable, resp.StatusCode)
+	}
+
+	var d fleetStatusDTO
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return domain.FleetStatus{}, fmt.Errorf("session: decode: %w", err)
+	}
+	return domain.FleetStatus{
+		Cluster:     d.Cluster,
+		FleetExists: d.FleetExists,
+		Desired:     d.Desired,
+		Current:     d.Current,
+		Ready:       d.Ready,
+		Allocated:   d.Allocated,
+	}, nil
+}
+
 func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 	out := make([]domain.GameSession, 0, len(dtos))
 	for _, d := range dtos {

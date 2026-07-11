@@ -84,7 +84,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	alloc, registry, err := buildAllocator(log)
+	alloc, registry, fleets, clusterLabel, err := buildAllocator(log)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func run(log *slog.Logger) error {
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	// superfície admin (spec 005): a aba Sessions do painel lê via BFF.
-	transport.NewAdminHandler(svc).Register(mux)
+	transport.NewAdminHandler(svc, fleets, clusterLabel).Register(mux)
 	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -220,9 +220,11 @@ func run(log *slog.Logger) error {
 // Devolve também o ServerRegistry (spec 008): no modo agones é o próprio adapter
 // (liveness via LIST da fleet); no static é nil — sem fonte de verdade de
 // liveness, o sweeper cai só no TTL.
-func buildAllocator(log *slog.Logger) (domain.ServerAllocator, domain.ServerRegistry, error) {
+func buildAllocator(log *slog.Logger) (domain.ServerAllocator, domain.ServerRegistry, domain.FleetInspector, string, error) {
 	var alloc domain.ServerAllocator
 	var registry domain.ServerRegistry
+	var fleets domain.FleetInspector
+	var clusterLabel string
 	switch mode := os.Getenv("ALLOCATOR_MODE"); mode {
 	case "", "static":
 		pool := serverPool()
@@ -231,11 +233,11 @@ func buildAllocator(log *slog.Logger) (domain.ServerAllocator, domain.ServerRegi
 	case "agones":
 		restCfg, err := kubeRestConfig()
 		if err != nil {
-			return nil, nil, fmt.Errorf("allocator agones: %w", err)
+			return nil, nil, nil, "", fmt.Errorf("allocator agones: %w", err)
 		}
 		client, err := dynamic.NewForConfig(restCfg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("allocator agones: client: %w", err)
+			return nil, nil, nil, "", fmt.Errorf("allocator agones: client: %w", err)
 		}
 		namespace := envOr("AGONES_NAMESPACE", "default")
 		// Fleet não é mais fixa por env var (ADR-0026): cada sessão resolve a
@@ -243,16 +245,20 @@ func buildAllocator(log *slog.Logger) (domain.ServerAllocator, domain.ServerRegi
 		// jogos que já usam Agones precisam ter a Fleet cadastrada antes do deploy.
 		log.Info("allocator agones", "namespace", namespace)
 		ag := allocator.NewAgones(client, namespace)
-		alloc, registry = ag, ag // mesmo adapter serve alocação e liveness
+		alloc, registry, fleets = ag, ag, ag // mesmo adapter serve alocação, liveness e status de fleet
+		// AGONES_CLUSTER_LABEL (spec 023): identifica qual cluster este processo
+		// observa (ex. "local"/"pi5") — a aba Fleet do console usa isso pra
+		// mostrar onde a Fleet está rodando. Vazio = não setado no compose ativo.
+		clusterLabel = os.Getenv("AGONES_CLUSTER_LABEL")
 	default:
-		return nil, nil, fmt.Errorf("ALLOCATOR_MODE inválido: %q (static|agones)", mode)
+		return nil, nil, nil, "", fmt.Errorf("ALLOCATOR_MODE inválido: %q (static|agones)", mode)
 	}
 
 	if host := os.Getenv("DEV_PUBLIC_HOST"); host != "" {
 		log.Warn("DEV_PUBLIC_HOST ativo — host dos endereços alocados reescrito (config de dev)", "host", host)
 		alloc = allocator.WithPublicHost(alloc, host)
 	}
-	return alloc, registry, nil
+	return alloc, registry, fleets, clusterLabel, nil
 }
 
 // kubeRestConfig resolve a config do k8s: KUBECONFIG (dev/compose, arquivo

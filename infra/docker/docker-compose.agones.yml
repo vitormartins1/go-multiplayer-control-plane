@@ -12,6 +12,9 @@ services:
       ALLOCATOR_MODE: agones
       KUBECONFIG: /kubeconfig
       AGONES_NAMESPACE: default
+      # AGONES_CLUSTER_LABEL (spec 023): identifica este cluster pra aba Fleet
+      # do admin console mostrar onde cada Fleet está rodando.
+      AGONES_CLUSTER_LABEL: local
       # Fleet não é mais fixa por env var (ADR-0026): cada sessão resolve a
       # Fleet do perfil do jogo no game-registry (PUT /games/{id}/fleet). Jogo
       # Packet Arena já tem fleet=packet-arena cadastrada.

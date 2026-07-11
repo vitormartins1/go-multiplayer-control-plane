@@ -21,11 +21,13 @@ import (
 var (
 	_ domain.ServerAllocator = (*Agones)(nil)
 	_ domain.ServerRegistry  = (*Agones)(nil)
+	_ domain.FleetInspector  = (*Agones)(nil)
 )
 
 var (
 	allocationGVR = schema.GroupVersionResource{Group: "allocation.agones.dev", Version: "v1", Resource: "gameserverallocations"}
 	gameServerGVR = schema.GroupVersionResource{Group: "agones.dev", Version: "v1", Resource: "gameservers"}
+	fleetGVR      = schema.GroupVersionResource{Group: "agones.dev", Version: "v1", Resource: "fleets"}
 )
 
 // Agones aloca GameServers de uma Fleet via GameServerAllocation.
@@ -115,6 +117,33 @@ func (a *Agones) LiveServerIDs(ctx context.Context) (map[string]struct{}, error)
 		live[list.Items[i].GetName()] = struct{}{}
 	}
 	return live, nil
+}
+
+// FleetStatus lê o recurso Fleet pelo nome (spec 023). NotFound não é erro —
+// FleetExists:false, sem os números. O campo Cluster do domain.FleetStatus
+// fica vazio aqui de propósito: quem sabe o rótulo do cluster (AGONES_CLUSTER_LABEL)
+// é o transport, não o adapter.
+func (a *Agones) FleetStatus(ctx context.Context, fleetName string) (domain.FleetStatus, error) {
+	out, err := a.client.Resource(fleetGVR).Namespace(a.namespace).Get(ctx, fleetName, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		return domain.FleetStatus{FleetExists: false}, nil
+	}
+	if err != nil {
+		return domain.FleetStatus{}, fmt.Errorf("agones: get fleet %q: %w", fleetName, err)
+	}
+
+	desired, _, _ := unstructured.NestedInt64(out.Object, "spec", "replicas")
+	current, _, _ := unstructured.NestedInt64(out.Object, "status", "replicas")
+	ready, _, _ := unstructured.NestedInt64(out.Object, "status", "readyReplicas")
+	allocated, _, _ := unstructured.NestedInt64(out.Object, "status", "allocatedReplicas")
+
+	return domain.FleetStatus{
+		FleetExists: true,
+		Desired:     int(desired),
+		Current:     int(current),
+		Ready:       int(ready),
+		Allocated:   int(allocated),
+	}, nil
 }
 
 var _ domain.ServerAllocator = (*publicHost)(nil)

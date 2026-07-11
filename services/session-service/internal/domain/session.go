@@ -403,6 +403,30 @@ type ServerRegistry interface {
 	LiveServerIDs(ctx context.Context) (map[string]struct{}, error)
 }
 
+// FleetStatus é o snapshot de saúde/tamanho de uma Fleet Agones (spec 023),
+// lido direto do recurso no momento da chamada — sem cache. FleetExists=false
+// cobre tanto "sem cluster observável" (allocator != agones) quanto "Fleet não
+// encontrada no cluster observado" — quem distingue os dois é o Cluster: vazio
+// no primeiro caso, com o AGONES_CLUSTER_LABEL no segundo.
+type FleetStatus struct {
+	Cluster     string
+	FleetExists bool
+	Desired     int
+	Current     int
+	Ready       int
+	Allocated   int
+}
+
+// FleetInspector é a Port de saída OPCIONAL que lê o estado real de uma Fleet
+// (spec 023). Só o adapter Agones a implementa (recurso fleets.agones.dev); o
+// static não tem Fleet nenhuma pra inspecionar. Handler trata nil como "sem
+// cluster observável" (mesmo padrão do ServerRegistry opcional).
+type FleetInspector interface {
+	// FleetStatus lê a Fleet pelo nome. Fleet inexistente não é erro:
+	// FleetStatus{FleetExists: false}, nil.
+	FleetStatus(ctx context.Context, fleetName string) (FleetStatus, error)
+}
+
 // ConnectClaims são os claims opcionais por arquétipo carregados no connect
 // token (ADR-0023). Cada campo vira claim só quando não-vazio, para não poluir o
 // token. Cresce por arquétipo sem alterar a assinatura de Issue.

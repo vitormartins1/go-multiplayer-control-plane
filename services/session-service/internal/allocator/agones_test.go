@@ -188,3 +188,43 @@ func TestWithPublicHost_HostVazio_NaoDecoraNada(t *testing.T) {
 	inner := New([]string{"172.19.0.3:7127"})
 	assert.Same(t, any(inner), any(WithPublicHost(inner, "")), "sem DEV_PUBLIC_HOST devolve o allocator cru")
 }
+
+// fleetObj monta uma Fleet unstructured com spec/status preenchidos, para
+// semear o fake do dynamic client no teste de FleetStatus (spec 023).
+func fleetObj(name string, desired, current, ready, allocated int64) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "agones.dev/v1",
+		"kind":       "Fleet",
+		"metadata":   map[string]any{"name": name, "namespace": "default"},
+		"spec":       map[string]any{"replicas": desired},
+		"status": map[string]any{
+			"replicas":          current,
+			"readyReplicas":     ready,
+			"allocatedReplicas": allocated,
+		},
+	}}
+}
+
+func TestAgonesFleetStatus_FleetExistente_DevolveNumerosReais(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "agones.dev", Version: "v1", Kind: "FleetList"}, &unstructured.UnstructuredList{})
+	client := dynamicfake.NewSimpleDynamicClient(scheme, fleetObj("capoeira-souls", 2, 2, 2, 0))
+
+	agones := NewAgones(client, "default")
+	status, err := agones.FleetStatus(context.Background(), "capoeira-souls")
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.FleetStatus{FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 0}, status)
+}
+
+func TestAgonesFleetStatus_FleetInexistente_FleetExistsFalseSemErro(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "agones.dev", Version: "v1", Kind: "FleetList"}, &unstructured.UnstructuredList{})
+	client := dynamicfake.NewSimpleDynamicClient(scheme)
+
+	agones := NewAgones(client, "default")
+	status, err := agones.FleetStatus(context.Background(), "nao-existe")
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.FleetStatus{FleetExists: false}, status)
+}

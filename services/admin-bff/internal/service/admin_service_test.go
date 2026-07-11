@@ -381,6 +381,37 @@ func TestSetFleet_Delega(t *testing.T) {
 	assert.Equal(t, "packet-arena", g.Fleet)
 }
 
+// TestFleetStatus_ResolveGameIDParaFleetEDelegaAoSessions (spec 023): a
+// resolução gameID->fleet acontece via ListGames; o nome resolvido é o que
+// chega no session-service.
+func TestFleetStatus_ResolveGameIDParaFleetEDelegaAoSessions(t *testing.T) {
+	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Fleet: "capoeira-souls"}}}
+	sessions := &fakeSessions{fleetStatus: domain.FleetStatus{
+		Cluster: "pi5", FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1,
+	}}
+	svc := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg, Sessions: sessions})
+
+	status, err := svc.FleetStatus(context.Background(), "g1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "capoeira-souls", sessions.gotGameID, "nome da fleet resolvido, não o gameID, chega no session-service")
+	assert.Equal(t, domain.FleetStatus{Cluster: "pi5", FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1}, status)
+}
+
+// TestFleetStatus_JogoSemFleet_NaoChamaSessions (spec 023, EARS 6): sem fleet
+// cadastrada, nem vale a pergunta ao session-service.
+func TestFleetStatus_JogoSemFleet_NaoChamaSessions(t *testing.T) {
+	reg := &fakeRegistry{games: []domain.Game{{ID: "g1", Fleet: ""}}}
+	sessions := &fakeSessions{fleetStatus: domain.FleetStatus{Cluster: "pi5", FleetExists: true}}
+	svc := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg, Sessions: sessions})
+
+	status, err := svc.FleetStatus(context.Background(), "g1")
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.FleetStatus{}, status)
+	assert.Empty(t, sessions.gotGameID, "session-service não deveria ser consultado")
+}
+
 func TestSetDescription_Delega(t *testing.T) {
 	reg := &fakeRegistry{}
 	g, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).SetDescription(context.Background(), "g1", "Um jogo de capoeira.")
@@ -473,10 +504,11 @@ func TestCloudSave_DelegaComJogoEPlayer(t *testing.T) {
 }
 
 type fakeSessions struct {
-	sessions  domain.GameSessions
-	err       error
-	gotGameID string
-	gotState  string
+	sessions    domain.GameSessions
+	fleetStatus domain.FleetStatus
+	err         error
+	gotGameID   string
+	gotState    string
 }
 
 func (f *fakeSessions) SessionsByGame(_ context.Context, gameID, state string) (domain.GameSessions, error) {
@@ -495,6 +527,11 @@ func (f *fakeSessions) CloseSession(_ context.Context, matchID string) (domain.G
 		return domain.GameSession{}, f.err
 	}
 	return domain.GameSession{MatchID: matchID, State: "closed", CloseReason: "admin"}, nil
+}
+
+func (f *fakeSessions) FleetStatus(_ context.Context, fleetName string) (domain.FleetStatus, error) {
+	f.gotGameID = fleetName // reaproveita o campo p/ capturar o nome da fleet
+	return f.fleetStatus, f.err
 }
 
 func TestRooms_EnriqueceHandleENomeDoJogo(t *testing.T) {

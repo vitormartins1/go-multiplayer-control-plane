@@ -131,6 +131,34 @@ func TestCloseSession_404_UpstreamError(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, ue.Status)
 }
 
+// Spec 023: status real da Fleet, repassado 1:1 do session-service.
+func TestFleetStatus_ParseiaEConverte(t *testing.T) {
+	var gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"cluster":"pi5","fleetExists":true,"desired":2,"current":2,"ready":2,"allocated":1}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).FleetStatus(context.Background(), "capoeira-souls")
+
+	require.NoError(t, err)
+	assert.Equal(t, "/admin/fleet-status/capoeira-souls", gotPath)
+	assert.Equal(t, domain.FleetStatus{Cluster: "pi5", FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1}, got)
+}
+
+func TestFleetStatus_UpstreamFora_ErrSessionsUnavailable(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	upstreamURL := upstream.URL
+	upstream.Close() // conexão recusada
+
+	_, err := New(upstreamURL, nil).FleetStatus(context.Background(), "capoeira-souls")
+	assert.ErrorIs(t, err, domain.ErrSessionsUnavailable)
+}
+
 // Spec 018 (session): snapshot do modo, formação e resultado repassados 1:1.
 func TestSessionsByGame_DetalheRico_RepassaSnapshotEResultado(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
