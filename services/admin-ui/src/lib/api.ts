@@ -56,6 +56,9 @@ export interface Game {
   generatedImageStyle?: string;
   // Modos de multiplayer (ADR-0024): resumo devolvido pelo GET /games/{id}.
   multiplayerModes?: ModeSummary[];
+  // Fleet Agones do jogo (ADR-0026); "" = sem fleet cadastrada. Exposto pelo
+  // BFF só a partir da spec 059 — o game-registry já devolvia desde a 012.
+  fleet?: string;
 }
 
 // Perfis de multiplayer do jogo (ADR-0023). Union discriminada por `archetype`.
@@ -459,6 +462,9 @@ export const api = {
   createGame: (slug: string, name: string) => postJSON<Game>("/api/games", { slug, name }),
   renameGame: (gameId: string, name: string) =>
     putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}`, { name }),
+  // Fleet Agones do jogo (ADR-0026, aba Fleet — spec 059).
+  setFleet: (gameId: string, fleet: string) =>
+    putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}/fleet`, { fleet }),
   // Soft delete no registry (ADR-0025): o jogo some do console; dados nos
   // demais serviços ficam órfãos e inacessíveis. 404 = já removido.
   deleteGame: (gameId: string) => del(`/api/games/${encodeURIComponent(gameId)}`),

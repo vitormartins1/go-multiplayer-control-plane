@@ -191,6 +191,46 @@ func TestRenameGame_PutName(t *testing.T) {
 	assert.Equal(t, "Novo", g.Name)
 }
 
+func TestSetFleet_RepassaAoRegistry(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"g1","slug":"orb","name":"Orb","fleet":"packet-arena"}`))
+	}))
+	defer srv.Close()
+
+	g, err := New(srv.URL, srv.Client()).SetFleet(context.Background(), "g1", "packet-arena")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPut, gotMethod)
+	assert.Equal(t, "/games/g1/fleet", gotPath)
+	assert.Contains(t, gotBody, `"fleet":"packet-arena"`)
+	assert.Equal(t, "packet-arena", g.Fleet)
+}
+
+func TestSetFleet_404_UpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"game_not_found"}`))
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).SetFleet(context.Background(), "fantasma", "packet-arena")
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusNotFound, ue.Status)
+}
+
+func TestSetFleet_Fora_Unavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+
+	_, err := New(url, &http.Client{}).SetFleet(context.Background(), "g1", "packet-arena")
+	assert.ErrorIs(t, err, domain.ErrGameRegistryUnavailable)
+}
+
 // --- modos nomeados (ADR-0024, spec 017) ---
 
 func TestListMultiplayerModes_200_RawPassthrough(t *testing.T) {

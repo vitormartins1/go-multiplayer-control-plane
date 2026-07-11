@@ -108,6 +108,11 @@ func (s *Service) RenameGame(ctx context.Context, id, name string) (*domain.Game
 	return s.registry.RenameGame(ctx, id, name)
 }
 
+// SetFleet cadastra/troca a Fleet Agones do jogo (aba Fleet, spec 059).
+func (s *Service) SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error) {
+	return s.registry.SetFleet(ctx, id, fleet)
+}
+
 // DeleteGame remove o jogo (soft delete no registry, ADR-0025, spec 018).
 func (s *Service) DeleteGame(ctx context.Context, id string) error {
 	return s.registry.DeleteGame(ctx, id)

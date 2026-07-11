@@ -80,6 +80,24 @@ func (c *Client) RenameGame(ctx context.Context, id, name string) (*domain.Game,
 	return &g, nil
 }
 
+// SetFleet cadastra/troca a Fleet Agones do jogo (PUT /games/{id}/fleet,
+// spec 012 do game-registry — endpoint próprio, separado do PUT genérico).
+func (c *Client) SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error) {
+	body, _ := json.Marshal(map[string]string{"fleet": fleet})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/games/"+url.PathEscape(id)+"/fleet", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var g domain.Game
+	if err := json.NewDecoder(resp.Body).Decode(&g); err != nil {
+		return nil, fmt.Errorf("gameregistry: decode: %w", err)
+	}
+	return &g, nil
+}
+
 // DeleteGame remove o jogo (DELETE /games/{id} — soft delete no registry,
 // ADR-0025). 204 esperado; 404 (inexistente/já deletado) vira UpstreamError.
 func (c *Client) DeleteGame(ctx context.Context, id string) error {
