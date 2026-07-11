@@ -24,9 +24,13 @@ Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fi
 
 **Analytics — Fase 1 de um plano em 3 fases (spec `admin-ui/054`, 2026-07-10):** a aba de Analytics **por jogo** tinha zero gráfico (só números + tabela condicional por arquétipo). Fase 1 acrescentou `LineChart`/`DonutChart`/`BarChart` (`@mantine/charts`, já instalado — avaliado e confirmado que não vale trocar de lib) usando dados que já vinham da API e nunca eram exibidos. Achado e fechado no caminho: `outcome` nunca ia pro DTO de participação (`analytics-service/008`) e a migration 006 desse serviço nunca tinha sido montada no `docker-compose.yml` (o endpoint de detalhe por jogo dava 500 pra qualquer jogo — bug pré-existente, não introduzido nesta sessão). **Fases 2/3 (série temporal pros outros 3 arquétipos + captura de stats brutos; dashboard configurável por widget) ficam gated por evidência.**
 
-**ADRs novos desde 08/07:** 0027 (regras genéricas data-driven), 0028 (editor visual + roadmap do motor V2). Há também o **0026 (alocação Agones fleet-aware por jogo) em status Proposed** — não implementado, sem specs associadas ainda; decisão pendente de retomada.
+**ADRs novos desde 08/07:** 0027 (regras genéricas data-driven), 0028 (editor visual + roadmap do motor V2). **0026 (Fleet por jogo) já estava Accepted e implementado desde 2026-07-09/10** (Packet Arena e Capoeira Souls com fleet cadastrada) — este doc chegou a listar isso como pendente por desatualização, corrigido em 2026-07-11.
 
-**Housekeeping:** ~10 commits locais à frente do `origin/main`, ainda não pushados (specs 017/051 até 054, branches `feat/*` merged `--no-ff` na main local). Confira `git log origin/main..HEAD` antes do próximo push.
+**Analytics — quebra por modo nas participações (spec `analytics-service/009`, 2026-07-11):** a aba Analytics por jogo agrupava participações só por arquétipo, não por modo nomeado (ADR-0024) — um jogo com vários modos host_world_dropin (Roda Aberta vs. Batizado do Capoeira Souls) não distinguia as métricas de cada um. Fechado ponta a ponta: `mode_id` na PK de `game_participation_rollup` + seletor de modo no admin-ui. Os outros 3 rollups (queue_arena/battle_royale/coop_mission) têm a mesma lacuna, documentada mas não implementada (schema mais invasivo — `PRIMARY KEY (game_id)` sem chave composta hoje).
+
+**ADR-0029 (infra Agones centralizada) — Accepted e Fatia 1 implementada (2026-07-11):** bootstrap de cluster (k3s/k3d, Agones, kubeconfig, monitoramento Grafana) e Fleet manifests migraram de `unity-queue-arena-data-plane` para `go-multiplayer-control-plane/infra/agones/` — elimina a duplicação que o `host_world_dropin` teria na Fase 5. `apply-fleet.sh` agora é genérico (`<fleet-name>`, cobre k3d local e Pi 5). Fatia 2 (registry de imagem por jogo + CI/GHCR) segue gated por evidência. Pendente de você: rodar `infra/agones/pi5/pi5-tunnels.sh install` pra recarregar o LaunchAgent do túnel Pi apontando pro novo caminho (bloqueado pelo classificador de permissões do Claude Code por instalar um serviço persistente).
+
+**Housekeeping:** ~14 commits locais à frente do `origin/main`, ainda não pushados. Confira `git log origin/main..HEAD` antes do próximo push.
 
 ---
 
@@ -73,9 +77,10 @@ ADRs recentes: 0020 (fan-out durável), 0021 (analytics), 0022 (reconcile de ór
 
 ## ⚠️ Pendente de você (ações fora do código)
 
-1. ~~**Push pro GitHub**~~ ✅ **FEITO (2026-07-08):** os dois repos publicados como **privados**. Desde então, ~10 commits locais se acumularam sem novo push (ver "Housekeeping" no topo) — considerar sincronizar.
+1. ~~**Push pro GitHub**~~ ✅ **FEITO (2026-07-08):** os dois repos publicados como **privados**. Desde então, commits locais seguem se acumulando sem novo push (ver "Housekeeping" no topo) — considerar sincronizar.
 2. ~~**Rename do control plane**~~ ✅ **CONCLUÍDO (2026-07-08).**
-3. **ADR-0026 (Agones fleet-aware por jogo)** está em status **Proposed** desde 2026-07-09, sem specs associadas — decidir se aceita/descarta/revisita quando for mexer em alocação Agones de novo.
+3. ~~**ADR-0026**~~ ✅ **Accepted e implementado (2026-07-09/10)** — nada pendente.
+4. **Reinstalar o LaunchAgent do túnel Pi 5** (`infra/agones/pi5/pi5-tunnels.sh install`) — a migração da ADR-0029 moveu o script; o LaunchAgent hoje ativo ainda aponta pro caminho antigo (removido). Ver seção ADR-0029 acima.
 
 ## Painel jogo-cêntrico (✅ completo)
 
@@ -90,14 +95,14 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 
 Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Itens concluídos desde a última revisão deste doc foram removidos da lista (ficam registrados no histórico de commits e nas seções acima); ordem sugerida do que resta:
 
-1. **Cross-repo Unity — em andamento, maior frente ativa.** `unity-queue-arena-data-plane` (Fases 0–7) e `unity-host-world-dropin-data-plane` (Fases 0–4 done, ver "Estado desde 2026-07-08" acima) têm data plane real; falta a **Fase 5** (e2e orquestrado k3d→Pi 5 + Fleet própria) do segundo, e `battle_royale`/`coop_mission` ainda não têm repo (contrato pronto, zero código Unity).
+1. **Cross-repo Unity — em andamento, maior frente ativa.** `unity-queue-arena-data-plane` (Fases 0–7) e `unity-host-world-dropin-data-plane` (Fases 0–4 done, ver "Estado desde 2026-07-08" acima) têm data plane real; falta a **Fase 5** (e2e orquestrado k3d→Pi 5 + Fleet própria) do segundo — agora mais simples de bootstrapar graças à ADR-0029 (infra Agones centralizada) — e `battle_royale`/`coop_mission` ainda não têm repo (contrato pronto, zero código Unity).
 2. **Infra / deploy — payoff da tese (ADR-0008).** Falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005 — hoje só decidido "diferido"). É a medição de custo/performance vs AWS GameKit que a tese promete; ainda não começou.
 3. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR antes de implementar.
 4. **SQS queue depth no Grafana** (observabilidade futura): precisa de `yet-another-cloudwatch-exporter` (YACE) — só faz sentido quando houver AWS real (item 2).
-5. **ADR-0026 (Agones fleet-aware por jogo)** — Proposed, sem specs. Decidir se retoma.
-6. **Analytics Fase 2/3** (gated por evidência): série temporal pros outros 3 arquétipos (schema novo); captura de `stats` brutos (kills/deaths) no analytics-service; dashboard configurável por widget.
-7. **V2c do motor de regras** (prioridade/exclusividade first-match-wins) — gated por evidência.
-8. **As duas limitações do motor de achievements** achadas no estresse-teste (janela de tempo intra-partida; streak entre partidas) — sem plano de ação ainda, só documentadas.
+5. **Analytics Fase 2/3** (gated por evidência): série temporal pros outros 3 arquétipos (schema novo, mesma lacuna de `mode_id` que a spec 009 já fechou só pra participações); captura de `stats` brutos (kills/deaths) no analytics-service; dashboard configurável por widget.
+6. **V2c do motor de regras** (prioridade/exclusividade first-match-wins) — gated por evidência.
+7. **As duas limitações do motor de achievements** achadas no estresse-teste (janela de tempo intra-partida; streak entre partidas) — sem plano de ação ainda, só documentadas.
+8. **Fatia 2 da ADR-0029** (registry de imagem por jogo + CI/GHCR) — gated por evidência (2º arquétipo real em produção, ou outro dev precisando mexer sem acesso ao cluster).
 
 ## Gotchas operacionais
 
