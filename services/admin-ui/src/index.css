@@ -27,6 +27,17 @@ body,
   color: var(--mantine-color-dark-2);
 }
 
+/* Tooltip do Mantine renderiza claro por padrão independente do
+   defaultColorScheme="dark" (main.tsx) — .mantine-Tooltip-tooltip/-arrow são
+   estáveis, mesmo padrão de override do cabeçalho de tabela acima. */
+.mantine-Tooltip-tooltip {
+  background: var(--mantine-color-dark-6);
+  color: var(--mantine-color-dark-0);
+}
+.mantine-Tooltip-arrow {
+  background: var(--mantine-color-dark-6);
+}
+
 /* React Flow: container e nós com cor por status */
 .topology {
   height: 460px;

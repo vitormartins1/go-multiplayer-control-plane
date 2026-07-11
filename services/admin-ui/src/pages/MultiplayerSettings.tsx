@@ -215,10 +215,11 @@ function QueueArenaForm({
                   label={
                     <FieldLabel
                       label="Nº de times"
-                      help="Quantos times disputam a partida. Mínimo 2 (ex.: 2 = NvN)."
+                      help="Quantos times disputam a partida. Mínimo 2 (ex.: 2 = NvN), máximo 10 (paleta de cores do painel)."
                     />
                   }
                   min={2}
+                  max={10}
                   value={p.teamCount}
                   onChange={(v) => set("teamCount", typeof v === "number" ? v : 2)}
                 />

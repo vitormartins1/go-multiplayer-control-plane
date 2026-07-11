@@ -1,4 +1,5 @@
-import { AppShell, Badge, Box, Center, Group, Loader, NavLink, Text, ThemeIcon, Title } from "@mantine/core";
+import { AppShell, Badge, Box, Burger, Center, Group, Loader, NavLink, Text, ThemeIcon, Title } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import { lazy, Suspense, useEffect } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
@@ -65,14 +66,23 @@ function HealthStrip() {
 export function App() {
   const { pathname } = useLocation();
   const active = (to: string) => pathname.startsWith(to);
+  // Nav mobile (breakpoint "sm"): o AppShell só entende o breakpoint quando
+  // este estado + o Burger existem — sem isso o navbar fica sempre fixo por
+  // cima do conteúdo abaixo de "sm" (achado da revisão de layout, 2026-07-10).
+  const [navOpened, { toggle: toggleNav, close: closeNav }] = useDisclosure(false);
 
   return (
-    <AppShell header={{ height: 59 }} navbar={{ width: 230, breakpoint: "sm" }} padding="md">
+    <AppShell
+      header={{ height: 59 }}
+      navbar={{ width: 230, breakpoint: "sm", collapsed: { mobile: !navOpened } }}
+      padding="md"
+    >
       <AppShell.Header>
         <HealthStrip />
         {/* Marca do console (025): ecoa o nome do repo (go-multiplayer-control-plane). */}
         <Group h="calc(100% - 3px)" px="md" justify="space-between">
           <Group gap="sm">
+            <Burger opened={navOpened} onClick={toggleNav} hiddenFrom="sm" size="sm" />
             <ThemeIcon variant="gradient" gradient={{ from: "signal.6", to: "signal.3" }} radius="md">
               <IconTopologyStar3 size={18} />
             </ThemeIcon>
@@ -98,6 +108,7 @@ export function App() {
             label={n.label}
             leftSection={<n.icon size={18} />}
             active={active(n.to)}
+            onClick={closeNav}
           />
         ))}
       </AppShell.Navbar>

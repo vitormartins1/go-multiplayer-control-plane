@@ -109,27 +109,30 @@ export function GameSessions({ gameId }: { gameId: string }) {
         </Text>
       )}
       {rows.length > 0 && (
-        <Table striped withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Match</Table.Th>
-              <Table.Th>Estado</Table.Th>
-              <Table.Th>Players</Table.Th>
-              <Table.Th>Server</Table.Th>
-              <Table.Th>Tempos</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((s) => (
-              <SessionRow
-                key={s.sessionId}
-                session={s}
-                expanded={expandedId === s.sessionId}
-                onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
-              />
-            ))}
-          </Table.Tbody>
-        </Table>
+        <Table.ScrollContainer minWidth={640}>
+          <Table striped withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Match</Table.Th>
+                <Table.Th>Modo</Table.Th>
+                <Table.Th>Estado</Table.Th>
+                <Table.Th>Players</Table.Th>
+                <Table.Th>Server</Table.Th>
+                <Table.Th>Tempos</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map((s) => (
+                <SessionRow
+                  key={s.sessionId}
+                  session={s}
+                  expanded={expandedId === s.sessionId}
+                  onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
+                />
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
     </Stack>
   );
@@ -160,20 +163,20 @@ function SessionRow({
           </Group>
         </Table.Td>
         <Table.Td>
-          <Group gap={4} wrap="nowrap">
-            {s.state === "open" ? (
-              <Badge color="nominal" variant="light">
-                ao vivo
-              </Badge>
-            ) : (
-              <Badge color="gray" variant="light">
-                closed · {s.closeReason ?? "?"}
-              </Badge>
-            )}
-            <Badge variant="light" color="indigo">
-              {s.modeId || "default"}
+          <Badge variant="light" color="indigo">
+            {s.modeId || "default"}
+          </Badge>
+        </Table.Td>
+        <Table.Td>
+          {s.state === "open" ? (
+            <Badge color="nominal" variant="light">
+              ao vivo
             </Badge>
-          </Group>
+          ) : (
+            <Badge color="gray" variant="light">
+              closed · {s.closeReason ?? "?"}
+            </Badge>
+          )}
         </Table.Td>
         <Table.Td>
           {/* resumo compacto (034): a lista completa vive no painel expandido. */}
@@ -197,7 +200,7 @@ function SessionRow({
       </Table.Tr>
       {expanded && (
         <Table.Tr>
-          <Table.Td colSpan={5} p={0}>
+          <Table.Td colSpan={6} p={0}>
             <Collapse in={expanded}>
               <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
                 <Stack gap="xs">
