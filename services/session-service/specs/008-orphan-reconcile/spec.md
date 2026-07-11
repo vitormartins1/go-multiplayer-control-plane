@@ -1,7 +1,7 @@
 # Spec: 008-orphan-reconcile
 
 **Serviço:** session-service
-**Status:** Planejado
+**Status:** Done
 **Data:** 2026-07-06
 **ADR:** [0022](../../../../docs/adr/0022-orphan-session-reconcile-agones.md) — reconciliação de sessões órfãs contra o Agones
 

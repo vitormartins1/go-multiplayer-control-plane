@@ -1,7 +1,7 @@
 # Spec: 006-coop-mission-collective
 
 **Serviço:** analytics-service
-**Status:** Aprovado (batch C1–C4)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 — arquétipo `coop_mission`
 **Roadmap:** `docs/game-models/coop_mission-roadmap.md` — fatia **C3** (sink)

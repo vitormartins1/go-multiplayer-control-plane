@@ -1,7 +1,7 @@
 # Spec: 009-analytics
 
 **Serviço:** admin-bff
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-04
 **Parte de:** Analytics (pares: `analytics-service/001-match-analytics`, `admin-ui/011-analytics`)
 

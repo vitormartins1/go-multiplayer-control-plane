@@ -1,7 +1,7 @@
 # Spec: 001-admin-overview
 
 **Serviço:** admin-bff
-**Status:** Approved
+**Status:** Superseded by 004-games
 **Data:** 2026-06-29
 
 ## Contexto

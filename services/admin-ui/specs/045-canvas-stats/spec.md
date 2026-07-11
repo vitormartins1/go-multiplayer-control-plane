@@ -1,6 +1,6 @@
 # Spec 045 — Stats (métricas) no canvas de Event Rules
 
-**Status:** Approved (fatia pequena/aditiva — spec curta, sem plan/tasks)
+**Status:** Done (fatia pequena/aditiva — spec curta, sem plan/tasks)
 **Serviço:** admin-ui (UI-only; dado já disponível nas APIs que a aba consome)
 **Relaciona:** specs 043/044, ADR-0028, ADR-0023 A1 (critério por métrica)
 

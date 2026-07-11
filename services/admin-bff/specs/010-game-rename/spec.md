@@ -1,7 +1,7 @@
 # Spec: 010-game-rename
 
 **Serviço:** admin-bff
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-04
 **Parte de:** Console — Configurações do jogo (pares: `game-registry/005-game-rename`, `admin-ui/012-game-settings`)
 

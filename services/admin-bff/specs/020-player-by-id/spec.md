@@ -1,7 +1,7 @@
 # Spec: 020-player-by-id
 
 **Serviço:** admin-bff
-**Status:** Aprovado e implementado (2026-07-08)
+**Status:** Done
 **Data:** 2026-07-08
 **Parte de:** admin-ui/040-player-page-ux (handle no header do jogador).
 

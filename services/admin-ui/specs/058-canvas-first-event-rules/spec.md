@@ -1,6 +1,7 @@
 # Spec 058 — canvas ocupando a aba Event Rules (chrome flutuante)
 
 **Serviço:** admin-ui
+**Status:** Done
 **Relaciona:** spec 055 (canvas focado por regra), spec 056 (criação dinâmica), o painel recolhível de detalhe do node (2026-07-10)
 **Depende de:** nada novo no dado — reorganização de LAYOUT sobre `GameEventRules.tsx`/`GameEventRulesCanvas.tsx`; reaproveita `ARCHETYPE_META` (`lib/archetypeMeta.ts`) e o padrão de painel flutuante recolhível já usado no `NodeDetails`.
 

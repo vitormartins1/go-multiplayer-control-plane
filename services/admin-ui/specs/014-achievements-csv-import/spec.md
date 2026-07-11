@@ -1,5 +1,7 @@
 # Spec 014 — Importação de conquistas via CSV (admin-ui)
 
+**Status:** Done
+
 ## Contexto
 
 O administrador de um jogo precisa cadastrar muitas conquistas de uma vez. Em vez de usar o formulário individual repetidamente, ele pode preparar um CSV (manualmente, em planilha ou via IA) e importar em lote pela aba Achievements do jogo.

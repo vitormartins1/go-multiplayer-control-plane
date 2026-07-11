@@ -1,7 +1,7 @@
 # Spec: 001-game-core
 
 **Serviço:** game-registry
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-29
 
 ## Contexto

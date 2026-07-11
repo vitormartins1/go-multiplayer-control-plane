@@ -1,7 +1,7 @@
 # Spec: 004-cumulative-boards
 
 **Serviço:** leaderboard-service (+ consumidor do fan-out)
-**Status:** Draft
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (resultado polimórfico) — fatia **A2** do roadmap `queue_arena`; relaciona ADR-0020 (fan-out).
 

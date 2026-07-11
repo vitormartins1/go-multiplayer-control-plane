@@ -1,7 +1,7 @@
 # Spec: 005-team-composition
 
 **Serviço:** matchmaking-service
-**Status:** Aprovada (design confirmado 2026-07-06)
+**Status:** Done (2026-07-06)
 **Data:** 2026-07-06
 **ADR:** 0023 (perfil de multiplayer por jogo) — **fatia "composição de times"** (matchmaking atribui os lados)
 

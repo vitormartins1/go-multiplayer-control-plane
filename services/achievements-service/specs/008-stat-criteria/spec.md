@@ -1,7 +1,7 @@
 # Spec: 008-stat-criteria
 
 **Serviço:** achievements-service (+ cauda admin-bff/admin-ui)
-**Status:** Draft
+**Status:** Done — implementado (migration `005_stat_criteria.sql`, `recordStatProgress`, testes de idempotência/delta negativo/multi-jogador presentes e verdes)
 **Data:** 2026-07-06
 **ADR:** 0023 (resultado polimórfico — `stats` por jogador). É a fatia **A1** do roadmap `queue_arena`.
 

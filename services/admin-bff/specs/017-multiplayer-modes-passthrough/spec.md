@@ -1,7 +1,7 @@
 # Spec: 017-multiplayer-modes-passthrough
 
 **Serviço:** admin-bff
-**Status:** Aprovado (2026-07-07)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0024 · **Roadmap:** `multiplayer-modes-roadmap.md` — fatia **M0** (lado console, BFF)
 

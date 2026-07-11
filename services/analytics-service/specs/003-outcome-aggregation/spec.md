@@ -1,7 +1,7 @@
 # Spec: 003-outcome-aggregation
 
 **Serviço:** analytics-service
-**Status:** Aprovada (2026-07-06)
+**Status:** Done
 **Data:** 2026-07-06
 **ADR:** 0023 (perfil de multiplayer) — fatia **"colher: analytics"** (analytics consome o outcome polimórfico)
 

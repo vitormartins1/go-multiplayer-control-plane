@@ -1,7 +1,7 @@
 # Spec: 007-sessions-tab
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Done (2026-07-03)
 **Data:** 2026-07-03
 
 ## Contexto

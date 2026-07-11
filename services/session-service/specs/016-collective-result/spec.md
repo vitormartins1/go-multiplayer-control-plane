@@ -1,7 +1,7 @@
 # Spec: 016-collective-result
 
 **Serviço:** session-service
-**Status:** Aprovado (batch C1–C4)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — arquétipo `coop_mission`
 **Roadmap:** `docs/game-models/coop_mission-roadmap.md` — fatia **C2** (o núcleo)

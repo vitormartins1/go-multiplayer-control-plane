@@ -1,7 +1,7 @@
 # Spec: 012-game-settings
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Done (2026-07-04)
 **Data:** 2026-07-04
 **Parte de:** Console — Configurações do jogo (pares: `game-registry/005`, `admin-bff/010`)
 

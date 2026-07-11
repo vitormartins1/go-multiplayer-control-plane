@@ -1,6 +1,6 @@
 # Spec 015 — Stats como facts nas event rules (etapa 2 do adendo ADR-0028)
 
-**Status:** Draft — aguardando aprovação
+**Status:** Done — implementado (`Facts.WithStats`/prefixo `stat.` em `internal/domain/event_rule.go`, aplicado em `ApplyMatchResult`/`ApplyPlacementResult`/`ApplyCollectiveResult`; host_world_dropin ficou de fora por escopo, conforme esta própria spec, e foi fechado depois pela spec `018-participation-stats`)
 **Serviço:** achievements-service (domain + service); toque no admin-ui
 (sugestões no canvas)
 **Relaciona:** ADR-0028 adendo (roadmap de facts — esta etapa depende do V2a),

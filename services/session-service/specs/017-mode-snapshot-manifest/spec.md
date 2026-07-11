@@ -1,7 +1,7 @@
 # Spec: 017-mode-snapshot-manifest
 
 **Serviço:** session-service (+ atualização dos 4 contratos de data plane)
-**Status:** Aprovado (2026-07-07)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0024 · **Roadmap:** `multiplayer-modes-roadmap.md` — fatia **M1** (núcleo)
 

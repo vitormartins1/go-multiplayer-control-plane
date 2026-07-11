@@ -1,7 +1,7 @@
 # Spec 018 — Detalhe rico da sessão no admin (params do modo + resultado persistido)
 
 **Serviço:** session-service (+ passthrough admin-bff, render admin-ui)
-**Status:** Concluída (2026-07-08) (direção aprovada pelo usuário em 2026-07-08; origem: spec 009 do data plane `unity-queue-arena-data-plane`)
+**Status:** Done (2026-07-08) (direção aprovada pelo usuário em 2026-07-08; origem: spec 009 do data plane `unity-queue-arena-data-plane`)
 **Fatia:** aditiva ponta a ponta (campos novos + render); decisão técnica única: persistir o outcome na sessão fechada.
 
 ## Contexto

@@ -1,7 +1,7 @@
 # Spec: 010-team-registration
 
 **Serviço:** session-service
-**Status:** Aprovada (design confirmado 2026-07-06)
+**Status:** Done
 **Data:** 2026-07-06
 **ADR:** 0023 (perfil de multiplayer por jogo) — **fatia "composição de times"** (session é o dono canônico dos times)
 

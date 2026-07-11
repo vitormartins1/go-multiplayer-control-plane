@@ -1,7 +1,7 @@
 # Spec: 005-battle-royale-placement
 
 **Serviço:** leaderboard-service
-**Status:** Rascunho (aguardando aprovação)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — arquétipo `battle_royale`
 **Roadmap:** `docs/game-models/battle_royale-roadmap.md` — fatia **BR3** (sinks), parte leaderboard

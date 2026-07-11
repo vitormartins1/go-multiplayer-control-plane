@@ -1,6 +1,7 @@
 # Spec 012 — campo `Fleet` por jogo (ADR-0026)
 
 **Serviço:** game-registry
+**Status:** Done
 **Relaciona:** ADR-0026 (alocação Agones fleet-aware por jogo), ADR-0023 (perfil de multiplayer), ADR-0024/spec 009 (modos nomeados)
 **Depende de:** nada. **Destrava:** session-service/022 (fleet-aware allocation).
 

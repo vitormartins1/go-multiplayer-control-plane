@@ -1,7 +1,7 @@
 # Spec: 010-battle-royale-placement
 
 **Serviço:** achievements-service
-**Status:** Rascunho (aguardando aprovação)
+**Status:** Superseded by ADR-0027 (motor genérico de event_rules, migration `008_event_rules.sql`) e spec `014-match-operators` (migration `009_match_operators.sql`) — o sink `placement`→`ApplyPlacementResult` e `survived_ms` como stat estão implementados e vivos, mas a função pura hardcoded `PlacementEventTypes`/`BattleRoyaleTopNThreshold` desta spec foi substituída por `PlacementFacts`+`EvaluateRules` com o limiar top-N migrado para regra data-driven (`placement <= 10`)
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — arquétipo `battle_royale`
 **Roadmap:** `docs/game-models/battle_royale-roadmap.md` — fatia **BR3** (sinks), parte achievements

@@ -1,7 +1,7 @@
 # Spec: 004-games-of-player
 
 **Serviço:** game-registry (consulta reversa) + admin-bff + admin-ui
-**Status:** Implementada (2026-06-30)
+**Status:** Done (2026-06-30)
 **Data:** 2026-06-30
 **Relaciona:** ADR-0019 (presença por jogo), admin-ui/005 (jogo ativo global)
 

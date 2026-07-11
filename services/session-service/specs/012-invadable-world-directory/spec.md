@@ -1,7 +1,7 @@
 # Spec: 012-invadable-world-directory
 
 **Serviço:** session-service
-**Status:** Aprovada (2026-07-07)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — **arquétipo `host_world_dropin`, fatia H1a** (lado session: atributos do host + diretório de mundos)
 **Roadmap:** `docs/game-models/host_world_dropin-roadmap.md` → H1a

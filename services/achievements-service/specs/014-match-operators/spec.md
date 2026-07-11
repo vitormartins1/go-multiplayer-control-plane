@@ -1,6 +1,6 @@
 # Spec 014 — Comparadores no match das event rules (V2a do ADR-0028)
 
-**Status:** Draft — aguardando aprovação
+**Status:** Done — implementado (`MatchCond`/`Op`/`Value` em `internal/domain/event_rule.go`, comparadores `lt/lte/gt/gte/ne/in`, `UnmarshalJSON`/`MarshalJSON` retrocompatíveis, migration `009_match_operators.sql` migrando `tier`→`placement lte 10`)
 **Serviço:** achievements-service (domain + service + repository + migration);
 admin-ui (render + form de operador no canvas/tabela)
 **Relaciona:** ADR-0028 (decisão + adendo — V2a é a etapa 1 do motor rico),

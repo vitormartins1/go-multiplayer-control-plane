@@ -1,7 +1,7 @@
 # Spec: 003-leaderboard-fanout
 
 **Serviço:** session-service
-**Status:** Approved
+**Status:** Superseded by 006-durable-fanout
 **Data:** 2026-06-30
 
 ## Contexto

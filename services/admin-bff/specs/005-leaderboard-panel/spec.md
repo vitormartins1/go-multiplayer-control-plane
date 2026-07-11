@@ -1,7 +1,7 @@
 # Spec: 005-leaderboard-panel
 
 **Serviço:** admin-bff (+ admin-ui)
-**Status:** Approved
+**Status:** Done
 **Data:** 2026-06-30
 
 ## Contexto

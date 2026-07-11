@@ -1,7 +1,7 @@
 # Spec: 018-stat-criteria-editor
 
 **Serviço:** admin-ui
-**Status:** Draft
+**Status:** Done (2026-07-06)
 **Data:** 2026-07-06
 **Parte de:** cauda da fatia A1 (`achievements/008-stat-criteria`, ADR-0023). Par de UI do critério por métrica.
 

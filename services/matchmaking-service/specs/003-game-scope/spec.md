@@ -1,7 +1,7 @@
 # Spec: 003-game-scope
 
 **Serviço:** matchmaking-service (+ companion no session-service)
-**Status:** Approved
+**Status:** Done (2026-06-29)
 **Data:** 2026-06-29
 
 ## Contexto

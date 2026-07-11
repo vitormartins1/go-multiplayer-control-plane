@@ -1,6 +1,7 @@
 # Spec 022 — alocação Agones fleet-aware por perfil (ADR-0026)
 
 **Serviço:** session-service
+**Status:** Done
 **Relaciona:** ADR-0026, ADR-0023 (perfil de multiplayer), spec 017 (mode snapshot + manifest)
 **Depende de:** game-registry/012 (campo `fleet` no perfil). **Destrava:** 2º jogo real usando Agones sem risco de alocar o binário errado.
 

@@ -1,6 +1,7 @@
 # Spec 059 — aba Fleet (fatia real do campo `fleet` + esqueleto mockado da evolução futura)
 
 **Serviços:** admin-ui (nova aba/página) + admin-bff (proxy do campo `fleet`, hoje ausente)
+**Status:** Done
 **Relaciona:** ADR-0026 (fleet por jogo, Accepted/implementado), ADR-0029 (infra Agones centralizada, Proposed — fatia 2 ainda não implementada)
 **Depende de:** nada novo no game-registry — `Fleet`/`setFleet` já existem lá (spec 012) e nunca foram expostos além dele.
 

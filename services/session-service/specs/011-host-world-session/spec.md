@@ -1,7 +1,7 @@
 # Spec: 011-host-world-session
 
 **Serviço:** session-service
-**Status:** Aprovada (2026-07-07)
+**Status:** Done
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — **arquétipo `host_world_dropin`, fatia H0** (sessão host-cêntrica persistente)
 **Roadmap:** `docs/game-models/host_world_dropin-roadmap.md` → H0
