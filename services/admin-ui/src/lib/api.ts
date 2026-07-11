@@ -330,9 +330,10 @@ export interface AnalyticsOverview {
   daily: AnalyticsDaily[];
 }
 
-// host_world_dropin (spec 004/020): contagem por papel/evento/outcome no
-// detalhe do jogo.
+// host_world_dropin (spec 004/020): contagem por modo/papel/evento/outcome no
+// detalhe do jogo. modeId="" agrupa dados anteriores à spec 009 (sem modo).
 export interface ParticipationStat {
+  modeId: string;
   role: string;
   event: string;
   outcome: string;

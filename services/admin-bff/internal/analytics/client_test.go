@@ -48,7 +48,7 @@ func TestGameAnalytics_ParseiaRoleParticipations(t *testing.T) {
 		assert.Equal(t, "7", r.URL.Query().Get("days"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"gameId":"hw","matches":0,"daily":[],
-			"roleParticipations":[{"role":"invader","event":"HOST_KILLED","count":3},{"role":"coop","event":"BOSS_DEFEATED","count":1}]}`))
+			"roleParticipations":[{"modeId":"batizado","role":"invader","event":"HOST_KILLED","count":3},{"role":"coop","event":"BOSS_DEFEATED","count":1}]}`))
 	}))
 	defer upstream.Close()
 
@@ -56,7 +56,8 @@ func TestGameAnalytics_ParseiaRoleParticipations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hw", d.GameID)
 	require.Len(t, d.RoleParticipations, 2)
-	assert.Equal(t, domain.ParticipationStat{Role: "invader", Event: "HOST_KILLED", Count: 3}, d.RoleParticipations[0])
+	assert.Equal(t, domain.ParticipationStat{ModeID: "batizado", Role: "invader", Event: "HOST_KILLED", Count: 3}, d.RoleParticipations[0])
+	assert.Empty(t, d.RoleParticipations[1].ModeID, "sem modo (dado anterior à spec 009) cai no bucket vazio")
 	assert.Empty(t, d.GameName, "nome é injetado pelo service")
 }
 

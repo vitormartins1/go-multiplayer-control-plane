@@ -1,10 +1,21 @@
-import { Alert, Loader, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { useMemo, useState } from "react";
+import { Alert, Loader, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
-import { api, type ParticipationStat } from "../lib/api";
+import { api, type MultiplayerMode, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
 import { FormSection } from "../components/FormSection";
 import { formatDuration } from "../lib/format";
+
+// seletor de modo (spec 009): valores sentinela porque o Select do Mantine
+// não lida bem com value="" (cai no branch de "sem seleção").
+const ALL_MODES = "__all__";
+const NO_MODE = "__none__";
+
+function modeLabel(modeId: string, modes: MultiplayerMode[]): string {
+  if (!modeId) return "Sem modo";
+  return modes.find((m) => m.modeId === modeId)?.displayName || modeId;
+}
 
 // rótulos amigáveis dos eventos de participação (host_world_dropin).
 const EVENT_LABELS: Record<string, string> = {
@@ -63,11 +74,20 @@ function participationByRole(stats: ParticipationStat[]) {
   return { data, series };
 }
 
-export function GameAnalytics({ gameId }: { gameId: string }) {
+export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: MultiplayerMode[] }) {
   const { data, loading, error } = useAsync((s) => api.gameAnalytics(gameId, s), [gameId]);
+  // "" (sentinela ALL_MODES) = sem filtro, mostra todos os modos somados.
+  const [selectedMode, setSelectedMode] = useState(ALL_MODES);
 
   const hasData = data && data.matches > 0;
-  const participations = data?.roleParticipations ?? [];
+  const allParticipations = data?.roleParticipations ?? [];
+  // modos distintos com dado reportado (ADR-0024, spec 009) — "" vira "Sem modo"
+  // (dado anterior à spec, quando o evento não carregava modeId).
+  const modeIds = useMemo(() => [...new Set(allParticipations.map((p) => p.modeId))], [allParticipations]);
+  const participations =
+    selectedMode === ALL_MODES
+      ? allParticipations
+      : allParticipations.filter((p) => p.modeId === (selectedMode === NO_MODE ? "" : selectedMode));
   // total por partida (independente de arquétipo) — só some se não houver nenhum resultado.
   const hasOutcomes = !!data && data.wins + data.losses + data.draws > 0;
   const roleChart = participations.length > 0 ? participationByRole(participations) : null;
@@ -129,15 +149,27 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
         </>
       )}
 
-      {/* host_world_dropin (spec 020): participações por papel/evento/outcome.
+      {/* host_world_dropin (spec 004/020/009): participações por papel/evento/outcome.
           Só aparece quando o jogo reportou eventos de participação. Agrupado
-          por papel (Host/Co-op/Invasor) com evento como série — granularidade
-          hoje é por ARQUÉTIPO, não por modo nomeado (ADR-0024): um jogo com
-          vários modos host_world_dropin não distingue "Roda Aberta" de
-          "Batizado" aqui. Evolução em aberto, não implementada. */}
+          por papel (Host/Co-op/Invasor) com evento como série. Quebra por modo
+          nomeado (ADR-0024) via seletor — só aparece quando há mais de um modo
+          distinto reportado (senão o filtro não teria o que filtrar). */}
       {roleChart && (
         <FormSection label="Participações por papel">
           <Stack gap="md">
+            {modeIds.length > 1 && (
+              <Select
+                label="Modo"
+                w={240}
+                allowDeselect={false}
+                value={selectedMode}
+                onChange={(v) => v && setSelectedMode(v)}
+                data={[
+                  { value: ALL_MODES, label: "Todos os modos" },
+                  ...modeIds.map((id) => ({ value: id || NO_MODE, label: modeLabel(id, modes) })),
+                ]}
+              />
+            )}
             <BarChart
               h={Math.max(160, roleChart.data.length * 70)}
               data={roleChart.data}
@@ -153,6 +185,7 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
             <Table striped withTableBorder>
               <Table.Thead>
                 <Table.Tr>
+                  {modeIds.length > 1 && <Table.Th>Modo</Table.Th>}
                   <Table.Th>Papel</Table.Th>
                   <Table.Th>Evento</Table.Th>
                   <Table.Th>Desfecho</Table.Th>
@@ -161,7 +194,8 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
               </Table.Thead>
               <Table.Tbody>
                 {participations.map((p) => (
-                  <Table.Tr key={`${p.role}-${p.event}-${p.outcome}`}>
+                  <Table.Tr key={`${p.modeId}-${p.role}-${p.event}-${p.outcome}`}>
+                    {modeIds.length > 1 && <Table.Td c="dimmed">{modeLabel(p.modeId, modes)}</Table.Td>}
                     <Table.Td>{ROLE_LABELS[p.role] ?? p.role}</Table.Td>
                     <Table.Td>{EVENT_LABELS[p.event] ?? p.event}</Table.Td>
                     <Table.Td c="dimmed">{OUTCOME_LABELS[p.outcome] ?? (p.outcome || "—")}</Table.Td>

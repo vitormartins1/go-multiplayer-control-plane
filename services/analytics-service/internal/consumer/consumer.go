@@ -148,6 +148,7 @@ func peekKind(body []byte) (kind, matchID string) {
 func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
 	var env struct {
 		GameID    string `json:"gameId"`
+		ModeID    string `json:"modeId"`
 		SessionID string `json:"sessionId"`
 		PlayerID  string `json:"playerId"`
 		Role      string `json:"role"`
@@ -159,7 +160,7 @@ func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
 		return domain.ParticipationEvent{}, fmt.Errorf("unmarshal participation: %w", err)
 	}
 	return domain.ParticipationEvent{
-		GameID: env.GameID, SessionID: env.SessionID, PlayerID: env.PlayerID,
+		GameID: env.GameID, ModeID: env.ModeID, SessionID: env.SessionID, PlayerID: env.PlayerID,
 		Role: env.Role, Event: env.Event, Outcome: env.Outcome, EventID: env.EventID,
 	}, nil
 }

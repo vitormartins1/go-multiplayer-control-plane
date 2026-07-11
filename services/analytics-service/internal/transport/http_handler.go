@@ -111,6 +111,7 @@ type dailyDTO struct {
 // o repositório já lia a coluna (query agrupa por role/event/outcome), só o
 // DTO não expunha.
 type participationStatDTO struct {
+	ModeID  string `json:"modeId"`
 	Role    string `json:"role"`
 	Event   string `json:"event"`
 	Outcome string `json:"outcome"`
@@ -135,7 +136,7 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
 	}
 	for _, p := range ga.RoleParticipations {
-		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{Role: p.Role, Event: p.Event, Outcome: p.Outcome, Count: p.Count})
+		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{ModeID: p.ModeID, Role: p.Role, Event: p.Event, Outcome: p.Outcome, Count: p.Count})
 	}
 	if pd := ga.Placement; pd != nil {
 		dto.Placement = &placementDTO{
