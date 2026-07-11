@@ -175,32 +175,34 @@ export function Rooms() {
         </Text>
       )}
       {rows.length > 0 && (
-        <Table striped withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Jogo</Table.Th>
-              <Table.Th>Match</Table.Th>
-              <Table.Th>Estado</Table.Th>
-              <Table.Th>Players</Table.Th>
-              <Table.Th>Server</Table.Th>
-              <Table.Th>Tempos</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((s) => (
-              <RoomRow
-                key={s.sessionId}
-                session={s}
-                br={brInfo(s)}
-                coop={coopInfo(s)}
-                expanded={expandedId === s.sessionId}
-                onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
-                onClose={() => setClosing(s)}
-              />
-            ))}
-          </Table.Tbody>
-        </Table>
+        <Table.ScrollContainer minWidth={720}>
+          <Table striped withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Jogo</Table.Th>
+                <Table.Th>Match</Table.Th>
+                <Table.Th>Estado</Table.Th>
+                <Table.Th>Players</Table.Th>
+                <Table.Th>Server</Table.Th>
+                <Table.Th>Tempos</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map((s) => (
+                <RoomRow
+                  key={s.sessionId}
+                  session={s}
+                  br={brInfo(s)}
+                  coop={coopInfo(s)}
+                  expanded={expandedId === s.sessionId}
+                  onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
+                  onClose={() => setClosing(s)}
+                />
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!closing} onClose={() => setClosing(null)} title="Encerrar sala" centered>

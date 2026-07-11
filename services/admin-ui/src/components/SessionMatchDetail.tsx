@@ -48,7 +48,10 @@ export const ROLE_META: Record<string, { label: string; color: string }> = {
   host: { label: "host", color: "blue" },
 };
 
-const TEAM_COLORS = ["blue", "red", "teal", "orange", "grape", "cyan"];
+// 10 cores (config de times/squads não tem teto duro — MultiplayerSettings
+// só valida mínimo — então o array cobre uma faixa mais folgada antes de
+// repetir cor por módulo).
+const TEAM_COLORS = ["blue", "red", "teal", "orange", "grape", "cyan", "pink", "lime", "indigo", "yellow"];
 
 const OUTCOME_META: Record<string, { label: string; color: string }> = {
   win: { label: "vitória", color: "green" },
@@ -485,9 +488,14 @@ function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handle
       <SectionLabel>MUNDO</SectionLabel>
       <SimpleGrid cols={{ base: 1, sm: 2, lg: Math.min(1 + slots.length, 4) }} spacing="sm">
         <Paper withBorder radius="md" p="sm" style={{ borderColor: "var(--mantine-color-blue-6)" }}>
-          <Badge variant="light" color="blue" leftSection={<IconCrown size={12} />}>
-            host
-          </Badge>
+          <Group justify="space-between" wrap="nowrap">
+            <Badge variant="light" color="blue" leftSection={<IconCrown size={12} />}>
+              host
+            </Badge>
+            <Text size="xs" c="dimmed">
+              {s.hostPlayerId ? "1/1" : "0/1"}
+            </Text>
+          </Group>
           <Divider my="xs" />
           {s.hostPlayerId ? (
             <PlayerCell id={s.hostPlayerId} handle={handleOf(s.hostPlayerId)} />
@@ -502,15 +510,28 @@ function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handle
           const occ = slot.occupants ?? [];
           const unnamed = Math.max(0, slot.occupied - occ.length); // payload antigo sem occupants
           const free = Math.max(0, slot.capacity - slot.occupied);
+          const full = slot.capacity > 0 && free === 0;
           return (
-            <Paper key={slot.role} withBorder radius="md" p="sm">
+            <Paper
+              key={slot.role}
+              withBorder
+              radius="md"
+              p="sm"
+              style={full ? { borderColor: "var(--mantine-color-nominal-6)" } : undefined}
+            >
               <Group justify="space-between" wrap="nowrap">
                 <Badge variant="light" color={meta.color}>
                   {meta.label}
                 </Badge>
-                <Text size="xs" c="dimmed">
-                  {slot.occupied}/{slot.capacity}
-                </Text>
+                {full ? (
+                  <Badge size="xs" variant="light" color="nominal">
+                    cheio
+                  </Badge>
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    {slot.occupied}/{slot.capacity}
+                  </Text>
+                )}
               </Group>
               <Divider my="xs" />
               <Stack gap={6}>
