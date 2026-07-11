@@ -45,6 +45,7 @@ import {
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { FormSection } from "../components/FormSection";
+import { SessionAvatar } from "../components/SessionAvatar";
 
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -1048,6 +1049,11 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
   const [deleting, setDeleting] = useState<MultiplayerMode | null>(null);
   const [removing, setRemoving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Hash do snapshot atual por modo (spec 022) — carregado em paralelo, sem
+  // bloquear a tabela: os dados dos modos (já disponíveis via
+  // listMultiplayerModes) renderizam independente do ícone/hash terem chegado.
+  const [snapshotHashes, setSnapshotHashes] = useState<Record<string, string>>({});
+  const [hashesLoading, setHashesLoading] = useState(true);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1062,6 +1068,22 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [gameId, reloadKey]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setHashesLoading(true);
+    api
+      .modeSnapshotHashes(gameId, ctrl.signal)
+      .then((hashes) => setSnapshotHashes(hashes))
+      .catch((err) => {
+        if (ctrl.signal.aborted) return;
+        console.error(err); // best-effort: ícone/hash faltando não impede editar modos
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setHashesLoading(false);
       });
     return () => ctrl.abort();
   }, [gameId, reloadKey]);
@@ -1161,9 +1183,11 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
       <Table verticalSpacing="sm" highlightOnHover>
         <Table.Thead>
           <Table.Tr>
+            <Table.Th />
             <Table.Th>Modo</Table.Th>
             <Table.Th>ID</Table.Th>
             <Table.Th>Arquétipo</Table.Th>
+            <Table.Th>Snapshot</Table.Th>
             <Table.Th>Configuração</Table.Th>
             <Table.Th w={90} />
           </Table.Tr>
@@ -1171,8 +1195,20 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
         <Table.Tbody>
           {modes.map((m) => {
             const meta = ARCHETYPE_META[m.archetype];
+            const hash = snapshotHashes[m.modeId];
             return (
               <Table.Tr key={m.modeId}>
+                <Table.Td>
+                  {hashesLoading ? (
+                    <Loader size={16} />
+                  ) : hash ? (
+                    <SessionAvatar seed={hash} />
+                  ) : (
+                    <Text size="xs" c="dimmed">
+                      —
+                    </Text>
+                  )}
+                </Table.Td>
                 <Table.Td>
                   <Text size="sm" fw={500}>
                     {m.displayName || m.modeId}
@@ -1185,6 +1221,19 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                   <Badge variant="light" color="gray" leftSection={<meta.icon size={12} />}>
                     {meta.label}
                   </Badge>
+                </Table.Td>
+                <Table.Td>
+                  {hash ? (
+                    <Text ff="monospace" size="xs" c="dimmed">
+                      {hash}
+                    </Text>
+                  ) : (
+                    !hashesLoading && (
+                      <Text size="xs" c="dimmed">
+                        —
+                      </Text>
+                    )
+                  )}
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm" c="dimmed">

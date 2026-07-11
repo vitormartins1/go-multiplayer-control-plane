@@ -206,6 +206,11 @@ type GameRegistry interface {
 	GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error)
 	SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error)
 	DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error
+	// ModeSnapshotHashes calcula o hash "atual" de cada modo do jogo (spec 022)
+	// — o mesmo hash que uma sessão aberta agora congelaria (shared/modesnapshot).
+	// Uma chamada só ao game-registry (reaproveita ListMultiplayerModes); jogo
+	// sem modos -> mapa vazio, não erro. Indisponibilidade -> ErrGameRegistryUnavailable.
+	ModeSnapshotHashes(ctx context.Context, gameID string) (map[string]string, error)
 }
 
 // LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).

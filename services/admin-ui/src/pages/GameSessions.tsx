@@ -18,6 +18,7 @@ import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { SessionMatchDetail } from "../components/SessionMatchDetail";
+import { archetypeMetaOf } from "../lib/archetypeMeta";
 
 const POLL_MS = 5000;
 
@@ -147,6 +148,7 @@ function SessionRow({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const modeMeta = archetypeMetaOf(s.archetype);
   return (
     <>
       <Table.Tr
@@ -156,14 +158,18 @@ function SessionRow({
       >
         <Table.Td>
           <Group gap={6} wrap="nowrap">
-            <SessionAvatar seed={s.sessionId} />
+            <SessionAvatar seed={s.profileHash || s.sessionId} />
             <Text ff="monospace" size="sm">
               {truncate(s.matchId)}
             </Text>
           </Group>
         </Table.Td>
         <Table.Td>
-          <Badge variant="light" color="indigo">
+          <Badge
+            variant="light"
+            color="gray"
+            leftSection={modeMeta && <modeMeta.icon size={12} />}
+          >
             {s.modeId || "default"}
           </Badge>
         </Table.Td>
@@ -205,7 +211,7 @@ function SessionRow({
               <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
                 <Stack gap="xs">
                   <Group gap="xl" wrap="wrap">
-                    <SessionAvatar seed={s.sessionId} size={40} />
+                    <SessionAvatar seed={s.profileHash || s.sessionId} size={40} />
                     <Stack gap={2}>
                       <Text size="xs" c="dimmed" fw={600}>SESSION ID</Text>
                       <Text ff="monospace" size="xs">{s.sessionId}</Text>

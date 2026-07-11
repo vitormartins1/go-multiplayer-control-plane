@@ -57,6 +57,7 @@ type fakeService struct {
 	importErr        error
 	fleetStatus      domain.FleetStatus
 	fleetStatusErr   error
+	snapshotHashes   map[string]string
 	gotGameID        string
 	gotPlayer        string
 	gotBoard         string
@@ -151,6 +152,10 @@ func (f *fakeService) SetMultiplayerMode(_ context.Context, gameID, modeID strin
 func (f *fakeService) DeleteMultiplayerMode(_ context.Context, gameID, modeID string) error {
 	f.gotGameID, f.gotModeID = gameID, modeID
 	return f.profileErr
+}
+func (f *fakeService) ModeSnapshotHashes(_ context.Context, gameID string) (map[string]string, error) {
+	f.gotGameID = gameID
+	return f.snapshotHashes, f.profileErr
 }
 func (f *fakeService) GameCatalog(_ context.Context, gameID string) ([]domain.Achievement, error) {
 	f.gotGameID = gameID
@@ -1275,6 +1280,39 @@ func TestDeleteMultiplayerMode_204(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, "tdm", svc.gotModeID)
+}
+
+func TestModeSnapshotHashes_200(t *testing.T) {
+	svc := &fakeService{snapshotHashes: map[string]string{"default": "a1b2c3d4e5f60718", "tdm": "9f8e7d6c5b4a3210"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/mode-snapshot-hashes")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.JSONEq(t, `{"default":"a1b2c3d4e5f60718","tdm":"9f8e7d6c5b4a3210"}`, readBody(t, resp))
+}
+
+func TestModeSnapshotHashes_SemModos_MapaVazio(t *testing.T) {
+	svc := &fakeService{snapshotHashes: map[string]string{}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/mode-snapshot-hashes")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.JSONEq(t, `{}`, readBody(t, resp))
+}
+
+func TestModeSnapshotHashes_RegistryFora_502(t *testing.T) {
+	svc := &fakeService{profileErr: domain.ErrGameRegistryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/mode-snapshot-hashes")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
 
 func TestDeleteMultiplayerMode_Default_409Propaga(t *testing.T) {

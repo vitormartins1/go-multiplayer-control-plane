@@ -198,6 +198,12 @@ func (s *Service) DeleteMultiplayerMode(ctx context.Context, gameID, modeID stri
 	return s.registry.DeleteMultiplayerMode(ctx, gameID, modeID)
 }
 
+// ModeSnapshotHashes calcula o hash "atual" de cada modo do jogo (aba
+// Configurações → Multiplayer, spec 022).
+func (s *Service) ModeSnapshotHashes(ctx context.Context, gameID string) (map[string]string, error) {
+	return s.registry.ModeSnapshotHashes(ctx, gameID)
+}
+
 // GameCatalog lê o catálogo de conquistas do jogo (achievements).
 func (s *Service) GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error) {
 	return s.reader.CatalogForGame(ctx, gameID)
