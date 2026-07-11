@@ -18,7 +18,7 @@ export function Analytics() {
 
       {loading && !data && <Loader />}
       {!!error && !data && (
-        <Alert color="red">Analytics indisponível (analytics-service fora?).</Alert>
+        <Alert color="critical">Analytics indisponível (analytics-service fora?).</Alert>
       )}
 
       {data && (
@@ -36,7 +36,7 @@ export function Analytics() {
                 h={220}
                 data={data.daily}
                 dataKey="day"
-                series={[{ name: "matches", label: "Partidas", color: "blue.5" }]}
+                series={[{ name: "matches", label: "Partidas", color: "signal.5" }]}
                 curveType="monotone"
                 withDots={data.daily.length < 40}
                 tickLine="x"
@@ -72,12 +72,12 @@ export function Analytics() {
                           <Text fw={500}>{g.gameName || g.gameId}</Text>
                         </Group>
                       </Table.Td>
-                      <Table.Td ta="right">{g.matches}</Table.Td>
-                      <Table.Td ta="right">{g.uniquePlayers}</Table.Td>
-                      <Table.Td ta="right">{g.wins}</Table.Td>
-                      <Table.Td ta="right">{g.losses}</Table.Td>
-                      <Table.Td ta="right">{g.draws}</Table.Td>
-                      <Table.Td ta="right">{g.avgScore.toFixed(1)}</Table.Td>
+                      <Table.Td ta="right" ff="monospace">{g.matches}</Table.Td>
+                      <Table.Td ta="right" ff="monospace">{g.uniquePlayers}</Table.Td>
+                      <Table.Td ta="right" ff="monospace">{g.wins}</Table.Td>
+                      <Table.Td ta="right" ff="monospace">{g.losses}</Table.Td>
+                      <Table.Td ta="right" ff="monospace">{g.draws}</Table.Td>
+                      <Table.Td ta="right" ff="monospace">{g.avgScore.toFixed(1)}</Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>

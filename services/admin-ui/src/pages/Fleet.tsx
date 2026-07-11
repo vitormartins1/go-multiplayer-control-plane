@@ -56,7 +56,7 @@ export function Fleet() {
       </Alert>
 
       {loading && !games && <Loader />}
-      {!!error && !games && <Alert color="red">admin-bff indisponível.</Alert>}
+      {!!error && !games && <Alert color="critical">admin-bff indisponível.</Alert>}
 
       {games && (
         <Table striped highlightOnHover withTableBorder>
@@ -155,7 +155,7 @@ function FleetRow({
                         <Text size="xs" c="dimmed" fw={600}>
                           HEALTH
                         </Text>
-                        <Badge color="green" variant="light">
+                        <Badge color="nominal" variant="light">
                           {mock.healthy}/{mock.total} saudáveis (mock)
                         </Badge>
                       </Stack>

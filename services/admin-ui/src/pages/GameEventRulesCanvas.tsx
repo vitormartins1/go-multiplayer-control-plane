@@ -431,14 +431,14 @@ export function GameEventRulesCanvas({
       if (draft.editingRuleID) {
         // archetype não é editável (spec 016) — o PUT leva só o conteúdo.
         await api.updateEventRule(gameId, draft.editingRuleID, { match, eventTypes });
-        notifications.show({ color: "green", message: "Regra atualizada." });
+        notifications.show({ color: "nominal", message: "Regra atualizada." });
       } else {
         // Sem seletor manual na toolbar (spec 058): jogo de 1 arquétipo só
         // usa `arch` direto; com mais de um, draftArchetype (editável no
         // próprio form, archetypePicker) manda.
         const archetype = archetypeOptions.length > 1 ? draftArchetype : arch;
         await api.createEventRule(gameId, { archetype, match, eventTypes });
-        notifications.show({ color: "green", message: "Regra adicionada." });
+        notifications.show({ color: "nominal", message: "Regra adicionada." });
       }
       setDraft(null);
       reload();
@@ -722,12 +722,12 @@ export function GameEventRulesCanvas({
     if (!deleting) return;
     try {
       await api.deleteEventRule(gameId, deleting.id);
-      notifications.show({ color: "green", message: "Regra removida." });
+      notifications.show({ color: "nominal", message: "Regra removida." });
       setDeleting(null);
       setSelectedId(null);
       reload();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao remover (serviço indisponível?)." });
+      notifications.show({ color: "critical", message: "Falha ao remover (serviço indisponível?)." });
       setDeleting(null);
     }
   }
@@ -739,14 +739,14 @@ export function GameEventRulesCanvas({
     try {
       if (rule.suppressed) {
         await api.unsuppressEventRule(gameId, rule.id);
-        notifications.show({ color: "green", message: "Regra restaurada." });
+        notifications.show({ color: "nominal", message: "Regra restaurada." });
       } else {
         await api.suppressEventRule(gameId, rule.id);
         notifications.show({ color: "orange", message: "Regra suprimida para este jogo." });
       }
       reload();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao atualizar a supressão (serviço indisponível?)." });
+      notifications.show({ color: "critical", message: "Falha ao atualizar a supressão (serviço indisponível?)." });
     }
   }
 
@@ -847,7 +847,7 @@ export function GameEventRulesCanvas({
             <Button variant="default" onClick={() => setDeleting(null)}>
               Cancelar
             </Button>
-            <Button color="red" onClick={confirmDelete}>
+            <Button color="critical" onClick={confirmDelete}>
               Remover
             </Button>
           </Group>
@@ -1116,7 +1116,7 @@ function EventRulesDock({
                   </Table.Td>
                   <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
                     {r.scope === "game" ? (
-                      <ActionIcon size="xs" variant="subtle" color="red" onClick={() => onDelete(r)} aria-label="Remover">
+                      <ActionIcon size="xs" variant="subtle" color="critical" onClick={() => onDelete(r)} aria-label="Remover">
                         <IconTrash size={13} />
                       </ActionIcon>
                     ) : (
@@ -1282,7 +1282,7 @@ function NodeDetails({
             </Button>
           </>
         ) : (
-          <Button variant="light" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => onDelete(rule)}>
+          <Button variant="light" color="critical" size="xs" leftSection={<IconTrash size={14} />} onClick={() => onDelete(rule)}>
             Remover regra
           </Button>
         )}
@@ -1295,7 +1295,7 @@ function NodeDetails({
     return (
       <Stack gap="xs">
         {d.drift && (
-          <Text size="xs" c="red">
+          <Text size="xs" c="critical">
             Nenhum modo deste jogo declara esta stat — achievements por ela podem nunca progredir
             (drift entre catálogo e modos).
           </Text>
@@ -1429,7 +1429,7 @@ function QuickAchievementDrawer({
         statMode: undefined,
         target: Number(target) || 1,
       });
-      notifications.show({ color: "green", message: "Conquista adicionada." });
+      notifications.show({ color: "nominal", message: "Conquista adicionada." });
       onCreated();
     } catch (e) {
       setError(
@@ -1473,7 +1473,7 @@ function QuickAchievementDrawer({
         />
         <NumberInput label="Target (ocorrências)" size="xs" min={1} value={target} onChange={setTarget} />
         {error && (
-          <Text size="xs" c="red">
+          <Text size="xs" c="critical">
             {error}
           </Text>
         )}

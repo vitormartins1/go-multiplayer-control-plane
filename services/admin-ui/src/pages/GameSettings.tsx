@@ -35,10 +35,10 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
     setSaving(true);
     try {
       await api.renameGame(game.id, trimmed);
-      notifications.show({ color: "green", message: "Jogo renomeado." });
+      notifications.show({ color: "nominal", message: "Jogo renomeado." });
       onRenamed();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao renomear (nome inválido ou serviço fora?)." });
+      notifications.show({ color: "critical", message: "Falha ao renomear (nome inválido ou serviço fora?)." });
     } finally {
       setSaving(false);
     }
@@ -48,7 +48,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
     setDeleting(true);
     try {
       await api.deleteGame(game.id);
-      notifications.show({ color: "green", message: `"${game.name}" removido.` });
+      notifications.show({ color: "nominal", message: `"${game.name}" removido.` });
       navigate("/games");
     } catch (err) {
       if (err instanceof HttpError && err.status === 404) {
@@ -57,7 +57,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
         navigate("/games");
         return;
       }
-      notifications.show({ color: "red", message: "Falha ao remover (serviço fora?). Tente de novo." });
+      notifications.show({ color: "critical", message: "Falha ao remover (serviço fora?). Tente de novo." });
       setDeleting(false);
     }
   }
@@ -128,7 +128,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
             O jogo some do console e para de aceitar filas e sessões novas. Conquistas, saves,
             leaderboards e analytics ficam inacessíveis. Não há desfazer pelo console.
           </Text>
-          <Button color="red" variant="outline" onClick={() => setDeleteOpen(true)}>
+          <Button color="critical" variant="outline" onClick={() => setDeleteOpen(true)}>
             Remover jogo
           </Button>
         </Group>
@@ -164,7 +164,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
             >
               Cancelar
             </Button>
-            <Button color="red" disabled={!canDelete} loading={deleting} onClick={removeGame}>
+            <Button color="critical" disabled={!canDelete} loading={deleting} onClick={removeGame}>
               Remover definitivamente
             </Button>
           </Group>

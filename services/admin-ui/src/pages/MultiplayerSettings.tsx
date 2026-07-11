@@ -400,7 +400,7 @@ function HostWorldDropInForm({
               />
             </Group>
             {p.enabledRoles.length === 0 && (
-              <Text size="xs" c="red" mt={4}>
+              <Text size="xs" c="critical" mt={4}>
                 Pelo menos um papel deve estar habilitado.
               </Text>
             )}
@@ -826,13 +826,13 @@ export function ModeEditor({
           ...profile,
           ...(name ? { displayName: name } : {}),
         });
-        notifications.show({ color: "green", message: `Modo "${name || modeId}" salvo.` });
+        notifications.show({ color: "nominal", message: `Modo "${name || modeId}" salvo.` });
       }
       onSaved();
     } catch (err) {
       const code = err instanceof HttpError ? err.code : undefined;
       notifications.show({
-        color: "red",
+        color: "critical",
         message: code
           ? `Falha ao salvar (${code}).`
           : "Falha ao salvar (parâmetros inválidos ou serviço fora?).",
@@ -975,7 +975,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
       .then((list) => setModes(list))
       .catch((err) => {
         if (ctrl.signal.aborted) return;
-        notifications.show({ color: "red", message: "Falha ao carregar os modos de multiplayer." });
+        notifications.show({ color: "critical", message: "Falha ao carregar os modos de multiplayer." });
         console.error(err);
       })
       .finally(() => {
@@ -995,7 +995,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
     try {
       await api.deleteMultiplayerMode(gameId, deleting.modeId);
       notifications.show({
-        color: "green",
+        color: "nominal",
         message: `Modo "${deleting.displayName || deleting.modeId}" removido.`,
       });
       setDeleting(null);
@@ -1003,7 +1003,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
     } catch (err) {
       const code = err instanceof HttpError ? err.code : undefined;
       notifications.show({
-        color: "red",
+        color: "critical",
         message: code ? `Falha ao remover (${code}).` : "Falha ao remover o modo.",
       });
     } finally {
@@ -1121,7 +1121,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                     {m.modeId !== DEFAULT_MODE_ID && (
                       <ActionIcon
                         variant="subtle"
-                        color="red"
+                        color="critical"
                         aria-label="Remover"
                         onClick={() => setDeleting(m)}
                       >
@@ -1150,7 +1150,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
             <Button variant="default" onClick={() => setDeleting(null)} disabled={removing}>
               Cancelar
             </Button>
-            <Button color="red" onClick={confirmDelete} loading={removing}>
+            <Button color="critical" onClick={confirmDelete} loading={removing}>
               Remover
             </Button>
           </Group>

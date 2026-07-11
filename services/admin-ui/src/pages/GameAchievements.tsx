@@ -386,7 +386,7 @@ export function GameAchievements({
       const { progress } = await api.achievementProgress(gameId, a.id);
       setProgressEntries(progress);
     } catch {
-      notifications.show({ color: "red", message: "Falha ao carregar o progresso." });
+      notifications.show({ color: "critical", message: "Falha ao carregar o progresso." });
     } finally {
       setProgressLoading(false);
     }
@@ -447,7 +447,7 @@ export function GameAchievements({
         description: values.description,
         ...buildCriterion(values),
       });
-      notifications.show({ color: "green", message: "Conquista adicionada." });
+      notifications.show({ color: "nominal", message: "Conquista adicionada." });
       close();
       form.reset();
       reload();
@@ -489,7 +489,7 @@ export function GameAchievements({
         description: values.description,
         ...buildCriterion(values),
       });
-      notifications.show({ color: "green", message: "Conquista atualizada." });
+      notifications.show({ color: "nominal", message: "Conquista atualizada." });
       focusRow(null);
       reload();
     } catch (e) {
@@ -525,11 +525,11 @@ export function GameAchievements({
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith(".csv")) {
-      notifications.show({ color: "red", message: "Selecione um arquivo .csv" });
+      notifications.show({ color: "critical", message: "Selecione um arquivo .csv" });
       return;
     }
     if (file.size > 200_000) {
-      notifications.show({ color: "red", message: "Arquivo muito grande (máx. 200 KB)." });
+      notifications.show({ color: "critical", message: "Arquivo muito grande (máx. 200 KB)." });
       return;
     }
 
@@ -541,7 +541,7 @@ export function GameAchievements({
       return;
     }
     if (rows.length > 500) {
-      notifications.show({ color: "red", message: "O arquivo tem mais de 500 conquistas. Divida em arquivos menores." });
+      notifications.show({ color: "critical", message: "O arquivo tem mais de 500 conquistas. Divida em arquivos menores." });
       return;
     }
 
@@ -554,7 +554,7 @@ export function GameAchievements({
       setImportResult(result);
       if (result.created > 0) reload();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao importar (serviço indisponível?)." });
+      notifications.show({ color: "critical", message: "Falha ao importar (serviço indisponível?)." });
     } finally {
       setImporting(false);
     }
@@ -564,11 +564,11 @@ export function GameAchievements({
     if (!deleting) return;
     try {
       await api.deleteAchievement(gameId, deleting.id);
-      notifications.show({ color: "green", message: "Conquista removida." });
+      notifications.show({ color: "nominal", message: "Conquista removida." });
       setDeleting(null);
       reload();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao remover (serviço indisponível?)." });
+      notifications.show({ color: "critical", message: "Falha ao remover (serviço indisponível?)." });
       setDeleting(null);
     }
   }
@@ -607,7 +607,7 @@ export function GameAchievements({
       </Group>
 
       {loading && !catalog && <Loader />}
-      {!!error && <Alert color="red">achievements indisponível.</Alert>}
+      {!!error && <Alert color="critical">achievements indisponível.</Alert>}
       {catalog && catalog.length === 0 && <Text c="dimmed">Nenhuma conquista neste jogo ainda.</Text>}
       {catalog && catalog.length > 0 && (
         <Table striped highlightOnHover withTableBorder>
@@ -705,13 +705,13 @@ export function GameAchievements({
                     <Table.Td>{a.target}</Table.Td>
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">
-                        <ActionIcon variant="subtle" color="blue" onClick={() => openProgress(a)} aria-label="Ver progresso">
+                        <ActionIcon variant="subtle" color="signal" onClick={() => openProgress(a)} aria-label="Ver progresso">
                           <IconChartBar size={16} />
                         </ActionIcon>
                         <ActionIcon variant="subtle" color="gray" onClick={() => openEdit(a)} aria-label="Editar">
                           <IconPencil size={16} />
                         </ActionIcon>
-                        <ActionIcon variant="subtle" color="red" onClick={() => setDeleting(a)} aria-label="Remover">
+                        <ActionIcon variant="subtle" color="critical" onClick={() => setDeleting(a)} aria-label="Remover">
                           <IconTrash size={16} />
                         </ActionIcon>
                       </Group>
@@ -832,7 +832,7 @@ export function GameAchievements({
           </Text>
           <List size="sm" spacing={4}>
             {importErrors.map((e) => (
-              <List.Item key={`${e.row}-${e.message}`} c="red">
+              <List.Item key={`${e.row}-${e.message}`} c="critical">
                 {e.message}
               </List.Item>
             ))}
@@ -855,11 +855,11 @@ export function GameAchievements({
         {importResult && (
           <Stack>
             <Group>
-              <Badge color="green" size="lg">
+              <Badge color="nominal" size="lg">
                 {importResult.created} criada{importResult.created !== 1 ? "s" : ""}
               </Badge>
               {importResult.failed > 0 && (
-                <Badge color="red" size="lg">
+                <Badge color="critical" size="lg">
                   {importResult.failed} falha{importResult.failed !== 1 ? "s" : ""}
                 </Badge>
               )}
@@ -886,7 +886,7 @@ export function GameAchievements({
                           <Table.Td>
                             <code>{r.id}</code>
                           </Table.Td>
-                          <Table.Td c="red">
+                          <Table.Td c="critical">
                             {r.status === "duplicate"
                               ? "Já existe uma conquista com este ID neste jogo"
                               : r.status === "invalid"
@@ -923,7 +923,7 @@ export function GameAchievements({
           {!progressLoading && progressEntries.length > 0 && (
             <>
               <Group gap="md">
-                <Badge color="green">
+                <Badge color="nominal">
                   {progressEntries.filter((e) => e.unlocked).length} desbloqueada{progressEntries.filter((e) => e.unlocked).length !== 1 ? "s" : ""}
                 </Badge>
                 <Badge color="blue">
@@ -957,7 +957,7 @@ export function GameAchievements({
                         {e.progress}/{progressAchievement?.target ?? "?"}
                       </Table.Td>
                       <Table.Td ta="center">
-                        <Badge color={e.unlocked ? "green" : "orange"} variant="light">
+                        <Badge color={e.unlocked ? "nominal" : "orange"} variant="light">
                           {e.unlocked ? "desbloqueado" : "em progresso"}
                         </Badge>
                       </Table.Td>
@@ -989,7 +989,7 @@ export function GameAchievements({
             <Button variant="default" onClick={() => setDeleting(null)}>
               Cancelar
             </Button>
-            <Button color="red" onClick={confirmDelete}>
+            <Button color="critical" onClick={confirmDelete}>
               Remover
             </Button>
           </Group>

@@ -37,7 +37,7 @@ export function GameAnalytics({ gameId }: { gameId: string }) {
   return (
     <Stack>
       {loading && !data && <Loader />}
-      {!!error && !data && <Alert color="red">Analytics indisponível (analytics-service fora?).</Alert>}
+      {!!error && !data && <Alert color="critical">Analytics indisponível (analytics-service fora?).</Alert>}
 
       {data && !hasData && participations.length === 0 && (
         <Text c="dimmed">

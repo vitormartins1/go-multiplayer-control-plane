@@ -24,7 +24,7 @@ export function PlayerDataView({ playerId, gameId }: { playerId: string; gameId:
       </Group>
 
       {loading && !data && <Loader />}
-      {!!error && <Alert color="red">Falha ao carregar (player-data indisponível?).</Alert>}
+      {!!error && <Alert color="critical">Falha ao carregar (player-data indisponível?).</Alert>}
       {data && data.length === 0 && <Text c="dimmed">Nenhum dado para este jogador neste jogo.</Text>}
       {data && data.length > 0 && (
         // sem highlightOnHover: o hover mudando a cor atrapalha a leitura das

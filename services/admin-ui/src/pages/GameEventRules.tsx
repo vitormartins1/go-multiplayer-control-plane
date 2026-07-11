@@ -65,7 +65,7 @@ export function GameEventRules({
   }, [pendingRuleFocus, rules]);
 
   if (loading && !rules) return <Loader />;
-  if (error) return <Alert color="red">achievements indisponível.</Alert>;
+  if (error) return <Alert color="critical">achievements indisponível.</Alert>;
 
   return (
     <GameEventRulesCanvas

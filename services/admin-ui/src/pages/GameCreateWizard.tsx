@@ -106,7 +106,7 @@ export function GameCreateWizard({
           return;
         }
       }
-      notifications.show({ color: "green", message: `Jogo "${trimmedName}" registrado.` });
+      notifications.show({ color: "nominal", message: `Jogo "${trimmedName}" registrado.` });
       reset();
       onCreated();
       nav(`/games/${game.id}`);
@@ -228,7 +228,7 @@ export function GameCreateWizard({
                 </Badge>
               )}
               {submitError && (
-                <Alert color="red" variant="light">
+                <Alert color="critical" variant="light">
                   {submitError}
                 </Alert>
               )}

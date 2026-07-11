@@ -5,10 +5,10 @@ export function statusClass(up: boolean | null | undefined): Status {
   return up ? "up" : "down";
 }
 
-// Cor Mantine por status.
+// Cor Mantine por status (theme.colors.nominal/critical — main.tsx).
 export function statusColor(up: boolean | null | undefined): string {
   const s = statusClass(up);
-  return s === "up" ? "green" : s === "down" ? "red" : "gray";
+  return s === "up" ? "nominal" : s === "down" ? "critical" : "gray";
 }
 
 export function statusLabel(up: boolean | null | undefined): string {

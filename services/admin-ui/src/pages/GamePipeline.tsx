@@ -41,7 +41,7 @@ export function GamePipeline({ gameId }: { gameId: string }) {
   );
 
   if (loading && !modes) return <Loader />;
-  if (error && !modes) return <Alert color="red">game-registry indisponível.</Alert>;
+  if (error && !modes) return <Alert color="critical">game-registry indisponível.</Alert>;
   if (modes && modes.length === 0) {
     return (
       <Text c="dimmed">

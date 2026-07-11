@@ -114,11 +114,11 @@ export function Rooms() {
     setCloseLoading(true);
     try {
       await api.closeRoom(closing.matchId);
-      notifications.show({ color: "green", message: "Sala encerrada." });
+      notifications.show({ color: "nominal", message: "Sala encerrada." });
       setClosing(null);
       reload();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao encerrar (sala já fechada ou serviço fora?)." });
+      notifications.show({ color: "critical", message: "Falha ao encerrar (sala já fechada ou serviço fora?)." });
     } finally {
       setCloseLoading(false);
     }
@@ -167,7 +167,7 @@ export function Rooms() {
       </Group>
 
       {loading && !data && <Loader />}
-      {!!error && <Alert color="red">salas indisponíveis (session-service fora?).</Alert>}
+      {!!error && <Alert color="critical">salas indisponíveis (session-service fora?).</Alert>}
       {data && rows.length === 0 && (
         <Text c="dimmed">
           Nenhuma sala {filter === "open" ? "aberta" : filter === "closed" ? "fechada" : "por aqui"} — salas
@@ -218,7 +218,7 @@ export function Rooms() {
             <Button variant="default" onClick={() => setClosing(null)} disabled={closeLoading}>
               Cancelar
             </Button>
-            <Button color="red" onClick={confirmClose} loading={closeLoading}>
+            <Button color="critical" onClick={confirmClose} loading={closeLoading}>
               Encerrar sala
             </Button>
           </Group>
@@ -278,7 +278,7 @@ function RoomRow({
         </Table.Td>
         <Table.Td>
           {s.state === "open" ? (
-            <Badge color="green" variant="light">
+            <Badge color="nominal" variant="light">
               ao vivo
             </Badge>
           ) : (
@@ -311,7 +311,7 @@ function RoomRow({
         </Table.Td>
         <Table.Td onClick={(e) => e.stopPropagation()}>
           {s.state === "open" && (
-            <Button size="compact-xs" color="red" variant="light" onClick={onClose}>
+            <Button size="compact-xs" color="critical" variant="light" onClick={onClose}>
               Encerrar
             </Button>
           )}

@@ -7,11 +7,24 @@ body,
   margin: 0;
 }
 
-/* Status (reutilizados no grafo de topologia) */
+/* Status (reutilizados no grafo de topologia) — mesmas cores semânticas do
+   tema Mantine (theme.colors.nominal/critical, main.tsx), não decorativas:
+   já existem estados reais no app (saúde de serviço, health de fleet). */
 :root {
-  --up: #3fb950;
-  --down: #f85149;
-  --unknown: #8b949e;
+  --up: #4ade9a;
+  --down: #ff5c5c;
+  --unknown: #7d8a99;
+}
+
+/* Cabeçalho de tabela: rótulo de painel (versalete espaçado, dimmed) — mesmo
+   tratamento do label do StatCard, aplicado de uma vez a toda tabela do app
+   (a classe .mantine-Table-th é estável em qualquer <Table.Th>). */
+.mantine-Table-th {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--mantine-color-dark-2);
 }
 
 /* React Flow: container e nós com cor por status */
@@ -21,9 +34,10 @@ body,
 .topo-node {
   border-radius: 8px;
   border: 2px solid var(--unknown);
-  background: #1c2330;
+  background: #12161d;
   padding: 8px 12px;
   font-size: 13px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   color: #e6edf3;
   text-align: center;
   cursor: pointer;

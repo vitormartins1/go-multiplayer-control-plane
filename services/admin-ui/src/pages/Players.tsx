@@ -45,7 +45,7 @@ export function Players() {
       />
 
       {loading && !data && <Loader />}
-      {!!error && <Alert color="red">identity indisponível.</Alert>}
+      {!!error && <Alert color="critical">identity indisponível.</Alert>}
       {data && filtered.length === 0 && (
         <Text c="dimmed">{search ? "Nenhum resultado para este filtro." : "Nenhum usuário cadastrado."}</Text>
       )}
@@ -68,7 +68,7 @@ export function Players() {
                       <span>{p.handle}</span>
                     </Group>
                   </Table.Td>
-                  <Table.Td c="dimmed">{p.id.slice(0, 8)}…</Table.Td>
+                  <Table.Td c="dimmed" ff="monospace">{p.id.slice(0, 8)}…</Table.Td>
                   <Table.Td>{new Date(p.createdAt).toLocaleDateString("pt-BR")}</Table.Td>
                 </Table.Tr>
               ))}
