@@ -1,4 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { Icon } from "@tabler/icons-react";
 import type { CatalogAchievement, EventRule, MultiplayerMode } from "./api";
 import { ARCHETYPE_META } from "./archetypeMeta";
 
@@ -11,7 +12,7 @@ import { ARCHETYPE_META } from "./archetypeMeta";
 export type PipelineModeData = {
   modeId: string;
   archetypeLabel: string;
-  archetypeColor: string;
+  archetypeIcon: Icon;
   stats: string[];
 };
 export type PipelineKindData = { kind: string };
@@ -108,7 +109,7 @@ export function buildPipelineGraph(
     data: {
       modeId: m.modeId,
       archetypeLabel: ARCHETYPE_META[m.archetype].label,
-      archetypeColor: ARCHETYPE_META[m.archetype].color,
+      archetypeIcon: ARCHETYPE_META[m.archetype].icon,
       stats: stats(m),
     } satisfies PipelineModeData,
     h: modeHeight(m.modeId, stats(m)),

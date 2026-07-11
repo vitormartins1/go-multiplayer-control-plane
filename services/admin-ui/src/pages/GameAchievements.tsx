@@ -673,7 +673,7 @@ export function GameAchievements({
                           style={{ cursor: "pointer" }}
                           onClick={() => (expanded ? focusRow(null) : focusRow(a.id))}
                         >
-                          <Badge variant="light" color="grape" style={{ cursor: "pointer" }}>
+                          <Badge variant="light" color="orange" style={{ cursor: "pointer" }}>
                             {a.statKey} · {a.statMode === "per_match" ? "por partida" : "acumulado"}
                           </Badge>
                           {!statDeclared(a.statKey) && (

@@ -128,6 +128,7 @@ export function GameCreateWizard({
   const collectedAsMode: MultiplayerMode | null = mode
     ? ({ ...mode.profile, modeId: mode.modeId, displayName: mode.displayName } as MultiplayerMode)
     : null;
+  const ArchIcon = collectedAsMode ? ARCHETYPE_META[collectedAsMode.archetype].icon : null;
 
   return (
     <Modal opened={opened} onClose={close} title="Registrar jogo" size="xl">
@@ -213,9 +214,9 @@ export function GameCreateWizard({
                 </Text>
                 <Code>{slug}</Code>
               </Group>
-              {collectedAsMode ? (
+              {collectedAsMode && ArchIcon ? (
                 <Group gap="xs">
-                  <Badge variant="light" color={ARCHETYPE_META[collectedAsMode.archetype].color}>
+                  <Badge variant="light" color="gray" leftSection={<ArchIcon size={12} />}>
                     {collectedAsMode.modeId}
                   </Badge>
                   <Text size="sm" c="dimmed">

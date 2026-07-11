@@ -12,11 +12,12 @@ import type {
 
 export function PipelineModeNode({ data }: NodeProps) {
   const d = data as unknown as PipelineModeData;
+  const ArchIcon = d.archetypeIcon;
   return (
     <div className="flow-card flow-card--fact">
       <div className="flow-card__header">
         <IconDeviceGamepad2 size={12} /> Modo
-        <Badge size="xs" variant="light" color={d.archetypeColor} ml="auto">
+        <Badge size="xs" variant="light" color="gray" leftSection={<ArchIcon size={11} />} ml="auto">
           {d.archetypeLabel}
         </Badge>
       </div>
