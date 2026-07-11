@@ -546,12 +546,11 @@ func (s *Service) AllSessions() (active, closed []domain.Session) {
 
 // CloseByAdmin encerra uma sessão ativa por ação do operador (CLOSED/admin):
 // reusa o fechamento unificado (libera o server, entra no histórico). Devolve
-// ErrSessionNotFound se não houver sessão ativa para o match (idempotente do
-// ponto de vista do operador). Spec 007.
-func (s *Service) CloseByAdmin(ctx context.Context, matchID string) (*domain.Session, error) {
-	s.mu.Lock()
-	sessionID, ok := s.matchIndex[matchID]
-	s.mu.Unlock()
+// ErrSessionNotFound se não houver sessão ativa para o id (idempotente do
+// ponto de vista do operador). Spec 007; id aceita matchID OU sessionID
+// (spec 024) — ver resolveAdminCloseID.
+func (s *Service) CloseByAdmin(ctx context.Context, id string) (*domain.Session, error) {
+	sessionID, ok := s.resolveAdminCloseID(id)
 	if !ok {
 		return nil, fmt.Errorf("session service: close by admin: %w", domain.ErrSessionNotFound)
 	}
@@ -560,6 +559,23 @@ func (s *Service) CloseByAdmin(ctx context.Context, matchID string) (*domain.Ses
 		return nil, fmt.Errorf("session service: close by admin: %w", err)
 	}
 	return sess, nil
+}
+
+// resolveAdminCloseID aceita tanto um matchID (caminho legado: queue_arena/
+// coop_mission/battle_royale, populado por CreateSession no matchIndex)
+// quanto um sessionID (host_world_dropin, cuja identidade externa já é o
+// próprio sessionID — nunca ganha matchId) — o operador no admin console não
+// distingue os dois formatos, então o resolvedor tenta ambos (spec 024).
+func (s *Service) resolveAdminCloseID(id string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sessionID, ok := s.matchIndex[id]; ok {
+		return sessionID, true
+	}
+	if _, ok := s.sessions[id]; ok {
+		return id, true
+	}
+	return "", false
 }
 
 // OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011):
