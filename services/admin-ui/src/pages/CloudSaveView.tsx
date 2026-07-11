@@ -53,7 +53,7 @@ export function CloudSaveView({ playerId, gameId }: { playerId: string; gameId: 
       </Group>
 
       {loading && !data && <Loader />}
-      {otherError && <Alert color="red">Falha ao carregar (cloud-save indisponível?).</Alert>}
+      {otherError && <Alert color="critical">Falha ao carregar (cloud-save indisponível?).</Alert>}
       {notFound && <Text c="dimmed">Nenhum save para este jogador neste jogo.</Text>}
       {data && decoded && (
         <Stack gap="xs">

@@ -101,7 +101,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
       </Group>
 
       {loading && !data && <Loader />}
-      {!!error && <Alert color="red">sessões indisponíveis (session-service fora?).</Alert>}
+      {!!error && <Alert color="critical">sessões indisponíveis (session-service fora?).</Alert>}
       {data && rows.length === 0 && (
         <Text c="dimmed">
           Nenhuma partida por aqui — abertas aparecem ao vivo quando um match é formado. O histórico de
@@ -162,7 +162,7 @@ function SessionRow({
         <Table.Td>
           <Group gap={4} wrap="nowrap">
             {s.state === "open" ? (
-              <Badge color="green" variant="light">
+              <Badge color="nominal" variant="light">
                 ao vivo
               </Badge>
             ) : (

@@ -71,7 +71,7 @@ export function PlayerDetail() {
       </Group>
 
       {loading && <Loader />}
-      {!!error && <Alert color="red">Falha ao carregar os jogos do jogador (game-registry indisponível?).</Alert>}
+      {!!error && <Alert color="critical">Falha ao carregar os jogos do jogador (game-registry indisponível?).</Alert>}
       {games && games.length === 0 && (
         <Text c="dimmed">Este jogador ainda não entrou em nenhum jogo (a presença é registrada no login).</Text>
       )}

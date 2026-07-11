@@ -114,7 +114,7 @@ export function GameDetail() {
               gamePlayers != null ? (
                 <Group gap={4} wrap="nowrap">
                   {matchedOnlineCount != null && matchedOnlineCount > 0 && (
-                    <CountBadge count={matchedOnlineCount} color="green" />
+                    <CountBadge count={matchedOnlineCount} color="nominal" />
                   )}
                   <CountBadge count={gamePlayers.length} />
                 </Group>
@@ -128,7 +128,7 @@ export function GameDetail() {
             leftSection={<IconServer2 size={16} />}
             rightSection={
               sessions != null && sessions.active.length > 0 ? (
-                <CountBadge count={sessions.active.length} color="green" />
+                <CountBadge count={sessions.active.length} color="nominal" />
               ) : null
             }
           >

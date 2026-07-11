@@ -258,7 +258,7 @@ export function RuleDraftNode({ data }: NodeProps) {
             />
             <ActionIcon
               variant="subtle"
-              color="red"
+              color="critical"
               size="xs"
               disabled={d.rows.length === 1}
               onClick={() => d.onRemoveRow(i)}
@@ -277,7 +277,7 @@ export function RuleDraftNode({ data }: NodeProps) {
           </Text>
         </Group>
         {d.error && (
-          <Text size="xs" c="red">
+          <Text size="xs" c="critical">
             {d.error}
           </Text>
         )}

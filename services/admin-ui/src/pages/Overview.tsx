@@ -45,7 +45,7 @@ export function Overview() {
       </Group>
 
       {loading && !data && <Loader />}
-      {!!error && !data && <Alert color="red">Painel indisponível (admin-bff fora?).</Alert>}
+      {!!error && !data && <Alert color="critical">Painel indisponível (admin-bff fora?).</Alert>}
 
       {data && (
         <>

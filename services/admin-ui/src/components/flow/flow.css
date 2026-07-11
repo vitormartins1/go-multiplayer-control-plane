@@ -7,7 +7,8 @@
   border: 1px solid #2a3340;
   border-radius: 10px;
   overflow: hidden;
-  background: #0f141b;
+  /* alinhado ao dark.9 do tema (main.tsx) — mesmo "void" do resto do app */
+  background: #0a0d12;
 }
 
 /* --- cards --- */
@@ -16,7 +17,8 @@
   max-width: 260px;
   border: 1px solid #2a3340;
   border-radius: 10px;
-  background: #1c2330;
+  /* alinhado ao dark.7 do tema (main.tsx) — mesmo "panel" do resto do app */
+  background: #1a212b;
   color: #e6edf3;
   font-size: 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);

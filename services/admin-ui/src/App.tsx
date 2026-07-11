@@ -1,5 +1,5 @@
-import { AppShell, Badge, Center, Group, Loader, NavLink, Text, ThemeIcon, Title } from "@mantine/core";
-import { lazy, Suspense } from "react";
+import { AppShell, Badge, Box, Center, Group, Loader, NavLink, Text, ThemeIcon, Title } from "@mantine/core";
+import { lazy, Suspense, useEffect } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   IconChartBar,
@@ -10,6 +10,8 @@ import {
   IconTopologyStar3,
   IconUsers,
 } from "@tabler/icons-react";
+import { api } from "./lib/api";
+import { useAsync } from "./lib/useAsync";
 
 // Rotas carregadas sob demanda (code-splitting): cada página vira um chunk
 // próprio, então os deps pesados (DiceBear nas capas/avatares, @xyflow no mapa
@@ -34,17 +36,44 @@ const NAV = [
   { to: "/infrastructure", label: "Infrastructure", icon: IconServer },
 ];
 
+const HEALTH_POLL_MS = 10000;
+
+// HealthStrip (assinatura do redesign — POC, ver conversa): faixa no topo do
+// header cuja cor reflete a saúde agregada da topologia real (mesmo endpoint
+// que o Overview usa) — não é decoração, é o console "respirando" com o que
+// ele está operando. nominal = todo serviço up; critical = algum fora;
+// cinza = Prometheus indisponível (sem dado pra avaliar).
+function HealthStrip() {
+  const { data, reload } = useAsync((s) => api.topology(s), []);
+
+  useEffect(() => {
+    const id = setInterval(reload, HEALTH_POLL_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const color =
+    !data || !data.sourceAvailable
+      ? "var(--mantine-color-dark-4)"
+      : data.nodes.some((n) => n.up === false)
+        ? "var(--mantine-color-critical-5)"
+        : "var(--mantine-color-nominal-5)";
+
+  return <Box h={3} style={{ background: color, transition: "background-color 600ms ease" }} />;
+}
+
 export function App() {
   const { pathname } = useLocation();
   const active = (to: string) => pathname.startsWith(to);
 
   return (
-    <AppShell header={{ height: 56 }} navbar={{ width: 230, breakpoint: "sm" }} padding="md">
+    <AppShell header={{ height: 59 }} navbar={{ width: 230, breakpoint: "sm" }} padding="md">
       <AppShell.Header>
+        <HealthStrip />
         {/* Marca do console (025): ecoa o nome do repo (go-multiplayer-control-plane). */}
-        <Group h="100%" px="md" justify="space-between">
+        <Group h="calc(100% - 3px)" px="md" justify="space-between">
           <Group gap="sm">
-            <ThemeIcon variant="gradient" gradient={{ from: "indigo", to: "cyan" }} radius="md">
+            <ThemeIcon variant="gradient" gradient={{ from: "signal.6", to: "signal.3" }} radius="md">
               <IconTopologyStar3 size={18} />
             </ThemeIcon>
             <Group gap={6} align="baseline">

@@ -26,15 +26,15 @@ function AchievementRow({ a }: { a: PlayerAchievement }) {
       </Table.Td>
       <Table.Td>
         <Group gap="sm" wrap="nowrap">
-          <Text size="sm" w={70} style={{ whiteSpace: "nowrap" }}>
+          <Text size="sm" ff="monospace" w={70} style={{ whiteSpace: "nowrap" }}>
             {a.progress}/{a.target}
           </Text>
-          <Progress value={pctOf(a) * 100} color={a.unlocked ? "green" : "blue"} size="sm" flex={1} />
+          <Progress value={pctOf(a) * 100} color={a.unlocked ? "nominal" : "blue"} size="sm" flex={1} />
         </Group>
       </Table.Td>
       <Table.Td>
         {a.unlocked ? (
-          <Text span size="sm" c="green">
+          <Text span size="sm" c="nominal">
             desbloqueada
             {a.unlockedAt ? ` · ${new Date(a.unlockedAt).toLocaleString("pt-BR")}` : ""}
           </Text>
@@ -111,7 +111,7 @@ function OverallProgress({ data }: { data: PlayerAchievement[] }) {
         Progresso geral
       </Text>
       <Tooltip label="Ponderado pelo alvo de cada conquista: unidades de progresso cumpridas sobre o total de unidades do catálogo.">
-        <Progress value={pct} color={unlocked === data.length ? "green" : "blue"} size="sm" w={180} />
+        <Progress value={pct} color={unlocked === data.length ? "nominal" : "blue"} size="sm" w={180} />
       </Tooltip>
       <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
         {unlocked} de {data.length} · {pctLabel}%
@@ -185,7 +185,7 @@ export function PlayerAchievements({ playerId, gameId }: { playerId: string; gam
       </Group>
 
       {loading && !data && <Loader />}
-      {!!error && <Alert color="red">Falha ao carregar (achievements indisponível?).</Alert>}
+      {!!error && <Alert color="critical">Falha ao carregar (achievements indisponível?).</Alert>}
       {data && data.length === 0 && <Text c="dimmed">Nenhum progresso para este jogador neste jogo.</Text>}
       {data && data.length > 0 &&
         (view === "table" ? (

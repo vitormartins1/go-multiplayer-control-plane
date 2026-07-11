@@ -56,7 +56,7 @@ function MiniBoardTable({
       </Text>
       {loading && !data && <Loader size="sm" />}
       {!!error && (
-        <Text size="sm" c="red">
+        <Text size="sm" c="critical">
           leaderboard indisponível.
         </Text>
       )}
@@ -72,17 +72,17 @@ function MiniBoardTable({
           <Table.Tbody>
             {data.map((e) => (
               <Table.Tr key={e.playerId}>
-                <Table.Td>{e.rank}</Table.Td>
+                <Table.Td ff="monospace">{e.rank}</Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
                     <PlayerAvatar seed={e.playerId} size={20} />
-                    <Text size="sm" c="dimmed" truncate>
+                    <Text size="sm" c="dimmed" ff="monospace" truncate>
                       {e.playerId}
                     </Text>
                     <GuestBadge playerId={e.playerId} />
                   </Group>
                 </Table.Td>
-                <Table.Td>{e.score}</Table.Td>
+                <Table.Td ff="monospace">{e.score}</Table.Td>
               </Table.Tr>
             ))}
             {/* completa até OVERVIEW_TOP com "–": todas as mini-tabelas ficam
@@ -162,7 +162,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       if (batch.length < PAGE) setNoMore(true);
       setExtra((prev) => [...prev, ...batch]);
     } catch {
-      notifications.show({ color: "red", message: "Falha ao carregar a próxima página." });
+      notifications.show({ color: "critical", message: "Falha ao carregar a próxima página." });
     } finally {
       setLoadingMore(false);
     }
@@ -191,12 +191,12 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
         Number(score),
         board === SCORE_BOARD ? undefined : board,
       );
-      notifications.show({ color: "green", message: `Score de ${editing.playerId.slice(0, 8)}… atualizado.` });
+      notifications.show({ color: "nominal", message: `Score de ${editing.playerId.slice(0, 8)}… atualizado.` });
       closeEdit();
       resetPaging();
       reload();
     } catch {
-      notifications.show({ color: "red", message: "Falha ao atualizar o score." });
+      notifications.show({ color: "critical", message: "Falha ao atualizar o score." });
     } finally {
       setSaving(false);
     }
@@ -293,7 +293,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       )}
 
       {singleTable && loading && !rows && <Loader />}
-      {singleTable && !!error && <Alert color="red">leaderboard indisponível.</Alert>}
+      {singleTable && !!error && <Alert color="critical">leaderboard indisponível.</Alert>}
       {singleTable && rows && rows.length === 0 && (
         <Text c="dimmed">
           {window === "alltime"
@@ -314,17 +314,17 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
           <Table.Tbody>
             {rows.map((e) => (
               <Table.Tr key={e.playerId}>
-                <Table.Td>{e.rank}</Table.Td>
+                <Table.Td ff="monospace">{e.rank}</Table.Td>
                 <Table.Td>
                   <Group gap={6} wrap="nowrap">
                     <PlayerAvatar seed={e.playerId} size={24} />
-                    <Text size="sm" c="dimmed">
+                    <Text size="sm" c="dimmed" ff="monospace">
                       {e.playerId}
                     </Text>
                     <GuestBadge playerId={e.playerId} />
                   </Group>
                 </Table.Td>
-                <Table.Td>{e.score}</Table.Td>
+                <Table.Td ff="monospace">{e.score}</Table.Td>
                 <Table.Td>
                   <ActionIcon variant="subtle" color="gray" onClick={() => openEdit(e)} aria-label="Ajustar score">
                     <IconPencil size={16} />

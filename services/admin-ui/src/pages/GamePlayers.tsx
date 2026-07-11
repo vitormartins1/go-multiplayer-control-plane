@@ -17,7 +17,7 @@ function PresenceDot() {
         width: 10,
         height: 10,
         borderRadius: "50%",
-        backgroundColor: "var(--mantine-color-green-5)",
+        backgroundColor: "var(--mantine-color-nominal-5)",
         border: "2px solid var(--mantine-color-body)",
       }}
     />
@@ -56,14 +56,14 @@ function SectionRow({ label, count, color }: { label: string; count: number; col
     <Table.Tr>
       <Table.Td colSpan={3} py={6} px="sm" style={{ backgroundColor: "var(--mantine-color-default-hover)" }}>
         <Group gap={6}>
-          {color === "green" && (
+          {color === "nominal" && (
             <Box
               w={8}
               h={8}
-              style={{ borderRadius: "50%", backgroundColor: "var(--mantine-color-green-5)", flexShrink: 0 }}
+              style={{ borderRadius: "50%", backgroundColor: "var(--mantine-color-nominal-5)", flexShrink: 0 }}
             />
           )}
-          <Text size="xs" fw={600} c={color === "green" ? "green" : "dimmed"}>
+          <Text size="xs" fw={600} c={color === "nominal" ? "nominal" : "dimmed"}>
             {label} · {count}
           </Text>
         </Group>
@@ -109,7 +109,7 @@ export function GamePlayers({
       </Group>
 
       {loading && !data && <Loader />}
-      {!!error && <Alert color="red">game-registry indisponível.</Alert>}
+      {!!error && <Alert color="critical">game-registry indisponível.</Alert>}
       {data && data.length === 0 && (
         <Text c="dimmed">Nenhum jogador entrou neste jogo ainda (a presença é registrada no login).</Text>
       )}
@@ -123,7 +123,7 @@ export function GamePlayers({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {hasOnline && <SectionRow label="Online" count={online.length} color="green" />}
+            {hasOnline && <SectionRow label="Online" count={online.length} color="nominal" />}
             {online.map((p) => (
               <PlayerRow key={p.playerId} player={p} online={true} onNavigate={() => nav(`/players/${p.playerId}`, { state: { fromGameId: gameId } })} />
             ))}

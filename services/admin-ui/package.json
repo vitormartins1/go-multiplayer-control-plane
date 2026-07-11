@@ -11,6 +11,9 @@
   "dependencies": {
     "@dicebear/core": "^10.3.0",
     "@dicebear/styles": "^10.2.0",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "@mantine/charts": "^7.17.8",
     "@mantine/core": "^7.17.8",
     "@mantine/form": "^7.17.8",

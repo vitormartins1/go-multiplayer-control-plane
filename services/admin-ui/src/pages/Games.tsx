@@ -27,7 +27,7 @@ export function Games() {
       </Group>
 
       {loading && !games && <Loader />}
-      {!!error && <Alert color="red">game-registry indisponível.</Alert>}
+      {!!error && <Alert color="critical">game-registry indisponível.</Alert>}
       {games && games.length === 0 && <Text c="dimmed">Nenhum jogo registrado ainda.</Text>}
       {games && games.length > 0 && (
         <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing="md">
