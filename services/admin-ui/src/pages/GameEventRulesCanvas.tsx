@@ -1085,7 +1085,9 @@ function EventRulesDock({
         <ScrollArea style={{ flex: 1, minHeight: 0 }}>
           <Table highlightOnHover fz="xs">
             <Table.Tbody>
-              {filtered.map((r, i) => (
+              {filtered.map((r, i) => {
+                const ArchIcon = ARCHETYPE_META[r.archetype].icon;
+                return (
                 <Table.Tr
                   key={r.id}
                   onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
@@ -1101,14 +1103,19 @@ function EventRulesDock({
                   }}
                 >
                   <Table.Td style={{ whiteSpace: "nowrap" }}>
-                    <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
-                      {r.scope === "global" ? "global" : "jogo"}
-                    </Badge>
+                    <Group gap={4} wrap="nowrap">
+                      <Tooltip label={ARCHETYPE_META[r.archetype].label} withArrow position="top-start" openDelay={300}>
+                        <ArchIcon size={13} />
+                      </Tooltip>
+                      <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                        {r.scope === "global" ? "global" : "jogo"}
+                      </Badge>
+                    </Group>
                   </Table.Td>
                   <Table.Td>
                     <Group gap={3} wrap="wrap">
                       {r.eventTypes.map((et) => (
-                        <Badge key={et} size="xs" variant="light" color={ARCHETYPE_META[r.archetype].color}>
+                        <Badge key={et} size="xs" variant="light" color="gray">
                           {et}
                         </Badge>
                       ))}
@@ -1132,7 +1139,8 @@ function EventRulesDock({
                     )}
                   </Table.Td>
                 </Table.Tr>
-              ))}
+                );
+              })}
             </Table.Tbody>
           </Table>
         </ScrollArea>

@@ -1,4 +1,4 @@
-import { AppShell, Badge, Box, Burger, Center, Group, Loader, NavLink, Text, ThemeIcon, Title } from "@mantine/core";
+import { AppShell, Badge, Box, Burger, Center, Group, Loader, NavLink, Text, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { lazy, Suspense, useEffect } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -8,7 +8,6 @@ import {
   IconDoorEnter,
   IconServer,
   IconServer2,
-  IconTopologyStar3,
   IconUsers,
 } from "@tabler/icons-react";
 import { api } from "./lib/api";
@@ -83,9 +82,6 @@ export function App() {
         <Group h="calc(100% - 3px)" px="md" justify="space-between">
           <Group gap="sm">
             <Burger opened={navOpened} onClick={toggleNav} hiddenFrom="sm" size="sm" />
-            <ThemeIcon variant="gradient" gradient={{ from: "signal.6", to: "signal.3" }} radius="md">
-              <IconTopologyStar3 size={18} />
-            </ThemeIcon>
             <Group gap={6} align="baseline">
               <Title order={4}>Multiplayer Control Plane</Title>
               <Text size="sm" c="dimmed">

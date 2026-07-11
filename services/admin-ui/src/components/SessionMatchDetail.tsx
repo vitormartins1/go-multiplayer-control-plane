@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import type { ReactNode } from "react";
+import type { Icon } from "@tabler/icons-react";
 import { IconCrown, IconTargetArrow, IconTrophy } from "@tabler/icons-react";
 import type { GameSession, PlacementEntry, PlayerOutcome, SessionPlayer } from "../lib/api";
 import { PlayerAvatar } from "./PlayerAvatar";
@@ -157,7 +158,7 @@ function ruleFields(archetype: string | undefined, params?: Record<string, unkno
 
 function RulesBlock({ session: s }: { session: GameSession }) {
   const meta = s.archetype
-    ? (ARCHETYPE_META as Record<string, { label: string; color: string } | undefined>)[s.archetype]
+    ? (ARCHETYPE_META as Record<string, { label: string; icon: Icon } | undefined>)[s.archetype]
     : undefined;
   const rules = ruleFields(s.archetype, s.modeParams);
   if (!s.archetype && rules.length === 0) return null;
@@ -167,7 +168,7 @@ function RulesBlock({ session: s }: { session: GameSession }) {
       <Group gap={6} wrap="nowrap">
         <SectionLabel>REGRAS DO MODO</SectionLabel>
         {s.archetype && (
-          <Badge size="xs" variant="light" color={meta?.color ?? "gray"}>
+          <Badge size="xs" variant="light" color="gray" leftSection={meta ? <meta.icon size={11} /> : undefined}>
             {meta?.label ?? s.archetype}
           </Badge>
         )}

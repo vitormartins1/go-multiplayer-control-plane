@@ -1101,7 +1101,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                   <Code>{m.modeId}</Code>
                 </Table.Td>
                 <Table.Td>
-                  <Badge variant="light" color={meta.color}>
+                  <Badge variant="light" color="gray" leftSection={<meta.icon size={12} />}>
                     {meta.label}
                   </Badge>
                 </Table.Td>

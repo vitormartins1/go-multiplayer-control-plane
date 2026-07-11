@@ -82,11 +82,14 @@ export function GameDetail() {
               sem multiplayer
             </Badge>
           ) : (
-            gameModes.map((m) => (
-              <Badge key={m.modeId} variant="light" color={ARCHETYPE_META[m.archetype].color}>
-                {m.modeId}
-              </Badge>
-            ))
+            gameModes.map((m) => {
+              const Icon = ARCHETYPE_META[m.archetype].icon;
+              return (
+                <Badge key={m.modeId} variant="light" color="gray" leftSection={<Icon size={12} />}>
+                  {m.modeId}
+                </Badge>
+              );
+            })
           ))}
       </Group>
 
