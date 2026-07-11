@@ -25,6 +25,7 @@ type AdminService interface {
 	CreateGame(ctx context.Context, slug, name string) (*domain.Game, error)
 	RenameGame(ctx context.Context, id, name string) (*domain.Game, error)
 	SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error)
+	FleetStatus(ctx context.Context, gameID string) (domain.FleetStatus, error)
 	SetDescription(ctx context.Context, id, description string) (*domain.Game, error)
 	DeleteGame(ctx context.Context, id string) error
 	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
@@ -80,6 +81,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/games", h.createGame)
 	mux.HandleFunc("PUT /api/games/{gameId}", h.renameGame)
 	mux.HandleFunc("PUT /api/games/{gameId}/fleet", h.setFleet)
+	mux.HandleFunc("GET /api/games/{gameId}/fleet-status", h.fleetStatus)
 	mux.HandleFunc("PUT /api/games/{gameId}/description", h.setDescription)
 	mux.HandleFunc("DELETE /api/games/{gameId}", h.deleteGame)
 	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profile", h.getMultiplayerProfile)
@@ -243,6 +245,22 @@ func (h *Handler) setFleet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpkit.WriteJSON(w, http.StatusOK, g)
+}
+
+// fleetStatus lê onde a Fleet do jogo está rodando e sua saúde (spec 023).
+// Indisponibilidade do session-service -> 502 (mesmo tratamento de sessions);
+// o admin-ui trata isso como estado "desconhecido", não crasha a página.
+func (h *Handler) fleetStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := h.svc.FleetStatus(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		if errors.Is(err, domain.ErrSessionsUnavailable) {
+			httpkit.WriteError(w, http.StatusBadGateway, "sessions_unavailable")
+			return
+		}
+		writeUpstream(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, status)
 }
 
 // setDescription atualiza a descrição do jogo (Configurações, spec 013).

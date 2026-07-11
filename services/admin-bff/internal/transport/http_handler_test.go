@@ -55,6 +55,8 @@ type fakeService struct {
 	gameAnalyticsErr error
 	importResp       domain.ImportResponse
 	importErr        error
+	fleetStatus      domain.FleetStatus
+	fleetStatusErr   error
 	gotGameID        string
 	gotPlayer        string
 	gotBoard         string
@@ -104,6 +106,10 @@ func (f *fakeService) SetFleet(_ context.Context, id, fleet string) (*domain.Gam
 		return nil, f.gamesErr
 	}
 	return &domain.Game{ID: id, Fleet: fleet}, nil
+}
+func (f *fakeService) FleetStatus(_ context.Context, gameID string) (domain.FleetStatus, error) {
+	f.gotGameID = gameID
+	return f.fleetStatus, f.fleetStatusErr
 }
 func (f *fakeService) SetDescription(_ context.Context, id, description string) (*domain.Game, error) {
 	f.gotGameID = id
@@ -930,6 +936,36 @@ func TestSetFleet_RegistryFora_502(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/fleet", strings.NewReader(`{"fleet":"packet-arena"}`))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestFleetStatus_200(t *testing.T) {
+	svc := &fakeService{fleetStatus: domain.FleetStatus{
+		Cluster: "local", FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 0,
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/games/g1/fleet-status", nil)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Contains(t, readBody(t, resp), `"cluster":"local"`)
+}
+
+func TestFleetStatus_SessionsFora_502(t *testing.T) {
+	svc := &fakeService{fleetStatusErr: domain.ErrSessionsUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/games/g1/fleet-status", nil)
 	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

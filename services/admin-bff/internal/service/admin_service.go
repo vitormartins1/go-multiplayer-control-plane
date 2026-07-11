@@ -137,6 +137,29 @@ func (s *Service) SetFleet(ctx context.Context, id, fleet string) (*domain.Game,
 	return s.registry.SetFleet(ctx, id, fleet)
 }
 
+// FleetStatus lê onde a Fleet do jogo está rodando e sua saúde (aba Fleet,
+// spec 023). Jogo sem fleet cadastrada devolve o shape zerado sem round-trip
+// ao session-service — não faz sentido perguntar status de uma fleet que não
+// existe. Resolve gameID -> fleet via ListGames (mesmo fan-out de Games();
+// volume baixo, uso interno de console).
+func (s *Service) FleetStatus(ctx context.Context, gameID string) (domain.FleetStatus, error) {
+	games, err := s.registry.ListGames(ctx)
+	if err != nil {
+		return domain.FleetStatus{}, err
+	}
+	var fleet string
+	for _, g := range games {
+		if g.ID == gameID {
+			fleet = g.Fleet
+			break
+		}
+	}
+	if fleet == "" {
+		return domain.FleetStatus{}, nil
+	}
+	return s.sessions.FleetStatus(ctx, fleet)
+}
+
 // SetDescription atualiza a descrição do jogo (Configurações, spec 013).
 func (s *Service) SetDescription(ctx context.Context, id, description string) (*domain.Game, error) {
 	return s.registry.SetDescription(ctx, id, description)

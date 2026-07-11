@@ -18,6 +18,8 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import { useState } from "react";
 import { api, type Game } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { FleetLocationBadge } from "../components/FleetLocationBadge";
+import { fleetLocationOf } from "../lib/fleetLocation";
 
 // mockFleetStatus (Fase 0, spec 059): dado ILUSTRATIVO determinístico por
 // nome de fleet — sem chamada de rede. A integração real (build publicado
@@ -141,6 +143,8 @@ function FleetRow({
                     </Button>
                   </Group>
 
+                  {game.fleet && <FleetRealStatus gameId={game.id} />}
+
                   {mock && (
                     <Group gap="xl" wrap="wrap" mt="xs">
                       <Stack gap={2}>
@@ -181,5 +185,37 @@ function FleetRow({
         </Table.Tr>
       )}
     </>
+  );
+}
+
+// FleetRealStatus (spec 023): busca o status real só quando montado — a linha
+// expandida é o gatilho (o componente pai só o renderiza dentro do Collapse),
+// não a lista inteira ao carregar a aba. Erro de rede -> badge "desconhecido"
+// (fleetLocationOf não é chamado; a página segue de pé).
+function FleetRealStatus({ gameId }: { gameId: string }) {
+  const { data, loading, error } = useAsync((s) => api.fleetStatus(gameId, s), [gameId]);
+
+  return (
+    <Group gap="xl" wrap="wrap">
+      <Stack gap={2}>
+        <Text size="xs" c="dimmed" fw={600}>
+          ONDE ESTÁ RODANDO
+        </Text>
+        {loading && <Loader size="xs" />}
+        {!loading && !!error && <FleetLocationBadge location="unknown" />}
+        {!loading && !error && data && <FleetLocationBadge location={fleetLocationOf(data)} />}
+      </Stack>
+      {!loading && !error && data?.fleetExists && (
+        <Stack gap={2}>
+          <Text size="xs" c="dimmed" fw={600}>
+            RÉPLICAS
+          </Text>
+          <Text size="sm">
+            {data.ready}/{data.desired} ready
+            {data.allocated > 0 && ` · ${data.allocated} allocated`}
+          </Text>
+        </Stack>
+      )}
+    </Group>
   );
 }

@@ -63,6 +63,20 @@ export interface Game {
   description?: string;
 }
 
+// FleetStatus é o snapshot real de localização/saúde de uma Fleet Agones
+// (spec 023). cluster="" cobre tanto "sem fleet cadastrada" quanto
+// "session-service sem allocator agones ativo" — distinto de cluster
+// preenchido com fleetExists=false ("Agones ativo, mas a Fleet não está
+// NESTE cluster").
+export interface FleetStatus {
+  cluster: string;
+  fleetExists: boolean;
+  desired: number;
+  current: number;
+  ready: number;
+  allocated: number;
+}
+
 // Perfis de multiplayer do jogo (ADR-0023). Union discriminada por `archetype`.
 
 export interface QueueArenaParams {
@@ -468,6 +482,9 @@ export const api = {
   // Fleet Agones do jogo (ADR-0026, aba Fleet — spec 059).
   setFleet: (gameId: string, fleet: string) =>
     putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}/fleet`, { fleet }),
+  // Status real da Fleet: onde está rodando + réplicas (aba Fleet — spec 023).
+  fleetStatus: (gameId: string, signal?: AbortSignal) =>
+    getJSON<FleetStatus>(`/api/games/${encodeURIComponent(gameId)}/fleet-status`, signal),
   // Descrição do jogo (spec 013).
   setGameDescription: (gameId: string, description: string) =>
     putJSON<Game>(`/api/games/${encodeURIComponent(gameId)}/description`, { description }),

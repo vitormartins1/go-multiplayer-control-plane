@@ -24,14 +24,21 @@ type SessionDirectory interface {
 	CloseByAdmin(ctx context.Context, matchID string) (*domain.Session, error)
 }
 
-// AdminHandler expõe as rotas /admin de sessões (leitura + encerrar).
+// AdminHandler expõe as rotas /admin de sessões (leitura + encerrar) e de
+// status de Fleet (spec 023).
 type AdminHandler struct {
 	sessions SessionDirectory
+	// fleets e clusterLabel cobrem a spec 023 (status real da Fleet Agones).
+	// fleets nil = allocator não é agones ("sem cluster observável"); mesmo
+	// padrão opcional do ServerRegistry.
+	fleets       domain.FleetInspector
+	clusterLabel string
 }
 
-// NewAdminHandler cria o handler admin.
-func NewAdminHandler(sessions SessionDirectory) *AdminHandler {
-	return &AdminHandler{sessions: sessions}
+// NewAdminHandler cria o handler admin. fleets/clusterLabel vêm vazios
+// (fleets nil, clusterLabel "") quando o allocator ativo não é o Agones.
+func NewAdminHandler(sessions SessionDirectory, fleets domain.FleetInspector, clusterLabel string) *AdminHandler {
+	return &AdminHandler{sessions: sessions, fleets: fleets, clusterLabel: clusterLabel}
 }
 
 // Register monta as rotas no mux existente (JWKS/metrics moram lá).
@@ -39,6 +46,7 @@ func (h *AdminHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/games/{gameId}/sessions", h.list)
 	mux.HandleFunc("GET /admin/sessions", h.listAll)
 	mux.HandleFunc("POST /admin/sessions/{matchId}/close", h.close)
+	mux.HandleFunc("GET /admin/fleet-status/{fleetName}", h.fleetStatus)
 }
 
 type sessionDTO struct {
@@ -165,6 +173,41 @@ func (h *AdminHandler) close(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpkit.WriteJSON(w, http.StatusOK, toSessionDTO(*sess))
+}
+
+// fleetStatusDTO é o shape de GET /admin/fleet-status/{fleetName} (spec 023).
+type fleetStatusDTO struct {
+	Cluster     string `json:"cluster"`
+	FleetExists bool   `json:"fleetExists"`
+	Desired     int    `json:"desired"`
+	Current     int    `json:"current"`
+	Ready       int    `json:"ready"`
+	Allocated   int    `json:"allocated"`
+}
+
+// fleetStatus lê o estado real da Fleet pelo nome (spec 023). fleets nil
+// (allocator != agones) devolve o shape zerado com cluster="" — sem chamada
+// nenhuma; é o caso 2 da spec, distinto do caso 3 (Agones ativo, Fleet
+// inexistente NESTE cluster), que preenche Cluster mesmo com FleetExists=false.
+func (h *AdminHandler) fleetStatus(w http.ResponseWriter, r *http.Request) {
+	fleetName := r.PathValue("fleetName")
+	if h.fleets == nil {
+		httpkit.WriteJSON(w, http.StatusOK, fleetStatusDTO{Cluster: ""})
+		return
+	}
+	status, err := h.fleets.FleetStatus(r.Context(), fleetName)
+	if err != nil {
+		httpkit.WriteError(w, http.StatusInternalServerError, "fleet_status_failed")
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, fleetStatusDTO{
+		Cluster:     h.clusterLabel,
+		FleetExists: status.FleetExists,
+		Desired:     status.Desired,
+		Current:     status.Current,
+		Ready:       status.Ready,
+		Allocated:   status.Allocated,
+	})
 }
 
 func validState(state string) bool {
