@@ -1,16 +1,16 @@
-# Override do compose para alocar no cluster do Pi 5 (unity-queue-arena-data-plane
-# spec 007-homelab-pi5). Igual ao docker-compose.agones.yml, com duas
-# diferenças: o kubeconfig aponta para a API do k3s do Pi (via túnel ssh —
-# host.docker.internal:36443; Docker Desktop não roteia container → LAN) e
-# NÃO há DEV_PUBLIC_HOST — o endereço devolvido pelo allocator é o IP real
-# do Pi na LAN, alcançável direto pelo client (comportamento de produção).
+# Override do compose para alocar no cluster do Pi 5 (infra/agones, ADR-0029).
+# Igual ao docker-compose.agones.yml, com duas diferenças: o kubeconfig aponta
+# para a API do k3s do Pi (via túnel ssh — host.docker.internal:36443; Docker
+# Desktop não roteia container → LAN) e NÃO há DEV_PUBLIC_HOST — o endereço
+# devolvido pelo allocator é o IP real do Pi na LAN, alcançável direto pelo
+# client (comportamento de produção).
 #
 #   docker compose -f docker-compose.yml -f docker-compose.agones-pi5.yml up -d session-service
 #
-# Pré-requisitos (unity-queue-arena-data-plane):
-#   1. tools/pi5/fetch-kubeconfig.sh já rodou — gera o
-#      kubeconfig-compose-pi5.yaml (gitignored);
-#   2. tools/pi5/start-pi-k8s-tunnel.sh rodando (túnel Mac:36443 → Pi:6443).
+# Pré-requisitos (infra/agones):
+#   1. pi5/fetch-kubeconfig.sh já rodou — gera o kubeconfig-compose-pi5.yaml
+#      (gitignored);
+#   2. pi5/pi5-tunnels.sh rodando (túnel Mac:36443 → Pi:6443).
 services:
   session-service:
     environment:
@@ -21,4 +21,4 @@ services:
       # Fleet do perfil do jogo no game-registry (PUT /games/{id}/fleet).
       SESSION_TTL: 30m
     volumes:
-      - ../../../unity-queue-arena-data-plane/tools/pi5/kubeconfig-compose-pi5.yaml:/kubeconfig:ro
+      - ../agones/pi5/kubeconfig-compose-pi5.yaml:/kubeconfig:ro

@@ -1,0 +1,52 @@
+# Fleet do dedicated server (spec 005-agones): 2 réplicas Ready aguardando
+# alocação do session-service. Mesmos manifests servem para o k3s do Pi 5.
+#
+#   kubectl apply -f fleet.yaml
+#   kubectl get gs -w
+apiVersion: agones.dev/v1
+kind: Fleet
+metadata:
+  name: packet-arena
+spec:
+  replicas: 2
+  template:
+    spec:
+      ports:
+        - name: game
+          # containerPort fixo (o server escuta 7777, SERVER_PORT default);
+          # Dynamic: o Agones sorteia a hostPort no range 7100-7139 — que o
+          # k3d mapeia para o host (tools/k3d/up.sh), então o client no Mac
+          # alcança em 127.0.0.1:<porta> (DEV_PUBLIC_HOST no session-service).
+          portPolicy: Dynamic
+          containerPort: 7777
+          protocol: UDP
+      health:
+        # Nosso Health() pinga a cada 2s: perder até 2 ciclos num period de 5s
+        # não recicla. initialDelay folgado — o boot busca o JWKS antes do Ready.
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        failureThreshold: 3
+      template:
+        spec:
+          containers:
+            - name: packet-arena-server
+              # Imagem local importada via tools/k3d/import-image.sh (sem
+              # registry) — IfNotPresent para o kubelet não tentar puxar.
+              image: packet-arena-server:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                # O pod alcança o backend do compose via DNS do host (como o
+                # docker puro da Fase 4 usava host.docker.internal).
+                - name: SESSION_JWKS_URL
+                  value: http://host.k3d.internal:8087/.well-known/jwks.json
+                # ReportResult (spec 006): gRPC do session-service, publicado
+                # pelo compose no host em :50052 (interno :50051).
+                - name: SESSION_GRPC_ADDR
+                  value: host.k3d.internal:50052
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
