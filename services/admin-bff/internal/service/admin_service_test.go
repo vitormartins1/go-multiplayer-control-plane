@@ -108,6 +108,7 @@ type fakeRegistry struct {
 	gotPlayerID    string
 	profile        json.RawMessage
 	gotProfile     json.RawMessage
+	snapshotHashes map[string]string
 }
 
 func (f *fakeRegistry) ListGames(_ context.Context) ([]domain.Game, error) {
@@ -182,6 +183,10 @@ func (f *fakeRegistry) SetMultiplayerMode(_ context.Context, gameID, _ string, m
 func (f *fakeRegistry) DeleteMultiplayerMode(_ context.Context, gameID, _ string) error {
 	f.gotGameID = gameID
 	return f.err
+}
+func (f *fakeRegistry) ModeSnapshotHashes(_ context.Context, gameID string) (map[string]string, error) {
+	f.gotGameID = gameID
+	return f.snapshotHashes, f.err
 }
 
 type fakeLeaderboard struct {

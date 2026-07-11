@@ -15,12 +15,14 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { api, type GameSession, type RoleSlot, type MultiplayerProfile } from "../lib/api";
+import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Game } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { SessionAvatar } from "../components/SessionAvatar";
+import { GameCover } from "../components/GameCover";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { ROLE_META, SessionMatchDetail } from "../components/SessionMatchDetail";
+import { archetypeMetaOf } from "../lib/archetypeMeta";
 
 const POLL_MS = 5000;
 
@@ -29,6 +31,12 @@ const POLL_MS = 5000;
 // Sessions por-jogo (dentro de GameDetail) segue como recorte por jogo.
 export function Rooms() {
   const { data, loading, error, reload } = useAsync((s) => api.rooms(s), []);
+  // Lista de jogos (uma vez, sem polling) só pra montar a capa (GameCover) da
+  // 1ª coluna — spec 022. Diferente do cache de `profiles` abaixo (que é
+  // per-gameId e sob demanda): aqui já existe um "listar todos" (Fleet.tsx faz
+  // o mesmo), não vale a pena buscar jogo por jogo.
+  const { data: games } = useAsync((s) => api.games(s), []);
+  const gamesById = useMemo(() => new Map((games ?? []).map((g) => [g.id, g])), [games]);
   const [filter, setFilter] = useState<"all" | "open" | "closed">("open");
   const [modeFilter, setModeFilter] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -179,6 +187,7 @@ export function Rooms() {
           <Table striped withTableBorder>
             <Table.Thead>
               <Table.Tr>
+                <Table.Th />
                 <Table.Th>Jogo</Table.Th>
                 <Table.Th>Match</Table.Th>
                 <Table.Th>Estado</Table.Th>
@@ -193,6 +202,7 @@ export function Rooms() {
                 <RoomRow
                   key={s.sessionId}
                   session={s}
+                  game={s.gameId ? gamesById.get(s.gameId) : undefined}
                   br={brInfo(s)}
                   coop={coopInfo(s)}
                   expanded={expandedId === s.sessionId}
@@ -232,6 +242,7 @@ export function Rooms() {
 
 function RoomRow({
   session: s,
+  game,
   br,
   coop,
   expanded,
@@ -239,12 +250,14 @@ function RoomRow({
   onClose,
 }: {
   session: GameSession;
+  game: Game | undefined;
   br: { lobbySize: number; mode: string } | null;
   coop: { teamSize: number } | null;
   expanded: boolean;
   onToggle: () => void;
   onClose: () => void;
 }) {
+  const modeMeta = archetypeMetaOf(s.archetype);
   return (
     <>
       <Table.Tr
@@ -253,10 +266,37 @@ function RoomRow({
         onClick={onToggle}
       >
         <Table.Td>
+          {game ? (
+            <Box style={{ position: "relative", width: 28, height: 28 }}>
+              <GameCover game={game} variant="mini" />
+              <Box
+                style={{
+                  position: "absolute",
+                  bottom: -4,
+                  right: -4,
+                  borderRadius: 8,
+                  boxShadow: "0 0 0 2px var(--mantine-color-body)",
+                }}
+              >
+                <SessionAvatar seed={s.profileHash || s.sessionId} size={16} />
+              </Box>
+            </Box>
+          ) : (
+            <SessionAvatar seed={s.profileHash || s.sessionId} size={16} />
+          )}
+        </Table.Td>
+        <Table.Td>
           <Text size="sm" fw={500}>
             {s.gameName || truncate(s.gameId || "—")}
           </Text>
-          <Badge size="xs" variant="light" color="indigo" mt={2} mr={4}>
+          <Badge
+            size="xs"
+            variant="light"
+            color="gray"
+            mt={2}
+            mr={4}
+            leftSection={modeMeta && <modeMeta.icon size={10} />}
+          >
             {s.modeId || "default"}
           </Badge>
           {br && (
@@ -272,7 +312,6 @@ function RoomRow({
         </Table.Td>
         <Table.Td>
           <Group gap={6} wrap="nowrap">
-            <SessionAvatar seed={s.sessionId} />
             <Text ff="monospace" size="sm">
               {truncate(s.matchId)}
             </Text>
@@ -326,7 +365,7 @@ function RoomRow({
               <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
                 <Stack gap="xs">
                   <Group gap="xl" wrap="wrap">
-                    <SessionAvatar seed={s.sessionId} size={40} />
+                    <SessionAvatar seed={s.profileHash || s.sessionId} size={40} />
                     <Field label="JOGO" value={s.gameName || s.gameId || "—"} />
                     <Field label="MODO" value={s.modeId || "default"} mono />
                     <Field label={s.origin === "host_world" ? "MUNDO" : "MATCH ID"} value={s.matchId || s.sessionId} mono />

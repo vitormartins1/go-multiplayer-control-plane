@@ -1,7 +1,7 @@
 # Spec 022 — ícone de partida a partir do snapshot do modo (+ padronização de tags)
 
 **Serviços:** admin-bff (+ `shared/`, session-service — fatia cross-service) + admin-ui
-**Status:** Draft
+**Status:** Implemented
 **Data:** 2026-07-11
 **Relaciona:** session-service/017 (mode snapshot manifest, `profileHash`), admin-ui (component library — `SessionAvatar`, `GameCover`, `archetypeMeta.ts`, revisão de layout 2026-07-10 que trocou cor-por-arquétipo por ícone único)
 

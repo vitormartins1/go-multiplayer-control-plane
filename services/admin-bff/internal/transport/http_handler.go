@@ -34,6 +34,7 @@ type AdminService interface {
 	GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error)
 	SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error)
 	DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error
+	ModeSnapshotHashes(ctx context.Context, gameID string) (map[string]string, error)
 	GameCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error)
 	CreateAchievement(ctx context.Context, gameID string, a domain.Achievement) error
 	UpdateAchievement(ctx context.Context, gameID, id string, a domain.Achievement) error
@@ -91,6 +92,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/games/{gameId}/multiplayer-profiles/{modeId}", h.setMultiplayerMode)
 	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profiles/{modeId}", h.getMultiplayerMode)
 	mux.HandleFunc("DELETE /api/games/{gameId}/multiplayer-profiles/{modeId}", h.deleteMultiplayerMode)
+	// Fora de /multiplayer-profiles/{modeId} de propósito (spec 022): um modo
+	// literalmente chamado "snapshot-hashes" colidiria com essa rota e ficaria
+	// inacessível via GET .../multiplayer-profiles/{modeId}.
+	mux.HandleFunc("GET /api/games/{gameId}/mode-snapshot-hashes", h.modeSnapshotHashes)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements", h.gameCatalog)
 	mux.HandleFunc("GET /api/games/{gameId}/achievements/{id}/progress", h.achievementProgress)
 	mux.HandleFunc("POST /api/games/{gameId}/achievements/import", h.importAchievements)
@@ -357,6 +362,17 @@ func (h *Handler) deleteMultiplayerMode(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// modeSnapshotHashes devolve o hash "atual" de cada modo do jogo (spec 022) —
+// mapa modeId -> hash. Jogo sem modos -> {} (200), não erro.
+func (h *Handler) modeSnapshotHashes(w http.ResponseWriter, r *http.Request) {
+	hashes, err := h.svc.ModeSnapshotHashes(r.Context(), r.PathValue("gameId"))
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, hashes)
 }
 
 // gameCatalog lê o catálogo de conquistas do jogo (achievements).

@@ -15,6 +15,7 @@ import (
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/upstream"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/modesnapshot"
 )
 
 var _ domain.GameRegistry = (*Client)(nil)
@@ -205,6 +206,36 @@ func (c *Client) SetMultiplayerMode(ctx context.Context, gameID, modeID string, 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, c.modeURL(gameID, modeID), bytes.NewReader(mode))
 	req.Header.Set("Content-Type", "application/json")
 	return c.doRaw(req)
+}
+
+// modeHashInput é o subconjunto de um item da coleção /multiplayer-profiles
+// usado no hash (spec 022) — Params como json.RawMessage preserva os bytes
+// crus da resposta, a mesma garantia que o session-service já tem ao tirar o
+// snapshot de UMA sessão (shared/modesnapshot.Hash exige isso).
+type modeHashInput struct {
+	ModeID    string          `json:"modeId"`
+	Archetype string          `json:"archetype"`
+	Topology  string          `json:"topology"`
+	Params    json.RawMessage `json:"params"`
+}
+
+// ModeSnapshotHashes calcula o hash "atual" de cada modo do jogo (spec 022) —
+// uma chamada só ao game-registry (reaproveita ListMultiplayerModes), sem N
+// requests por modo. Jogo sem modos -> mapa vazio, não erro.
+func (c *Client) ModeSnapshotHashes(ctx context.Context, gameID string) (map[string]string, error) {
+	raw, err := c.ListMultiplayerModes(ctx, gameID)
+	if err != nil {
+		return nil, err
+	}
+	var modes []modeHashInput
+	if err := json.Unmarshal(raw, &modes); err != nil {
+		return nil, fmt.Errorf("gameregistry: decode modes for hash: %w", err)
+	}
+	out := make(map[string]string, len(modes))
+	for _, m := range modes {
+		out[m.ModeID] = modesnapshot.Hash(m.Archetype, m.Topology, m.Params)
+	}
+	return out, nil
 }
 
 // DeleteMultiplayerMode remove um modo. UpstreamError(409) no default

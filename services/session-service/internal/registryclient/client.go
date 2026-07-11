@@ -7,8 +7,6 @@ package registryclient
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +14,7 @@ import (
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/modesnapshot"
 )
 
 var _ domain.ProfileProvider = (*Client)(nil)
@@ -88,7 +87,7 @@ func (c *Client) ModeProfile(ctx context.Context, gameID, modeID string) (domain
 		Archetype:  m.Archetype,
 		Topology:   m.Topology,
 		ParamsJSON: append([]byte(nil), m.Params...),
-		Hash:       profileHash(m),
+		Hash:       modesnapshot.Hash(m.Archetype, m.Topology, m.Params),
 		Fleet:      m.Fleet,
 	}
 	if m.Archetype == domain.ArchetypeHostWorldDropIn {
@@ -101,16 +100,4 @@ func (c *Client) ModeProfile(ctx context.Context, gameID, modeID string) (domain
 		snap.InvaderSlots = hw.InvaderSlots
 	}
 	return snap, nil
-}
-
-// profileHash é o hash curto do snapshot: SHA-256 de {archetype, topology,
-// params crus}, truncado a 16 hex. Determinístico para o mesmo corpo servido.
-func profileHash(m modeResponse) string {
-	h := sha256.New()
-	h.Write([]byte(m.Archetype))
-	h.Write([]byte{0})
-	h.Write([]byte(m.Topology))
-	h.Write([]byte{0})
-	h.Write(m.Params)
-	return hex.EncodeToString(h.Sum(nil))[:16]
 }

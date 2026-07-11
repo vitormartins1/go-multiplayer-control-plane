@@ -247,6 +247,54 @@ func TestListMultiplayerModes_200_RawPassthrough(t *testing.T) {
 	assert.JSONEq(t, raw, string(got), "corpo cru, sem re-serializar")
 }
 
+// TestModeSnapshotHashes_UmaChamadaCalculaTodos (spec 022): reaproveita
+// ListMultiplayerModes — uma chamada só ao game-registry, não N por modo.
+func TestModeSnapshotHashes_UmaChamadaCalculaTodos(t *testing.T) {
+	raw := `[
+		{"modeId":"default","archetype":"queue_arena","topology":"dedicated","params":{"scoreTarget":5}},
+		{"modeId":"tdm","archetype":"queue_arena","topology":"dedicated","params":{"scoreTarget":10}}
+	]`
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		assert.Equal(t, "/games/g1/multiplayer-profiles", r.URL.Path)
+		_, _ = w.Write([]byte(raw))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).ModeSnapshotHashes(context.Background(), "g1")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls, "uma chamada só, não uma por modo")
+	require.Contains(t, got, "default")
+	require.Contains(t, got, "tdm")
+	assert.Len(t, got["default"], 16)
+	assert.NotEqual(t, got["default"], got["tdm"], "params diferentes -> hashes diferentes")
+}
+
+func TestModeSnapshotHashes_SemModos_MapaVazio(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	got, err := New(srv.URL, srv.Client()).ModeSnapshotHashes(context.Background(), "g1")
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestModeSnapshotHashes_RegistryFora_ErrGameRegistryUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL, srv.Client()).ModeSnapshotHashes(context.Background(), "g1")
+
+	assert.ErrorIs(t, err, domain.ErrGameRegistryUnavailable)
+}
+
 func TestSetMultiplayerMode_PutRawNoPath(t *testing.T) {
 	body := `{"displayName":"TDM","archetype":"queue_arena","topology":"dedicated","params":{}}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

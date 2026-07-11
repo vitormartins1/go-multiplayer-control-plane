@@ -527,6 +527,13 @@ export const api = {
     del(
       `/api/games/${encodeURIComponent(gameId)}/multiplayer-profiles/${encodeURIComponent(modeId)}`,
     ),
+  // Hash "atual" de cada modo (spec 022) — mesmo hash que uma sessão aberta
+  // agora congelaria; mapa modeId -> hash.
+  modeSnapshotHashes: (gameId: string, signal?: AbortSignal) =>
+    getJSON<Record<string, string>>(
+      `/api/games/${encodeURIComponent(gameId)}/mode-snapshot-hashes`,
+      signal,
+    ),
   gameCatalog: (gameId: string, signal?: AbortSignal) =>
     getJSON<CatalogAchievement[]>(`/api/games/${encodeURIComponent(gameId)}/achievements`, signal),
   createAchievement: (gameId: string, a: NewAchievement) =>

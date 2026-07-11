@@ -19,3 +19,12 @@ export const ARCHETYPE_META: Record<
   // mesmo símbolo do banner de missão (CoopPanel, SessionMatchDetail.tsx) — mesmo conceito.
   coop_mission: { label: "Co-op Mission", icon: IconTargetArrow },
 };
+
+// archetypeMetaOf busca o meta por uma string arbitrária (spec 022: o
+// arquétipo de uma sessão vem do backend como string livre — passthrough,
+// pode faltar em sessão legada ou vir de um arquétipo desconhecido). undefined
+// em vez de indexar direto no ARCHETYPE_META, que só aceita o union tipado.
+export function archetypeMetaOf(archetype: string | undefined): { label: string; icon: Icon } | undefined {
+  if (!archetype) return undefined;
+  return (ARCHETYPE_META as Record<string, { label: string; icon: Icon }>)[archetype];
+}
