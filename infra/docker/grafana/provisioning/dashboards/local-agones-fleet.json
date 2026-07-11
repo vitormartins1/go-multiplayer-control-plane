@@ -2,7 +2,7 @@
   "title": "Local (k3d) — Agones Fleet",
   "uid": "local-agones-fleet",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -110,118 +110,12 @@
     },
     {
       "type": "stat",
-      "title": "CPU (node k3d)",
-      "id": 3,
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 0
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{cluster=\"local\",job=\"node-exporter\",mode=\"idle\"}[2m])) * 100)",
-          "instant": true
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "RAM (node k3d)",
-      "id": 4,
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 12,
-        "y": 0
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 75
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(1 - node_memory_MemAvailable_bytes{cluster=\"local\",job=\"node-exporter\"} / node_memory_MemTotal_bytes{cluster=\"local\",job=\"node-exporter\"}) * 100",
-          "instant": true
-        }
-      ]
-    },
-    {
-      "type": "stat",
       "title": "Uptime",
       "id": 6,
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 20,
+        "x": 8,
         "y": 0
       },
       "options": {
@@ -259,7 +153,7 @@
       "description": "agones_fleets_replicas_count (status do CRD Fleet, reconciliado sempre) em vez de agones_gameservers_count: essa é esparsa — só existe uma série pra (fleet,type) depois que aquele estado ocorreu de fato desde que o controller subiu, então uma fleet que nunca alocou/nunca teve GameServer Ready some do painel em vez de aparecer como 0.",
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 4
       },
@@ -307,8 +201,8 @@
       "description": "agones_fleets_replicas_count (status do CRD Fleet) — mesmo motivo do painel Ready: reporta 0 de verdade por fleet, em vez de sumir quando a fleet nunca alocou.",
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 8,
+        "x": 8,
         "y": 4
       },
       "options": {
@@ -355,8 +249,8 @@
       "description": "Sem equivalente em agones_fleets_replicas_count (o status do Fleet não rastreia unhealthy) — fica em agones_gameservers_count, então uma fleet que nunca teve GameServer Unhealthy some do painel em vez de aparecer como 0 (mesma limitação dos outros painéis, sem workaround aqui).",
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 8,
+        "x": 16,
         "y": 4
       },
       "options": {
@@ -402,9 +296,9 @@
       "id": 10,
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 4
+        "w": 12,
+        "x": 12,
+        "y": 0
       },
       "options": {
         "colorMode": "value",
