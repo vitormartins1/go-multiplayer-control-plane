@@ -27,88 +27,17 @@ Três decisões estruturais. **Recomendação anotada; confirmar por escrito no 
 
 ## Realidade cross-repo: o data plane não existe ainda
 
-O `unity-battle-royale-data-plane` (Unity) **não está sequer planejado** em [REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md) — não há server que encolha a zona nem fixe colocações. Consequência (mesmo princípio dos outros arquétipos: **control plane primeiro**):
+O `unity-battle-royale-data-plane` (Unity) **ainda não foi criado** — não há server que encolha a zona nem fixe colocações. Todo o roadmap abaixo foi validado **só no control plane**, com o adapter `static` do `ServerAllocator` (server mockado) e um cliente de teste simulando o server do BR. A validação end-to-end real (Agones + Unity com zona/eliminação de verdade) é etapa cross-repo futura, condicionada a esse repo existir — o contrato que ela vai consumir já está escrito ([`battle_royale-dataplane-contract.md`](./battle_royale-dataplane-contract.md)).
 
-- Todo BR0–BR3 se **valida no control plane** com o adapter `static` do `ServerAllocator` (server mockado) e um **cliente de teste** simulando o server do BR (enche o lobby, chama `ReportResult` com as colocações como o Unity chamaria).
-- A validação **end-to-end real** (Agones + Unity com zona/eliminação de verdade, lobby grande) é etapa **cross-repo posterior**. Este roadmap entrega o **contrato** (`battle_royale-dataplane-contract.md`, fatia do fim) que ela vai consumir.
+## Fatias executadas (histórico resumido — detalhe completo nas specs)
 
----
+Todas as 5 fatias (BR0–BR4) foram concluídas e validadas com server mockado — cada uma reaproveitou um pipeline já trilhado pelo `queue_arena`/`host_world_dropin`, sem inventar mecanismo novo:
 
-## BR0 — Declaração do perfil (a base)
-
-**Objetivo:** o jogo declara `battle_royale` com seus parâmetros; o console cadastra/edita. Espelha a declaração que abriu o `host_world_dropin` (commit `6fbb3cf`).
-
-**Specs:** `game-registry/007-battle-royale-profile` + `admin-bff`/`admin-ui` (numeração seguinte livre).
-
-**Escopo:**
-- **game-registry:** novo `BattleRoyaleParams{ LobbySize, TeamSize, RespawnMode, PlacementPoints bool, ScoringStats[] }` (schema fino na spec), ponteiro `BattleRoyale` no `MultiplayerProfile`, `ArchetypeBattleRoyale`, validação por arquétipo (`profile_service.go`), persistência JSONB (a coluna já existe, migration `005`), leitura no `GetMultiplayerProfile`.
-- **admin-bff:** passthrough cru (o BFF já é passthrough do perfil, spec `admin-bff/012`).
-- **admin-ui:** ramo condicional no form de perfil (aba Configurações) — select de `battle_royale`, campos `lobbySize`/`teamSize`/`respawnMode`/scoring com tooltips, como os Fieldsets do `host_world_dropin`.
-
-**Depende de:** nada. **Tamanho:** **M** (aditivo puro, padrão já trilhado 2×). **Destrava:** todas as demais (o perfil é lido por matchmaking/session).
-
----
-
-## BR1 — Lobby grande + composição de squads (matchmaking)
-
-**Objetivo:** o matchmaking enche um **lobby de N grande** (do perfil) e compõe **squads** (solo/duo/quad), completando squads incompletos com solos. Extensão em escala do `queue_arena` NvN, não um pipeline novo.
-
-**Specs:** `matchmaking/008-battle-royale-lobby`.
-
-**Escopo (matchmaking-service):**
-- Derivar `lobbySize`/`teamSize` do perfil `battle_royale` (reusa o leitor de perfil que o `matchmaking/004` já usa para derivar o tamanho do match).
-- Encher o lobby até `lobbySize` (alvo alto) antes de abrir a sessão; compor squads de `teamSize` (solo = `teamSize` 1). `FindMatch` continua a porta de entrada; ticket ganha o modo (solo/duo/squad) quando `teamSize > 1`. Party real (grupos pré-formados) = follow-up.
-- Chama `session.Create(matchID, gameID, teams)` com os squads como `TeamAssignment` — **reusa** a composição do `session/010` (a sessão já é dona canônica do `teamId`). FFA (solo) = N times de 1.
-
-**Depende de:** BR0 (perfil). **Tamanho:** **M–L** (reusa `matchmaking/004`+`005`). **Nota:** skill/SBMM e região ficam **follow-up** (como no `queue_arena`).
-
----
-
-## BR2 — Resultado por colocação ordinal (session + fan-out) — o núcleo
-
-**Objetivo:** o server do BR reporta as **colocações de todos** no fim; o outcome vira o kind `placement`; o fan-out o distribui. Fecha o "gap central" (colocação ordinal) para este arquétipo.
-
-**Specs:** `session/015-placement-result`.
-
-**Escopo (session-service):**
-- Novo kind de outcome: `MatchOutcome.Kind = "placement"`, ponteiro `Placement *PlacementResult`. `PlacementResult{ Entries []PlacementEntry }`, `PlacementEntry{ PlayerID, TeamID, Placement int, SurvivedMs int64, Stats map[string]int64 }` (kills/etc. em `Stats`, reusa o padrão do `PlayerOutcome`). Validação: colocações consistentes (1..N, squad compartilha colocação, sem buracos — regra pura testável).
-- `ReportResult` aceita o novo kind (terminal, como o `queue_arena` — decisão #1); publica no `match-results` com o envelope `kind` já existente (o payload muda, o mecanismo não). `ErrInvalidOutcome` em colocação inconsistente.
-- **Sem** nova operação de sessão (sem `ReportElimination` — decisão #1: eliminação progressiva é data plane; tracking ao vivo é follow-up).
-
-**Depende de:** BR1 (sessão com os squads). **Tamanho:** **M** (aditivo ao `MatchOutcome`; o mecanismo de fan-out não muda). **Destrava:** BR3.
-
----
-
-## BR3 — Colher: conquistas + leaderboard + analytics (sinks)
-
-**Objetivo:** os sinks reagem à colocação. Reusa os consumers já discriminados por `kind` (ADR-0020) e os boards cumulativos/por-métrica.
-
-**Specs:** `achievements/010` + `leaderboard/005` + `analytics/005`.
-
-**Escopo:**
-- **achievements (consumer):** despacha `placement` → event types por faixa de colocação: `battle_royale_win` (colocação 1), `battle_royale_top_n` (colocação ≤ limiar declarado). **Reusa** o critério por-stat/limiar da A1 (`achievements/008`) para kills/sobrevivência. Idempotência por `matchID` (resultado terminal — reusa `processed_matches`).
-- **leaderboard (consumer):** boards do `battle_royale` via `ZINCRBY` cumulativo (reusa A2, `leaderboard/004`): `wins` (1º lugar), `top_n_finishes`, `kills_total`; e/ou highscore de `survivedMs`. Idempotente por `matchID`.
-- **analytics (consumer):** despacha `placement` → distribuição de colocações por jogo (histograma 1º/top-10/resto) e média de sobrevivência. JSON aditivo, idempotente por `matchID`.
-
-**Depende de:** BR2 (outcome `placement`). **Tamanho:** **L** (3 sinks, mas cada um reusa padrão existente).
-
----
-
-## BR4 — Surfacing no console (+ contrato do data plane)
-
-**Objetivo:** o painel mostra o BR — o lobby ao vivo e as estatísticas de colocação; e o contrato control↔data plane fica escrito.
-
-**Specs:** `admin-bff` + `admin-ui` (numeração seguinte livre) + doc `battle_royale-dataplane-contract.md`.
-
-**Escopo:** (implementado — `admin-bff/015` + `admin-ui/021`; fechou também o gap da BR0-UI, o form de perfil BR)
-- **Rooms:** ✅ a sala de um jogo `battle_royale` mostra o lobby (N/`lobbySize`) e o modo (solo/squad), buscando o perfil por jogo (cacheado). *Vivos/eliminados ao vivo = follow-up (decisão #1).*
-- **Analytics:** ✅ bloco condicional com a distribuição de colocação (1º/top-10/resto) e a sobrevivência média (o bff propaga o campo `placement` da BR3).
-- **Perfil no console (gap BR0-UI):** ✅ o form de multiplayer ganhou o ramo `battle_royale` (lobbySize/teamSize/respawnMode/scoringStats), espelhando o do `host_world_dropin`.
-- **Contrato:** ✅ **escrito** — [`battle_royale-dataplane-contract.md`](./battle_royale-dataplane-contract.md) (par do `queue_arena`/`host_world_dropin`): o server do BR recebe o lobby via connect token (com `team_id` do squad), roda a partida com o `respawnMode` declarado, chama `ReportResult` com o `PlacementResult` terminal. Fonte de verdade das mudanças cross-repo no futuro `unity-battle-royale-data-plane`.
-
-**Depende de:** BR1 (Rooms lê lobby), BR3 (analytics lê colocações). **Tamanho:** **M**.
-
----
+- **BR0 — declaração do perfil** (`game-registry/007` + `admin-bff`/`admin-ui`): `BattleRoyaleParams` (lobbySize/teamSize/respawnMode/scoringStats) no perfil de multiplayer, form condicional no console.
+- **BR1 — lobby grande + squads** (`matchmaking/008`): extensão em escala da composição NvN do `queue_arena` — enche um lobby grande e forma squads, completando com solos.
+- **BR2 — colocação ordinal** (`session/015`): novo kind de outcome `placement` (`PlacementResult`, terminal — decisão #1 abaixo), aditivo ao `MatchOutcome` polimórfico já existente.
+- **BR3 — sinks** (`achievements/010` + `leaderboard/005` + `analytics/005`): os 3 consumers do fan-out (já discriminados por `kind`, ADR-0020) reagem à colocação — conquista por faixa/limiar, board cumulativo, histograma de colocação.
+- **BR4 — console + contrato** (`admin-bff/015` + `admin-ui/021` + doc): Rooms/Analytics mostram o BR; contrato cross-repo escrito.
 
 ## Resumo de sequência
 

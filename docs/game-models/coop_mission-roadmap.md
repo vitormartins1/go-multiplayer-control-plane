@@ -31,103 +31,17 @@ Três decisões estruturais. **Recomendação anotada; confirmar por escrito no 
 
 ## Realidade cross-repo: o data plane não existe ainda
 
-O `unity-coop-mission-data-plane` (Unity) **não está planejado** em [REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md) — não há server com AI Director que cumpra objetivo ou detecte wipe. Consequência (mesmo princípio dos outros arquétipos: **control plane primeiro**):
+O `unity-coop-mission-data-plane` (Unity) **ainda não foi criado** — não há server com AI Director que cumpra objetivo ou detecte wipe. Todo o roadmap abaixo foi validado **só no control plane**, com o adapter `static` do `ServerAllocator` (server mockado) e um cliente de teste simulando o server da missão. A validação end-to-end real (Agones + Unity com objetivo/wipe/bots) é etapa cross-repo futura — o contrato que ela vai consumir já está escrito ([`coop_mission-dataplane-contract.md`](./coop_mission-dataplane-contract.md)).
 
-- Todo C0–C3 se **valida no control plane** com o adapter `static` do `ServerAllocator` (server mockado) e um **cliente de teste** simulando o server da missão (forma o time, chama `ReportResult` com o outcome coletivo como o Unity chamaria).
-- A validação **end-to-end real** (Agones + Unity com objetivo/wipe/bots) é etapa **cross-repo posterior**. Este roadmap entrega o **contrato** (`coop_mission-dataplane-contract.md`, fatia C4) que ela vai consumir.
+## Fatias executadas (histórico resumido — detalhe completo nas specs)
 
----
+Todas as 5 fatias (C0–C4) foram concluídas e validadas com server mockado — cada uma reaproveitou um pipeline já trilhado pelo `queue_arena`/`battle_royale`, sem inventar mecanismo novo:
 
-## C0 — Declaração do perfil (a base) ✅ main
-
-**Objetivo:** o jogo declara `coop_mission` com seus parâmetros; o console cadastra/edita. Espelha a declaração que abriu `host_world_dropin` (commit `6fbb3cf`) e `battle_royale` (BR0, `game-registry/007`).
-
-> **Status:** implementado na branch `feat/game-registry/008-coop-mission-profile` (specs `game-registry/008` + admin-ui). `CoopMissionParams{TeamSize, Missions, Difficulties, BotfillEnabled, ScoringStats}`, `ArchetypeCoopMission`, validação (`teamSize ≥ 2`, catálogos como identificadores estáveis sem duplicata), JSONB sem migration. Form `coop_mission` no `MultiplayerSettings.tsx` + union em `api.ts`. Verde: unit 119 (`-race`, service 89.4%), integração testcontainers 20, lint 0, admin-ui build. Diferente da BR (form saiu só na BR4), aqui a UI já entrou junto.
-
-**Specs:** `game-registry/008-coop-mission-profile` + `admin-ui` (numeração seguinte livre).
-
-**Escopo:**
-- **game-registry:** novo `CoopMissionParams{ TeamSize int, Missions []string, Difficulties []string, BotfillEnabled bool, ScoringStats []string }` (schema fino na spec), ponteiro `CoopMission *CoopMissionParams` no `MultiplayerProfile`, constante `ArchetypeCoopMission = "coop_mission"`, validação por arquétipo em `profile_service.go` (`teamSize >= 2`; `Missions`/`Difficulties` opcionais mas sem vazios/duplicados se presentes; `ScoringStats` sem vazios/duplicados). Persistência JSONB — **a coluna já existe** (migration `005`), sem migration nova. Encode/decode no repo e ramo no transport: os **quatro switches** do padrão tagged-union (service-validate / repo-encode / repo-decode / transport).
-- **admin-ui:** ramo condicional no form de perfil (`MultiplayerSettings.tsx`, aba Configurações) — opção `coop_mission` no select, campos `teamSize`/`missions`/`difficulties`/`botfill`/`scoringStats` com tooltips, espelhando os Fieldsets do `battle_royale`; **union em `api.ts`** ganha a variante `coop_mission`. Verificação: `cd services/admin-ui && npm run build`.
-- **admin-bff:** **nada** — o passthrough de perfil é `json.RawMessage` cru; o `coop_mission` já flui sem tipar (achado da BR4).
-
-**Depende de:** nada. **Tamanho:** **M** (aditivo puro, padrão já trilhado 3×). **Destrava:** todas as demais (o perfil é lido por matchmaking/session).
-
----
-
-## C1 — Formação do time co-op (matchmaking) ✅ main
-
-**Objetivo:** o matchmaking forma **um único time** de `teamSize` (do perfil) e abre a sessão. Caso degenerado da composição NvN do `queue_arena` — um lado só.
-
-> **Status:** implementado na branch `feat/matchmaking/009-coop-mission-team` (spec `matchmaking/009`). Reuso máximo: co-op = `StructureTeams` com `TeamCount=1` → `composeTeams`/domínio/**session intactos** (confirmou a descoberta da BR1). A mudança é um único `case archetypeCoopMission` no `registryclient.Format` (valida `teamSize ≥ 2`, monta `{teams, TeamCount:1, TeamSize, Size:teamSize}`). Verde: unit 113 (`-race`), service 93.4%/registryclient 92.6%, lint 0.
-
-**Specs:** `matchmaking/009-coop-mission-team`.
-
-**Escopo (matchmaking-service):**
-- Derivar `teamSize` do perfil `coop_mission` (reusa o leitor de perfil do `matchmaking/004`/`registryclient` + cache).
-- Encher a fila até `teamSize` e compor **um `TeamAssignment` único** (todos no mesmo `teamId`, ex. `team-coop`). `FindMatch` continua a porta de entrada. Chama `session.Create(matchID, gameID, teams)` com o time único — **reusa** a composição do `session/010` (dono canônico do `teamId`). **session provavelmente intacto** (a formação já é agnóstica de arquétipo — a diferença do `coop_mission` é o *resultado*, C2 — mesmo achado da BR1).
-- Bot-fill **não** entra aqui: se faltam humanos, é o data plane que preenche com bots (decisão #2). O match forma com os humanos disponíveis (mínimo a definir no plan — provável: forma com ≥1 e o resto vira bot no server).
-
-**Depende de:** C0 (perfil). **Tamanho:** **S–M** (reusa `matchmaking/004`+`005`; menor que BR1, sem squads ragged). **Nota:** lobby/browser, join-in-progress, skill/região = **Aberturas** (follow-up).
-
----
-
-## C2 — Resultado coletivo (session + fan-out) — o núcleo ✅ main
-
-**Objetivo:** o server reporta **um desfecho coletivo** (`MISSION_SUCCESS`/`MISSION_FAILURE`) + stats por jogador no fim; o outcome vira o kind `collective`; o fan-out o distribui. Fecha o **último eixo** do "gap central" (resultado coletivo) e completa os quatro modelos do ADR-0023.
-
-> **Status:** implementado na branch `feat/session/016-collective-result` (spec `session/016`). Kind `collective` no `MatchOutcome` (4º ponteiro `Collective`), proto regenerado com `buf` (`CollectiveResult{outcome, players[]}`/`CollectivePlayer{playerId, teamId, stats}` no `oneof`). O **ponto novo** confirmado no código: `Outcome` vive no nível da sessão (campo do `CollectiveResult`), não por jogador. Dispatch por kind em `validateOutcome`/`stampTeams`/`toMatchOutcome`/`SNS.Publish`/`Log.Publish`; envelope `kind=collective` no mesmo tópico `match-results`. Validação estrutural: `players` não-vazio + `outcome ∈ {MISSION_SUCCESS, MISSION_FAILURE}`; valores de `stats` **não** checados (server autoritativo, como o `placement`). Terminal, reusa `stampTeams`→publish→closeSession. Verde: 126 testes `-race`, service 94.4%, lint 0. **Nada novo de Go** (tagged-union + dispatch por kind já documentados). Sem ADR novo.
-
-**Specs:** `session/016-collective-result`.
-
-**Escopo (session-service):**
-- Novo kind de outcome: `MatchOutcome.Kind = "collective"` (constante `OutcomeCollective`), ponteiro `Collective *CollectiveResult`. Tipos:
-  ```
-  CollectiveResult{ Outcome string; Players []CollectivePlayer }   // Outcome no nível da SESSÃO
-  CollectivePlayer{ PlayerID string; TeamID string; Stats map[string]int64 }
-  ```
-  Constantes `MissionSuccess = "MISSION_SUCCESS"`, `MissionFailure = "MISSION_FAILURE"`.
-- **Proto:** adicionar `CollectiveResult`/`CollectivePlayer` ao `oneof outcome` e **regenerar com `buf generate`** — nunca editar `.pb.go` à mão.
-- **Dispatch por `kind`** (já existente): mais um ramo em `validateOutcome` (outcome ∈ {SUCCESS, FAILURE}; ≥1 player; stats não-negativos), `stampTeams` (carimba `TeamID` a partir da formação, não confia no eco do server — igual aos outros kinds), `toMatchOutcome`, `SNSPublisher.Publish` e `LogPublisher.Publish`. Envelope `kind=collective` no **mesmo** tópico `match-results` (o payload muda — `outcome` de sessão + `players[].stats` —, o mecanismo não). `ErrInvalidOutcome` em desfecho fora do vocabulário.
-- **Sem** nova operação de sessão. Terminal, um `ReportResult`, reusa `stampTeams`→publish→closeSession (`CloseResult`).
-
-**Depende de:** C1 (sessão com o time). **Tamanho:** **M** (aditivo ao `MatchOutcome`; o mecanismo de fan-out não muda). **Destrava:** C3.
-
----
-
-## C3 — Colher: conquistas + leaderboard + analytics (sinks) ✅ main
-
-**Objetivo:** os sinks reagem ao desfecho coletivo. Reusa os consumers já discriminados por `kind` (ADR-0020) — o padrão exato da BR3.
-
-> **Status:** implementado e mergeado (3 branches, especs `achievements/011` + `leaderboard/006` + `analytics/006`). achievements: `CollectiveEventTypes` → `coop_mission_played`/`_success`/`_failed` (desfecho da sessão, igual para todos), reusa `ApplyMatchResult`/`processed_matches`. leaderboard: board cumulativo `missions_completed` (+1 p/ todos em SUCCESS) + `<stat>_total`/highscore por stat. analytics: migration `005_mission_rollup` (`game_mission_rollup`), `ApplyCollective` (successes/failures idempotente por matchId), `successRate` no read; **corrigiu o gap** de mounts do `analytics-postgres` no compose (002–005). Verde nos três: build, testes `-race` (analytics integração testcontainers), lint 0. Nada novo de Go (dispatch por kind + idempotência por matchId já documentados).
-
-**Specs:** `achievements/011` + `leaderboard/006` + `analytics/006`.
-
-**Escopo:**
-- **achievements (consumer):** despacha `collective` → event types: `coop_mission_played` (todos), `coop_mission_success` (todos, se `MISSION_SUCCESS`) / `coop_mission_failed` (todos, se `MISSION_FAILURE`). **Reusa** o critério por-stat da A1 (`achievements/008`) para kills/revives/minério. Idempotência por `matchID` (terminal — reusa `processed_matches`, sem migration).
-- **leaderboard (consumer):** boards do `coop_mission` via `ZINCRBY` cumulativo (reusa A2, `leaderboard/004`): `missions_completed` (só em SUCCESS), `<stat>_total` por stat declarada. Idempotente por `matchID` (script Lua). Sem migration (Redis).
-- **analytics (consumer):** despacha `collective` → rollup `game_mission_rollup` (contagem de sucesso/falha por jogo + taxa de sucesso). **Migration nova** (próximo número na sequência do analytics; a BR3 usou a 004) — montar no compose (gotcha conhecido). Idempotente por `matchID` (`processed_matches`), JSON aditivo no `GameAnalytics` (render = C4).
-
-**Depende de:** C2 (outcome `collective`). **Tamanho:** **L** (3 sinks, cada um reusa padrão existente).
-
----
-
-## C4 — Surfacing no console (+ contrato do data plane) ✅ branch
-
-**Objetivo:** o painel mostra o `coop_mission` — a taxa de sucesso/falha das missões e o modo co-op no Rooms; e o contrato control↔data plane fica escrito.
-
-> **Status:** implementado na branch `feat/coop-mission/c4-console` (specs `admin-bff/016` + `admin-ui/022` + doc). admin-bff propaga o campo `mission` no `GameAnalyticsDetail` (passthrough; perfil já fluía cru). admin-ui: bloco "Desfecho das missões" (cumpridas/falhas/taxa) em `GameAnalytics.tsx` + badge `co-op N/teamSize` em `Rooms.tsx` (cache de perfil por gameId) + tipo `mission` em `api.ts`. O form de perfil já saíra na C0. Contrato: `docs/game-models/coop_mission-dataplane-contract.md` (par dos 3 existentes). Verde: admin-bff testes + lint 0; admin-ui `npm run build`.
-
-**Specs:** `admin-bff` + `admin-ui` (numeração seguinte livre) + doc `coop_mission-dataplane-contract.md`.
-
-**Escopo:**
-- **admin-bff:** propaga o campo de missão no `GameAnalyticsDetail` (sucesso/falha/taxa) — **achado da BR4:** só o analytics precisa de campo; perfil já flui cru. Passthrough.
-- **admin-ui:** bloco condicional na Analytics (`GameAnalytics.tsx`) com sucesso/falha/taxa de missão; rótulo `co-op · teamSize` no Rooms (`Rooms.tsx`, cache de perfil por `gameId`, como o BR). *(O form de perfil já saiu em C0 — aqui é só surfacing.)*
-- **Contrato:** `coop_mission-dataplane-contract.md` (par do `queue_arena`/`host_world_dropin`/`battle_royale`): o server recebe o time via connect token (com `team_id` do time co-op), roda a missão com os params declarados (`missions`/`difficulties`/`botfill`), chama `ReportResult` com o `CollectiveResult` terminal (`MISSION_SUCCESS/FAILURE` + stats). Envelope `kind=collective`. Fonte de verdade das mudanças cross-repo no futuro `unity-coop-mission-data-plane`.
-
-**Depende de:** C1 (Rooms lê o perfil), C3 (analytics lê o desfecho). **Tamanho:** **M**.
-
----
+- **C0 — declaração do perfil** (`game-registry/008` + `admin-ui`): `CoopMissionParams` (teamSize/missions/difficulties/botfillEnabled/scoringStats) no perfil de multiplayer, form condicional no console desde já (diferente do BR, cujo form só saiu na BR4).
+- **C1 — formação do time co-op** (`matchmaking/009`): caso degenerado da composição NvN do `queue_arena` — um único time (`TeamCount=1`), `session-service` intacto.
+- **C2 — resultado coletivo** (`session/016`) — **o núcleo desta fatia**: novo kind `collective` no `MatchOutcome` polimórfico — o desfecho (`MISSION_SUCCESS`/`MISSION_FAILURE`) vive no nível da **sessão**, não do jogador (diferença estrutural dos outros 3 kinds). Com ele, os 4 modelos de resultado do ADR-0023 (`win_loss_draw`, `placement`, `participation_event`, `collective`) ficam cobertos.
+- **C3 — sinks** (`achievements/011` + `leaderboard/006` + `analytics/006`): os 3 consumers do fan-out reagem ao desfecho coletivo — conquista por sucesso/falha (igual para todos), board cumulativo `missions_completed`, rollup de taxa de sucesso.
+- **C4 — console + contrato** (`admin-bff/016` + `admin-ui/022` + doc): Analytics/Rooms mostram o `coop_mission`; contrato cross-repo escrito.
 
 ## Resumo de sequência
 
