@@ -98,6 +98,13 @@ func (f *fakeService) RenameGame(_ context.Context, id, name string) (*domain.Ga
 	}
 	return &domain.Game{ID: id, Name: name}, nil
 }
+func (f *fakeService) SetFleet(_ context.Context, id, fleet string) (*domain.Game, error) {
+	f.gotGameID = id
+	if f.gamesErr != nil {
+		return nil, f.gamesErr
+	}
+	return &domain.Game{ID: id, Fleet: fleet}, nil
+}
 func (f *fakeService) DeleteGame(_ context.Context, id string) error {
 	f.gotGameID = id
 	return f.gamesErr
@@ -878,6 +885,47 @@ func TestRenameGame_200(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "g1", svc.gotGameID)
 	assert.Contains(t, readBody(t, resp), `"name":"Novo"`)
+}
+
+func TestSetFleet_200(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/fleet", strings.NewReader(`{"fleet":"packet-arena"}`))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Contains(t, readBody(t, resp), `"fleet":"packet-arena"`)
+}
+
+func TestSetFleet_CorpoInvalido_400(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/fleet", strings.NewReader(`{`))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestSetFleet_RegistryFora_502(t *testing.T) {
+	svc := &fakeService{gamesErr: domain.ErrGameRegistryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/fleet", strings.NewReader(`{"fleet":"packet-arena"}`))
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
 
 func TestDeleteGame_204(t *testing.T) {

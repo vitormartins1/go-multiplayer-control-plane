@@ -102,6 +102,7 @@ type fakeRegistry struct {
 	err         error
 	gotSlug     string
 	gotName     string
+	gotFleet    string
 	gotGameID   string
 	gotPlayerID string
 	profile     json.RawMessage
@@ -132,6 +133,13 @@ func (f *fakeRegistry) RenameGame(_ context.Context, id, name string) (*domain.G
 		return nil, f.err
 	}
 	return &domain.Game{ID: id, Name: name}, nil
+}
+func (f *fakeRegistry) SetFleet(_ context.Context, id, fleet string) (*domain.Game, error) {
+	f.gotGameID, f.gotFleet = id, fleet
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &domain.Game{ID: id, Fleet: fleet}, nil
 }
 func (f *fakeRegistry) DeleteGame(_ context.Context, id string) error {
 	f.gotGameID = id
@@ -354,6 +362,15 @@ func TestCreateGame_DelegaAoRegistry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "tetris", reg.gotSlug)
 	assert.Equal(t, "g1", g.ID)
+}
+
+func TestSetFleet_Delega(t *testing.T) {
+	reg := &fakeRegistry{}
+	g, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).SetFleet(context.Background(), "g1", "packet-arena")
+	require.NoError(t, err)
+	assert.Equal(t, "g1", reg.gotGameID)
+	assert.Equal(t, "packet-arena", reg.gotFleet)
+	assert.Equal(t, "packet-arena", g.Fleet)
 }
 
 func TestMultiplayerProfile_DelegaAoRegistry(t *testing.T) {

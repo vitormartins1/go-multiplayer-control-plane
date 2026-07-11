@@ -6,6 +6,7 @@ import {
   IconDeviceGamepad2,
   IconDoorEnter,
   IconServer,
+  IconServer2,
   IconTopologyStar3,
   IconUsers,
 } from "@tabler/icons-react";
@@ -20,12 +21,16 @@ const Players = lazy(() => import("./pages/Players").then((m) => ({ default: m.P
 const PlayerDetail = lazy(() => import("./pages/PlayerDetail").then((m) => ({ default: m.PlayerDetail })));
 const Analytics = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.Analytics })));
 const Rooms = lazy(() => import("./pages/Rooms").then((m) => ({ default: m.Rooms })));
+const Fleet = lazy(() => import("./pages/Fleet").then((m) => ({ default: m.Fleet })));
 
 const NAV = [
   { to: "/games", label: "Games", icon: IconDeviceGamepad2 },
   { to: "/players", label: "Players", icon: IconUsers },
   { to: "/rooms", label: "Rooms", icon: IconDoorEnter },
   { to: "/analytics", label: "Analytics", icon: IconChartBar },
+  // Fleet (spec 059): conceito de produto/jogo (game servers), diferente da
+  // Infrastructure abaixo (saúde da plataforma) — ícone distinto de propósito.
+  { to: "/fleet", label: "Fleet", icon: IconServer2 },
   { to: "/infrastructure", label: "Infrastructure", icon: IconServer },
 ];
 
@@ -84,6 +89,7 @@ export function App() {
             <Route path="/players/:playerId" element={<PlayerDetail />} />
             <Route path="/rooms" element={<Rooms />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/fleet" element={<Fleet />} />
             <Route path="/infrastructure" element={<Overview />} />
             <Route path="*" element={<Navigate to="/games" replace />} />
           </Routes>
