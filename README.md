@@ -53,6 +53,7 @@ Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Re
 
 | Documento | Conteúdo |
 |---|---|
+| [docs/PRODUCT-OVERVIEW.md](docs/PRODUCT-OVERVIEW.md) | **O que o sistema FAZ** — capacidades e fluxos, visão de produto (não de arquitetura) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **Panorama canônico** da arquitetura (control/data plane, serviços, hexagonal, infra) |
 | [docs/game-models/README.md](docs/game-models/README.md) | Taxonomia de arquétipos + estado de implementação por fatia |
 | [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md) | Control plane + data planes por arquétipo (nomenclatura de repos) |

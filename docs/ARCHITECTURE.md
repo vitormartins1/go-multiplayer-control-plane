@@ -1,6 +1,6 @@
 # Arquitetura — game-backend
 
-> Visão consolidada da arquitetura do repositório. Aqui está o **panorama e o porquê de alto nível**; cada decisão pontual tem seu **ADR** em `docs/adr/`. O roadmap de execução está em `ROADMAP.md`.
+> Visão consolidada da arquitetura do repositório. Aqui está o **panorama e o porquê de alto nível**; cada decisão pontual tem seu **ADR** em `docs/adr/`. O roadmap de execução está em `ROADMAP.md`. Para o que o sistema **faz** (capacidades/fluxos, visão de produto em vez de arquitetura), ver [`PRODUCT-OVERVIEW.md`](PRODUCT-OVERVIEW.md).
 
 ---
 
