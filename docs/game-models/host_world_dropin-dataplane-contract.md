@@ -2,7 +2,7 @@
 
 > **Escopo:** o contrato entre o **control plane** (`go-multiplayer-control-plane`, Go) e o **data plane** (server do mundo, Unity) para o arquétipo **`host_world_dropin`** do ADR-0023 — o mundo persistente de um host onde phantoms **co-op** e **invasor** entram/saem no meio, com **papéis assimétricos** e **resultado por evento/participante** (não um placar terminal).
 >
-> Este doc é a **fonte de verdade do contrato**. O data plane (`unity-host-world-dropin-data-plane`, Unity) está **⬜ planejado** ([REPO-TOPOLOGY.md](../REPO-TOPOLOGY.md)) — este documento é o que esse repo vai consumir. O control plane já está pronto e testado isoladamente com server mockado (adapter `static` + cliente de teste).
+> Este doc é a **fonte de verdade do contrato** — o Unity referencia este arquivo por caminho relativo (`unity-host-world-dropin-data-plane/CLAUDE.md`) em vez de duplicar o conteúdo, propositalmente. O data plane (`unity-host-world-dropin-data-plane`) está **rodando de verdade** (2026-07-11): Fases 0–5 done, e2e k3d→Pi 5 + carga real (ver [`UNITY-INTEGRATION.md`](../UNITY-INTEGRATION.md) pro estado atualizado por arquétipo). O control plane está pronto e validado tanto isoladamente (adapter `static` + cliente de teste) quanto ponta a ponta com o server real.
 >
 > **Refs:** ADR-0023 (perfil de multiplayer), ADR-0010 (control/data plane), ADR-0011/0012 (Agones/Unity), ADR-0020 (fan-out). Specs: `session/011` (mundo host-cêntrico), `session/012` (diretório de invadíveis), `session/013` (eventos de participação), `matchmaking/006` (invasão), `matchmaking/007` (co-op por sinais), `achievements/009` + `analytics/004` (sinks). Roadmap: [`host_world_dropin-roadmap.md`](./host_world_dropin-roadmap.md). Follow-ups: [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md).
 
@@ -156,19 +156,21 @@ stateDiagram-v2
 - **Capacidade por papel** vem do perfil (`EnabledRoles`, `CoopSlots`, `InvaderSlots`). O host **não** ocupa slot (é o dono).
 - **Host sai/morre encerra tudo:** `HOST_KILLED` (evento do server) ou `LeaveWorld(host)`/`CloseWorld` (voluntário) fecham o mundo; os phantoms voltam aos seus mundos.
 
-## Mudanças necessárias no `unity-host-world-dropin-data-plane` (a construir)
+## Implementação no `unity-host-world-dropin-data-plane` (estado em 2026-07-11)
 
-O repo Unity ainda não existe. Ao criá-lo, o contrato acima define o que ele precisa implementar. Trabalho cross-repo (não bloqueia o control plane):
+O repo Unity implementou o contrato acima integralmente — todos os itens abaixo (originalmente um checklist "a construir", antes do repo existir) estão **feitos e verificados ao vivo**:
 
-| # | Mudança | Origem | Prioridade |
+| # | Mudança | Origem | Estado |
 |---|---|---|---|
-| 1 | Gerar os stubs C# dos protos `session.v1` (com `ReportParticipationEvent`) e `matchmaking.v1` (Invade/PostSummonSign/ListSigns/SummonSign). | specs `011–013`, `006–007` | **Alta** |
-| 2 | Ler o claim **`role`** do connect token no *connection approval* e aplicar no gameplay (spawn/hostilidade/HUD por papel: host, co-op sem friendly-fire, invasor PvP). | spec `011` | **Alta** |
-| 3 | Aceitar **join-in-progress** a qualquer momento (phantoms entram no meio) e **leave** (phantom some, mundo segue). Sem reconnect do phantom. | ficha 01 §ciclo de vida | **Alta** |
-| 4 | Reportar **eventos por participante** via `ReportParticipationEvent` (`JOINED` ao entrar; `BOSS_DEFEATED`/`HOST_KILLED`/`DIED`/`LEFT` conforme o gameplay), com `outcome` por papel. **Idempotente/retriável** (reenviar em erro; parar em `NotFound`). | spec `013` | **Alta** |
-| 5 | Usar o `session_id` (claim `match_id` do token) como identidade do mundo ao reportar. | spec `013` | Alta |
-| 6 | (Evolução) `eventId` único por evento para contagem fiel de ocorrências múltiplas na mesma sessão. | follow-up #4 | Média |
-| 7 | (Evolução) preencher `stats` nos eventos (se conquistas por stat entrarem). | follow-up #6 | Baixa |
+| 1 | Gerar os stubs C# dos protos `session.v1` (com `ReportParticipationEvent`) e `matchmaking.v1` (Invade/PostSummonSign/ListSigns/SummonSign). | specs `011–013`, `006–007` | ✅ Feito |
+| 2 | Ler o claim **`role`** do connect token no *connection approval* e aplicar no gameplay (spawn/hostilidade/HUD por papel: host, co-op sem friendly-fire, invasor PvP). | spec `011` | ✅ Feito |
+| 3 | Aceitar **join-in-progress** a qualquer momento (phantoms entram no meio) e **leave** (phantom some, mundo segue). Sem reconnect do phantom. | ficha 01 §ciclo de vida | ✅ Feito |
+| 4 | Reportar **eventos por participante** via `ReportParticipationEvent` (`JOINED` ao entrar; `BOSS_DEFEATED`/`HOST_KILLED`/`DIED`/`LEFT` conforme o gameplay), com `outcome` por papel. **Idempotente/retriável** (reenviar em erro; parar em `NotFound`). | spec `013` | ✅ Feito |
+| 5 | Usar o `session_id` (claim `match_id` do token) como identidade do mundo ao reportar. | spec `013` | ✅ Feito |
+| 6 | `eventId` único por evento para contagem fiel de ocorrências múltiplas na mesma sessão. | follow-up #4 | ✅ Feito |
+| 7 | Preencher `stats` nos eventos (conquistas/leaderboard por stat). | follow-up #6 | ✅ Feito |
+
+Evoluções seguintes (senha, pools por região, reconexão do host) ficam no [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md) e na Fase 6+ do roadmap Unity — não são mudança de contrato, são refinamento sobre o que já está de pé.
 
 > **Nota de topologia.** Este arquétipo tem afinidade com **P2P** (host como listen-server), mas o MVP usa **dedicated** (Agones/Unity) pela autoridade neutra (ADR-0008). O contrato acima vale para dedicated; a variante `p2p` é um investimento à parte (follow-up/aberturas do roadmap) — muda só a camada de provisionamento/connect da sessão, não os eventos nem os papéis.
 
