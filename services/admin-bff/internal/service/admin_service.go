@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 
@@ -93,9 +94,32 @@ func (s *Service) Player(ctx context.Context, playerID string) (domain.Player, e
 	return s.directory.GetPlayer(ctx, playerID)
 }
 
-// Games lista os jogos (game-registry).
+// Games lista os jogos (game-registry) com o resumo dos modos de multiplayer
+// de cada um (biblioteca, revisão de layout 2026-07-11) — fan-out em paralelo,
+// best-effort por jogo: falha ao buscar os modos de UM jogo não derruba a
+// listagem inteira (o card só fica sem o badge de arquétipo).
 func (s *Service) Games(ctx context.Context) ([]domain.Game, error) {
-	return s.registry.ListGames(ctx)
+	games, err := s.registry.ListGames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var wg sync.WaitGroup
+	for i := range games {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			raw, err := s.registry.ListMultiplayerModes(ctx, games[i].ID)
+			if err != nil {
+				return
+			}
+			var modes []domain.ModeSummary
+			if json.Unmarshal(raw, &modes) == nil {
+				games[i].MultiplayerModes = modes
+			}
+		}(i)
+	}
+	wg.Wait()
+	return games, nil
 }
 
 // CreateGame registra um jogo (game-registry).

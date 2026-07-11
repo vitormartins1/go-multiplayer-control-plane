@@ -1,10 +1,11 @@
-import { AspectRatio, Box, Text } from "@mantine/core";
+import { AspectRatio, Box, Group, Text, Tooltip } from "@mantine/core";
 import { useMemo } from "react";
 import { Style, Avatar } from "@dicebear/core";
 import shapesDef from "@dicebear/styles/shapes.json";
 import glassDef from "@dicebear/styles/glass.json";
 import ringsDef from "@dicebear/styles/rings.json";
 import type { Game } from "../lib/api";
+import { ARCHETYPE_META } from "../lib/archetypeMeta";
 
 // Estilos suportados (abstratos/geométricos, não-avatar). O backend manda o
 // nome em generatedImageStyle; trocar/adicionar gerador é só mexer aqui.
@@ -39,12 +40,22 @@ interface GameCoverProps {
   // withName=false esconde a faixa do nome (036): em contextos onde o nome já
   // está ao lado (ex.: Dados do jogo), a faixa só quebrava texto em larguras menores.
   withName?: boolean;
+  // Ícones de arquétipo no canto (biblioteca de jogos, revisão de layout
+  // 2026-07-11) — só quando o caller quer esse metadado (a capa em si é
+  // reusada em contextos sem isso, ex.: preview do wizard). Um ícone por
+  // arquétipo DISTINTO — vários modos do mesmo arquétipo (ex.: 6 modos
+  // host_world_dropin) não repetem o ícone.
+  modes?: Game["multiplayerModes"];
+  // Override do 9:16 padrão do "cover" — a capa é gerada proceduralmente
+  // (DiceBear) e aceita qualquer proporção; o drawer de registro usa um
+  // formato banner largo (revisão de layout, 2026-07-11).
+  ratio?: number;
 }
 
 // GameCover é a capa procedural/determinística de um jogo (003-generated-cover).
-// "cover" = card 9:16 da biblioteca (imagem + faixa com o nome); "mini" = swatch
-// quadrado para o seletor do header.
-export function GameCover({ game, variant = "cover", withName = true }: GameCoverProps) {
+// "cover" = card 9:16 da biblioteca (imagem + faixa com o nome, proporção
+// customizável via `ratio`); "mini" = swatch quadrado para o seletor do header.
+export function GameCover({ game, variant = "cover", withName = true, modes, ratio }: GameCoverProps) {
   const uri = useMemo(() => coverDataUri(game), [game.id, game.generatedImageSeed, game.generatedImageStyle, game.slug, game.image, game.imageSource]);
 
   if (variant === "mini") {
@@ -64,8 +75,10 @@ export function GameCover({ game, variant = "cover", withName = true }: GameCove
     );
   }
 
+  const distinctArchetypes = modes ? [...new Set(modes.map((m) => m.archetype))] : [];
+
   return (
-    <AspectRatio ratio={9 / 16}>
+    <AspectRatio ratio={ratio ?? 9 / 16}>
       <Box
         style={{
           borderRadius: 10,
@@ -76,6 +89,32 @@ export function GameCover({ game, variant = "cover", withName = true }: GameCove
           backgroundPosition: "center",
         }}
       >
+        {distinctArchetypes.length > 0 && (
+          <Group gap={4} style={{ position: "absolute", top: 8, left: 8 }}>
+            {distinctArchetypes.map((a) => {
+              const meta = ARCHETYPE_META[a];
+              const Icon = meta.icon;
+              return (
+                <Tooltip key={a} label={meta.label} withArrow>
+                  <Box
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "rgba(10, 13, 18, 0.65)",
+                      backdropFilter: "blur(2px)",
+                    }}
+                  >
+                    <Icon size={13} color="white" />
+                  </Box>
+                </Tooltip>
+              );
+            })}
+          </Group>
+        )}
         {/* faixa inferior para leitura do nome sobre a imagem */}
         {withName && (
         <Box

@@ -39,7 +39,7 @@ export function Games() {
               onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.03)")}
               onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
             >
-              <GameCover game={g} />
+              <GameCover game={g} modes={g.multiplayerModes} />
             </UnstyledButton>
           ))}
         </SimpleGrid>

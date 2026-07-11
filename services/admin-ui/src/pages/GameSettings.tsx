@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   Divider,
-  Fieldset,
   Group,
   Modal,
   Stack,
@@ -15,6 +14,7 @@ import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { api, HttpError, type Game } from "../lib/api";
 import { GameCover } from "../components/GameCover";
+import { FormSection } from "../components/FormSection";
 import { GamePipeline } from "./GamePipeline";
 import { MultiplayerSettings } from "./MultiplayerSettings";
 
@@ -63,21 +63,18 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
   }
 
   // Capa DENTRO de Dados do jogo (036, 3ª iteração do layout): a capa é conteúdo
-  // de identidade, não merece coluna própria — a página volta a ser coluna única
-  // e o Multiplayer usa a largura toda. Sem faixa de nome na capa (o nome está
-  // no input ao lado). Em tela estreita o Group quebra e a capa fica acima.
+  // de identidade, não merece coluna própria. Multiplayer/pipeline usam a
+  // largura toda da página (revisão de layout, 2026-07-11) — só o formulário
+  // de identidade fica com largura de leitura confortável (maw no Stack interno).
   return (
-    <Stack maw={900}>
+    <Stack>
       <Title order={4}>Identidade</Title>
-      <Fieldset legend="Dados do jogo">
+      <FormSection label="Dados do jogo">
         <Group align="flex-start" gap="xl" wrap="wrap">
           <Box w={150} style={{ flexShrink: 0 }}>
             <GameCover game={game} withName={false} />
-            <Text size="xs" c="dimmed" ta="center" mt={6}>
-              Capa gerada — determinística pela seed do jogo.
-            </Text>
           </Box>
-          <Stack gap="sm" style={{ flex: 1, minWidth: 260 }}>
+          <Stack gap="sm" style={{ flex: 1, minWidth: 260, maxWidth: 420 }}>
             <TextInput
               label="Nome"
               value={name}
@@ -98,7 +95,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
             </Group>
           </Stack>
         </Group>
-      </Fieldset>
+      </FormSection>
 
       <Divider my="md" />
 
@@ -122,7 +119,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
       <Divider my="md" />
 
       <Title order={4}>Zona de perigo</Title>
-      <Fieldset legend="Remover jogo">
+      <FormSection label="Remover jogo">
         <Group justify="space-between" align="center" wrap="wrap">
           <Text size="sm" c="dimmed" style={{ flex: 1, minWidth: 260 }}>
             O jogo some do console e para de aceitar filas e sessões novas. Conquistas, saves,
@@ -132,7 +129,7 @@ export function GameSettings({ game, onRenamed }: { game: Game; onRenamed: () =>
             Remover jogo
           </Button>
         </Group>
-      </Fieldset>
+      </FormSection>
 
       <Modal
         opened={deleteOpen}
