@@ -57,8 +57,8 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 		}
 		scoreSum += p.Score
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO game_player_seen (game_id, player_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-			m.GameID, p.PlayerID); err != nil {
+			`INSERT INTO game_player_seen (game_id, mode_id, player_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+			m.GameID, m.ModeID, p.PlayerID); err != nil {
 			return false, fmt.Errorf("analytics repository: apply match: player seen: %w", err)
 		}
 		// stats brutos por jogador (spec 011), com mode_id (spec 012 — o
@@ -70,24 +70,24 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO game_rollup (game_id, matches_total, participations, wins, losses, draws, score_sum)
-		VALUES ($1, 1, $2, $3, $4, $5, $6)
-		ON CONFLICT (game_id) DO UPDATE SET
+		INSERT INTO game_rollup (game_id, mode_id, matches_total, participations, wins, losses, draws, score_sum)
+		VALUES ($1, $2, 1, $3, $4, $5, $6, $7)
+		ON CONFLICT (game_id, mode_id) DO UPDATE SET
 			matches_total  = game_rollup.matches_total + 1,
-			participations = game_rollup.participations + $2,
-			wins           = game_rollup.wins + $3,
-			losses         = game_rollup.losses + $4,
-			draws          = game_rollup.draws + $5,
-			score_sum      = game_rollup.score_sum + $6`,
-		m.GameID, participations, wins, losses, draws, scoreSum); err != nil {
+			participations = game_rollup.participations + $3,
+			wins           = game_rollup.wins + $4,
+			losses         = game_rollup.losses + $5,
+			draws          = game_rollup.draws + $6,
+			score_sum      = game_rollup.score_sum + $7`,
+		m.GameID, m.ModeID, participations, wins, losses, draws, scoreSum); err != nil {
 		return false, fmt.Errorf("analytics repository: apply match: rollup: %w", err)
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO game_daily (game_id, day, matches)
-		VALUES ($1, (now() AT TIME ZONE 'utc')::date, 1)
-		ON CONFLICT (game_id, day) DO UPDATE SET matches = game_daily.matches + 1`,
-		m.GameID); err != nil {
+		INSERT INTO game_daily (game_id, mode_id, day, matches)
+		VALUES ($1, $2, (now() AT TIME ZONE 'utc')::date, 1)
+		ON CONFLICT (game_id, mode_id, day) DO UPDATE SET matches = game_daily.matches + 1`,
+		m.GameID, m.ModeID); err != nil {
 		return false, fmt.Errorf("analytics repository: apply match: daily: %w", err)
 	}
 
@@ -177,15 +177,15 @@ func (r *PostgresRepository) ApplyPlacement(ctx context.Context, pr domain.Place
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO game_placement_rollup (game_id, winners, top_n, rest, entries, sum_survived_ms)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (game_id) DO UPDATE SET
-			winners         = game_placement_rollup.winners + $2,
-			top_n           = game_placement_rollup.top_n + $3,
-			rest            = game_placement_rollup.rest + $4,
-			entries         = game_placement_rollup.entries + $5,
-			sum_survived_ms = game_placement_rollup.sum_survived_ms + $6`,
-		pr.GameID, winners, topN, rest, entries, sumSurvived); err != nil {
+		INSERT INTO game_placement_rollup (game_id, mode_id, winners, top_n, rest, entries, sum_survived_ms)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (game_id, mode_id) DO UPDATE SET
+			winners         = game_placement_rollup.winners + $3,
+			top_n           = game_placement_rollup.top_n + $4,
+			rest            = game_placement_rollup.rest + $5,
+			entries         = game_placement_rollup.entries + $6,
+			sum_survived_ms = game_placement_rollup.sum_survived_ms + $7`,
+		pr.GameID, pr.ModeID, winners, topN, rest, entries, sumSurvived); err != nil {
 		return false, fmt.Errorf("analytics repository: apply placement: rollup: %w", err)
 	}
 
@@ -237,12 +237,12 @@ func (r *PostgresRepository) ApplyCollective(ctx context.Context, cr domain.Coll
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO game_mission_rollup (game_id, successes, failures)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (game_id) DO UPDATE SET
-			successes = game_mission_rollup.successes + $2,
-			failures  = game_mission_rollup.failures + $3`,
-		cr.GameID, successDelta, failureDelta); err != nil {
+		INSERT INTO game_mission_rollup (game_id, mode_id, successes, failures)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (game_id, mode_id) DO UPDATE SET
+			successes = game_mission_rollup.successes + $3,
+			failures  = game_mission_rollup.failures + $4`,
+		cr.GameID, cr.ModeID, successDelta, failureDelta); err != nil {
 		return false, fmt.Errorf("analytics repository: apply collective: rollup: %w", err)
 	}
 
@@ -317,12 +317,16 @@ func (r *PostgresRepository) ApplySessionClosed(ctx context.Context, evt domain.
 }
 
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
+// Sem conceito de modo (sempre "todos os modos" de todos os jogos) — spec
+// 014: GROUP BY game_id é OBRIGATÓRIO desde que game_rollup ganhou mode_id,
+// senão jogos com mais de um modo duplicariam aqui (uma linha por modo).
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.game_id, r.matches_total, r.participations, r.wins, r.losses, r.draws, r.score_sum,
-		       (SELECT count(*) FROM game_player_seen s WHERE s.game_id = r.game_id)
+		SELECT r.game_id, SUM(r.matches_total), SUM(r.participations), SUM(r.wins), SUM(r.losses), SUM(r.draws), SUM(r.score_sum),
+		       (SELECT count(DISTINCT s.player_id) FROM game_player_seen s WHERE s.game_id = r.game_id)
 		FROM game_rollup r
-		ORDER BY r.matches_total DESC, r.game_id`)
+		GROUP BY r.game_id
+		ORDER BY SUM(r.matches_total) DESC, r.game_id`)
 	if err != nil {
 		return domain.Overview{}, fmt.Errorf("analytics repository: overview: %w", err)
 	}
@@ -378,35 +382,28 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 	out.GameID = gameID
 	out.ModeID = modeID
 
+	// mode_id (spec 014): agregação, não mais QueryRow direto — pode haver
+	// N linhas em game_rollup (uma por modo). modeID="" soma todas.
 	var participations, scoreSum int64
 	err := r.pool.QueryRow(ctx, `
-		SELECT r.matches_total, r.participations, r.wins, r.losses, r.draws, r.score_sum,
-		       (SELECT count(*) FROM game_player_seen s WHERE s.game_id = r.game_id)
-		FROM game_rollup r WHERE r.game_id = $1`, gameID).
+		SELECT COALESCE(SUM(r.matches_total),0), COALESCE(SUM(r.participations),0),
+		       COALESCE(SUM(r.wins),0), COALESCE(SUM(r.losses),0), COALESCE(SUM(r.draws),0),
+		       COALESCE(SUM(r.score_sum),0),
+		       (SELECT count(DISTINCT s.player_id) FROM game_player_seen s
+		          WHERE s.game_id = $1 AND ($2 = '' OR s.mode_id = $2))
+		FROM game_rollup r WHERE r.game_id = $1 AND ($2 = '' OR r.mode_id = $2)`, gameID, modeID).
 		Scan(&out.Matches, &participations, &out.Wins, &out.Losses, &out.Draws, &scoreSum, &out.UniquePlayers)
-	if err != nil && err != pgx.ErrNoRows {
+	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: game analytics: %w", err)
 	}
 	out.Participations = participations
 	out.AvgScore = avg(scoreSum, participations)
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT to_char(day, 'YYYY-MM-DD'), matches FROM game_daily
-		WHERE game_id = $1 AND day >= (now() AT TIME ZONE 'utc')::date - $2::int
-		ORDER BY day`, gameID, days)
+	// game_daily agora tem o mesmo shape das outras 3 séries diárias (spec
+	// 014) — reusa o helper comum em vez de uma query bespoke.
+	out.Daily, err = r.dailySeries(ctx, "game_daily", "matches", gameID, days, modeID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: daily: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var d domain.DailyPoint
-		if err := rows.Scan(&d.Day, &d.Matches); err != nil {
-			return domain.GameAnalytics{}, fmt.Errorf("analytics repository: scan daily: %w", err)
-		}
-		out.Daily = append(out.Daily, d)
-	}
-	if err := rows.Err(); err != nil {
-		return domain.GameAnalytics{}, err
 	}
 
 	// séries diárias dos 3 arquétipos que não tinham (spec 010) — Matches
@@ -447,37 +444,36 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		return domain.GameAnalytics{}, err
 	}
 
-	// distribuição de colocação (battle_royale, spec 005). Aditivo: sem linha ->
-	// Placement nil (jogo não-BR não regride).
+	// distribuição de colocação (battle_royale, spec 005), agregada por modo
+	// (spec 014). rowCount distingue "sem colocação neste jogo" (Placement
+	// fica nil) de "zero" de verdade — agregação sempre devolve uma linha.
 	var pd domain.PlacementDistribution
-	var sumSurvived int64
+	var sumSurvived, placementRows int64
 	err = r.pool.QueryRow(ctx, `
-		SELECT winners, top_n, rest, entries, sum_survived_ms
-		FROM game_placement_rollup WHERE game_id = $1`, gameID).
-		Scan(&pd.Winners, &pd.TopN, &pd.Rest, &pd.Entries, &sumSurvived)
-	switch {
-	case err == pgx.ErrNoRows:
-		// sem colocação neste jogo: Placement fica nil.
-	case err != nil:
+		SELECT COUNT(*), COALESCE(SUM(winners),0), COALESCE(SUM(top_n),0),
+		       COALESCE(SUM(rest),0), COALESCE(SUM(entries),0), COALESCE(SUM(sum_survived_ms),0)
+		FROM game_placement_rollup WHERE game_id = $1 AND ($2 = '' OR mode_id = $2)`, gameID, modeID).
+		Scan(&placementRows, &pd.Winners, &pd.TopN, &pd.Rest, &pd.Entries, &sumSurvived)
+	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: placement: %w", err)
-	default:
+	}
+	if placementRows > 0 {
 		pd.AvgSurvivedMs = avg(sumSurvived, pd.Entries)
 		out.Placement = &pd
 	}
 
-	// distribuição de desfecho da missão (coop_mission, spec 006). Aditivo: sem
-	// linha -> Mission nil (jogo não-coop não regride).
+	// distribuição de desfecho da missão (coop_mission, spec 006), agregada
+	// por modo (spec 014). Mesmo tratamento de rowCount do placement acima.
 	var md domain.MissionDistribution
+	var missionRows int64
 	err = r.pool.QueryRow(ctx, `
-		SELECT successes, failures
-		FROM game_mission_rollup WHERE game_id = $1`, gameID).
-		Scan(&md.Successes, &md.Failures)
-	switch {
-	case err == pgx.ErrNoRows:
-		// sem missões neste jogo: Mission fica nil.
-	case err != nil:
+		SELECT COUNT(*), COALESCE(SUM(successes),0), COALESCE(SUM(failures),0)
+		FROM game_mission_rollup WHERE game_id = $1 AND ($2 = '' OR mode_id = $2)`, gameID, modeID).
+		Scan(&missionRows, &md.Successes, &md.Failures)
+	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: mission: %w", err)
-	default:
+	}
+	if missionRows > 0 {
 		md.SuccessRate = ratio(md.Successes, md.Successes+md.Failures)
 		out.Mission = &md
 	}
