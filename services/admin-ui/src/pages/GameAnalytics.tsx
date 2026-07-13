@@ -56,8 +56,9 @@ function modeLabel(modeId: string, modes: MultiplayerMode[]): string {
 }
 
 // rótulos amigáveis dos motivos de fechamento (spec 065, session health) —
-// dado cru, sem pré-classificar o que "conta como abandono" (decisão do
-// analytics-service, spec 013): o usuário lê os motivos e interpreta.
+// dado cru; a tabela/donut continuam mostrando o motivo original mesmo
+// depois da classificação (spec 069) — o usuário pode querer o detalhe
+// fino além do resumo.
 const CLOSE_REASON_LABELS: Record<string, string> = {
   result: "Concluída",
   ttl: "Expirou (TTL)",
@@ -74,6 +75,27 @@ const CLOSE_REASON_COLORS: Record<string, string> = {
   abandoned: "red.6",
   host_left: "teal.5",
   host_killed: "grape.5",
+};
+
+// classificação de closeReason em 3 categorias (spec 069) — decisão de
+// apresentação, não do backend (analytics-service/013 devolve o dado cru
+// deliberadamente sem classificar). host_left/admin são encerramento
+// voluntário/intervenção humana, distintos de abandono espontâneo (ttl,
+// crash) — mesma distinção já documentada no CloseReason original
+// (session-service/domain/session.go).
+const CLOSE_REASON_CATEGORY: Record<string, "concluded" | "manual" | "abandoned"> = {
+  result: "concluded",
+  host_killed: "concluded",
+  host_left: "manual",
+  admin: "manual",
+  ttl: "abandoned",
+  abandoned: "abandoned",
+};
+
+const CLOSE_REASON_CATEGORY_LABELS: Record<"concluded" | "manual" | "abandoned", string> = {
+  concluded: "Concluída",
+  manual: "Encerrada manualmente",
+  abandoned: "Abandonada",
 };
 
 // rótulos amigáveis dos eventos de participação (host_world_dropin).
@@ -420,12 +442,32 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     if (data.sessionHealth.length > 0) {
       const health = data.sessionHealth;
       const healthModeIds = [...new Set(health.map((h) => h.modeId ?? ""))];
+      // classificação (spec 069): soma por categoria / total — client-side
+      // em cima do sessionHealth já filtrado por modo pelo backend.
+      const categoryTotals = { concluded: 0, manual: 0, abandoned: 0 };
+      let healthTotal = 0;
+      for (const h of health) {
+        categoryTotals[CLOSE_REASON_CATEGORY[h.closeReason] ?? "abandoned"] += h.count;
+        healthTotal += h.count;
+      }
+      // "72% (5)" — percentual em destaque (é o que importa pra saúde),
+      // contagem absoluta entre parênteses (StatCard só tem 1 campo de valor).
+      const summary = (n: number) => (healthTotal > 0 ? `${((n / healthTotal) * 100).toFixed(0)}% (${n})` : `— (${n})`);
       out.push({
         id: "session-health",
         title: "Saúde das sessões",
         span: 6,
         render: () => (
           <Stack gap="md">
+            <SimpleGrid cols={3}>
+              <StatCard label={CLOSE_REASON_CATEGORY_LABELS.concluded} value={summary(categoryTotals.concluded)} />
+              <StatCard label={CLOSE_REASON_CATEGORY_LABELS.manual} value={summary(categoryTotals.manual)} />
+              <StatCard
+                label={CLOSE_REASON_CATEGORY_LABELS.abandoned}
+                value={summary(categoryTotals.abandoned)}
+                bad={categoryTotals.abandoned > 0}
+              />
+            </SimpleGrid>
             <DonutChart
               size={140}
               thickness={20}
