@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Grid, Group, Loader, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Divider, Grid, Group, Loader, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
 import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
@@ -13,7 +13,6 @@ import { ARCHETYPE_META } from "../lib/archetypeMeta";
 const WIDGET_ARCHETYPE: Record<string, MultiplayerProfile["archetype"]> = {
   summary: "queue_arena",
   "queue-daily": "queue_arena",
-  "outcomes-donut": "queue_arena",
   "participations-role": "host_world_dropin",
   "participation-daily": "host_world_dropin",
   "placement-distribution": "battle_royale",
@@ -139,7 +138,7 @@ function participationByRole(stats: ParticipationStat[]) {
 function DailyLineChart({ data, label }: { data: { day: string; matches: number }[]; label: string }) {
   return (
     <LineChart
-      h={220}
+      h={170}
       data={data}
       dataKey="day"
       series={[{ name: "matches", label, color: "signal.5" }]}
@@ -192,16 +191,35 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "summary",
         title: "Resumo",
-        span: 12,
+        span: 6,
+        // Vitórias/derrotas/empates aparecem no grid de stats E no donut logo
+        // abaixo (fundidos num card só, spec 068) — o donut é só a MESMA
+        // proporção em forma visual, não um dado novo; separar em 2 cards
+        // duplicava a informação e desperdiçava espaço vertical.
         render: () => (
-          <SimpleGrid cols={{ base: 2, sm: 3 }}>
-            <StatCard label="Partidas" value={String(data.matches)} />
-            <StatCard label="Jogadores únicos" value={String(data.uniquePlayers)} />
-            <StatCard label="Score médio" value={data.avgScore.toFixed(1)} />
-            <StatCard label="Vitórias" value={String(data.wins)} />
-            <StatCard label="Derrotas" value={String(data.losses)} />
-            <StatCard label="Empates" value={String(data.draws)} />
-          </SimpleGrid>
+          <Stack gap="sm">
+            <SimpleGrid cols={{ base: 2, sm: 3 }}>
+              <StatCard label="Partidas" value={String(data.matches)} />
+              <StatCard label="Jogadores únicos" value={String(data.uniquePlayers)} />
+              <StatCard label="Score médio" value={data.avgScore.toFixed(1)} />
+              <StatCard label="Vitórias" value={String(data.wins)} />
+              <StatCard label="Derrotas" value={String(data.losses)} />
+              <StatCard label="Empates" value={String(data.draws)} />
+            </SimpleGrid>
+            {hasOutcomes && (
+              <DonutChart
+                size={140}
+                thickness={20}
+                withLabelsLine
+                withLabels
+                data={[
+                  { name: "Vitórias", value: data.wins, color: "green.6" },
+                  { name: "Derrotas", value: data.losses, color: "red.6" },
+                  { name: "Empates", value: data.draws, color: "yellow.6" },
+                ]}
+              />
+            )}
+          </Stack>
         ),
       });
     }
@@ -212,27 +230,6 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         title: "Partidas por dia",
         span: 6,
         render: () => <DailyLineChart data={data.daily} label="Partidas" />,
-      });
-    }
-
-    if (hasOutcomes) {
-      out.push({
-        id: "outcomes-donut",
-        title: "Vitórias × derrotas × empates",
-        span: 6,
-        render: () => (
-          <DonutChart
-            size={160}
-            thickness={22}
-            withLabelsLine
-            withLabels
-            data={[
-              { name: "Vitórias", value: data.wins, color: "green.6" },
-              { name: "Derrotas", value: data.losses, color: "red.6" },
-              { name: "Empates", value: data.draws, color: "yellow.6" },
-            ]}
-          />
-        ),
       });
     }
 
@@ -304,8 +301,8 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               <StatCard label="Sobrevivência média" value={formatDuration(placement.avgSurvivedMs)} />
             </SimpleGrid>
             <DonutChart
-              size={160}
-              thickness={22}
+              size={140}
+              thickness={20}
               withLabelsLine
               withLabels
               data={[
@@ -344,8 +341,8 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               <StatCard label="Taxa de sucesso" value={`${(mission.successRate * 100).toFixed(1)}%`} />
             </SimpleGrid>
             <DonutChart
-              size={160}
-              thickness={22}
+              size={140}
+              thickness={20}
               withLabelsLine
               withLabels
               data={[
@@ -427,8 +424,8 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         render: () => (
           <Stack gap="md">
             <DonutChart
-              size={160}
-              thickness={22}
+              size={140}
+              thickness={20}
               withLabelsLine
               withLabels
               data={health.map((h) => ({
@@ -522,20 +519,26 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         </Text>
       )}
 
-      {sections.map((section) => {
+      {sections.map((section, i) => {
         const meta = section.archetype ? ARCHETYPE_META[section.archetype] : undefined;
         return (
           <Stack key={section.archetype ?? "geral"} gap="sm">
+            {i > 0 && <Divider />}
             {meta && (
               <Group gap={6}>
                 <meta.icon size={18} />
                 <Title order={4}>{meta.label}</Title>
               </Group>
             )}
-            <Grid>
+            {/* align="flex-start" (spec 068): sem isso, o Grid estica todo
+                card da linha pra altura do vizinho mais alto — um donut
+                sozinho ficava gigante e vazio ao lado de um card com stat
+                grid + gráfico. Cada card agora só ocupa a altura do que
+                de fato mostra. */}
+            <Grid align="flex-start">
               {section.cards.map((card) => (
                 <Grid.Col key={card.id} span={{ base: 12, md: card.span }}>
-                  <Paper withBorder p="md" h="100%">
+                  <Paper withBorder p="md">
                     <Text fw={600} size="sm" mb="xs">
                       {card.title}
                     </Text>
