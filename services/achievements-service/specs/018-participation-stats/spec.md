@@ -7,6 +7,14 @@
 > usado nos outros 3 arquétipos; sem decisão técnica nova (mistura idêntica
 > ao que `ApplyMatchResult`/`ApplyPlacementResult`/`ApplyCollectiveResult`
 > já fazem).
+>
+> **Correção 2026-07-13:** esta spec implementou só o lado de RECEBER `stats`
+> aqui no achievements-service — o `session-service` nunca chegou a enviar o
+> campo (nem no proto, nem no envelope), então na prática `Stats` sempre
+> chegava `nil` por este caminho e nenhum achievement por stat de
+> host_world_dropin disparava de verdade (no-op silencioso, sem erro visível).
+> Achado ao especificar `analytics-service/011-raw-stat-capture`; fechado por
+> `session-service/026-participation-event-stats`.
 
 ## Contexto
 

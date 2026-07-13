@@ -275,6 +275,25 @@ func TestReportParticipationEvent_ComEventID_Aceita(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// stats (spec 026) é passthrough puro, mesmo padrão do event_id acima: o
+// gRPC aceita o campo sem erro; o repasse pro envelope é coberto no nível do
+// publisher (sns_publisher_test.go).
+func TestReportParticipationEvent_ComStats_Aceita(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
+	ctx := context.Background()
+
+	open, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
+	require.NoError(t, err)
+	_, err = client.JoinWorld(ctx, &pb.JoinWorldRequest{SessionId: open.GetSessionId(), PlayerId: "coop-1", Role: "coop"})
+	require.NoError(t, err)
+
+	_, err = client.ReportParticipationEvent(ctx, &pb.ReportParticipationEventRequest{
+		SessionId: open.GetSessionId(), PlayerId: "coop-1", Role: "coop",
+		Event: "BOSS_DEFEATED", Outcome: "SUCCESS", Stats: map[string]int64{"kills": 3, "revives": 1},
+	})
+	require.NoError(t, err)
+}
+
 func TestReportParticipationEvent_EventoInvalido_InvalidArgument(t *testing.T) {
 	client, _ := setupWorld(t, []string{"10.0.0.1:7777"})
 	open, err := client.OpenWorld(context.Background(), &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})

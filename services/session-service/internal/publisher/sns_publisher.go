@@ -83,6 +83,9 @@ type participationEnvelope struct {
 	// EventID identifica a ocorrência (follow-up #4, spec 021); vazio = data
 	// plane antigo, os sinks caem no fallback deles.
 	EventID string `json:"eventId,omitempty"`
+	// Stats são métricas opcionais do participante (spec 026) — mesmo padrão
+	// dos outros 3 kinds. Ausente = data plane antigo (compat total).
+	Stats map[string]int64 `json:"stats,omitempty"`
 }
 
 // placementEnvelope é o envelope do battle_royale (BR2) no mesmo tópico
@@ -301,6 +304,7 @@ func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID, modeI
 		Event:         evt.Event,
 		Outcome:       evt.Outcome,
 		EventID:       evt.EventID,
+		Stats:         evt.Stats,
 	}
 	body, err := json.Marshal(env)
 	if err != nil {

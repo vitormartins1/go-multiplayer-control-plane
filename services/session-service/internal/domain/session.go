@@ -91,6 +91,12 @@ type ParticipationEvent struct {
 	// respawna); o session não usa isto pra nada (seus efeitos já são
 	// idempotentes por natureza).
 	EventID string
+	// Stats são métricas opcionais do participante (kills, revives, ...;
+	// spec 026) — mesmo padrão já usado em ReportResult (WinLossDraw/
+	// Placement/Collective). O session não valida conteúdo (server
+	// autoritativo); repassado tal como chega aos sinks (achievements/
+	// analytics). Nil/vazio = data plane antigo (compat total).
+	Stats map[string]int64
 }
 
 // TeamAssignment é um lado da partida NvN: um rótulo estável no match e seus

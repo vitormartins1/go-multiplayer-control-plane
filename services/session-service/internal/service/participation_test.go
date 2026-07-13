@@ -46,6 +46,21 @@ func TestReportParticipation_Joined_PublicaSemMexerNoSlot(t *testing.T) {
 	part.AssertCalled(t, "PublishParticipation", mock.Anything, "game-1", sid, mock.Anything, mock.Anything)
 }
 
+// TestReportParticipation_Stats_PassamSemAlteracao (spec 026): mesmo padrão
+// dos outros 3 kinds — o service repassa Stats tal como chega, sem validar.
+func TestReportParticipation_Stats_PassamSemAlteracao(t *testing.T) {
+	svc, _, part, sid := participationSetup(t)
+	_, _, err := svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err)
+
+	e := evt("coop-1", domain.RoleCoop, domain.EventBossDefeated, domain.OutcomeSuccess)
+	e.Stats = map[string]int64{"kills": 3}
+	require.NoError(t, svc.ReportParticipationEvent(context.Background(), sid, e))
+
+	part.AssertCalled(t, "PublishParticipation", mock.Anything, "game-1", sid, mock.Anything,
+		domain.ParticipationEvent{PlayerID: "coop-1", Role: domain.RoleCoop, Event: domain.EventBossDefeated, Outcome: domain.OutcomeSuccess, Stats: map[string]int64{"kills": 3}})
+}
+
 func TestReportParticipation_BossDefeated_NaoMexeNoSlot(t *testing.T) {
 	svc, _, _, sid := participationSetup(t)
 	_, _, err := svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
