@@ -4,7 +4,36 @@ Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fi
 
 > **Trilha de serviços do control plane: 100% construída e validada — os 4 arquétipos ponta a ponta, motor de achievements/event-rules maduro, Analytics com gráficos.** O que falta de verdade agora é **fora deste repo** (data planes Unity) ou **infra real** (AWS). Ver "Estado desde 2026-07-08" logo abaixo pro que mudou nas últimas sessões.
 
-## Estado desde 2026-07-12 (o que este doc ainda não registrava)
+## Estado desde 2026-07-13 (o que este doc ainda não registrava)
+
+**Analytics Fase 2/3 — FEITO, 5 specs, 2026-07-13 (item 6 do backlog, escopo completo aprovado pelo Vitor):**
+
+- **Achado no meio do caminho, fechado primeiro:** ao especificar captura de
+  stats, descobrimos que `achievements/018` ("implementada") só tinha
+  fechado o lado de RECEBER stats no `host_world_dropin` — o session-service
+  nunca enviava o campo (proto/domínio/envelope sem `stats`). Nenhum
+  achievement por stat de HWD jamais disparou de verdade, silenciosamente.
+  Fechado por `session-service/026-participation-event-stats`: `stats
+  map<string,int64>` em `ReportParticipationEvent`, mesmo padrão dos outros
+  3 kinds. Validado ao vivo: `deaths_1` desbloqueou de verdade pela primeira
+  vez (jogo "Achievements Test"). Doc do contrato HWD corrigido (a linha do
+  checklist Unity estava incorreta/otimista).
+- **`analytics-service/010`**: série "por dia" pros 3 arquétipos que só
+  tinham rollup cumulativo (battle_royale/coop_mission/host_world_dropin) —
+  3 tabelas novas, já com `mode_id`.
+- **`analytics-service/011`**: captura de stats brutos por jogador (os 4
+  kinds do fan-out, incluindo HWD depois da 026) — tabela nova
+  `game_player_stats`, resumo agregado (soma/contagem/média) no endpoint.
+- **`admin-bff/024`**: passthrough dos campos novos, sem rota nova.
+- **`admin-ui/062`**: dashboard configurável por widget na aba Analytics —
+  `react-grid-layout` (API v1 clássica via `/legacy`, escolhida sobre a v2
+  hooks-based por familiaridade/menor risco), drag/resize/reorder/esconder,
+  persistido em `localStorage` por jogo (client-only, decisão deliberada).
+  Validado em browser real via Playwright ad-hoc.
+- Todas as 5 specs mergeadas na `main` (commits `--no-ff` por fatia),
+  validadas ao vivo (grpcurl + curl + browser), 1062 testes Go verdes.
+
+## Estado desde 2026-07-12
 
 **`session/025-session-history` — FEITO, Fatias 1-4, 2026-07-13:** o histórico
 de sessões fechadas do session-service agora é persistido em Postgres próprio
@@ -21,7 +50,7 @@ enriquece com handle (specs admin-bff/023, admin-ui/061). admin-ui: aba
 participantes por sessão; aba Sessions do jogo trocou a fonte das fechadas
 para o store persistido com botão "Carregar mais". Critério 4 da spec (coop
 morto aparece com `role=coop` no histórico) validado ao vivo em dois jogos.
-Branch `feat/session/025-session-history`, ainda não commitado/mergeado.
+Mergeado na `main` (branch `feat/session/025-session-history`, 4 commits).
 
 ## Estado desde 2026-07-08
 
@@ -124,7 +153,7 @@ Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-
 3. **Infra / deploy — payoff da tese (ADR-0008).** Falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005 — hoje só decidido "diferido"). É a medição de custo/performance vs AWS GameKit que a tese promete; ainda não começou.
 4. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR antes de implementar.
 5. **SQS queue depth no Grafana** (observabilidade futura): precisa de `yet-another-cloudwatch-exporter` (YACE) — só faz sentido quando houver AWS real (item 2).
-6. **Analytics Fase 2/3** (gated por evidência): série temporal pros outros 3 arquétipos (schema novo, mesma lacuna de `mode_id` que a spec 009 já fechou só pra participações); captura de `stats` brutos (kills/deaths) no analytics-service; dashboard configurável por widget.
+6. ~~**Analytics Fase 2/3**~~ ✅ **FEITO (2026-07-13)** — ver "Estado desde 2026-07-13" acima.
 7. **V2c do motor de regras** (prioridade/exclusividade first-match-wins) — gated por evidência.
 8. **As duas limitações do motor de achievements** achadas no estresse-teste (janela de tempo intra-partida; streak entre partidas) — sem plano de ação ainda, só documentadas.
 9. **Fatia 2 da ADR-0029** (registry de imagem por jogo + CI/GHCR) — gated por evidência (2º arquétipo real em produção, ou outro dev precisando mexer sem acesso ao cluster).
