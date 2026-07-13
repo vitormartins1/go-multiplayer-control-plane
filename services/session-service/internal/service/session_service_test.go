@@ -82,6 +82,12 @@ func (m *mockParticipation) PublishParticipation(ctx context.Context, gameID, se
 	return m.Called(ctx, gameID, sessionID, modeID, evt).Error(0)
 }
 
+type mockSessionClosedPublisher struct{ mock.Mock }
+
+func (m *mockSessionClosedPublisher) PublishSessionClosed(ctx context.Context, sess *domain.Session) error {
+	return m.Called(ctx, sess).Error(0)
+}
+
 // wldOutcome monta um MatchOutcome win_loss_draw com os jogadores dados.
 func wldOutcome(players ...domain.PlayerOutcome) domain.MatchOutcome {
 	return domain.MatchOutcome{Kind: domain.OutcomeWinLossDraw, WinLossDraw: &domain.WinLossDrawResult{Players: players}}
@@ -561,6 +567,67 @@ func TestCloseByAdmin_Inexistente_ErrSessionNotFound(t *testing.T) {
 	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
 	_, err := svc.CloseByAdmin(context.Background(), "nao-existe")
 	assert.ErrorIs(t, err, domain.ErrSessionNotFound)
+}
+
+// TestCloseByAdmin_PublicaSessionClosed (spec 028): closeSession publica o
+// fechamento no fan-out quando o publisher está configurado.
+func TestCloseByAdmin_PublicaSessionClosed(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	scp := &mockSessionClosedPublisher{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "a"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+	scp.On("PublishSessionClosed", mock.Anything, mock.MatchedBy(func(sess *domain.Session) bool {
+		return sess.GameID == "g1" && sess.CloseReason == domain.CloseAdmin
+	})).Return(nil)
+
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}), WithSessionClosedPublisher(scp))
+	_, _, err := svc.Create(context.Background(), "m1", "g1", "default", ffaTeams("p1"))
+	require.NoError(t, err)
+
+	_, err = svc.CloseByAdmin(context.Background(), "m1")
+	require.NoError(t, err)
+	scp.AssertExpectations(t)
+}
+
+// TestCloseByAdmin_SemSessionClosedPublisher_NaoQuebra: sem a option
+// configurada (nil), closeSession funciona normalmente.
+func TestCloseByAdmin_SemSessionClosedPublisher_NaoQuebra(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "a"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}))
+	_, _, err := svc.Create(context.Background(), "m1", "g1", "default", ffaTeams("p1"))
+	require.NoError(t, err)
+
+	_, err = svc.CloseByAdmin(context.Background(), "m1")
+	require.NoError(t, err)
+}
+
+// TestCloseByAdmin_PublishSessionClosedFalha_NaoImpedeFechamento: falha ao
+// publicar não desfaz o fechamento (best-effort, mesma filosofia de
+// persistHistory).
+func TestCloseByAdmin_PublishSessionClosedFalha_NaoImpedeFechamento(t *testing.T) {
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	scp := &mockSessionClosedPublisher{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "a"}, nil)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(nil)
+	scp.On("PublishSessionClosed", mock.Anything, mock.Anything).Return(assert.AnError)
+
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(stubProfiles{}), WithSessionClosedPublisher(scp))
+	_, _, err := svc.Create(context.Background(), "m1", "g1", "default", ffaTeams("p1"))
+	require.NoError(t, err)
+
+	sess, err := svc.CloseByAdmin(context.Background(), "m1")
+	require.NoError(t, err, "publish falhar não pode impedir o fechamento")
+	assert.Equal(t, domain.CloseAdmin, sess.CloseReason)
+	assert.Equal(t, float64(1), svc.SessionClosedPublishFailures())
 }
 
 func TestAllSessions_JogosDistintos_VemJuntas(t *testing.T) {

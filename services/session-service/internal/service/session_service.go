@@ -58,6 +58,12 @@ type Service struct {
 	// sem erro, o ring in-memory continua sendo a única fonte.
 	historyStore           domain.HistoryStore
 	historyPersistFailures float64
+
+	// sessionClosedPublisher alimenta o "session health" do analytics-service
+	// (spec 028). nil = sem fan-out configurado — closeSession pula a
+	// publicação sem erro (mesmo espírito do historyStore).
+	sessionClosedPublisher       domain.SessionClosedPublisher
+	sessionClosedPublishFailures float64
 }
 
 // Option configura o Service na construção (só testes precisam disso).
@@ -104,6 +110,14 @@ func WithProfileProvider(p domain.ProfileProvider) Option {
 // host_world sem fan-out configurado é bug de wire-up).
 func WithParticipationPublisher(p domain.ParticipationPublisher) Option {
 	return func(s *Service) { s.participation = p }
+}
+
+// WithSessionClosedPublisher liga o fan-out do fechamento de sessão (spec
+// 028, session health do analytics-service). Sem esta option
+// (sessionClosedPublisher nil), closeSession não publica nada além do que
+// já publicava — dev sem esse adapter configurado segue funcionando.
+func WithSessionClosedPublisher(p domain.SessionClosedPublisher) Option {
+	return func(s *Service) { s.sessionClosedPublisher = p }
 }
 
 // WithServerRegistry liga a reconciliação de órfãs (spec 008): o sweeper passa a
@@ -506,6 +520,9 @@ func (s *Service) closeSession(ctx context.Context, sessionID string, reason dom
 	// ativas; o registro do que aconteceu não deve depender de o server ter
 	// sido devolvido ao pool com sucesso.
 	s.persistHistory(ctx, sess)
+	// publica o fechamento no fan-out (spec 028) — alimenta o session health
+	// do analytics-service. Mesmo espírito best-effort do persistHistory.
+	s.publishSessionClosed(ctx, sess)
 	if releaseErr != nil {
 		return sess, fmt.Errorf("release: %w", releaseErr)
 	}
@@ -535,6 +552,32 @@ func (s *Service) HistoryPersistFailures() float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.historyPersistFailures
+}
+
+// publishSessionClosed publica o fechamento no fan-out, best-effort (spec
+// 028): falha só loga + incrementa a métrica
+// session_closed_publish_failures_total, nunca propaga — o fechamento da
+// sessão não pode depender de um destino externo (mesma filosofia de
+// persistHistory). No-op se nenhum SessionClosedPublisher foi configurado.
+func (s *Service) publishSessionClosed(ctx context.Context, sess *domain.Session) {
+	if s.sessionClosedPublisher == nil {
+		return
+	}
+	if err := s.sessionClosedPublisher.PublishSessionClosed(ctx, sess); err != nil {
+		s.mu.Lock()
+		s.sessionClosedPublishFailures++
+		s.mu.Unlock()
+		s.log.Error("session closed: falha ao publicar no fan-out", "sessionId", sess.ID, "gameId", sess.GameID, "err", err)
+	}
+}
+
+// SessionClosedPublishFailures devolve o total de falhas ao publicar o
+// fechamento (métrica session_closed_publish_failures_total — CounterFunc
+// no main).
+func (s *Service) SessionClosedPublishFailures() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessionClosedPublishFailures
 }
 
 // Sweep fecha (CLOSED/ttl) as sessões abertas há mais que ttl e devolve

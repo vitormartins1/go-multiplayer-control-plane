@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/stretchr/testify/assert"
@@ -243,6 +244,51 @@ func TestSNSPublish_Collective_EnvelopeDiscriminadoPorKind(t *testing.T) {
 	assert.NotContains(t, raw, "entries")
 	assert.Contains(t, raw, "players")
 	assert.Contains(t, raw, "outcome")
+}
+
+// TestSNSPublishSessionClosed_EnvelopeCorreto (spec 028): kind, sessionId,
+// archetype, closeReason e timestamps corretos.
+func TestSNSPublishSessionClosed_EnvelopeCorreto(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	opened := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	closed := opened.Add(6 * time.Minute)
+	sess := &domain.Session{
+		ID: "s1", GameID: "game-1", ModeID: "mundo-vivo",
+		Profile:     &domain.ProfileSnapshot{Archetype: domain.ArchetypeHostWorldDropIn},
+		CloseReason: domain.CloseHostLeft,
+		OpenedAt:    opened, ClosedAt: closed,
+	}
+	require.NoError(t, p.PublishSessionClosed(context.Background(), sess))
+
+	require.NotNil(t, fake.in)
+	assert.Equal(t, "arn:aws:sns:local:match-results", *fake.in.TopicArn, "mesmo tópico dos demais kinds")
+
+	var got sessionClosedEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, envelopeVersion, got.SchemaVersion)
+	assert.Equal(t, kindSessionClosed, got.Kind)
+	assert.Equal(t, "s1", got.SessionID)
+	assert.Equal(t, "game-1", got.GameID)
+	assert.Equal(t, "mundo-vivo", got.ModeID)
+	assert.Equal(t, domain.ArchetypeHostWorldDropIn, got.Archetype)
+	assert.Equal(t, "host_left", got.CloseReason)
+	assert.Equal(t, opened.Format(time.RFC3339), got.OpenedAt)
+	assert.Equal(t, closed.Format(time.RFC3339), got.ClosedAt)
+}
+
+func TestSNSPublishSessionClosed_SemProfile_ArchetypeVazio(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}
+
+	sess := &domain.Session{ID: "s1", GameID: "game-1", CloseReason: domain.CloseTTL}
+	require.NoError(t, p.PublishSessionClosed(context.Background(), sess))
+
+	var got sessionClosedEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Empty(t, got.Archetype)
+	assert.Equal(t, "ttl", got.CloseReason)
 }
 
 // win_loss_draw segue intacto após o dispatch por kind (sem regressão).

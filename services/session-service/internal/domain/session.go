@@ -501,3 +501,11 @@ type ResultPublisher interface {
 type ParticipationPublisher interface {
 	PublishParticipation(ctx context.Context, gameID, sessionID, modeID string, evt ParticipationEvent) error
 }
+
+// SessionClosedPublisher é a Port de saída do fan-out do fechamento de
+// sessão (spec 028) — alimenta o "session health" do analytics-service.
+// Publica no MESMO tópico match-results, kind=session_closed. Best-effort:
+// closeSession não falha se isso falhar (mesma filosofia de HistoryStore).
+type SessionClosedPublisher interface {
+	PublishSessionClosed(ctx context.Context, sess *Session) error
+}

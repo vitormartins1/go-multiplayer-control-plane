@@ -116,6 +116,7 @@ func run(log *slog.Logger) error {
 	svc := service.New(alloc, issuer, pub,
 		service.WithProfileProvider(buildProfileProvider(log)), // snapshot do modo (specs 011/017)
 		service.WithParticipationPublisher(pub),                // eventos de participação (spec 013)
+		service.WithSessionClosedPublisher(pub),                // session health do analytics (spec 028)
 		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)),
 		service.WithHistoryStore(historyStore), // persistência de fechadas (spec 025)
 		service.WithLogger(log),
@@ -169,6 +170,12 @@ func run(log *slog.Logger) error {
 			Name: "session_history_persist_failures_total",
 			Help: "Falhas ao persistir sessão fechada no histórico (Postgres indisponível).",
 		}, svc.HistoryPersistFailures),
+		// falhas ao publicar o fechamento no fan-out (spec 028, session health
+		// do analytics-service) — mesmo espírito best-effort da métrica acima.
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "session_closed_publish_failures_total",
+			Help: "Falhas ao publicar o fechamento de sessão no fan-out (SNS indisponível).",
+		}, svc.SessionClosedPublishFailures),
 	)
 
 	grpcSrv := grpc.NewServer(
@@ -370,12 +377,14 @@ func serverPool() []string {
 	return out
 }
 
-// fanoutPublisher junta as duas Ports do fan-out (win_loss_draw e participation);
-// os adapters SNS e Log satisfazem as duas, então um valor só é passado como
-// ResultPublisher (posicional) e ParticipationPublisher (option) no wire-up.
+// fanoutPublisher junta as três Ports do fan-out (win_loss_draw, participation
+// e session_closed, spec 028); os adapters SNS e Log satisfazem as três,
+// então um valor só é passado como ResultPublisher (posicional) e
+// ParticipationPublisher/SessionClosedPublisher (options) no wire-up.
 type fanoutPublisher interface {
 	domain.ResultPublisher
 	domain.ParticipationPublisher
+	domain.SessionClosedPublisher
 }
 
 // buildPublisher escolhe o adapter do fan-out: SNS (publica no tópico

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
@@ -24,6 +25,7 @@ var publishTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 var (
 	_ domain.ResultPublisher        = (*SNS)(nil)
 	_ domain.ParticipationPublisher = (*SNS)(nil)
+	_ domain.SessionClosedPublisher = (*SNS)(nil)
 )
 
 // kindParticipationEvent é o discriminador do envelope de participação (spec 013,
@@ -37,6 +39,11 @@ const kindPlacement = "placement"
 // kindCollective é o discriminador do envelope de resultado coletivo
 // (coop_mission, C2): mesmo tópico match-results, kind distinto dos demais.
 const kindCollective = "collective"
+
+// kindSessionClosed é o discriminador do envelope de fechamento de sessão
+// (spec 028) — session health do analytics-service. Mesmo tópico
+// match-results, único kind pra todo arquétipo/motivo de fechamento.
+const kindSessionClosed = "session_closed"
 
 // envelopeVersion é a versão do schema da mensagem publicada no tópico. Os
 // consumidores ignoram campos desconhecidos; bumps de major viram um novo campo.
@@ -125,6 +132,25 @@ type collectivePlayerDTO struct {
 	PlayerID string           `json:"playerId"`
 	TeamID   string           `json:"teamId,omitempty"`
 	Stats    map[string]int64 `json:"stats,omitempty"`
+}
+
+// sessionClosedEnvelope é o envelope do fechamento de sessão (spec 028) no
+// mesmo tópico match-results. Único kind pra todo arquétipo/motivo — o
+// dado publicado (duração, motivo) tem o MESMO shape em todos, diferente
+// de win_loss_draw/placement/collective (polimórficos pelo resultado).
+type sessionClosedEnvelope struct {
+	SchemaVersion int    `json:"schemaVersion"`
+	Kind          string `json:"kind"`
+	SessionID     string `json:"sessionId"`
+	GameID        string `json:"gameId"`
+	ModeID        string `json:"modeId,omitempty"`
+	// Archetype vai no envelope (diferente dos outros kinds) porque
+	// kind=session_closed sozinho não diferencia arquétipo — o
+	// analytics-service precisa dessa dimensão pra agrupar/exibir.
+	Archetype   string `json:"archetype,omitempty"`
+	CloseReason string `json:"closeReason"`
+	OpenedAt    string `json:"openedAt"` // RFC3339
+	ClosedAt    string `json:"closedAt"` // RFC3339
 }
 
 // snsClient é a fração da API do SNS que usamos (permite fake em teste).
@@ -325,6 +351,41 @@ func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID, modeI
 		slog.String("role", evt.Role),
 		slog.String("event", evt.Event),
 		slog.String("outcome", evt.Outcome),
+	)
+	return nil
+}
+
+// PublishSessionClosed serializa o envelope session_closed e o publica no
+// mesmo tópico match-results (spec 028) — session health do
+// analytics-service. Falha propaga; o chamador (closeSession) trata como
+// best-effort e não desfaz o fechamento.
+func (s *SNS) PublishSessionClosed(ctx context.Context, sess *domain.Session) error {
+	var archetype string
+	if sess.Profile != nil {
+		archetype = sess.Profile.Archetype
+	}
+	env := sessionClosedEnvelope{
+		SchemaVersion: envelopeVersion,
+		Kind:          kindSessionClosed,
+		SessionID:     sess.ID,
+		GameID:        sess.GameID,
+		ModeID:        sess.ModeID,
+		Archetype:     archetype,
+		CloseReason:   string(sess.CloseReason),
+		OpenedAt:      sess.OpenedAt.Format(time.RFC3339),
+		ClosedAt:      sess.ClosedAt.Format(time.RFC3339),
+	}
+	body, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("session publisher: marshal session closed envelope: %w", err)
+	}
+	if err := s.publish(ctx, body); err != nil {
+		return err
+	}
+	s.log.Info("session closed publicado no tópico",
+		slog.String("game_id", sess.GameID),
+		slog.String("session_id", sess.ID),
+		slog.String("close_reason", string(sess.CloseReason)),
 	)
 	return nil
 }
