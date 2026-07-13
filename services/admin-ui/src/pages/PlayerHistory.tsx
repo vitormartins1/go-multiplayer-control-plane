@@ -6,6 +6,7 @@ import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration } from "../lib/format";
 import { PlayersSummary } from "../components/PlayersSummary";
+import { ParticipantOutcomeBadge } from "../components/SessionMatchDetail";
 
 const PAGE = 20;
 
@@ -108,7 +109,7 @@ export function PlayerHistory({ playerId, gameId }: { playerId: string; gameId: 
 }
 
 function PlayerHistoryRow({ session: s, playerId }: { session: GameSession; playerId: string }) {
-  const role = s.participants?.find((p) => p.playerId === playerId)?.role;
+  const participant = s.participants?.find((p) => p.playerId === playerId);
   const duration = s.closedAt ? formatDuration(Date.parse(s.closedAt) - Date.parse(s.openedAt)) : "?";
   return (
     <Table.Tr>
@@ -119,7 +120,10 @@ function PlayerHistoryRow({ session: s, playerId }: { session: GameSession; play
         <Text size="sm">{s.modeId || "default"}</Text>
       </Table.Td>
       <Table.Td>
-        <Text size="sm">{role || "—"}</Text>
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm">{participant?.role || "—"}</Text>
+          <ParticipantOutcomeBadge participant={participant} />
+        </Group>
       </Table.Td>
       <Table.Td>
         <Text size="sm">{closeReasonLabel(s.closeReason)}</Text>
