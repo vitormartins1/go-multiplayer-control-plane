@@ -1,10 +1,29 @@
-# NEXT-STEPS — handoff (atualizado 2026-07-12)
+# NEXT-STEPS — handoff (atualizado 2026-07-13)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
 > **Trilha de serviços do control plane: 100% construída e validada — os 4 arquétipos ponta a ponta, motor de achievements/event-rules maduro, Analytics com gráficos.** O que falta de verdade agora é **fora deste repo** (data planes Unity) ou **infra real** (AWS). Ver "Estado desde 2026-07-08" logo abaixo pro que mudou nas últimas sessões.
 
-## Estado desde 2026-07-08 (o que este doc ainda não registrava)
+## Estado desde 2026-07-12 (o que este doc ainda não registrava)
+
+**`session/025-session-history` — FEITO, Fatias 1-4, 2026-07-13:** o histórico
+de sessões fechadas do session-service agora é persistido em Postgres próprio
+(`session-postgres` + exporter no compose), sobrevive a restart do serviço —
+validado ao vivo (restart real, sessão fechada seguiu acessível). `Session`
+ganhou `Participants []Participant{PlayerID, Role, JoinedAt}` (dedupe na
+re-entrada; papel atualizado quando muda), acumulado em `Create`/`OpenWorld`/
+`JoinWorld`. Dois endpoints novos no session-service (`GET .../sessions?
+state=closed&limit=&before=` — mesma rota, mudou de fonte; `GET /admin/players
+/{id}/sessions?gameId=`), paginados por cursor (`nextBefore`), com fallback
+503 `history_unavailable` se o Postgres do histórico cair. admin-bff repassa +
+enriquece com handle (specs admin-bff/023, admin-ui/061). admin-ui: aba
+**History** nova no PlayerDetail (após Achievements) com papel/motivo/duração/
+participantes por sessão; aba Sessions do jogo trocou a fonte das fechadas
+para o store persistido com botão "Carregar mais". Critério 4 da spec (coop
+morto aparece com `role=coop` no histórico) validado ao vivo em dois jogos.
+Branch `feat/session/025-session-history`, ainda não commitado/mergeado.
+
+## Estado desde 2026-07-08
 
 **Fix do achado da bateria real do host_world_dropin + spec de histórico de sessão (2026-07-12):**
 
@@ -100,7 +119,7 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 
 Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Itens concluídos desde a última revisão deste doc foram removidos da lista (ficam registrados no histórico de commits e nas seções acima); ordem sugerida do que resta:
 
-1. **Histórico de sessão — spec PRONTA (`session/025-session-history`, Proposed):** persistência das fechadas + aba History do player + Sessions do jogo. É a resposta estrutural aos dois achados da bateria de 2026-07-12 (salas in-memory somem no restart; participação por player não existe em lugar nenhum). Fatias 1-4 no `tasks.md` da spec.
+1. ~~**Histórico de sessão**~~ ✅ **FEITO (2026-07-13)** — ver "Estado desde 2026-07-12" acima.
 2. **Cross-repo Unity — em andamento, maior frente ativa.** `unity-queue-arena-data-plane` (Fases 0–7) e `unity-host-world-dropin-data-plane` (Fases 0–4 done, ver "Estado desde 2026-07-08" acima) têm data plane real; falta a **Fase 5** (e2e orquestrado k3d→Pi 5 + Fleet própria) do segundo — agora mais simples de bootstrapar graças à ADR-0029 (infra Agones centralizada) — e `battle_royale`/`coop_mission` ainda não têm repo (contrato pronto, zero código Unity).
 3. **Infra / deploy — payoff da tese (ADR-0008).** Falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005 — hoje só decidido "diferido"). É a medição de custo/performance vs AWS GameKit que a tese promete; ainda não começou.
 4. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR antes de implementar.
