@@ -100,6 +100,35 @@ func TestGameAnalytics_QueueArena_RoleParticipationsVazio(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"roleParticipations":[]`, "campo aditivo, vazio no queue_arena")
+	assert.Contains(t, rec.Body.String(), `"placementDaily":[]`, "campo aditivo, vazio fora do BR")
+	assert.Contains(t, rec.Body.String(), `"missionDaily":[]`, "campo aditivo, vazio fora do coop")
+	assert.Contains(t, rec.Body.String(), `"participationDaily":[]`, "campo aditivo, vazio fora do HWD")
+}
+
+// séries diárias novas (spec 010): expostas no DTO, uma por arquétipo.
+func TestGameAnalytics_200_ExpoeSeriesDiariasNovas(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{
+		GameStat:           domain.GameStat{GameID: "g1"},
+		PlacementDaily:     []domain.DailyPoint{{Day: "2026-07-13", Matches: 3}},
+		MissionDaily:       []domain.DailyPoint{{Day: "2026-07-13", Matches: 1}},
+		ParticipationDaily: []domain.DailyPoint{{Day: "2026-07-13", Matches: 42}},
+	}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		PlacementDaily     []struct{ Matches int64 } `json:"placementDaily"`
+		MissionDaily       []struct{ Matches int64 } `json:"missionDaily"`
+		ParticipationDaily []struct{ Matches int64 } `json:"participationDaily"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.PlacementDaily, 1)
+	assert.Equal(t, int64(3), body.PlacementDaily[0].Matches)
+	require.Len(t, body.MissionDaily, 1)
+	assert.Equal(t, int64(1), body.MissionDaily[0].Matches)
+	require.Len(t, body.ParticipationDaily, 1)
+	assert.Equal(t, int64(42), body.ParticipationDaily[0].Matches)
 }
 
 // modeId (ADR-0024, spec 009): o DTO expõe o modo de cada linha de participação,

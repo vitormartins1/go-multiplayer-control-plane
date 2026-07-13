@@ -166,11 +166,13 @@ func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
 }
 
 // parsePlacement desserializa o envelope placement (battle_royale, session/015).
-// O analytics só agrega colocação + sobrevivência (ignora playerId/teamId/stats).
+// O analytics agrega colocação + sobrevivência + série diária por modo (spec
+// 010); ignora playerId/teamId/stats.
 func parsePlacement(body []byte) (domain.PlacementResult, error) {
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
+		ModeID  string `json:"modeId"`
 		Entries []struct {
 			Placement  int   `json:"placement"`
 			SurvivedMs int64 `json:"survivedMs"`
@@ -179,7 +181,7 @@ func parsePlacement(body []byte) (domain.PlacementResult, error) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		return domain.PlacementResult{}, fmt.Errorf("unmarshal placement: %w", err)
 	}
-	pr := domain.PlacementResult{MatchID: env.MatchID, GameID: env.GameID}
+	pr := domain.PlacementResult{MatchID: env.MatchID, GameID: env.GameID, ModeID: env.ModeID}
 	for _, e := range env.Entries {
 		pr.Entries = append(pr.Entries, domain.PlacementEntry{Placement: e.Placement, SurvivedMs: e.SurvivedMs})
 	}
@@ -187,17 +189,19 @@ func parsePlacement(body []byte) (domain.PlacementResult, error) {
 }
 
 // parseCollective desserializa o envelope collective (coop_mission, session/016).
-// O analytics só agrega o desfecho da SESSÃO (ignora players/stats).
+// O analytics agrega o desfecho da SESSÃO + série diária por modo (spec 010);
+// ignora players/stats.
 func parseCollective(body []byte) (domain.CollectiveResult, error) {
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
+		ModeID  string `json:"modeId"`
 		Outcome string `json:"outcome"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		return domain.CollectiveResult{}, fmt.Errorf("unmarshal collective: %w", err)
 	}
-	return domain.CollectiveResult{MatchID: env.MatchID, GameID: env.GameID, Outcome: env.Outcome}, nil
+	return domain.CollectiveResult{MatchID: env.MatchID, GameID: env.GameID, ModeID: env.ModeID, Outcome: env.Outcome}, nil
 }
 
 // parse desserializa o envelope do fan-out (struct próprio, desacoplado).

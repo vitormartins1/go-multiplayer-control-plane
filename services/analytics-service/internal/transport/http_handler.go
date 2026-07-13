@@ -83,6 +83,12 @@ type gameAnalyticsDTO struct {
 	RoleParticipations []participationStatDTO `json:"roleParticipations"`
 	Placement          *placementDTO          `json:"placement,omitempty"` // battle_royale (spec 005); ausente fora do BR
 	Mission            *missionDTO            `json:"mission,omitempty"`   // coop_mission (spec 006); ausente fora do coop
+
+	// Séries diárias dos 3 arquétipos que não tinham (spec 010) — vazias fora
+	// do arquétipo correspondente, mesmo padrão de Placement/Mission.
+	PlacementDaily     []dailyDTO `json:"placementDaily"`
+	MissionDaily       []dailyDTO `json:"missionDaily"`
+	ParticipationDaily []dailyDTO `json:"participationDaily"`
 }
 
 // placementDTO é a distribuição de colocação do battle_royale (spec 005).
@@ -131,9 +137,21 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
-	dto := gameAnalyticsDTO{gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{}}
+	dto := gameAnalyticsDTO{
+		gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{},
+		PlacementDaily: []dailyDTO{}, MissionDaily: []dailyDTO{}, ParticipationDaily: []dailyDTO{},
+	}
 	for _, d := range ga.Daily {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
+	}
+	for _, d := range ga.PlacementDaily {
+		dto.PlacementDaily = append(dto.PlacementDaily, dailyDTO{Day: d.Day, Matches: d.Matches})
+	}
+	for _, d := range ga.MissionDaily {
+		dto.MissionDaily = append(dto.MissionDaily, dailyDTO{Day: d.Day, Matches: d.Matches})
+	}
+	for _, d := range ga.ParticipationDaily {
+		dto.ParticipationDaily = append(dto.ParticipationDaily, dailyDTO{Day: d.Day, Matches: d.Matches})
 	}
 	for _, p := range ga.RoleParticipations {
 		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{ModeID: p.ModeID, Role: p.Role, Event: p.Event, Outcome: p.Outcome, Count: p.Count})

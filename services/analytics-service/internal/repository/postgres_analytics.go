@@ -116,6 +116,16 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 		evt.GameID, evt.ModeID, evt.Role, evt.Event, evt.Outcome); err != nil {
 		return false, fmt.Errorf("analytics repository: apply participation: rollup: %w", err)
 	}
+
+	// série diária por modo (spec 010): host_world_dropin não tem "partida"
+	// terminal — a atividade é medida em EVENTOS de participação.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_participation_daily (game_id, mode_id, day, events)
+		VALUES ($1, $2, (now() AT TIME ZONE 'utc')::date, 1)
+		ON CONFLICT (game_id, mode_id, day) DO UPDATE SET events = game_participation_daily.events + 1`,
+		evt.GameID, evt.ModeID); err != nil {
+		return false, fmt.Errorf("analytics repository: apply participation: daily: %w", err)
+	}
 	return false, tx.Commit(ctx)
 }
 
@@ -166,6 +176,15 @@ func (r *PostgresRepository) ApplyPlacement(ctx context.Context, pr domain.Place
 		pr.GameID, winners, topN, rest, entries, sumSurvived); err != nil {
 		return false, fmt.Errorf("analytics repository: apply placement: rollup: %w", err)
 	}
+
+	// série diária por modo (spec 010).
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_placement_daily (game_id, mode_id, day, matches)
+		VALUES ($1, $2, (now() AT TIME ZONE 'utc')::date, 1)
+		ON CONFLICT (game_id, mode_id, day) DO UPDATE SET matches = game_placement_daily.matches + 1`,
+		pr.GameID, pr.ModeID); err != nil {
+		return false, fmt.Errorf("analytics repository: apply placement: daily: %w", err)
+	}
 	return false, tx.Commit(ctx)
 }
 
@@ -206,6 +225,15 @@ func (r *PostgresRepository) ApplyCollective(ctx context.Context, cr domain.Coll
 			failures  = game_mission_rollup.failures + $3`,
 		cr.GameID, successDelta, failureDelta); err != nil {
 		return false, fmt.Errorf("analytics repository: apply collective: rollup: %w", err)
+	}
+
+	// série diária por modo (spec 010).
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_mission_daily (game_id, mode_id, day, matches)
+		VALUES ($1, $2, (now() AT TIME ZONE 'utc')::date, 1)
+		ON CONFLICT (game_id, mode_id, day) DO UPDATE SET matches = game_mission_daily.matches + 1`,
+		cr.GameID, cr.ModeID); err != nil {
+		return false, fmt.Errorf("analytics repository: apply collective: daily: %w", err)
 	}
 	return false, tx.Commit(ctx)
 }
@@ -302,6 +330,22 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		return domain.GameAnalytics{}, err
 	}
 
+	// séries diárias dos 3 arquétipos que não tinham (spec 010) — Matches
+	// representa "events" em ParticipationDaily (host_world_dropin não tem
+	// partida terminal, ver plan.md da 010), reaproveitando o mesmo campo.
+	out.PlacementDaily, err = r.dailySeries(ctx, "game_placement_daily", "matches", gameID, days)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: placement daily: %w", err)
+	}
+	out.MissionDaily, err = r.dailySeries(ctx, "game_mission_daily", "matches", gameID, days)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: mission daily: %w", err)
+	}
+	out.ParticipationDaily, err = r.dailySeries(ctx, "game_participation_daily", "events", gameID, days)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: participation daily: %w", err)
+	}
+
 	// participações por papel/evento/outcome (host_world_dropin, spec 004/007).
 	// Aditivo: queue_arena não tem linhas aqui -> lista vazia.
 	prows, err := r.pool.Query(ctx, `
@@ -357,6 +401,30 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		out.Mission = &md
 	}
 	return out, nil
+}
+
+// dailySeries lê uma série diária somando entre modos (spec 010): table e
+// valueCol são identificadores FIXOS do código (nunca entrada do usuário) —
+// mesmo padrão de leitura de game_daily, generalizado pras 3 tabelas novas.
+func (r *PostgresRepository) dailySeries(ctx context.Context, table, valueCol, gameID string, days int) ([]domain.DailyPoint, error) {
+	q := fmt.Sprintf(`
+		SELECT to_char(day, 'YYYY-MM-DD'), SUM(%s) FROM %s
+		WHERE game_id = $1 AND day >= (now() AT TIME ZONE 'utc')::date - $2::int
+		GROUP BY day ORDER BY day`, valueCol, table)
+	rows, err := r.pool.Query(ctx, q, gameID, days)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", table, err)
+	}
+	defer rows.Close()
+	var out []domain.DailyPoint
+	for rows.Next() {
+		var d domain.DailyPoint
+		if err := rows.Scan(&d.Day, &d.Matches); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", table, err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
 // ratio devolve num/den (0 se den==0) — taxa de sucesso da missão no read.

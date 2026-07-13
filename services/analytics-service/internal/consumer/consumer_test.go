@@ -95,6 +95,36 @@ func TestParseCollective_LeDesfecho(t *testing.T) {
 	assert.Equal(t, domain.CollectiveResult{MatchID: "m1", GameID: "g1", Outcome: "MISSION_SUCCESS"}, cr)
 }
 
+// modeId (spec 010): mesma lacuna que a 009 fechou pra participação — o
+// envelope já publica, faltava ler aqui.
+func TestParsePlacement_LeModeID(t *testing.T) {
+	body := []byte(`{"kind":"placement","matchId":"m1","gameId":"g1","modeId":"batizado","entries":[{"placement":1,"survivedMs":900000}]}`)
+	pr, err := parsePlacement(body)
+	require.NoError(t, err)
+	assert.Equal(t, "batizado", pr.ModeID)
+}
+
+func TestParsePlacement_SemModeID_CaiEmVazio(t *testing.T) {
+	body := []byte(`{"kind":"placement","matchId":"m1","gameId":"g1","entries":[{"placement":1,"survivedMs":900000}]}`)
+	pr, err := parsePlacement(body)
+	require.NoError(t, err)
+	assert.Empty(t, pr.ModeID, "envelope antigo: bucket 'sem modo'")
+}
+
+func TestParseCollective_LeModeID(t *testing.T) {
+	body := []byte(`{"kind":"collective","matchId":"m1","gameId":"g1","modeId":"batizado","outcome":"MISSION_SUCCESS"}`)
+	cr, err := parseCollective(body)
+	require.NoError(t, err)
+	assert.Equal(t, "batizado", cr.ModeID)
+}
+
+func TestParseCollective_SemModeID_CaiEmVazio(t *testing.T) {
+	body := []byte(`{"kind":"collective","matchId":"m1","gameId":"g1","outcome":"MISSION_SUCCESS"}`)
+	cr, err := parseCollective(body)
+	require.NoError(t, err)
+	assert.Empty(t, cr.ModeID, "envelope antigo: bucket 'sem modo'")
+}
+
 // Envelope v1 legado (sem outcome): deriva de won (win/loss), sem empate.
 func TestParse_EnvelopeV1_FallbackPorWon(t *testing.T) {
 	body := []byte(`{

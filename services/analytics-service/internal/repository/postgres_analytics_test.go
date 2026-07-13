@@ -34,6 +34,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/005_mission_rollup.sql",
 			"../../migrations/006_participation_event_id_and_outcome.sql",
 			"../../migrations/007_participation_mode_id.sql",
+			"../../migrations/008_archetype_daily.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -103,6 +104,24 @@ func TestApplyPlacement_AgregaHistogramaESobrevivencia(t *testing.T) {
 	assert.InDelta(t, 6500.0, ga.Placement.AvgSurvivedMs, 0.001)
 }
 
+// série diária por modo (spec 010) — battle_royale não tinha antes.
+func TestApplyPlacement_GravaSerieDiaria(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	pr := placement("m1", "g1", domain.PlacementEntry{Placement: 1, SurvivedMs: 500})
+	pr.ModeID = "batizado"
+	_, err := repo.ApplyPlacement(ctx, pr)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.PlacementDaily, 1)
+	assert.Equal(t, int64(1), ga.PlacementDaily[0].Matches)
+	assert.Empty(t, ga.MissionDaily, "sem missão -> vazio")
+	assert.Empty(t, ga.ParticipationDaily, "sem participação -> vazio")
+}
+
 func TestApplyPlacement_Reprocessado_NaoDobra(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
@@ -121,6 +140,8 @@ func TestApplyPlacement_Reprocessado_NaoDobra(t *testing.T) {
 	assert.Equal(t, int64(2), ga.Placement.Entries, "reentrega não dobra")
 	assert.Equal(t, int64(1), ga.Placement.Winners)
 	assert.Equal(t, int64(1), ga.Placement.TopN)
+	require.Len(t, ga.PlacementDaily, 1)
+	assert.Equal(t, int64(1), ga.PlacementDaily[0].Matches, "reentrega não dobra a série diária")
 }
 
 // Jogo sem placement (só queue_arena) não tem distribuição — Placement nil.
@@ -134,6 +155,9 @@ func TestGameAnalytics_SemPlacement_PlacementNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, ga.Placement, "jogo não-BR não regride")
 	assert.Nil(t, ga.Mission, "jogo não-coop não regride")
+	assert.Empty(t, ga.PlacementDaily)
+	assert.Empty(t, ga.MissionDaily)
+	assert.Empty(t, ga.ParticipationDaily)
 }
 
 // coop_mission (C3): sucessos/falhas agregam por jogo; successRate derivado.
@@ -172,6 +196,22 @@ func TestApplyCollective_Reprocessado_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ga.Mission)
 	assert.Equal(t, int64(1), ga.Mission.Successes, "reentrega não dobra")
+	require.Len(t, ga.MissionDaily, 1)
+	assert.Equal(t, int64(1), ga.MissionDaily[0].Matches, "reentrega não dobra a série diária")
+}
+
+// série diária por modo (spec 010) — coop_mission não tinha antes.
+func TestApplyCollective_GravaSerieDiaria(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	_, err := repo.ApplyCollective(ctx, domain.CollectiveResult{MatchID: "m1", GameID: "g1", ModeID: "default", Outcome: domain.MissionSuccess})
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.MissionDaily, 1)
+	assert.Equal(t, int64(1), ga.MissionDaily[0].Matches)
 }
 
 func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {
@@ -190,6 +230,25 @@ func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 1)
 	assert.Equal(t, int64(1), ga.RoleParticipations[0].Count, "reentrega não dobra")
+	require.Len(t, ga.ParticipationDaily, 1)
+	assert.Equal(t, int64(1), ga.ParticipationDaily[0].Matches, "reentrega não dobra a série diária")
+}
+
+// série diária por modo (spec 010) — host_world_dropin não tinha antes;
+// conta EVENTOS (não sessões), acumulando entre eventos distintos no dia.
+func TestApplyParticipation_GravaSerieDiaria(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	_, err := repo.ApplyParticipation(ctx, pevt("g1", "w1", "coop-1", "coop", "JOINED"))
+	require.NoError(t, err)
+	_, err = repo.ApplyParticipation(ctx, pevt("g1", "w1", "coop-1", "coop", "BOSS_DEFEATED"))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.ParticipationDaily, 1)
+	assert.Equal(t, int64(2), ga.ParticipationDaily[0].Matches, "2 eventos distintos no mesmo dia somam")
 }
 
 // Dois eventId diferentes (mesma sessão/jogador/evento) contam duas vezes —
