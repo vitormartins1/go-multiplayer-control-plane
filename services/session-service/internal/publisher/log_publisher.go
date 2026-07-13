@@ -14,6 +14,7 @@ import (
 var (
 	_ domain.ResultPublisher        = (*Log)(nil)
 	_ domain.ParticipationPublisher = (*Log)(nil)
+	_ domain.SessionClosedPublisher = (*Log)(nil)
 )
 
 // Log é o ResultPublisher de fallback: registra o resultado em vez de publicar
@@ -94,6 +95,23 @@ func (l *Log) PublishParticipation(_ context.Context, gameID, sessionID, modeID 
 		slog.String("outcome", evt.Outcome),
 		slog.String("event_id", evt.EventID),
 		slog.Any("stats", evt.Stats),
+	)
+	return nil
+}
+
+// PublishSessionClosed loga o fechamento de sessão (fallback do fan-out
+// real, spec 028).
+func (l *Log) PublishSessionClosed(_ context.Context, sess *domain.Session) error {
+	var archetype string
+	if sess.Profile != nil {
+		archetype = sess.Profile.Archetype
+	}
+	l.log.Info("session closed fan-out (log fallback)",
+		slog.String("game_id", sess.GameID),
+		slog.String("session_id", sess.ID),
+		slog.String("mode_id", sess.ModeID),
+		slog.String("archetype", archetype),
+		slog.String("close_reason", string(sess.CloseReason)),
 	)
 	return nil
 }
