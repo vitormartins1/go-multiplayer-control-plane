@@ -406,6 +406,21 @@ export interface GameAnalyticsDetail {
   // Resumo agregado de stats brutos por stat_key (analytics-service/011) —
   // vazio se o jogo nunca reportou stats (sem scoringStats no perfil).
   stats: StatSummary[];
+  // Distribuição por motivo de fechamento (analytics-service/013) — vazio
+  // se o jogo não tem nenhum session_closed processado ainda.
+  sessionHealth: SessionCloseStat[];
+}
+
+// SessionCloseStat é a distribuição agregada por motivo de fechamento
+// (analytics-service/013): conta + duração total (avgDurationMs já vem
+// calculado do backend).
+export interface SessionCloseStat {
+  modeId?: string;
+  archetype?: string;
+  closeReason: string;
+  count: number;
+  durationSumMs: number;
+  avgDurationMs: number;
 }
 
 // StatSummary é o panorama agregado de uma métrica do jogo (analytics-service/011).
