@@ -33,6 +33,11 @@ type SessionParticipant struct {
 	Handle   string    `json:"handle"`
 	Role     string    `json:"role,omitempty"`
 	JoinedAt time.Time `json:"joinedAt"`
+	// LastEvent/LastOutcome (spec 027 do session-service): último evento de
+	// participação conhecido — só existem em host_world_dropin. Passthrough
+	// 1:1, sem transformação.
+	LastEvent   string `json:"lastEvent,omitempty"`
+	LastOutcome string `json:"lastOutcome,omitempty"`
 }
 
 // GameSession é uma partida (aberta ou fechada) para a aba Sessions e o board
