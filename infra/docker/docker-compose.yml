@@ -142,6 +142,8 @@ services:
     environment:
       PORT: "8080"
       GRPC_PORT: "50051"
+      # Histórico de sessões fechadas (spec 025) — banco próprio do session.
+      DATABASE_URL: postgres://dev:dev@session-postgres:5432/session?sslmode=disable
       # Snapshot do perfil do modo no CreateSession (ADR-0024) — obrigatório
       # para QUALQUER sessão; sem isso o Create falha com profile unavailable.
       GAME_REGISTRY_URL: http://game-registry:8080
@@ -162,6 +164,8 @@ services:
     secrets:
       - session-jwt-key
     depends_on:
+      session-postgres:
+        condition: service_healthy
       messaging-provisioner:
         condition: service_completed_successfully
       tempo:
@@ -553,6 +557,35 @@ services:
       - "9191:9187"
     depends_on:
       - analytics-postgres
+
+  # Banco próprio do session (database-per-service, ADR-0015) — histórico de
+  # sessões fechadas (spec 025). Único banco novo do session-service; até aqui
+  # era o único serviço stateful-por-natureza sem Postgres.
+  session-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: session
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5437:5432"
+    volumes:
+      - ../../services/session-service/migrations/001_create_closed_sessions.sql:/docker-entrypoint-initdb.d/001_create_closed_sessions.sql:ro
+      - ../../services/session-service/migrations/002_create_closed_session_players.sql:/docker-entrypoint-initdb.d/002_create_closed_session_players.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d session"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  session-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://dev:dev@session-postgres:5432/session?sslmode=disable
+    ports:
+      - "9192:9187"
+    depends_on:
+      - session-postgres
 
 # Segredos de dev (gitignored — infra/docker/secrets/). Gerar: gen-secrets.sh
 secrets:

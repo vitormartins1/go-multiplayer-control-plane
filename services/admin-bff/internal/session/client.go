@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
@@ -64,6 +65,17 @@ type sessionDTO struct {
 	ModeParams  json.RawMessage      `json:"modeParams"`
 	Teams       []domain.SessionTeam `json:"teams"`
 	Result      *domain.MatchResult  `json:"result"`
+
+	// Participants é a base do histórico persistido (spec 025).
+	Participants []participantDTO `json:"participants"`
+}
+
+// participantDTO espelha domain.SessionParticipant (spec 025) — sem Handle
+// (o session-service não conhece identity; o service do admin-bff enriquece).
+type participantDTO struct {
+	PlayerID string    `json:"playerId"`
+	Role     string    `json:"role"`
+	JoinedAt time.Time `json:"joinedAt"`
 }
 
 // SessionsByGame lê as sessões do jogo, repassando o filtro state.
@@ -128,6 +140,68 @@ func (c *Client) CloseSession(ctx context.Context, matchID string) (domain.GameS
 	return toGameSessions([]sessionDTO{d})[0], nil
 }
 
+// closedPageDTO é o shape paginado de GET .../sessions?state=closed e de
+// GET /admin/players/{p}/sessions do session-service (spec 025).
+type closedPageDTO struct {
+	Closed     []sessionDTO `json:"closed"`
+	NextBefore *time.Time   `json:"nextBefore"`
+}
+
+// ClosedSessionsByGame lê as sessões fechadas persistidas do jogo, paginadas.
+func (c *Client) ClosedSessionsByGame(ctx context.Context, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/sessions?state=closed" + paginationQuery(limit, before)
+	return c.getClosedPage(ctx, u)
+}
+
+// PlayerSessions lê as sessões fechadas do jogo em que o player participou
+// (spec 025, aba History do player), paginadas.
+func (c *Client) PlayerSessions(ctx context.Context, playerID, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	u := c.baseURL + "/admin/players/" + url.PathEscape(playerID) + "/sessions?gameId=" + url.QueryEscape(gameID) + paginationQuery(limit, before)
+	return c.getClosedPage(ctx, u)
+}
+
+// paginationQuery monta o sufixo de query string de limit/before — before
+// zero (sem cursor) e limit <=0 (default do session-service) ficam de fora.
+func paginationQuery(limit int, before time.Time) string {
+	q := ""
+	if limit > 0 {
+		q += "&limit=" + strconv.Itoa(limit)
+	}
+	if !before.IsZero() {
+		q += "&before=" + url.QueryEscape(before.Format(time.RFC3339))
+	}
+	return q
+}
+
+// getClosedPage faz o GET e mapeia a resposta paginada. 503 do session-service
+// (Postgres do histórico fora, plan D6) -> ErrHistoryUnavailable, distinto de
+// ErrSessionsUnavailable (session-service inteiro inacessível).
+func (c *Client) getClosedPage(ctx context.Context, u string) (domain.ClosedSessionsPage, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return domain.ClosedSessionsPage{}, fmt.Errorf("session: build request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return domain.ClosedSessionsPage{}, fmt.Errorf("%w: %v", domain.ErrSessionsUnavailable, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusServiceUnavailable:
+		return domain.ClosedSessionsPage{}, domain.ErrHistoryUnavailable
+	default:
+		return domain.ClosedSessionsPage{}, &domain.UpstreamError{Status: resp.StatusCode}
+	}
+
+	var body closedPageDTO
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return domain.ClosedSessionsPage{}, fmt.Errorf("session: decode: %w", err)
+	}
+	return domain.ClosedSessionsPage{Closed: toGameSessions(body.Closed), NextBefore: body.NextBefore}, nil
+}
+
 // fleetStatusDTO é o shape de GET /admin/fleet-status/{fleetName} do
 // session-service (spec 023) — mesmos campos do domain.FleetStatus.
 type fleetStatusDTO struct {
@@ -181,6 +255,10 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 		for _, s := range d.RoleSlots {
 			slots = append(slots, domain.RoleSlot{Role: s.Role, Capacity: s.Capacity, Occupied: s.Occupied, Occupants: s.Occupants})
 		}
+		var participants []domain.SessionParticipant
+		for _, p := range d.Participants {
+			participants = append(participants, domain.SessionParticipant{PlayerID: p.PlayerID, Role: p.Role, JoinedAt: p.JoinedAt}) // handle: service enriquece
+		}
 		out = append(out, domain.GameSession{
 			SessionID:     d.SessionID,
 			MatchID:       d.MatchID,
@@ -200,6 +278,7 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 			ModeParams:    d.ModeParams,
 			Teams:         d.Teams,
 			Result:        d.Result,
+			Participants:  participants,
 		})
 	}
 	return out

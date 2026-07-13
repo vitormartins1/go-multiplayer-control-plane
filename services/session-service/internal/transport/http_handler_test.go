@@ -38,13 +38,13 @@ func (f *fakeDirectory) CloseByAdmin(_ context.Context, matchID string) (*domain
 }
 
 func newAdminMux(dir *fakeDirectory) *http.ServeMux {
-	return newAdminMuxWithFleets(dir, nil, "")
+	return newAdminMuxWithFleets(dir, nil, nil, "")
 }
 
 // fakeFleetInspector (spec 023) devolve status/erro fixos, sem cluster real.
 type fakeFleetInspector struct {
-	status domain.FleetStatus
-	err    error
+	status  domain.FleetStatus
+	err     error
 	gotName string
 }
 
@@ -53,10 +53,48 @@ func (f *fakeFleetInspector) FleetStatus(_ context.Context, fleetName string) (d
 	return f.status, f.err
 }
 
-func newAdminMuxWithFleets(dir *fakeDirectory, fleets domain.FleetInspector, clusterLabel string) *http.ServeMux {
+// fakeHistory (spec 025) é o HistoryReader mockado — captura os argumentos
+// recebidos e devolve sessions/err fixos.
+type fakeHistory struct {
+	sessions []domain.Session
+	err      error
+
+	gotGameID, gotPlayerID string
+	gotLimit               int
+	gotBefore              time.Time
+	byPlayerCalled         bool
+}
+
+func (f *fakeHistory) ClosedByGame(_ context.Context, gameID string, limit int, before time.Time) ([]domain.Session, error) {
+	f.gotGameID, f.gotLimit, f.gotBefore = gameID, limit, before
+	return f.sessions, f.err
+}
+
+func (f *fakeHistory) ClosedByPlayer(_ context.Context, gameID, playerID string, limit int, before time.Time) ([]domain.Session, error) {
+	f.byPlayerCalled = true
+	f.gotGameID, f.gotPlayerID, f.gotLimit, f.gotBefore = gameID, playerID, limit, before
+	return f.sessions, f.err
+}
+
+func newAdminMuxWithFleets(dir *fakeDirectory, history HistoryReader, fleets domain.FleetInspector, clusterLabel string) *http.ServeMux {
 	mux := http.NewServeMux()
-	NewAdminHandler(dir, fleets, clusterLabel).Register(mux)
+	NewAdminHandler(dir, history, fleets, clusterLabel).Register(mux)
 	return mux
+}
+
+func newAdminMuxWithHistory(dir *fakeDirectory, history HistoryReader) *http.ServeMux {
+	return newAdminMuxWithFleets(dir, history, nil, "")
+}
+
+func doGetPage(t *testing.T, mux *http.ServeMux, url string) (*httptest.ResponseRecorder, closedSessionsPage) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
+	var body closedSessionsPage
+	if rec.Code == http.StatusOK {
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	}
+	return rec, body
 }
 
 func doGet(t *testing.T, mux *http.ServeMux, url string) (*httptest.ResponseRecorder, sessionsResponse) {
@@ -148,12 +186,104 @@ func TestAdminSessions_FiltroState(t *testing.T) {
 	assert.Len(t, open.Active, 1)
 	assert.Empty(t, open.Closed)
 
-	_, closed := doGet(t, mux, "/admin/games/g1/sessions?state=closed")
-	assert.Empty(t, closed.Active)
-	assert.Len(t, closed.Closed, 1)
-
 	rec, _ := doGet(t, mux, "/admin/games/g1/sessions?state=zumbi")
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- spec 025: state=closed lê do HistoryStore persistido, paginado ---
+
+func TestAdminSessions_StateClosed_LeDoHistoryStorePaginado(t *testing.T) {
+	closedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	history := &fakeHistory{sessions: []domain.Session{
+		{ID: "s0", GameID: "g1", State: domain.SessionClosed, CloseReason: domain.CloseHostLeft, ClosedAt: closedAt,
+			Participants: []domain.Participant{{PlayerID: "host-1", Role: domain.RoleHost, JoinedAt: closedAt}}},
+	}}
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, history)
+
+	rec, page := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed&limit=10")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "g1", history.gotGameID)
+	assert.Equal(t, 11, history.gotLimit, "pede limit+1 para detectar próxima página")
+	require.Len(t, page.Closed, 1)
+	assert.Equal(t, "s0", page.Closed[0].SessionID)
+	require.Len(t, page.Closed[0].Participants, 1)
+	assert.Equal(t, "host-1", page.Closed[0].Participants[0].PlayerID)
+	assert.Equal(t, []string{"host-1"}, page.Closed[0].Players, "players derivado de participants")
+	assert.Nil(t, page.NextBefore, "menos itens que o limite: sem próxima página")
+}
+
+func TestAdminSessions_StateClosed_SemHistoryStore_503(t *testing.T) {
+	mux := newAdminMux(&fakeDirectory{}) // sem WithHistoryStore
+	rec, _ := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestAdminSessions_StateClosed_ErroNoStore_503(t *testing.T) {
+	history := &fakeHistory{err: assert.AnError}
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, history)
+	rec, _ := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestAdminSessions_StateClosed_HaMaisPaginas_DevolveNextBefore(t *testing.T) {
+	base := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	// devolve limit+1 = 3 sessões para limit=2 → sinaliza próxima página.
+	history := &fakeHistory{sessions: []domain.Session{
+		{ID: "s3", GameID: "g1", ClosedAt: base.Add(2 * time.Minute)},
+		{ID: "s2", GameID: "g1", ClosedAt: base.Add(time.Minute)},
+		{ID: "s1", GameID: "g1", ClosedAt: base},
+	}}
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, history)
+
+	rec, page := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed&limit=2")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, page.Closed, 2, "trunca para o limit pedido")
+	require.NotNil(t, page.NextBefore)
+	assert.Equal(t, base.Add(time.Minute), *page.NextBefore, "cursor = closed_at do último item mantido")
+}
+
+func TestAdminSessions_StateClosed_LimitInvalido_400(t *testing.T) {
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, &fakeHistory{})
+	rec, _ := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed&limit=abc")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAdminSessions_StateClosed_BeforeInvalido_400(t *testing.T) {
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, &fakeHistory{})
+	rec, _ := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed&before=ontem")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- spec 025: aba History do player ---
+
+func TestAdminPlayerSessions_ChamaClosedByPlayer(t *testing.T) {
+	history := &fakeHistory{sessions: []domain.Session{{ID: "s1", GameID: "g1"}}}
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, history)
+
+	rec, page := doGetPage(t, mux, "/admin/players/p1/sessions?gameId=g1&limit=5")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, history.byPlayerCalled)
+	assert.Equal(t, "g1", history.gotGameID)
+	assert.Equal(t, "p1", history.gotPlayerID)
+	assert.Equal(t, 6, history.gotLimit)
+	require.Len(t, page.Closed, 1)
+}
+
+func TestAdminPlayerSessions_SemGameId_400(t *testing.T) {
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, &fakeHistory{})
+	rec, _ := doGetPage(t, mux, "/admin/players/p1/sessions")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAdminPlayerSessions_SemHistorico_ListaVaziaSemErro(t *testing.T) {
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, &fakeHistory{sessions: nil})
+	rec, page := doGetPage(t, mux, "/admin/players/p1/sessions?gameId=g1")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, page.Closed)
+	assert.Nil(t, page.NextBefore)
 }
 
 func TestAdminSessions_JogoSemSessao_200ComListasVazias(t *testing.T) {
@@ -208,7 +338,7 @@ func TestAdminClose_Inexistente_404(t *testing.T) {
 // TestAdminFleetStatus_SemAgones_ClusterVazioSemChamada cobre o caso 2 da spec
 // 023: allocator != agones (fleets nil) — nenhuma chamada ao inspector.
 func TestAdminFleetStatus_SemAgones_ClusterVazioSemChamada(t *testing.T) {
-	mux := newAdminMuxWithFleets(&fakeDirectory{}, nil, "")
+	mux := newAdminMuxWithFleets(&fakeDirectory{}, nil, nil, "")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/fleet-status/capoeira-souls", nil))
 
@@ -222,7 +352,7 @@ func TestAdminFleetStatus_SemAgones_ClusterVazioSemChamada(t *testing.T) {
 // mas a Fleet não existe NESTE cluster — Cluster preenchido, FleetExists=false.
 func TestAdminFleetStatus_AgonesFleetInexistente(t *testing.T) {
 	fleets := &fakeFleetInspector{status: domain.FleetStatus{FleetExists: false}}
-	mux := newAdminMuxWithFleets(&fakeDirectory{}, fleets, "pi5")
+	mux := newAdminMuxWithFleets(&fakeDirectory{}, nil, fleets, "pi5")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/fleet-status/nao-existe", nil))
 
@@ -239,7 +369,7 @@ func TestAdminFleetStatus_AgonesFleetExistente(t *testing.T) {
 	fleets := &fakeFleetInspector{status: domain.FleetStatus{
 		FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1,
 	}}
-	mux := newAdminMuxWithFleets(&fakeDirectory{}, fleets, "local")
+	mux := newAdminMuxWithFleets(&fakeDirectory{}, nil, fleets, "local")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/fleet-status/capoeira-souls", nil))
 

@@ -36,6 +36,8 @@ type Service struct {
 	registry    domain.ServerRegistry
 	orphanGrace time.Duration
 
+	log *slog.Logger // falhas best-effort (persistência de histórico, spec 025)
+
 	mu       sync.Mutex
 	sessions map[string]*domain.Session // sessionID -> sessão ativa (spec 011)
 	// matchIndex mapeia matchID -> sessionID para o caminho queue_arena, cuja
@@ -46,9 +48,16 @@ type Service struct {
 	participationEvents map[string]float64
 
 	// histórico bounded de fechadas (spec 005): ring em memória, best-effort
-	// de dev — some no restart, persistência é evolução.
+	// de dev — serve o "recém-fechado" sem ida ao banco e é o fallback se o
+	// Postgres estiver fora (spec 025).
 	history      []*domain.Session
 	historyLimit int
+
+	// historyStore persiste sessões fechadas (spec 025). nil = sem persistência
+	// configurada (dev sem Postgres, ou testes) — closeSession pula a gravação
+	// sem erro, o ring in-memory continua sendo a única fonte.
+	historyStore           domain.HistoryStore
+	historyPersistFailures float64
 }
 
 // Option configura o Service na construção (só testes precisam disso).
@@ -66,6 +75,21 @@ func WithHistoryLimit(n int) Option {
 			s.historyLimit = n
 		}
 	}
+}
+
+// WithHistoryStore liga a persistência de sessões fechadas (spec 025). Sem
+// esta option (historyStore nil), closeSession não grava em lugar nenhum além
+// do ring in-memory — dev sem Postgres configurado segue funcionando, só sem
+// histórico sobrevivendo a restart.
+func WithHistoryStore(store domain.HistoryStore) Option {
+	return func(s *Service) { s.historyStore = store }
+}
+
+// WithLogger troca o logger (default slog.Default()) — usado só para falhas
+// best-effort que não podem propagar como erro (persistência de histórico,
+// spec 025).
+func WithLogger(log *slog.Logger) Option {
+	return func(s *Service) { s.log = log }
 }
 
 // WithProfileProvider liga a leitura do perfil de multiplayer (specs 011/017).
@@ -110,6 +134,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		publisher:           publisher,
 		now:                 time.Now,
 		orphanGrace:         time.Minute,
+		log:                 slog.Default(),
 		sessions:            make(map[string]*domain.Session),
 		matchIndex:          make(map[string]string),
 		closed:              make(map[domain.CloseReason]float64),
@@ -155,6 +180,7 @@ func (s *Service) Create(ctx context.Context, matchID, gameID, modeID string, te
 		grants = append(grants, domain.ConnectGrant{PlayerID: playerID, Token: tok})
 	}
 
+	openedAt := s.now()
 	sess := &domain.Session{
 		ID:            uuid.NewString(),
 		MatchID:       matchID,
@@ -162,12 +188,13 @@ func (s *Service) Create(ctx context.Context, matchID, gameID, modeID string, te
 		ModeID:        modeID,
 		Profile:       &snap,
 		Players:       players,
+		Participants:  participantsFromTeams(players, teamByPlayer, openedAt),
 		TeamByPlayer:  teamByPlayer,
 		ServerID:      server.ID,
 		ServerAddress: server.Address,
 		Origin:        domain.OriginMatch,
 		State:         domain.SessionOpen,
-		OpenedAt:      s.now(),
+		OpenedAt:      openedAt,
 	}
 
 	s.mu.Lock()
@@ -199,6 +226,40 @@ func flattenTeams(teams []domain.TeamAssignment) ([]string, map[string]string, e
 		}
 	}
 	return players, teamByPlayer, nil
+}
+
+// participantsFromTeams monta os participantes iniciais de uma sessão de match
+// (spec 025): papel vazio em FFA, "team:<id>" quando o jogador tem time. Todos
+// entram no mesmo instante — a criação da sessão é atômica (diferente do
+// host_world, onde phantoms entram em momentos distintos via JoinWorld).
+func participantsFromTeams(players []string, teamByPlayer map[string]string, at time.Time) []domain.Participant {
+	out := make([]domain.Participant, 0, len(players))
+	for _, p := range players {
+		role := ""
+		if team, ok := teamByPlayer[p]; ok {
+			role = "team:" + team
+		}
+		out = append(out, domain.Participant{PlayerID: p, Role: role, JoinedAt: at})
+	}
+	return out
+}
+
+// upsertParticipant grava/atualiza um participante do mundo host_world (spec
+// 025): dedupe por PlayerID — mesmo papel na re-entrada, mantém a entrada
+// original (sem duplicar); papel diferente, atualiza para refletir a
+// ocorrência mais recente (o jogador trocou de papel, ex.: saiu como coop e
+// voltou como invader).
+func upsertParticipant(participants []domain.Participant, playerID, role string, joinedAt time.Time) []domain.Participant {
+	for i, p := range participants {
+		if p.PlayerID == playerID {
+			if p.Role != role {
+				participants[i].Role = role
+				participants[i].JoinedAt = joinedAt
+			}
+			return participants
+		}
+	}
+	return append(participants, domain.Participant{PlayerID: playerID, Role: role, JoinedAt: joinedAt})
 }
 
 // ReportResult publica o resultado no fan-out e, só então, libera o server e
@@ -421,10 +482,41 @@ func (s *Service) closeSession(ctx context.Context, sessionID string, reason dom
 	}
 	s.mu.Unlock()
 
-	if err := s.allocator.Release(ctx, sess.ServerID); err != nil {
-		return sess, fmt.Errorf("release: %w", err)
+	releaseErr := s.allocator.Release(ctx, sess.ServerID)
+	// persiste o histórico DEPOIS do release, best-effort, independente do
+	// resultado dele (spec 025) — a sessão já está CLOSED e fora do mapa de
+	// ativas; o registro do que aconteceu não deve depender de o server ter
+	// sido devolvido ao pool com sucesso.
+	s.persistHistory(ctx, sess)
+	if releaseErr != nil {
+		return sess, fmt.Errorf("release: %w", releaseErr)
 	}
 	return sess, nil
+}
+
+// persistHistory grava o registro de histórico da sessão fechada, best-effort
+// (spec 025): falha só loga + incrementa a métrica
+// session_history_persist_failures_total, nunca propaga — o fechamento da
+// sessão não pode depender de um destino externo (mesma filosofia do fan-out,
+// ADR-0020). No-op se nenhum HistoryStore foi configurado (dev sem Postgres).
+func (s *Service) persistHistory(ctx context.Context, sess *domain.Session) {
+	if s.historyStore == nil {
+		return
+	}
+	if err := s.historyStore.SaveClosed(ctx, sess); err != nil {
+		s.mu.Lock()
+		s.historyPersistFailures++
+		s.mu.Unlock()
+		s.log.Error("session history: falha ao persistir sessão fechada", "sessionId", sess.ID, "gameId", sess.GameID, "err", err)
+	}
+}
+
+// HistoryPersistFailures devolve o total de falhas ao persistir o histórico
+// (métrica session_history_persist_failures_total — CounterFunc no main).
+func (s *Service) HistoryPersistFailures() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.historyPersistFailures
 }
 
 // Sweep fecha (CLOSED/ttl) as sessões abertas há mais que ttl e devolve
@@ -610,12 +702,14 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID st
 		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: issue token: %w", err)
 	}
 
+	openedAt := s.now()
 	sess := &domain.Session{
 		ID:            sessionID,
 		GameID:        gameID,
 		ModeID:        modeID,
 		Profile:       &snap,
 		Players:       []string{hostPlayerID},
+		Participants:  []domain.Participant{{PlayerID: hostPlayerID, Role: domain.RoleHost, JoinedAt: openedAt}},
 		ServerID:      server.ID,
 		ServerAddress: server.Address,
 		Origin:        domain.OriginHostWorld,
@@ -625,7 +719,7 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID st
 		WeaponTier:    attrs.WeaponTier,
 		PasswordHash:  domain.HashWorldPassword(attrs.Password),
 		State:         domain.SessionOpen,
-		OpenedAt:      s.now(),
+		OpenedAt:      openedAt,
 	}
 
 	s.mu.Lock()
@@ -680,6 +774,7 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 	if firstJoin {
 		sess.Players = append(sess.Players, playerID)
 	}
+	sess.Participants = upsertParticipant(sess.Participants, playerID, role, s.now())
 	serverAddr := sess.ServerAddress
 	modeID := sess.ModeID
 	s.mu.Unlock()
@@ -691,6 +786,7 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 		if firstJoin {
 			// nunca chegou a entrar: não conta como participante
 			sess.Players = slices.DeleteFunc(sess.Players, func(p string) bool { return p == playerID })
+			sess.Participants = slices.DeleteFunc(sess.Participants, func(p domain.Participant) bool { return p.PlayerID == playerID })
 		}
 		s.mu.Unlock()
 		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: issue token: %w", err)

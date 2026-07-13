@@ -7,8 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/domain"
@@ -24,10 +26,21 @@ type SessionDirectory interface {
 	CloseByAdmin(ctx context.Context, matchID string) (*domain.Session, error)
 }
 
+// HistoryReader é o recorte de domain.HistoryStore que o admin consome (spec
+// 025): leitura paginada das sessões fechadas PERSISTIDAS — irmão de
+// SessionDirectory, que cobre só o estado em memória (ativas + ring bounded).
+type HistoryReader interface {
+	ClosedByGame(ctx context.Context, gameID string, limit int, before time.Time) ([]domain.Session, error)
+	ClosedByPlayer(ctx context.Context, gameID, playerID string, limit int, before time.Time) ([]domain.Session, error)
+}
+
 // AdminHandler expõe as rotas /admin de sessões (leitura + encerrar) e de
 // status de Fleet (spec 023).
 type AdminHandler struct {
 	sessions SessionDirectory
+	// history é o store persistido de fechadas (spec 025). nil = sem Postgres
+	// configurado — as rotas paginadas respondem 503 history_unavailable.
+	history HistoryReader
 	// fleets e clusterLabel cobrem a spec 023 (status real da Fleet Agones).
 	// fleets nil = allocator não é agones ("sem cluster observável"); mesmo
 	// padrão opcional do ServerRegistry.
@@ -36,9 +49,10 @@ type AdminHandler struct {
 }
 
 // NewAdminHandler cria o handler admin. fleets/clusterLabel vêm vazios
-// (fleets nil, clusterLabel "") quando o allocator ativo não é o Agones.
-func NewAdminHandler(sessions SessionDirectory, fleets domain.FleetInspector, clusterLabel string) *AdminHandler {
-	return &AdminHandler{sessions: sessions, fleets: fleets, clusterLabel: clusterLabel}
+// (fleets nil, clusterLabel "") quando o allocator ativo não é o Agones;
+// history vem nil quando o session-service sobe sem Postgres configurado.
+func NewAdminHandler(sessions SessionDirectory, history HistoryReader, fleets domain.FleetInspector, clusterLabel string) *AdminHandler {
+	return &AdminHandler{sessions: sessions, history: history, fleets: fleets, clusterLabel: clusterLabel}
 }
 
 // Register monta as rotas no mux existente (JWKS/metrics moram lá).
@@ -47,6 +61,8 @@ func (h *AdminHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/sessions", h.listAll)
 	mux.HandleFunc("POST /admin/sessions/{matchId}/close", h.close)
 	mux.HandleFunc("GET /admin/fleet-status/{fleetName}", h.fleetStatus)
+	// histórico persistido por jogador (spec 025) — a aba History do player.
+	mux.HandleFunc("GET /admin/players/{playerId}/sessions", h.playerSessions)
 }
 
 type sessionDTO struct {
@@ -74,6 +90,18 @@ type sessionDTO struct {
 	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
 	Teams       []teamDTO       `json:"teams,omitempty"`
 	Result      *resultDTO      `json:"result,omitempty"`
+
+	// Participants é a base do histórico persistido (spec 025): um registro por
+	// jogador com o papel ocupado. Aditivo — vem preenchido tanto nas sessões em
+	// memória quanto nas lidas do store persistido (que não populam RoleSlots).
+	Participants []participantDTO `json:"participants,omitempty"`
+}
+
+// participantDTO espelha domain.Participant (spec 025).
+type participantDTO struct {
+	PlayerID string    `json:"playerId"`
+	Role     string    `json:"role,omitempty"`
+	JoinedAt time.Time `json:"joinedAt"`
 }
 
 // teamDTO é um lado da formação registrada no Create (ADR-0023) — o rótulo
@@ -136,6 +164,11 @@ type sessionsResponse struct {
 
 // list responde as sessões do jogo. `state=open|closed` filtra; sem sessões =
 // 200 com listas vazias (jogo pode existir sem partidas — não é 404).
+//
+// `state=closed` muda de fonte (spec 025): em vez do ring in-memory (só as
+// últimas ~200 fechadas de TODOS os jogos), lê o store persistido, paginado
+// por closed_at (`limit`/`before`) — sobrevive a restart. Os demais valores de
+// `state` (vazio/"open") mantêm o comportamento anterior, inalterado.
 func (h *AdminHandler) list(w http.ResponseWriter, r *http.Request) {
 	gameID := r.PathValue("gameId")
 	state := r.URL.Query().Get("state")
@@ -143,9 +176,95 @@ func (h *AdminHandler) list(w http.ResponseWriter, r *http.Request) {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_state")
 		return
 	}
+	if state == string(domain.SessionClosed) {
+		h.closedFromStore(w, r, func(ctx context.Context, limit int, before time.Time) ([]domain.Session, error) {
+			return h.history.ClosedByGame(ctx, gameID, limit, before)
+		})
+		return
+	}
 
 	active, closed := h.sessions.SessionsByGame(gameID)
 	httpkit.WriteJSON(w, http.StatusOK, filterByState(active, closed, state))
+}
+
+// playerSessions responde as sessões fechadas do jogo em que o player
+// participou (spec 025, aba History do player), paginadas por closed_at.
+// `gameId` é obrigatório — o histórico é sempre escopado a um jogo (a página
+// do player já é escopada por jogo via presença, ADR-0019).
+func (h *AdminHandler) playerSessions(w http.ResponseWriter, r *http.Request) {
+	playerID := r.PathValue("playerId")
+	gameID := r.URL.Query().Get("gameId")
+	if gameID == "" {
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game_id")
+		return
+	}
+	h.closedFromStore(w, r, func(ctx context.Context, limit int, before time.Time) ([]domain.Session, error) {
+		return h.history.ClosedByPlayer(ctx, gameID, playerID, limit, before)
+	})
+}
+
+// closedSessionsPage é a resposta paginada do store persistido (spec 025):
+// NextBefore é o cursor da próxima página (ausente = não há mais páginas).
+type closedSessionsPage struct {
+	Closed     []sessionDTO `json:"closed"`
+	NextBefore *time.Time   `json:"nextBefore,omitempty"`
+}
+
+// closedFromStore monta a página de fechadas via fetch (ClosedByGame ou
+// ClosedByPlayer), com o cursor de paginação. history nil (Postgres não
+// configurado) ou erro na leitura (Postgres fora, plan D6) -> 503
+// history_unavailable; o client cai pro comportamento atual (ring) com aviso.
+func (h *AdminHandler) closedFromStore(w http.ResponseWriter, r *http.Request, fetch func(ctx context.Context, limit int, before time.Time) ([]domain.Session, error)) {
+	if h.history == nil {
+		httpkit.WriteError(w, http.StatusServiceUnavailable, "history_unavailable")
+		return
+	}
+	limit, before, err := parsePagination(r)
+	if err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination")
+		return
+	}
+	// pede limit+1: se vier um item a mais, sabemos que há próxima página sem
+	// precisar de um COUNT(*) separado.
+	sessions, err := fetch(r.Context(), limit+1, before)
+	if err != nil {
+		httpkit.WriteError(w, http.StatusServiceUnavailable, "history_unavailable")
+		return
+	}
+	hasMore := len(sessions) > limit
+	if hasMore {
+		sessions = sessions[:limit]
+	}
+	page := closedSessionsPage{Closed: make([]sessionDTO, 0, len(sessions))}
+	for _, s := range sessions {
+		page.Closed = append(page.Closed, toSessionDTO(s))
+	}
+	if hasMore {
+		next := sessions[len(sessions)-1].ClosedAt
+		page.NextBefore = &next
+	}
+	httpkit.WriteJSON(w, http.StatusOK, page)
+}
+
+// parsePagination lê limit (default 50, máx 200) e before (RFC3339; vazio =
+// sem cursor, primeira página) da query (spec 025).
+func parsePagination(r *http.Request) (limit int, before time.Time, err error) {
+	const defaultLimit, maxLimit = 50, 200
+	limit = defaultLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, convErr := strconv.Atoi(raw)
+		if convErr != nil || n <= 0 {
+			return 0, time.Time{}, fmt.Errorf("limit inválido: %q", raw)
+		}
+		limit = min(n, maxLimit)
+	}
+	if raw := r.URL.Query().Get("before"); raw != "" {
+		before, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return 0, time.Time{}, fmt.Errorf("before inválido: %q", raw)
+		}
+	}
+	return limit, before, nil
 }
 
 // listAll responde as sessões de TODOS os jogos (board global do console, 007).
@@ -232,19 +351,26 @@ func filterByState(active, closed []domain.Session, state string) sessionsRespon
 }
 
 func toSessionDTO(s domain.Session) sessionDTO {
+	players := s.Players
+	if len(players) == 0 && len(s.Participants) > 0 {
+		// sessões lidas do store persistido (spec 025) não populam Players —
+		// deriva de Participants para não quebrar quem lê o campo legado.
+		players = playerIDs(s.Participants)
+	}
 	dto := sessionDTO{
 		SessionID:     s.ID,
 		MatchID:       s.MatchID,
 		GameID:        s.GameID,
 		ModeID:        s.ModeID,
 		State:         string(s.State),
-		Players:       s.Players,
+		Players:       players,
 		ServerAddress: s.ServerAddress,
 		OpenedAt:      s.OpenedAt,
 		CloseReason:   string(s.CloseReason),
 		Origin:        string(s.Origin),
 		HostPlayerID:  s.HostPlayerID,
 		RoleSlots:     roleSlotsDTO(s.RoleSlots),
+		Participants:  participantsDTO(s.Participants),
 	}
 	if !s.ClosedAt.IsZero() {
 		closedAt := s.ClosedAt
@@ -258,6 +384,28 @@ func toSessionDTO(s domain.Session) sessionDTO {
 	dto.Teams = teamsDTO(s.TeamByPlayer)
 	dto.Result = toResultDTO(s.Result)
 	return dto
+}
+
+// playerIDs extrai os playerIDs dos participantes, na ordem em que entraram.
+func playerIDs(participants []domain.Participant) []string {
+	out := make([]string, len(participants))
+	for i, p := range participants {
+		out[i] = p.PlayerID
+	}
+	return out
+}
+
+// participantsDTO serializa os participantes (spec 025); nil (campo omitido)
+// quando a sessão não tem nenhum registrado.
+func participantsDTO(participants []domain.Participant) []participantDTO {
+	if len(participants) == 0 {
+		return nil
+	}
+	out := make([]participantDTO, len(participants))
+	for i, p := range participants {
+		out[i] = participantDTO{PlayerID: p.PlayerID, Role: p.Role, JoinedAt: p.JoinedAt}
+	}
+	return out
 }
 
 // teamsDTO agrupa a formação por time em ordem estável (teamId, players). Nil

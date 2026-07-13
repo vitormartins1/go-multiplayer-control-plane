@@ -279,6 +279,20 @@ export interface GameSession {
   modeParams?: Record<string, unknown>;
   teams?: SessionTeam[];
   result?: MatchResult;
+  // Participants é a base do histórico persistido (spec 025): um registro por
+  // jogador com o papel ocupado. Presente tanto nas sessões em memória quanto
+  // nas lidas do store (closedGameSessions/playerSessions).
+  participants?: SessionParticipant[];
+}
+
+// SessionParticipant é um participante da sessão com o papel ocupado (spec
+// 025) — a base do histórico persistido (distinto de SessionPlayer, que é só
+// a lista simples mantida por compat).
+export interface SessionParticipant {
+  playerId: string;
+  handle: string; // vazio quando o identity não resolveu (best-effort do BFF)
+  role?: string;
+  joinedAt: string;
 }
 
 // Um lado da formação registrada no match (rótulo canônico do session).
@@ -319,6 +333,14 @@ export interface CollectiveResult {
 export interface GameSessions {
   active: GameSession[];
   closed: GameSession[];
+}
+
+// ClosedSessionsPage é uma página de sessões fechadas lidas do store
+// persistido (spec 025): nextBefore é o cursor da próxima página (ausente =
+// não há mais páginas).
+export interface ClosedSessionsPage {
+  closed: GameSession[];
+  nextBefore?: string;
 }
 
 // Analytics: overview cross-game (ADR-0021).
@@ -621,6 +643,39 @@ export const api = {
     getJSON<Game[]>(`/api/players/${encodeURIComponent(playerID)}/games`, signal),
   gameSessions: (gameId: string, signal?: AbortSignal) =>
     getJSON<GameSessions>(`/api/games/${encodeURIComponent(gameId)}/sessions`, signal),
+
+  // Histórico persistido de sessões fechadas (spec 025) — sobrevive a restart
+  // do session-service, ao contrário do ring in-memory de `gameSessions`.
+  // `before` é o cursor RFC3339 (nextBefore da página anterior).
+  closedGameSessions: (
+    gameId: string,
+    opts?: { limit?: number; before?: string },
+    signal?: AbortSignal,
+  ) => {
+    const q = new URLSearchParams({ state: "closed" });
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    if (opts?.before) q.set("before", opts.before);
+    return getJSON<ClosedSessionsPage>(
+      `/api/games/${encodeURIComponent(gameId)}/sessions?${q.toString()}`,
+      signal,
+    );
+  },
+  // Histórico do jogador no jogo (spec 025, aba History): sessões fechadas em
+  // que ele participou, mesma paginação por cursor.
+  playerSessions: (
+    playerId: string,
+    gameId: string,
+    opts?: { limit?: number; before?: string },
+    signal?: AbortSignal,
+  ) => {
+    const q = new URLSearchParams({ gameId });
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    if (opts?.before) q.set("before", opts.before);
+    return getJSON<ClosedSessionsPage>(
+      `/api/players/${encodeURIComponent(playerId)}/sessions?${q.toString()}`,
+      signal,
+    );
+  },
 
   // Rooms Console (board global de salas + force-close + saúde do fan-out).
   rooms: (signal?: AbortSignal) => getJSON<GameSessions>("/api/rooms", signal),

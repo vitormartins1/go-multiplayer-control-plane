@@ -21,6 +21,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/exaring/otelpgx"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -37,6 +39,7 @@ import (
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/profilecache"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/publisher"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/registryclient"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/repository"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/service"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/token"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/session-service/internal/transport"
@@ -92,12 +95,30 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	// Postgres próprio (spec 025): primeiro banco do session-service — persiste
+	// o histórico de sessões fechadas (a aba Sessions/History some no restart
+	// sem isto). Mesmo padrão do achievements-service (pgxpool + otelpgx).
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("pgxpool config: %w", err)
+	}
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer() // spans de query dentro do trace (ADR-0014)
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
+	if err != nil {
+		return fmt.Errorf("pgxpool: %w", err)
+	}
+	defer pool.Close()
+	historyStore := repository.NewPostgresHistoryRepository(pool)
+
 	// registry nil (modo static) => WithServerRegistry no-op; reconciliação só no
 	// modo agones. Grace protege contra falso-positivo por staleness do LIST.
 	svc := service.New(alloc, issuer, pub,
 		service.WithProfileProvider(buildProfileProvider(log)), // snapshot do modo (specs 011/017)
 		service.WithParticipationPublisher(pub),                // eventos de participação (spec 013)
 		service.WithHistoryLimit(intEnv("SESSION_HISTORY_LIMIT", 200, log)),
+		service.WithHistoryStore(historyStore), // persistência de fechadas (spec 025)
+		service.WithLogger(log),
 		service.WithServerRegistry(registry),
 		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
 
@@ -141,6 +162,13 @@ func run(log *slog.Logger) error {
 			Name: "world_role_slots", Help: "Slots ocupados em mundos host_world_dropin, por papel.",
 			ConstLabels: prometheus.Labels{"role": domain.RoleInvader},
 		}, func() float64 { return svc.OccupiedSlots(domain.RoleInvader) }),
+		// falhas ao persistir o histórico de sessões fechadas (spec 025) — o
+		// fechamento nunca falha por causa disto, mas a métrica denuncia se o
+		// Postgres do session-service está fora.
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "session_history_persist_failures_total",
+			Help: "Falhas ao persistir sessão fechada no histórico (Postgres indisponível).",
+		}, svc.HistoryPersistFailures),
 	)
 
 	grpcSrv := grpc.NewServer(
@@ -171,7 +199,8 @@ func run(log *slog.Logger) error {
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	// superfície admin (spec 005): a aba Sessions do painel lê via BFF.
-	transport.NewAdminHandler(svc, fleets, clusterLabel).Register(mux)
+	// historyStore alimenta as rotas paginadas do histórico persistido (spec 025).
+	transport.NewAdminHandler(svc, historyStore, fleets, clusterLabel).Register(mux)
 	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

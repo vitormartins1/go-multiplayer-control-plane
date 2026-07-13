@@ -123,6 +123,12 @@ type Session struct {
 	ServerID      string
 	ServerAddress string
 
+	// Participants é a base do histórico persistido (spec 025): um registro por
+	// jogador com o papel ocupado e o instante da entrada. Dedupe por PlayerID
+	// (a regra de acumulação/atualização mora no service, não aqui — domain só
+	// tem o tipo). Players continua existindo por compat com os DTOs atuais.
+	Participants []Participant
+
 	// host_world_dropin (spec 011): Origin=host_world; HostPlayerID é o dono do
 	// mundo; RoleSlots é a capacidade/ocupação por papel (coop/invader). Em
 	// OriginMatch estes ficam zero/nil.
@@ -152,6 +158,17 @@ type Session struct {
 	// Nil em sessões abertas e nos fechamentos sem resultado (ttl/admin/
 	// abandoned/host_left/host_killed).
 	Result *MatchOutcome
+}
+
+// Participant é um jogador que participou da sessão, com o papel ocupado e o
+// instante da entrada (spec 025). Fonte do histórico persistido — reconstrói
+// "quem jogou com quem papel", o que RoleSlots.Occupants não permite (só guarda
+// quem está PRESENTE agora; DIED/LEFT libera o slot mas não apaga a
+// participação histórica).
+type Participant struct {
+	PlayerID string
+	Role     string // "host" | "coop" | "invader" | "" | "team:<id>" (match)
+	JoinedAt time.Time
 }
 
 // WorldAttributes são os atributos de matchmaking que o host informa ao abrir o

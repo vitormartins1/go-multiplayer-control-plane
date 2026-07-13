@@ -72,6 +72,10 @@ scrape_configs:
     static_configs:
       - targets: ["player-data-postgres-exporter:9187"]
 
+  - job_name: session-postgres
+    static_configs:
+      - targets: ["session-postgres-exporter:9187"]
+
   # MinIO expõe métricas Prometheus nativas (cloud-save storage).
   - job_name: minio
     metrics_path: /minio/v2/metrics/cluster

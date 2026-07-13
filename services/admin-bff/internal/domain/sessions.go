@@ -11,11 +11,28 @@ import (
 // transport mapeia -> 502.
 var ErrSessionsUnavailable = errors.New("admin: sessions source unavailable")
 
+// ErrHistoryUnavailable indica que o store de histórico persistido do session-
+// service está fora (Postgres indisponível, spec 025/plan D6). Distinto de
+// ErrSessionsUnavailable (session-service inteiro inacessível): aqui o
+// service está de pé, só o histórico que não responde. O transport mapeia ->
+// 503 history_unavailable.
+var ErrHistoryUnavailable = errors.New("admin: session history unavailable")
+
 // SessionPlayer é um jogador da sessão com o handle resolvido no identity
 // (best-effort: identity fora -> handle vazio, o id sempre presente).
 type SessionPlayer struct {
 	ID     string `json:"id"`
 	Handle string `json:"handle"`
+}
+
+// SessionParticipant é um participante da sessão com o papel ocupado (spec
+// 025) — a base do histórico persistido. Handle resolvido no identity, mesmo
+// best-effort de SessionPlayer.
+type SessionParticipant struct {
+	PlayerID string    `json:"playerId"`
+	Handle   string    `json:"handle"`
+	Role     string    `json:"role,omitempty"`
+	JoinedAt time.Time `json:"joinedAt"`
 }
 
 // GameSession é uma partida (aberta ou fechada) para a aba Sessions e o board
@@ -49,6 +66,11 @@ type GameSession struct {
 	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
 	Teams       []SessionTeam   `json:"teams,omitempty"`
 	Result      *MatchResult    `json:"result,omitempty"`
+
+	// Participants é a base do histórico persistido (spec 025): um registro por
+	// jogador com o papel ocupado. Presente tanto nas sessões em memória quanto
+	// nas lidas do store (ClosedSessionsByGame/PlayerSessions).
+	Participants []SessionParticipant `json:"participants,omitempty"`
 }
 
 // SessionTeam é um lado da formação registrada (rótulo canônico + jogadores).
@@ -113,6 +135,14 @@ type GameSessions struct {
 	Closed []GameSession `json:"closed"`
 }
 
+// ClosedSessionsPage é uma página de sessões fechadas lidas do store
+// persistido (spec 025): NextBefore é o cursor da próxima página (nil = não
+// há mais páginas).
+type ClosedSessionsPage struct {
+	Closed     []GameSession `json:"closed"`
+	NextBefore *time.Time    `json:"nextBefore,omitempty"`
+}
+
 // SessionsReader é a Port de saída da API admin do session-service.
 type SessionsReader interface {
 	// SessionsByGame lê as sessões do jogo; state ("open"|"closed"|"") é
@@ -127,6 +157,15 @@ type SessionsReader interface {
 	// rodando (cluster) e réplicas desired/current/ready/allocated.
 	// Indisponibilidade -> ErrSessionsUnavailable.
 	FleetStatus(ctx context.Context, fleetName string) (FleetStatus, error)
+	// ClosedSessionsByGame lê as sessões fechadas PERSISTIDAS do jogo, paginadas
+	// por closed_at (spec 025) — sobrevive a restart do session-service, ao
+	// contrário do ring in-memory usado por SessionsByGame. Postgres fora ->
+	// ErrHistoryUnavailable.
+	ClosedSessionsByGame(ctx context.Context, gameID string, limit int, before time.Time) (ClosedSessionsPage, error)
+	// PlayerSessions lê as sessões fechadas do jogo em que o player participou
+	// (spec 025, aba History do player), mesma paginação. Postgres fora ->
+	// ErrHistoryUnavailable.
+	PlayerSessions(ctx context.Context, playerID, gameID string, limit int, before time.Time) (ClosedSessionsPage, error)
 }
 
 // FleetStatus é o snapshot de localização/saúde de uma Fleet Agones (spec
