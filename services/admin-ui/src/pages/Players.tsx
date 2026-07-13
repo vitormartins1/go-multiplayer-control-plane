@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Loader, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Group, Loader, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { IconRefresh, IconSearch } from "@tabler/icons-react";
@@ -68,7 +68,12 @@ export function Players() {
                       <span>{p.handle}</span>
                     </Group>
                   </Table.Td>
-                  <Table.Td c="dimmed" ff="monospace">{p.id.slice(0, 8)}…</Table.Td>
+                  <Table.Td c="dimmed" ff="monospace">
+                    {/* Tooltip com o ID completo (padronização, 2026-07-13). */}
+                    <Tooltip label={p.id}>
+                      <span>{p.id.slice(0, 8)}…</span>
+                    </Tooltip>
+                  </Table.Td>
                   <Table.Td>{new Date(p.createdAt).toLocaleDateString("pt-BR")}</Table.Td>
                 </Table.Tr>
               ))}

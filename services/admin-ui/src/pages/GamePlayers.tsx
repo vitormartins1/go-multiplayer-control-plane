@@ -45,7 +45,13 @@ function PlayerRow({
           <GuestBadge playerId={p.playerId} />
         </Group>
       </Table.Td>
-      <Table.Td c="dimmed" ff="monospace">{p.playerId.slice(0, 8)}…</Table.Td>
+      <Table.Td c="dimmed" ff="monospace">
+        {/* Tooltip com o ID completo (padronização, 2026-07-13) — mesmo
+            padrão já usado no drawer de progresso de conquista. */}
+        <Tooltip label={p.playerId}>
+          <span>{p.playerId.slice(0, 8)}…</span>
+        </Tooltip>
+      </Table.Td>
       <Table.Td>{new Date(p.firstSeen).toLocaleString("pt-BR")}</Table.Td>
     </Table.Tr>
   );

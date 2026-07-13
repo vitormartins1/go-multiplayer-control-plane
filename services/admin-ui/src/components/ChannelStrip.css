@@ -1,17 +1,17 @@
 /* "Channel strip" — cabeçalho de seção tratado como canal de telemetria
-   (nome literal do accent do tema, "signal", ver main.tsx): régua/timebase
-   de osciloscópio + leitura mono à direita, no lugar do título solto de
-   antes. CSS global (mesma convenção do flow.css) com prefixo "ga-" —
-   projeto não tem CSS Modules configurado (sem *.module.css em outro
-   lugar, sem vite/client nos types do tsconfig). */
+   (nasceu na aba Analytics, spec 071; extraído como componente
+   compartilhado na spec 074 pro Leaderboards reusar): badge do ícone +
+   régua/timebase de osciloscópio (referência literal ao accent "signal"
+   do tema, main.tsx) + leitura mono à direita. CSS global (mesma
+   convenção do flow.css) — projeto não tem CSS Modules configurado. */
 
-.ga-channel {
+.channel-strip {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.ga-channel-badge {
+.channel-strip-badge {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -24,11 +24,11 @@
   color: var(--mantine-color-signal-4);
 }
 
-.ga-channel-label {
+.channel-strip-label {
   white-space: nowrap;
 }
 
-.ga-channel-rule {
+.channel-strip-rule {
   flex: 1;
   height: 22px;
   min-width: 24px;
@@ -39,7 +39,7 @@
       no-repeat;
 }
 
-.ga-channel-readout {
+.channel-strip-readout {
   white-space: nowrap;
   letter-spacing: 0.04em;
 }

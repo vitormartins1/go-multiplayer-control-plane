@@ -1,14 +1,13 @@
 import { useMemo, useState } from "react";
-import { Alert, Grid, Loader, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Grid, Loader, Paper, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
 import { IconActivity } from "@tabler/icons-react";
-import type { Icon } from "@tabler/icons-react";
 import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
+import { ChannelStrip } from "../components/ChannelStrip";
 import { formatDuration } from "../lib/format";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
-import "./GameAnalytics.css";
 
 // Widget -> arquétipo (spec 064): tabela fixa, cada widget já é condicionado
 // a um campo do GameAnalyticsDetail que só existe pra um arquétipo. raw-stats
@@ -172,30 +171,6 @@ function DailyLineChart({ data, label }: { data: { day: string; matches: number 
       tickLine="x"
       gridAxis="xy"
     />
-  );
-}
-
-// ChannelStrip é o cabeçalho de cada seção (redesign): trata o arquétipo como
-// um canal de telemetria — badge do ícone, régua de osciloscópio e uma
-// leitura mono à direita (total daquele canal). É o elemento assinatura da
-// página; o resto (cards, StatCard, charts) já lia como "painel de
-// instrumentos" antes, só faltava essa costura entre as seções.
-function ChannelStrip({ icon: SectionIcon, label, readout }: { icon: Icon; label: string; readout?: string }) {
-  return (
-    <div className="ga-channel">
-      <div className="ga-channel-badge">
-        <SectionIcon size={16} stroke={1.75} />
-      </div>
-      <Title order={4} className="ga-channel-label">
-        {label}
-      </Title>
-      <div className="ga-channel-rule" aria-hidden />
-      {readout && (
-        <Text ff="monospace" size="xs" c="dimmed" className="ga-channel-readout">
-          {readout}
-        </Text>
-      )}
-    </div>
   );
 }
 

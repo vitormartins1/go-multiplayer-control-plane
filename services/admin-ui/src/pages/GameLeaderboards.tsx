@@ -1,11 +1,12 @@
-import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
-import { IconPencil, IconRefresh } from "@tabler/icons-react";
+import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text, Tooltip } from "@mantine/core";
+import { IconChartBar, IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { api, type LeaderEntry } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
+import { ChannelStrip } from "../components/ChannelStrip";
 
 const SCORE_BOARD = "score";
 const ALL_BOARDS = "all"; // valor do switch de boards; nunca vai para a API
@@ -99,6 +100,25 @@ function MiniBoardTable({
       )}
     </Stack>
   );
+}
+
+// BoardChannelStrip (spec 074): cabeçalho de cada grupo de board na "Visão
+// geral" — mesmo elemento assinatura da aba Analytics (ChannelStrip,
+// extraído como componente compartilhado). Ícone único (IconChartBar, o
+// mesmo da própria aba Leaderboards) pra todo board — o board não tem uma
+// taxonomia de ícones própria (diferente do arquétipo em Analytics); a
+// diferenciação vem do rótulo, o ícone só sustenta a gramática visual do
+// canal. Leitura = jogadores no ranking "Geral" (all-time) daquele board —
+// única contagem que faz sentido pro grupo inteiro (as 4 janelas ao lado
+// têm cada uma sua própria contagem, sem "o" total óbvio).
+function BoardChannelStrip({ gameId, board, label }: { gameId: string; board: string; label: string }) {
+  const { data } = useAsync(
+    (s) =>
+      api.gameLeaderboard(gameId, { board: board === SCORE_BOARD ? undefined : board, window: "alltime", limit: 50 }, s),
+    [gameId, board],
+  );
+  const readout = data ? `${data.length}${data.length === 50 ? "+" : ""} jogador${data.length === 1 ? "" : "es"}` : undefined;
+  return <ChannelStrip icon={IconChartBar} label={label} readout={readout} />;
 }
 
 export function GameLeaderboards({ gameId }: { gameId: string }) {
@@ -259,11 +279,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       {mode === "overview" &&
         shownBoards.map((b) => (
           <Stack key={b.value} gap="sm">
-            {/* Title order={5} (padronização, 2026-07-13): mesma convenção de
-                cabeçalho de subseção do Overview.tsx/Analytics.tsx — o Divider
-                label ficava pequeno demais pra separar até 5 grupos de board
-                empilhados ("Todas"). */}
-            <Title order={5}>{b.label}</Title>
+            <BoardChannelStrip gameId={gameId} board={b.value} label={b.label} />
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               {WINDOW_OPTIONS.map((w) => (
                 <MiniBoardTable
@@ -323,12 +339,19 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
                   {/* size=32 (padronização das tabelas, 2026-07-13): iguala a
                       densidade da tabela de referência (Achievements/Players)
                       — a mini-tabela da Visão geral continua compacta (20px),
-                      contexto diferente (grid denso de vários boards). */}
+                      contexto diferente (grid denso de vários boards).
+                      ID truncado + Tooltip (mesmo achado): esta era a única
+                      tabela do console mostrando o UUID inteiro — guest-<uuid>
+                      tem 43 caracteres e estourava a linha. Acompanha o
+                      padrão já usado em Achievements/Players (8 chars + "…",
+                      completo no hover). */}
                   <Group gap={6} wrap="nowrap">
                     <PlayerAvatar seed={e.playerId} size={32} />
-                    <Text size="sm" c="dimmed" ff="monospace">
-                      {e.playerId}
-                    </Text>
+                    <Tooltip label={e.playerId}>
+                      <Text size="sm" c="dimmed" ff="monospace">
+                        {e.playerId.slice(0, 8)}…
+                      </Text>
+                    </Tooltip>
                     <GuestBadge playerId={e.playerId} />
                   </Group>
                 </Table.Td>
