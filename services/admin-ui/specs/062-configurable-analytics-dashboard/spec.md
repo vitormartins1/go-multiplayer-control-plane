@@ -1,10 +1,14 @@
 # Spec: 062-configurable-analytics-dashboard
 
 **Serviço:** admin-ui
-**Status:** Done (2026-07-13) — validado em browser real (Playwright ad-hoc):
-drag/reorder, hide, restaurar padrão e persistência entre reloads confirmados
-com dado real (jogo neon-breach, 9 widgets incl. as 3 séries diárias novas e
-o resumo de stats).
+**Status:** Superseded pela spec 067 (2026-07-13) — validado em browser real
+na época (Playwright ad-hoc: drag/reorder, hide, restaurar padrão e
+persistência entre reloads confirmados com dado real, jogo neon-breach, 9
+widgets). Depois de uso real prolongado, o usuário achou o modelo de edição
+confuso — `DashboardGrid`/`dashboardLayout.ts`/`react-grid-layout` foram
+removidos; o layout virou fixo, responsivo e organizado por seção de
+arquétipo (spec 067). Mantido aqui como registro histórico da decisão
+original e do porquê ela mudou.
 **Data:** 2026-07-13
 **Parte de:** analytics-service/010+011 ("Analytics Fase 2/3", item 6 do backlog).
 
