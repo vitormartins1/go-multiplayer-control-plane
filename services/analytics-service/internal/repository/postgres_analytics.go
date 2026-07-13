@@ -313,6 +313,16 @@ func (r *PostgresRepository) ApplySessionClosed(ctx context.Context, evt domain.
 		evt.GameID, evt.ModeID, evt.Archetype, evt.CloseReason, durationMs); err != nil {
 		return false, fmt.Errorf("analytics repository: apply session closed: rollup: %w", err)
 	}
+
+	// série diária (spec 015): dia derivado de evt.ClosedAt (não now()) —
+	// correto mesmo em reprocessamento tardio da fila.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_session_daily (game_id, mode_id, day, count)
+		VALUES ($1, $2, ($3 AT TIME ZONE 'utc')::date, 1)
+		ON CONFLICT (game_id, mode_id, day) DO UPDATE SET count = game_session_daily.count + 1`,
+		evt.GameID, evt.ModeID, evt.ClosedAt); err != nil {
+		return false, fmt.Errorf("analytics repository: apply session closed: daily: %w", err)
+	}
 	return false, tx.Commit(ctx)
 }
 
@@ -521,6 +531,13 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 	}
 	if err := hrows.Err(); err != nil {
 		return domain.GameAnalytics{}, err
+	}
+
+	// série "sessões fechadas por dia" (spec 015) — mesmo helper das
+	// outras 3 séries diárias, mesmo shape de tabela.
+	out.SessionCloseDaily, err = r.dailySeries(ctx, "game_session_daily", "count", gameID, days, modeID)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: session close daily: %w", err)
 	}
 	return out, nil
 }

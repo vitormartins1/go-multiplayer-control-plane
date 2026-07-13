@@ -39,6 +39,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/009_player_stats.sql",
 			"../../migrations/010_session_health.sql",
 			"../../migrations/011_mode_scoped_cumulative_rollups.sql",
+			"../../migrations/012_session_closed_daily.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -822,4 +823,61 @@ func TestOverview_JogoComDoisModos_NaoDuplica(t *testing.T) {
 	assert.Equal(t, "g1", ov.Games[0].GameID)
 	assert.Equal(t, int64(2), ov.Games[0].Matches, "totais somados entre os modos")
 	assert.Equal(t, int64(2), ov.Totals.UniquePlayers)
+}
+
+// TestApplySessionClosed_GravaSerieDiaria (spec 015): sessões fechadas
+// grava um ponto no dia (derivado de ClosedAt), soma no mesmo dia.
+func TestApplySessionClosed_GravaSerieDiaria(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "default", "queue_arena", "result", base, base.Add(2*time.Minute)))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, ga.SessionCloseDaily, 1)
+	assert.Equal(t, "2026-07-13", ga.SessionCloseDaily[0].Day)
+	assert.Equal(t, int64(2), ga.SessionCloseDaily[0].Matches)
+}
+
+func TestApplySessionClosed_Reprocessado_NaoDobraSerieDiaria(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	evt := closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(time.Minute))
+	_, err := repo.ApplySessionClosed(ctx, evt)
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, evt) // reentrega at-least-once
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, ga.SessionCloseDaily, 1)
+	assert.Equal(t, int64(1), ga.SessionCloseDaily[0].Matches, "reentrega não dobra")
+}
+
+func TestApplySessionClosed_SerieDiaria_FiltraPorModo(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "modo-a", "queue_arena", "result", base, base.Add(time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "modo-b", "queue_arena", "result", base, base.Add(time.Minute)))
+	require.NoError(t, err)
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, all.SessionCloseDaily, 1)
+	assert.Equal(t, int64(2), all.SessionCloseDaily[0].Matches, "sem filtro: soma os 2 modos")
+
+	a, err := repo.GameAnalytics(ctx, "g1", 30, "modo-a")
+	require.NoError(t, err)
+	require.Len(t, a.SessionCloseDaily, 1)
+	assert.Equal(t, int64(1), a.SessionCloseDaily[0].Matches, "filtrado: só o modo pedido")
 }

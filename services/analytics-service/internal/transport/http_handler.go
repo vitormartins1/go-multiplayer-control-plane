@@ -100,6 +100,9 @@ type gameAnalyticsDTO struct {
 	// SessionHealth é a distribuição por motivo de fechamento (spec 013) —
 	// vazio se o jogo não tem nenhum session_closed processado ainda.
 	SessionHealth []sessionCloseStatDTO `json:"sessionHealth"`
+
+	// SessionCloseDaily é a série "sessões fechadas por dia" (spec 015).
+	SessionCloseDaily []dailyDTO `json:"sessionCloseDaily"`
 }
 
 // statSummaryDTO é o panorama agregado de uma métrica do jogo (spec 011).
@@ -171,7 +174,7 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	dto := gameAnalyticsDTO{
 		gameStatDTO: toGameStatDTO(ga.GameStat), ModeID: ga.ModeID, Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{},
 		PlacementDaily: []dailyDTO{}, MissionDaily: []dailyDTO{}, ParticipationDaily: []dailyDTO{},
-		Stats: []statSummaryDTO{}, SessionHealth: []sessionCloseStatDTO{},
+		Stats: []statSummaryDTO{}, SessionHealth: []sessionCloseStatDTO{}, SessionCloseDaily: []dailyDTO{},
 	}
 	for _, s := range ga.Stats {
 		dto.Stats = append(dto.Stats, statSummaryDTO{Key: s.Key, Sum: s.Sum, Count: s.Count, Avg: s.Avg})
@@ -193,6 +196,9 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, d := range ga.ParticipationDaily {
 		dto.ParticipationDaily = append(dto.ParticipationDaily, dailyDTO{Day: d.Day, Matches: d.Matches})
+	}
+	for _, d := range ga.SessionCloseDaily {
+		dto.SessionCloseDaily = append(dto.SessionCloseDaily, dailyDTO{Day: d.Day, Matches: d.Matches})
 	}
 	for _, p := range ga.RoleParticipations {
 		dto.RoleParticipations = append(dto.RoleParticipations, participationStatDTO{ModeID: p.ModeID, Role: p.Role, Event: p.Event, Outcome: p.Outcome, Count: p.Count})
