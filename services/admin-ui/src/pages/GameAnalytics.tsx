@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
-import { Alert, Divider, Grid, Group, Loader, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Grid, Loader, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
+import { IconActivity } from "@tabler/icons-react";
+import type { Icon } from "@tabler/icons-react";
 import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
 import { formatDuration } from "../lib/format";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
+import "./GameAnalytics.css";
 
 // Widget -> arquétipo (spec 064): tabela fixa, cada widget já é condicionado
 // a um campo do GameAnalyticsDetail que só existe pra um arquétipo. raw-stats
@@ -172,6 +175,30 @@ function DailyLineChart({ data, label }: { data: { day: string; matches: number 
   );
 }
 
+// ChannelStrip é o cabeçalho de cada seção (redesign): trata o arquétipo como
+// um canal de telemetria — badge do ícone, régua de osciloscópio e uma
+// leitura mono à direita (total daquele canal). É o elemento assinatura da
+// página; o resto (cards, StatCard, charts) já lia como "painel de
+// instrumentos" antes, só faltava essa costura entre as seções.
+function ChannelStrip({ icon: SectionIcon, label, readout }: { icon: Icon; label: string; readout?: string }) {
+  return (
+    <div className="ga-channel">
+      <div className="ga-channel-badge">
+        <SectionIcon size={16} stroke={1.75} />
+      </div>
+      <Title order={4} className="ga-channel-label">
+        {label}
+      </Title>
+      <div className="ga-channel-rule" aria-hidden />
+      {readout && (
+        <Text ff="monospace" size="xs" c="dimmed" className="ga-channel-readout">
+          {readout}
+        </Text>
+      )}
+    </div>
+  );
+}
+
 export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: MultiplayerMode[] }) {
   // "" (sentinela ALL_MODES) = sem filtro, mostra todos os modos somados
   // (spec 064: o seletor de página só oferece modos REAIS + "todos" — o
@@ -200,6 +227,28 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   // elegíveis).
   const selectedArchetype =
     selectedMode !== ALL_MODES ? modes.find((m) => m.modeId === selectedMode)?.archetype : undefined;
+
+  // leitura mono de cada canal (ChannelStrip) — um total por arquétipo, o
+  // dado mais "de assinatura" de cada um (partidas/eventos/participações/
+  // missões), não uma soma genérica sem sentido pro domínio.
+  const archetypeReadout = useMemo<Partial<Record<MultiplayerProfile["archetype"], string>>>(() => {
+    const out: Partial<Record<MultiplayerProfile["archetype"], string>> = {};
+    if (!data) return out;
+    if (hasData) out.queue_arena = `${data.matches} partidas`;
+    if (participations.length > 0) {
+      const total = participations.reduce((acc, p) => acc + p.count, 0);
+      out.host_world_dropin = `${total} eventos`;
+    }
+    if (data.placement) out.battle_royale = `${data.placement.entries} participações`;
+    if (data.mission) out.coop_mission = `${data.mission.successes + data.mission.failures} missões`;
+    return out;
+  }, [data, hasData, participations]);
+
+  const generalReadout = useMemo(() => {
+    if (!data || data.sessionHealth.length === 0) return undefined;
+    const total = data.sessionHealth.reduce((acc, h) => acc + h.count, 0);
+    return `${total} sessões`;
+  }, [data]);
 
   // Catálogo de widgets (spec 062): cada seção vira um widget com id estável,
   // disponível só quando a condição de dado (mesma de antes, agora
@@ -581,15 +630,10 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
 
       {sections.map((section, i) => {
         const meta = section.archetype ? ARCHETYPE_META[section.archetype] : undefined;
+        const readout = section.archetype ? archetypeReadout[section.archetype] : generalReadout;
         return (
-          <Stack key={section.archetype ?? "geral"} gap="sm">
-            {i > 0 && <Divider />}
-            {meta && (
-              <Group gap={6}>
-                <meta.icon size={18} />
-                <Title order={4}>{meta.label}</Title>
-              </Group>
-            )}
+          <Stack key={section.archetype ?? "geral"} gap="sm" mt={i > 0 ? "lg" : undefined}>
+            <ChannelStrip icon={meta?.icon ?? IconActivity} label={meta?.label ?? "Geral"} readout={readout} />
             {/* align="flex-start" (spec 068): sem isso, o Grid estica todo
                 card da linha pra altura do vizinho mais alto — um donut
                 sozinho ficava gigante e vazio ao lado de um card com stat

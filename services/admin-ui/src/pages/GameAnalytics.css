@@ -1,0 +1,45 @@
+/* "Channel strip" — cabeçalho de seção tratado como canal de telemetria
+   (nome literal do accent do tema, "signal", ver main.tsx): régua/timebase
+   de osciloscópio + leitura mono à direita, no lugar do título solto de
+   antes. CSS global (mesma convenção do flow.css) com prefixo "ga-" —
+   projeto não tem CSS Modules configurado (sem *.module.css em outro
+   lugar, sem vite/client nos types do tsconfig). */
+
+.ga-channel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ga-channel-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--mantine-color-dark-4);
+  border-radius: 4px;
+  background: var(--mantine-color-dark-8);
+  color: var(--mantine-color-signal-4);
+}
+
+.ga-channel-label {
+  white-space: nowrap;
+}
+
+.ga-channel-rule {
+  flex: 1;
+  height: 22px;
+  min-width: 24px;
+  align-self: center;
+  background:
+    linear-gradient(var(--mantine-color-dark-4), var(--mantine-color-dark-4)) bottom / 100% 1px no-repeat,
+    repeating-linear-gradient(to right, var(--mantine-color-dark-4) 0 1px, transparent 1px 10px) bottom / 100% 7px
+      no-repeat;
+}
+
+.ga-channel-readout {
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
