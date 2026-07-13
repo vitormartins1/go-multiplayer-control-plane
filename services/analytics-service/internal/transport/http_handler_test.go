@@ -18,11 +18,12 @@ type fakeReader struct {
 	ga      domain.GameAnalytics
 	gotGame string
 	gotDays int
+	gotMode string
 }
 
 func (f *fakeReader) Overview(context.Context) (domain.Overview, error) { return f.ov, nil }
-func (f *fakeReader) GameAnalytics(_ context.Context, gameID string, days int) (domain.GameAnalytics, error) {
-	f.gotGame, f.gotDays = gameID, days
+func (f *fakeReader) GameAnalytics(_ context.Context, gameID string, days int, modeID string) (domain.GameAnalytics, error) {
+	f.gotGame, f.gotDays, f.gotMode = gameID, days, modeID
 	return f.ga, nil
 }
 
@@ -91,6 +92,32 @@ func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {
 	assert.Equal(t, "invader", body.RoleParticipations[0].Role)
 	assert.Equal(t, "SUCCESS", body.RoleParticipations[0].Outcome, "outcome não pode se perder no DTO (achado 2026-07-10)")
 	assert.Equal(t, int64(3), body.RoleParticipations[0].Count)
+}
+
+// TestGameAnalytics_ModeIdQuery_RepassaEEcoa (spec 012): o filtro de modo é
+// lido da query e ecoado no DTO; ausente -> comportamento atual (omitido).
+func TestGameAnalytics_ModeIdQuery_RepassaEEcoa(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1"}, ModeID: "mundo-vivo"}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics?modeId=mundo-vivo", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "mundo-vivo", r.gotMode, "query param repassado pro reader")
+	var body struct {
+		ModeID string `json:"modeId"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "mundo-vivo", body.ModeID)
+}
+
+func TestGameAnalytics_SemModeIdQuery_CampoOmitido(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1"}}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "", r.gotMode, "sem query param -> repassa vazio (sem filtro)")
+	assert.NotContains(t, rec.Body.String(), `"modeId"`, "omitempty: campo vazio não aparece no JSON")
 }
 
 func TestGameAnalytics_QueueArena_RoleParticipationsVazio(t *testing.T) {

@@ -16,7 +16,7 @@ const defaultDailyDays = 30
 // Reader é o recorte de leitura consumido pelo admin (satisfeito pelo repositório).
 type Reader interface {
 	Overview(ctx context.Context) (domain.Overview, error)
-	GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalytics, error)
+	GameAnalytics(ctx context.Context, gameID string, days int, modeID string) (domain.GameAnalytics, error)
 }
 
 // AdminHandler expõe as rotas /admin de analytics.
@@ -79,6 +79,9 @@ func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
 
 type gameAnalyticsDTO struct {
 	gameStatDTO
+	// ModeID é o filtro efetivamente aplicado (spec 012); "" = todos os
+	// modos (omitido no JSON — mesma semântica de "campo ausente = default").
+	ModeID             string                 `json:"modeId,omitempty"`
 	Daily              []dailyDTO             `json:"daily"`
 	RoleParticipations []participationStatDTO `json:"roleParticipations"`
 	Placement          *placementDTO          `json:"placement,omitempty"` // battle_royale (spec 005); ausente fora do BR
@@ -144,13 +147,14 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 			days = n
 		}
 	}
-	ga, err := h.reader.GameAnalytics(r.Context(), gameID, days)
+	modeID := r.URL.Query().Get("modeId")
+	ga, err := h.reader.GameAnalytics(r.Context(), gameID, days, modeID)
 	if err != nil {
 		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 		return
 	}
 	dto := gameAnalyticsDTO{
-		gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{},
+		gameStatDTO: toGameStatDTO(ga.GameStat), ModeID: ga.ModeID, Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{},
 		PlacementDaily: []dailyDTO{}, MissionDaily: []dailyDTO{}, ParticipationDaily: []dailyDTO{},
 		Stats: []statSummaryDTO{},
 	}

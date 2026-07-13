@@ -54,6 +54,12 @@ func match(matchID, gameID string, players ...domain.PlayerResult) domain.MatchR
 	return domain.MatchResult{MatchID: matchID, GameID: gameID, Results: players}
 }
 
+// matchWithMode (spec 012) — mesma forma de match, com ModeID explícito
+// (ausente em match(): dado legado "sem modo").
+func matchWithMode(matchID, gameID, modeID string, players ...domain.PlayerResult) domain.MatchResult {
+	return domain.MatchResult{MatchID: matchID, GameID: gameID, ModeID: modeID, Results: players}
+}
+
 func pevt(gameID, sessionID, playerID, role, event string) domain.ParticipationEvent {
 	return domain.ParticipationEvent{GameID: gameID, SessionID: sessionID, PlayerID: playerID, Role: role, Event: event, Outcome: "NEUTRAL"}
 }
@@ -69,7 +75,7 @@ func TestApplyParticipation_AgregaPorPapelEEvento(t *testing.T) {
 	_, err = repo.ApplyParticipation(ctx, pevt("g1", "w1", "coop-1", "coop", "BOSS_DEFEATED"))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 2)
 	// ordenado por role, event, outcome: coop/BOSS_DEFEATED, invader/HOST_KILLED.
@@ -94,7 +100,7 @@ func TestApplyPlacement_AgregaHistogramaESobrevivencia(t *testing.T) {
 	_, err := repo.ApplyPlacement(ctx, placement("m1", "g1", entries...))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.NotNil(t, ga.Placement)
 	assert.Equal(t, int64(1), ga.Placement.Winners)
@@ -115,7 +121,7 @@ func TestApplyPlacement_GravaSerieDiaria(t *testing.T) {
 	_, err := repo.ApplyPlacement(ctx, pr)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.PlacementDaily, 1)
 	assert.Equal(t, int64(1), ga.PlacementDaily[0].Matches)
@@ -135,7 +141,7 @@ func TestApplyPlacement_Reprocessado_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, dup)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.NotNil(t, ga.Placement)
 	assert.Equal(t, int64(2), ga.Placement.Entries, "reentrega não dobra")
@@ -152,7 +158,7 @@ func TestGameAnalytics_SemPlacement_PlacementNil(t *testing.T) {
 	_, err := repo.ApplyMatch(ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 10}))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Nil(t, ga.Placement, "jogo não-BR não regride")
 	assert.Nil(t, ga.Mission, "jogo não-coop não regride")
@@ -173,7 +179,7 @@ func TestApplyCollective_AgregaSucessosEFalhas(t *testing.T) {
 	_, err = repo.ApplyCollective(ctx, domain.CollectiveResult{MatchID: "m3", GameID: "g1", Outcome: domain.MissionFailure})
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.NotNil(t, ga.Mission)
 	assert.Equal(t, int64(2), ga.Mission.Successes)
@@ -193,7 +199,7 @@ func TestApplyCollective_Reprocessado_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, dup)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.NotNil(t, ga.Mission)
 	assert.Equal(t, int64(1), ga.Mission.Successes, "reentrega não dobra")
@@ -209,7 +215,7 @@ func TestApplyCollective_GravaSerieDiaria(t *testing.T) {
 	_, err := repo.ApplyCollective(ctx, domain.CollectiveResult{MatchID: "m1", GameID: "g1", ModeID: "default", Outcome: domain.MissionSuccess})
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.MissionDaily, 1)
 	assert.Equal(t, int64(1), ga.MissionDaily[0].Matches)
@@ -227,7 +233,7 @@ func TestApplyParticipation_Reprocessado_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, dup)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 1)
 	assert.Equal(t, int64(1), ga.RoleParticipations[0].Count, "reentrega não dobra")
@@ -246,7 +252,7 @@ func TestApplyParticipation_GravaSerieDiaria(t *testing.T) {
 	_, err = repo.ApplyParticipation(ctx, pevt("g1", "w1", "coop-1", "coop", "BOSS_DEFEATED"))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.ParticipationDaily, 1)
 	assert.Equal(t, int64(2), ga.ParticipationDaily[0].Matches, "2 eventos distintos no mesmo dia somam")
@@ -268,7 +274,7 @@ func TestApplyParticipation_EventIDsDiferentes_ContaDuasVezes(t *testing.T) {
 	_, err = repo.ApplyParticipation(ctx, evtB)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 1)
 	assert.Equal(t, int64(2), ga.RoleParticipations[0].Count, "eventId diferente -> conta as duas ocorrências")
@@ -290,7 +296,7 @@ func TestApplyParticipation_MesmoRoleEvento_OutcomesDiferentes_LinhasSeparadas(t
 	_, err = repo.ApplyParticipation(ctx, fail)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 2, "mesmo role/event, outcome diferente -> linhas separadas")
 	byOutcome := map[string]domain.ParticipationStat{}
@@ -318,7 +324,7 @@ func TestApplyParticipation_ModosDiferentes_LinhasSeparadas(t *testing.T) {
 	_, err = repo.ApplyParticipation(ctx, semModo)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.RoleParticipations, 3, "3 modos distintos (incl. \"sem modo\") -> 3 linhas, nenhuma soma na outra")
 	byMode := map[string]int64{}
@@ -336,7 +342,7 @@ func TestGameAnalytics_QueueArena_SemParticipacoes(t *testing.T) {
 	_, err := repo.ApplyMatch(ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Outcome: "win"}))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Empty(t, ga.RoleParticipations, "jogo sem host_world não tem participações")
 }
@@ -352,7 +358,7 @@ func TestApplyMatch_AgregaRollupEDaily(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, dup)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), ga.Matches)
 	assert.Equal(t, int64(2), ga.Participations)
@@ -378,7 +384,7 @@ func TestApplyMatch_WinLossDraw_ContadoresDistintos(t *testing.T) {
 	))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), ga.Wins)
 	assert.Equal(t, int64(1), ga.Losses)
@@ -399,7 +405,7 @@ func TestApplyMatch_Reprocessada_NaoDobra(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, dup, "duplicata detectada")
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), ga.Matches, "não recontabiliza")
 	assert.Equal(t, int64(1), ga.Participations)
@@ -411,7 +417,7 @@ func TestApplyMatch_JogadorUnicoEmDuasPartidas(t *testing.T) {
 	require.NoErrorf(t, mustApply(repo, ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Score: 3})), "m1")
 	require.NoErrorf(t, mustApply(repo, ctx, match("m2", "g1", domain.PlayerResult{PlayerID: "p1", Score: 7})), "m2")
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), ga.Matches)
 	assert.Equal(t, int64(2), ga.Participations)
@@ -456,7 +462,7 @@ func TestApplyMatch_GravaStatsBrutos(t *testing.T) {
 	))
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.Stats, 1)
 	assert.Equal(t, "kills", ga.Stats[0].Key)
@@ -470,7 +476,7 @@ func TestApplyMatch_SemStats_NaoGravaNada(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, mustApply(repo, ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Score: 10})))
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	assert.Empty(t, ga.Stats, "jogo sem scoringStats nunca reporta stats")
 }
@@ -483,7 +489,7 @@ func TestApplyMatch_Reprocessado_NaoDobraStats(t *testing.T) {
 	require.NoError(t, mustApply(repo, ctx, m))
 	require.NoError(t, mustApply(repo, ctx, m)) // reentrega at-least-once
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.Stats, 1)
 	assert.Equal(t, int64(5), ga.Stats[0].Sum, "reentrega não dobra")
@@ -501,7 +507,7 @@ func TestApplyPlacement_GravaStatsBrutos(t *testing.T) {
 	_, err := repo.ApplyPlacement(ctx, pr)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.Stats, 1)
 	assert.Equal(t, "kills", ga.Stats[0].Key)
@@ -523,7 +529,7 @@ func TestApplyCollective_GravaStatsBrutos(t *testing.T) {
 	_, err := repo.ApplyCollective(ctx, cr)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.Stats, 1)
 	assert.Equal(t, "revives", ga.Stats[0].Key)
@@ -540,7 +546,7 @@ func TestApplyParticipation_GravaStatsBrutos(t *testing.T) {
 	_, err := repo.ApplyParticipation(ctx, evt)
 	require.NoError(t, err)
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.Stats, 1)
 	assert.Equal(t, "deaths", ga.Stats[0].Key)
@@ -554,10 +560,64 @@ func TestGameAnalytics_Stats_AgregaEntrePartidasDistintas(t *testing.T) {
 	require.NoError(t, mustApply(repo, ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Stats: map[string]int64{"kills": 3}})))
 	require.NoError(t, mustApply(repo, ctx, match("m2", "g1", domain.PlayerResult{PlayerID: "p2", Stats: map[string]int64{"kills": 5}})))
 
-	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.Stats, 1)
 	assert.Equal(t, int64(8), ga.Stats[0].Sum)
 	assert.Equal(t, int64(2), ga.Stats[0].Count)
 	assert.InDelta(t, 4.0, ga.Stats[0].Avg, 0.001)
+}
+
+// TestGameAnalytics_ModeID_GravaEIsolaStatsDoQueueArena (spec 012): o
+// achado adicional — ApplyMatch gravava mode_id='' hardcoded, misturando
+// "kills" de dois modos distintos do mesmo jogo num único total.
+func TestGameAnalytics_ModeID_GravaEIsolaStatsDoQueueArena(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m1", "g1", "ffa", domain.PlayerResult{PlayerID: "p1", Stats: map[string]int64{"kills": 3}})))
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m2", "g1", "teams-2v2", domain.PlayerResult{PlayerID: "p2", Stats: map[string]int64{"kills": 5}})))
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, all.Stats, 1, "sem filtro: soma os dois modos (mesma semântica das séries diárias)")
+	assert.Equal(t, int64(8), all.Stats[0].Sum)
+
+	ffa, err := repo.GameAnalytics(ctx, "g1", 30, "ffa")
+	require.NoError(t, err)
+	require.Len(t, ffa.Stats, 1)
+	assert.Equal(t, int64(3), ffa.Stats[0].Sum, "filtrado por modo: só o modo pedido")
+	assert.Equal(t, "ffa", ffa.ModeID, "eco do filtro aplicado")
+
+	teams, err := repo.GameAnalytics(ctx, "g1", 30, "teams-2v2")
+	require.NoError(t, err)
+	require.Len(t, teams.Stats, 1)
+	assert.Equal(t, int64(5), teams.Stats[0].Sum)
+}
+
+// TestGameAnalytics_ModeIDFiltro_IsolaSeriesDiarias (spec 012): o filtro de
+// modo cobre também as séries diárias dos 3 arquétipos (spec 010), não só stats.
+func TestGameAnalytics_ModeIDFiltro_IsolaSeriesDiarias(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	pr1 := placement("m1", "g1", domain.PlacementEntry{Placement: 1})
+	pr1.ModeID = "royale-a"
+	_, err := repo.ApplyPlacement(ctx, pr1)
+	require.NoError(t, err)
+
+	pr2 := placement("m2", "g1", domain.PlacementEntry{Placement: 1})
+	pr2.ModeID = "royale-b"
+	_, err = repo.ApplyPlacement(ctx, pr2)
+	require.NoError(t, err)
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, all.PlacementDaily, 1)
+	assert.Equal(t, int64(2), all.PlacementDaily[0].Matches, "sem filtro: soma os 2 modos")
+
+	a, err := repo.GameAnalytics(ctx, "g1", 30, "royale-a")
+	require.NoError(t, err)
+	require.Len(t, a.PlacementDaily, 1)
+	assert.Equal(t, int64(1), a.PlacementDaily[0].Matches, "filtrado: só o modo pedido")
 }

@@ -68,7 +68,7 @@ func (f *fakeRepo) ApplyCollective(_ context.Context, cr domain.CollectiveResult
 	return false, nil
 }
 func (f *fakeRepo) Overview(context.Context) (domain.Overview, error) { return domain.Overview{}, nil }
-func (f *fakeRepo) GameAnalytics(context.Context, string, int) (domain.GameAnalytics, error) {
+func (f *fakeRepo) GameAnalytics(context.Context, string, int, string) (domain.GameAnalytics, error) {
 	return domain.GameAnalytics{}, nil
 }
 

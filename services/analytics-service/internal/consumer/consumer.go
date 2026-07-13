@@ -222,6 +222,7 @@ func parse(body []byte) (domain.MatchResult, error) {
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
+		ModeID  string `json:"modeId"` // ADR-0024 (spec 012 — extração era gap)
 		Results []struct {
 			PlayerID string           `json:"playerId"`
 			Outcome  string           `json:"outcome"` // "win"|"loss"|"draw" (ADR-0023)
@@ -233,7 +234,7 @@ func parse(body []byte) (domain.MatchResult, error) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		return domain.MatchResult{}, fmt.Errorf("unmarshal envelope: %w", err)
 	}
-	m := domain.MatchResult{MatchID: env.MatchID, GameID: env.GameID}
+	m := domain.MatchResult{MatchID: env.MatchID, GameID: env.GameID, ModeID: env.ModeID}
 	for _, r := range env.Results {
 		m.Results = append(m.Results, domain.PlayerResult{
 			PlayerID: r.PlayerID,

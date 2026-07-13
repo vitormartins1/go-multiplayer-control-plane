@@ -110,6 +110,22 @@ func TestParse_LeStats(t *testing.T) {
 	assert.Equal(t, map[string]int64{"kills": 7, "assists": 2}, m.Results[0].Stats)
 }
 
+// modeId (spec 012): mesma lacuna que a 010 fechou pra placement/collective/
+// participation — o envelope já publica desde a spec 010, faltava ler aqui.
+func TestParse_LeModeID(t *testing.T) {
+	body := []byte(`{"matchId":"m1","gameId":"g1","modeId":"teams-2v2","results":[{"playerId":"p1","outcome":"win","score":10}]}`)
+	m, err := parse(body)
+	require.NoError(t, err)
+	assert.Equal(t, "teams-2v2", m.ModeID)
+}
+
+func TestParse_SemModeID_CaiEmVazio(t *testing.T) {
+	body := []byte(`{"matchId":"m1","gameId":"g1","results":[{"playerId":"p1","outcome":"win","score":10}]}`)
+	m, err := parse(body)
+	require.NoError(t, err)
+	assert.Empty(t, m.ModeID, "envelope antigo: bucket 'sem modo'")
+}
+
 func TestParseParticipation_LeStats(t *testing.T) {
 	body := []byte(`{"kind":"participation_event","gameId":"g1","sessionId":"w1","playerId":"coop-1","role":"coop","event":"BOSS_DEFEATED","outcome":"SUCCESS","stats":{"kills":2}}`)
 	evt, err := parseParticipation(body)
