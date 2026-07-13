@@ -61,10 +61,10 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 			m.GameID, p.PlayerID); err != nil {
 			return false, fmt.Errorf("analytics repository: apply match: player seen: %w", err)
 		}
-		// stats brutos por jogador (spec 011); mode_id fica vazio aqui —
-		// MatchResult não carrega o modo (fora de escopo da spec 010 pro
-		// queue_arena, que já tinha game_daily sem mode_id).
-		if err := insertPlayerStats(ctx, tx, m.GameID, "", m.MatchID, p.PlayerID, p.Stats); err != nil {
+		// stats brutos por jogador (spec 011), com mode_id (spec 012 — o
+		// "" hardcoded era o gap: MatchResult não carregava o modo, mesmo
+		// o envelope já publicando desde a spec 010).
+		if err := insertPlayerStats(ctx, tx, m.GameID, m.ModeID, m.MatchID, p.PlayerID, p.Stats); err != nil {
 			return false, fmt.Errorf("analytics repository: apply match: stats: %w", err)
 		}
 	}
@@ -338,9 +338,10 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 const overviewDailyDays = 30
 
 // GameAnalytics devolve o resumo do jogo + a série diária dos últimos `days`.
-func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalytics, error) {
+func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, days int, modeID string) (domain.GameAnalytics, error) {
 	var out domain.GameAnalytics
 	out.GameID = gameID
+	out.ModeID = modeID
 
 	var participations, scoreSum int64
 	err := r.pool.QueryRow(ctx, `
@@ -376,24 +377,26 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 	// séries diárias dos 3 arquétipos que não tinham (spec 010) — Matches
 	// representa "events" em ParticipationDaily (host_world_dropin não tem
 	// partida terminal, ver plan.md da 010), reaproveitando o mesmo campo.
-	out.PlacementDaily, err = r.dailySeries(ctx, "game_placement_daily", "matches", gameID, days)
+	out.PlacementDaily, err = r.dailySeries(ctx, "game_placement_daily", "matches", gameID, days, modeID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: placement daily: %w", err)
 	}
-	out.MissionDaily, err = r.dailySeries(ctx, "game_mission_daily", "matches", gameID, days)
+	out.MissionDaily, err = r.dailySeries(ctx, "game_mission_daily", "matches", gameID, days, modeID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: mission daily: %w", err)
 	}
-	out.ParticipationDaily, err = r.dailySeries(ctx, "game_participation_daily", "events", gameID, days)
+	out.ParticipationDaily, err = r.dailySeries(ctx, "game_participation_daily", "events", gameID, days, modeID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: participation daily: %w", err)
 	}
 
 	// participações por papel/evento/outcome (host_world_dropin, spec 004/007).
-	// Aditivo: queue_arena não tem linhas aqui -> lista vazia.
+	// Aditivo: queue_arena não tem linhas aqui -> lista vazia. modeID (spec
+	// 012): "" = sem filtro (comportamento atual).
 	prows, err := r.pool.Query(ctx, `
 		SELECT mode_id, role, event, outcome, count FROM game_participation_rollup
-		WHERE game_id = $1 ORDER BY mode_id, role, event, outcome`, gameID)
+		WHERE game_id = $1 AND ($2 = '' OR mode_id = $2)
+		ORDER BY mode_id, role, event, outcome`, gameID, modeID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: participations: %w", err)
 	}
@@ -445,11 +448,12 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 	}
 
 	// resumo agregado de stats brutos (spec 011): soma/contagem/média entre
-	// TODOS os jogadores e partidas do jogo. Vazio = jogo sem scoringStats.
+	// TODOS os jogadores e partidas do jogo (ou só o modo filtrado, spec
+	// 012). Vazio = jogo sem scoringStats (ou sem dado nesse modo).
 	srows, err := r.pool.Query(ctx, `
 		SELECT stat_key, SUM(stat_value), COUNT(*)
-		FROM game_player_stats WHERE game_id = $1
-		GROUP BY stat_key ORDER BY stat_key`, gameID)
+		FROM game_player_stats WHERE game_id = $1 AND ($2 = '' OR mode_id = $2)
+		GROUP BY stat_key ORDER BY stat_key`, gameID, modeID)
 	if err != nil {
 		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: stats: %w", err)
 	}
@@ -468,15 +472,17 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 	return out, nil
 }
 
-// dailySeries lê uma série diária somando entre modos (spec 010): table e
-// valueCol são identificadores FIXOS do código (nunca entrada do usuário) —
-// mesmo padrão de leitura de game_daily, generalizado pras 3 tabelas novas.
-func (r *PostgresRepository) dailySeries(ctx context.Context, table, valueCol, gameID string, days int) ([]domain.DailyPoint, error) {
+// dailySeries lê uma série diária somando entre modos, ou só o modo
+// filtrado (spec 012): table e valueCol são identificadores FIXOS do
+// código (nunca entrada do usuário) — mesmo padrão de leitura de
+// game_daily, generalizado pras 3 tabelas novas (spec 010).
+func (r *PostgresRepository) dailySeries(ctx context.Context, table, valueCol, gameID string, days int, modeID string) ([]domain.DailyPoint, error) {
 	q := fmt.Sprintf(`
 		SELECT to_char(day, 'YYYY-MM-DD'), SUM(%s) FROM %s
 		WHERE game_id = $1 AND day >= (now() AT TIME ZONE 'utc')::date - $2::int
+		  AND ($3 = '' OR mode_id = $3)
 		GROUP BY day ORDER BY day`, valueCol, table)
-	rows, err := r.pool.Query(ctx, q, gameID, days)
+	rows, err := r.pool.Query(ctx, q, gameID, days, modeID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", table, err)
 	}

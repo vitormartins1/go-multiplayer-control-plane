@@ -29,6 +29,11 @@ type PlayerResult struct {
 type MatchResult struct {
 	MatchID string
 	GameID  string
+	// ModeID é o modo do jogo (ADR-0024) — publicado no envelope desde a
+	// spec 010, mas só extraído aqui na 012 (gap: os "primos"
+	// PlacementResult/CollectiveResult/ParticipationEvent já tinham).
+	// "" = evento anterior a esta correção (dado legado).
+	ModeID  string
 	Results []PlayerResult
 }
 
@@ -147,7 +152,12 @@ type DailyPoint struct {
 // por papel, host_world_dropin — spec 004).
 type GameAnalytics struct {
 	GameStat
-	Daily []DailyPoint
+	// ModeID é o filtro efetivamente aplicado (spec 012); "" = todos os
+	// modos. Eco do parâmetro de entrada — o cliente confirma o que
+	// recebeu sem adivinhar pelo conteúdo (séries vazias podem ser "sem
+	// dado" OU "filtro não bateu com nenhum modo", indistinguíveis sem o eco).
+	ModeID string
+	Daily  []DailyPoint
 	// RoleParticipations é a quebra de eventos de participação por papel/evento
 	// (host_world_dropin). Vazia no queue_arena. Aditivo (spec 004). Nome distinto
 	// do GameStat.Participations (contagem do queue_arena).
@@ -233,8 +243,13 @@ type MatchRepository interface {
 	ApplyCollective(ctx context.Context, cr CollectiveResult) (dup bool, err error)
 	// Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 	Overview(ctx context.Context) (Overview, error)
-	// GameAnalytics devolve o resumo do jogo + a série diária dos últimos `days`.
-	GameAnalytics(ctx context.Context, gameID string, days int) (GameAnalytics, error)
+	// GameAnalytics devolve o resumo do jogo + a série diária dos últimos
+	// `days`. modeID == "" agrega TODOS os modos (comportamento atual,
+	// default); modeID != "" filtra as séries mode-scoped (spec 012).
+	// Matches/Participations/Wins/Losses/Draws/AvgScore/Placement/Mission
+	// NUNCA são filtrados por modo (tabelas sem essa dimensão — item D,
+	// fora de escopo).
+	GameAnalytics(ctx context.Context, gameID string, days int, modeID string) (GameAnalytics, error)
 }
 
 // Ingestor é a Port de entrada usada pelo consumidor (driving adapter): entrega
