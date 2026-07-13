@@ -111,8 +111,13 @@ type Session struct {
 	// (ADR-0024, spec 017): mudar o perfil no registry não afeta a sessão em voo.
 	// O snapshot alimenta o manifest (GetSessionConfig) e a validação
 	// kind×arquétipo do ReportResult.
-	ModeID        string
-	Profile       *ProfileSnapshot
+	ModeID  string
+	Profile *ProfileSnapshot
+	// Players: no queue_arena, a escalação do match (imutável). No host_world,
+	// TODOS que participaram do mundo (host + phantoms) — acumula no JoinWorld e
+	// NÃO remove em DIED/LEFT (presença/capacidade é papel dos RoleSlots; sem
+	// isto, um coop que morre some da sala do admin como se nunca tivesse
+	// entrado — achado ao vivo, 2026-07-12).
 	Players       []string
 	TeamByPlayer  map[string]string // playerID -> teamID; nil/vazio em FFA (ADR-0023)
 	ServerID      string

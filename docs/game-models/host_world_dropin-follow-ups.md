@@ -131,6 +131,12 @@ declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por pap
 - **Fonte:** descoberta operacional de 2026-07-08 (cadastro dos modos do Capoeira Souls).
 - **Implementado (branch `feat/game-registry/worldparams-passthrough`):** escolhida a opção do **passthrough** (não a rejeição) — chave fora do vocabulário tipado de `host_world_dropin` some do struct decodificado mas sobrevive crua em `MultiplayerProfile.ExtraParams` (novo pacote `internal/jsonparams`, `Extract`/`Merge`) e é reinjetada no `params` de volta na leitura (HTTP GET e persistência JSONB) — chave tipada sempre manda, extra nunca sobrescreve. **Zero mudança no session-service ou no contrato do data plane**: `ParamsJSON`/`params_json` já eram bytes crus repassados verbatim (`registryclient.ModeProfile`), então a chave extra já chega ao Unity dentro do `params_json` de sempre — é só ler quando alguma spec precisar (ex.: item 13). Escopo só `host_world_dropin` por ora (outros arquétipos têm o mesmo problema, mas sem evidência de demanda ainda — replicar por evidência, mesmo princípio deste doc).
 
+## 15. Phantom morto sumia da sala do admin (`players[]` como presença) — ✅ FEITO (2026-07-12)
+
+- **O quê:** na bateria real do data plane (Agones/k3d, 2026-07-12), o operador viu o coop invocado por sinal "nunca aparecer" na sala do admin. Investigação com repro limpa (grpcurl ponta a ponta) mostrou que o caminho dos sinais **estava correto** (`SummonSign → JoinWorld → Players`); a causa real: `DIED`/`LEFT` chamavam `removeFromWorld`, que apagava o phantom **de `Players` além do slot** — e os bots coop morriam rápido pro boss. O jogador sumia da sala como se nunca tivesse entrado.
+- **Implementado (session-service, 2026-07-12):** `Players` de host_world virou lista de **PARTICIPANTES** (acumula no `JoinWorld`, com dedupe na re-entrada pós-morte; rollback de token remove só quem nunca entrou) — presença/capacidade continua sendo papel dos `RoleSlots`. `removeFromWorld` só libera o slot. Validado por teste (176 no serviço) e ao vivo (DIED → slot 0, participante permanece na sala).
+- **Evolução natural:** spec **`session/025-session-history`** (Proposed) — participantes com PAPEL no domínio + persistência das sessões fechadas (hoje 100% in-memory) + aba History no player e fechadas persistidas na aba Sessions do jogo.
+
 ---
 
 ## Aberturas maiores (roadmap-level, além do arco atual)

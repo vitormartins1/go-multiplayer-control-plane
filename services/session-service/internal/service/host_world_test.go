@@ -180,6 +180,7 @@ func TestJoinWorld_TokenFalha_ReverteSlot(t *testing.T) {
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "phantom-1", domain.RoleCoop)
 	require.Error(t, err)
 	assert.Equal(t, float64(0), svc.OccupiedSlots(domain.RoleCoop), "slot revertido após falha de token")
+	assert.Equal(t, []string{"host-1"}, worldPlayers(t, svc, sess.ID), "quem nunca entrou não vira participante")
 }
 
 func TestJoinWorld_MundoInexistente_ErrWorldNotFound(t *testing.T) {
