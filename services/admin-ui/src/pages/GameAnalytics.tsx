@@ -4,7 +4,7 @@ import { BarChart, DonutChart, LineChart } from "@mantine/charts";
 import { api, type MultiplayerMode, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
-import { FormSection } from "../components/FormSection";
+import { DashboardGrid, type WidgetDef } from "../components/DashboardGrid";
 import { formatDuration } from "../lib/format";
 
 // seletor de modo (spec 009): valores sentinela porque o Select do Mantine
@@ -74,6 +74,23 @@ function participationByRole(stats: ParticipationStat[]) {
   return { data, series };
 }
 
+// dailyLineChart é o LineChart genérico reaproveitado pelas 4 séries diárias
+// (queue_arena + as 3 novas da spec 010) — mesmo visual.
+function DailyLineChart({ data, label }: { data: { day: string; matches: number }[]; label: string }) {
+  return (
+    <LineChart
+      h={220}
+      data={data}
+      dataKey="day"
+      series={[{ name: "matches", label, color: "signal.5" }]}
+      curveType="monotone"
+      withDots={data.length < 40}
+      tickLine="x"
+      gridAxis="xy"
+    />
+  );
+}
+
 export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: MultiplayerMode[] }) {
   const { data, loading, error } = useAsync((s) => api.gameAnalytics(gameId, s), [gameId]);
   // "" (sentinela ALL_MODES) = sem filtro, mostra todos os modos somados.
@@ -92,19 +109,20 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   const hasOutcomes = !!data && data.wins + data.losses + data.draws > 0;
   const roleChart = participations.length > 0 ? participationByRole(participations) : null;
 
-  return (
-    <Stack>
-      {loading && !data && <Loader />}
-      {!!error && !data && <Alert color="critical">Analytics indisponível (analytics-service fora?).</Alert>}
+  // Catálogo de widgets (spec 062): cada seção vira um widget com id estável,
+  // disponível só quando a condição de dado (mesma de antes, agora
+  // centralizada) é satisfeita. A ordem aqui é só o default inicial — o
+  // operador reordena/redimensiona/esconde livremente (persistido por jogo).
+  const widgets = useMemo<WidgetDef[]>(() => {
+    if (!data) return [];
+    const out: WidgetDef[] = [];
 
-      {data && !hasData && participations.length === 0 && (
-        <Text c="dimmed">
-          Sem dados ainda — os agregados aparecem conforme as partidas terminam e reportam resultado.
-        </Text>
-      )}
-
-      {hasData && (
-        <>
+    if (hasData) {
+      out.push({
+        id: "summary",
+        title: "Resumo",
+        defaultH: 5,
+        render: () => (
           <SimpleGrid cols={{ base: 2, sm: 3 }}>
             <StatCard label="Partidas" value={String(data.matches)} />
             <StatCard label="Jogadores únicos" value={String(data.uniquePlayers)} />
@@ -113,49 +131,47 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
             <StatCard label="Derrotas" value={String(data.losses)} />
             <StatCard label="Empates" value={String(data.draws)} />
           </SimpleGrid>
+        ),
+      });
+    }
 
-          {/* Partidas por dia (queue_arena, migration game_daily) — o dado já
-              vinha da API e não era renderizado em lugar nenhum. */}
-          {data.daily.length > 0 && (
-            <FormSection label="Partidas por dia">
-              <LineChart
-                h={220}
-                data={data.daily}
-                dataKey="day"
-                series={[{ name: "matches", label: "Partidas", color: "signal.5" }]}
-                curveType="monotone"
-                withDots={data.daily.length < 40}
-                tickLine="x"
-                gridAxis="xy"
-              />
-            </FormSection>
-          )}
+    if (data.daily.length > 0) {
+      out.push({
+        id: "queue-daily",
+        title: "Partidas por dia",
+        defaultH: 9,
+        render: () => <DailyLineChart data={data.daily} label="Partidas" />,
+      });
+    }
 
-          {hasOutcomes && (
-            <FormSection label="Vitórias × derrotas × empates">
-              <DonutChart
-                size={160}
-                thickness={22}
-                withLabelsLine
-                withLabels
-                data={[
-                  { name: "Vitórias", value: data.wins, color: "green.6" },
-                  { name: "Derrotas", value: data.losses, color: "red.6" },
-                  { name: "Empates", value: data.draws, color: "yellow.6" },
-                ]}
-              />
-            </FormSection>
-          )}
-        </>
-      )}
+    if (hasOutcomes) {
+      out.push({
+        id: "outcomes-donut",
+        title: "Vitórias × derrotas × empates",
+        defaultH: 8,
+        render: () => (
+          <DonutChart
+            size={160}
+            thickness={22}
+            withLabelsLine
+            withLabels
+            data={[
+              { name: "Vitórias", value: data.wins, color: "green.6" },
+              { name: "Derrotas", value: data.losses, color: "red.6" },
+              { name: "Empates", value: data.draws, color: "yellow.6" },
+            ]}
+          />
+        ),
+      });
+    }
 
-      {/* host_world_dropin (spec 004/020/009): participações por papel/evento/outcome.
-          Só aparece quando o jogo reportou eventos de participação. Agrupado
-          por papel (Host/Co-op/Invasor) com evento como série. Quebra por modo
-          nomeado (ADR-0024) via seletor — só aparece quando há mais de um modo
-          distinto reportado (senão o filtro não teria o que filtrar). */}
-      {roleChart && (
-        <FormSection label="Participações por papel">
+    // host_world_dropin (spec 004/020/009): participações por papel/evento/outcome.
+    if (roleChart) {
+      out.push({
+        id: "participations-role",
+        title: "Participações por papel",
+        defaultH: Math.max(11, Math.ceil(roleChart.data.length * 70 / 30) + 6),
+        render: () => (
           <Stack gap="md">
             {modeIds.length > 1 && (
               <Select
@@ -205,20 +221,25 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               </Table.Tbody>
             </Table>
           </Stack>
-        </FormSection>
-      )}
+        ),
+      });
+    }
 
-      {/* battle_royale (BR4): distribuição de colocação. Só aparece quando o jogo
-          reportou resultados por colocação (placement). */}
-      {data?.placement && (
-        <FormSection label="Distribuição de colocação">
+    // battle_royale (BR4): distribuição de colocação.
+    if (data.placement) {
+      const placement = data.placement;
+      out.push({
+        id: "placement-distribution",
+        title: "Distribuição de colocação",
+        defaultH: 12,
+        render: () => (
           <Stack gap="md">
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
-              <StatCard label="1º lugar" value={String(data.placement.winners)} />
-              <StatCard label="Top 10" value={String(data.placement.topN)} />
-              <StatCard label="Resto" value={String(data.placement.rest)} />
-              <StatCard label="Participações" value={String(data.placement.entries)} />
-              <StatCard label="Sobrevivência média" value={formatDuration(data.placement.avgSurvivedMs)} />
+              <StatCard label="1º lugar" value={String(placement.winners)} />
+              <StatCard label="Top 10" value={String(placement.topN)} />
+              <StatCard label="Resto" value={String(placement.rest)} />
+              <StatCard label="Participações" value={String(placement.entries)} />
+              <StatCard label="Sobrevivência média" value={formatDuration(placement.avgSurvivedMs)} />
             </SimpleGrid>
             <DonutChart
               size={160}
@@ -226,24 +247,39 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               withLabelsLine
               withLabels
               data={[
-                { name: "1º lugar", value: data.placement.winners, color: "yellow.6" },
-                { name: "Top 10", value: data.placement.topN, color: "blue.5" },
-                { name: "Resto", value: data.placement.rest, color: "gray.5" },
+                { name: "1º lugar", value: placement.winners, color: "yellow.6" },
+                { name: "Top 10", value: placement.topN, color: "blue.5" },
+                { name: "Resto", value: placement.rest, color: "gray.5" },
               ]}
             />
           </Stack>
-        </FormSection>
-      )}
+        ),
+      });
+    }
 
-      {/* coop_mission (C4): desfecho coletivo da missão. Só aparece quando o jogo
-          reportou resultados coletivos (mission). */}
-      {data?.mission && (
-        <FormSection label="Desfecho das missões">
+    // battle_royale (spec 010): série "partidas por dia" — não existia antes.
+    if (data.placementDaily.length > 0) {
+      out.push({
+        id: "placement-daily",
+        title: "Partidas de battle royale por dia",
+        defaultH: 9,
+        render: () => <DailyLineChart data={data.placementDaily} label="Partidas" />,
+      });
+    }
+
+    // coop_mission (C4): desfecho coletivo da missão.
+    if (data.mission) {
+      const mission = data.mission;
+      out.push({
+        id: "mission-distribution",
+        title: "Desfecho das missões",
+        defaultH: 10,
+        render: () => (
           <Stack gap="md">
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
-              <StatCard label="Missões cumpridas" value={String(data.mission.successes)} />
-              <StatCard label="Missões falhas" value={String(data.mission.failures)} />
-              <StatCard label="Taxa de sucesso" value={`${(data.mission.successRate * 100).toFixed(1)}%`} />
+              <StatCard label="Missões cumpridas" value={String(mission.successes)} />
+              <StatCard label="Missões falhas" value={String(mission.failures)} />
+              <StatCard label="Taxa de sucesso" value={`${(mission.successRate * 100).toFixed(1)}%`} />
             </SimpleGrid>
             <DonutChart
               size={160}
@@ -251,13 +287,84 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               withLabelsLine
               withLabels
               data={[
-                { name: "Cumpridas", value: data.mission.successes, color: "green.6" },
-                { name: "Falhas", value: data.mission.failures, color: "red.6" },
+                { name: "Cumpridas", value: mission.successes, color: "green.6" },
+                { name: "Falhas", value: mission.failures, color: "red.6" },
               ]}
             />
           </Stack>
-        </FormSection>
+        ),
+      });
+    }
+
+    // coop_mission (spec 010): série "missões por dia" — não existia antes.
+    if (data.missionDaily.length > 0) {
+      out.push({
+        id: "mission-daily",
+        title: "Missões por dia",
+        defaultH: 9,
+        render: () => <DailyLineChart data={data.missionDaily} label="Missões" />,
+      });
+    }
+
+    // host_world_dropin (spec 010): série "eventos de participação por dia" —
+    // não existia antes (o arquétipo não tem partida terminal).
+    if (data.participationDaily.length > 0) {
+      out.push({
+        id: "participation-daily",
+        title: "Eventos de participação por dia",
+        defaultH: 9,
+        render: () => <DailyLineChart data={data.participationDaily} label="Eventos" />,
+      });
+    }
+
+    // stats brutos (spec 011): resumo agregado (soma/contagem/média) por métrica.
+    if (data.stats.length > 0) {
+      const stats = data.stats;
+      out.push({
+        id: "raw-stats",
+        title: "Stats agregados",
+        defaultH: 4 + stats.length * 2,
+        render: () => (
+          <Table striped withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Stat</Table.Th>
+                <Table.Th ta="right">Soma</Table.Th>
+                <Table.Th ta="right">Ocorrências</Table.Th>
+                <Table.Th ta="right">Média</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {stats.map((s) => (
+                <Table.Tr key={s.key}>
+                  <Table.Td>{s.key}</Table.Td>
+                  <Table.Td ta="right" ff="monospace">{s.sum}</Table.Td>
+                  <Table.Td ta="right" ff="monospace">{s.count}</Table.Td>
+                  <Table.Td ta="right" ff="monospace">{s.avg.toFixed(1)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        ),
+      });
+    }
+
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, hasData, hasOutcomes, roleChart, participations, modeIds, selectedMode, modes]);
+
+  return (
+    <Stack>
+      {loading && !data && <Loader />}
+      {!!error && !data && <Alert color="critical">Analytics indisponível (analytics-service fora?).</Alert>}
+
+      {data && widgets.length === 0 && (
+        <Text c="dimmed">
+          Sem dados ainda — os agregados aparecem conforme as partidas terminam e reportam resultado.
+        </Text>
       )}
+
+      {widgets.length > 0 && <DashboardGrid gameId={gameId} widgets={widgets} />}
     </Stack>
   );
 }
