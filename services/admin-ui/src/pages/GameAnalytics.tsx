@@ -1,16 +1,46 @@
 import { useMemo, useState } from "react";
 import { Alert, Loader, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
-import { api, type MultiplayerMode, type ParticipationStat } from "../lib/api";
+import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
 import { DashboardGrid, type WidgetDef } from "../components/DashboardGrid";
 import { formatDuration } from "../lib/format";
+import { ARCHETYPE_META } from "../lib/archetypeMeta";
 
-// seletor de modo (spec 009): valores sentinela porque o Select do Mantine
-// não lida bem com value="" (cai no branch de "sem seleção").
+// Widget -> arquétipo (spec 064): tabela fixa, cada widget já é condicionado
+// a um campo do GameAnalyticsDetail que só existe pra um arquétipo. raw-stats
+// fica de fora — cross-arquétipo por natureza (qualquer modo reporta stats).
+const WIDGET_ARCHETYPE: Record<string, MultiplayerProfile["archetype"]> = {
+  summary: "queue_arena",
+  "queue-daily": "queue_arena",
+  "outcomes-donut": "queue_arena",
+  "participations-role": "host_world_dropin",
+  "participation-daily": "host_world_dropin",
+  "placement-distribution": "battle_royale",
+  "placement-daily": "battle_royale",
+  "mission-distribution": "coop_mission",
+  "mission-daily": "coop_mission",
+};
+
+// Widgets cujo dado-fonte NÃO é filtrável por modo (analytics-service: as
+// tabelas cumulativas game_rollup/game_daily/game_placement_rollup/
+// game_mission_rollup não têm mode_id — item D, ainda pendente). Usado só
+// pra decidir se mostra o aviso de "ainda soma todos os modos".
+const UNSCOPED_WIDGETS = new Set(["summary", "queue-daily", "outcomes-donut", "placement-distribution", "mission-distribution"]);
+
+function UnscopedNotice({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <Text size="xs" c="dimmed" fs="italic">
+      Ainda soma todos os modos deste arquétipo — o filtro por modo não cobre este resumo.
+    </Text>
+  );
+}
+
+// seletor de modo (spec 009/064): sentinela porque o Select do Mantine não
+// lida bem com value="" (cai no branch de "sem seleção").
 const ALL_MODES = "__all__";
-const NO_MODE = "__none__";
 
 function modeLabel(modeId: string, modes: MultiplayerMode[]): string {
   if (!modeId) return "Sem modo";
@@ -92,22 +122,44 @@ function DailyLineChart({ data, label }: { data: { day: string; matches: number 
 }
 
 export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: MultiplayerMode[] }) {
-  const { data, loading, error } = useAsync((s) => api.gameAnalytics(gameId, s), [gameId]);
-  // "" (sentinela ALL_MODES) = sem filtro, mostra todos os modos somados.
+  // "" (sentinela ALL_MODES) = sem filtro, mostra todos os modos somados
+  // (spec 064: o seletor de página só oferece modos REAIS + "todos" — o
+  // sentinela NO_MODE do widget antigo não sobrevive, ver plan.md: o
+  // backend não distingue "filtrar por modo vazio" de "sem filtro", então
+  // oferecer essa opção no seletor de página seria enganoso).
   const [selectedMode, setSelectedMode] = useState(ALL_MODES);
+  const modeIdParam = selectedMode === ALL_MODES ? undefined : selectedMode;
+  const { data, loading, error } = useAsync(
+    (s) => api.gameAnalytics(gameId, { modeId: modeIdParam }, s),
+    [gameId, modeIdParam],
+  );
 
   const hasData = data && data.matches > 0;
-  const allParticipations = data?.roleParticipations ?? [];
-  // modos distintos com dado reportado (ADR-0024, spec 009) — "" vira "Sem modo"
-  // (dado anterior à spec, quando o evento não carregava modeId).
-  const modeIds = useMemo(() => [...new Set(allParticipations.map((p) => p.modeId))], [allParticipations]);
-  const participations =
-    selectedMode === ALL_MODES
-      ? allParticipations
-      : allParticipations.filter((p) => p.modeId === (selectedMode === NO_MODE ? "" : selectedMode));
+  const participations = data?.roleParticipations ?? [];
+  // modos distintos NOS DADOS RECEBIDOS (spec 009) — só tem >1 quando
+  // "Todos os modos" está selecionado (um modo específico já vem filtrado
+  // pelo backend, spec 064); decide se a coluna "Modo" da tabela aparece.
+  const modeIdsInData = useMemo(() => [...new Set(participations.map((p) => p.modeId))], [participations]);
   // total por partida (independente de arquétipo) — só some se não houver nenhum resultado.
   const hasOutcomes = !!data && data.wins + data.losses + data.draws > 0;
   const roleChart = participations.length > 0 ? participationByRole(participations) : null;
+
+  // arquétipo do modo selecionado (spec 064) — filtra o catálogo pra só
+  // mostrar widgets desse arquétipo (+ raw-stats, sempre elegível).
+  const selectedArchetype =
+    selectedMode !== ALL_MODES ? modes.find((m) => m.modeId === selectedMode)?.archetype : undefined;
+  // quantos modos do jogo compartilham um arquétipo — só mostra o aviso de
+  // "ainda soma todos os modos" nos widgets cumulativos (UNSCOPED_WIDGETS)
+  // quando isso de fato muda alguma coisa (>1 modo pra somar).
+  function archetypeModeCount(archetype: MultiplayerProfile["archetype"]) {
+    return modes.filter((m) => m.archetype === archetype).length;
+  }
+  // widget não cobre o filtro de modo (item D pendente) E há mais de um
+  // modo daquele arquétipo pra realmente confundir — só então avisa.
+  function showsUnscopedNotice(widgetId: string): boolean {
+    if (!selectedArchetype || !UNSCOPED_WIDGETS.has(widgetId)) return false;
+    return archetypeModeCount(selectedArchetype) > 1;
+  }
 
   // Catálogo de widgets (spec 062): cada seção vira um widget com id estável,
   // disponível só quando a condição de dado (mesma de antes, agora
@@ -122,15 +174,19 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "summary",
         title: "Resumo",
         defaultH: 5,
+        icon: ARCHETYPE_META.queue_arena.icon,
         render: () => (
-          <SimpleGrid cols={{ base: 2, sm: 3 }}>
-            <StatCard label="Partidas" value={String(data.matches)} />
-            <StatCard label="Jogadores únicos" value={String(data.uniquePlayers)} />
-            <StatCard label="Score médio" value={data.avgScore.toFixed(1)} />
-            <StatCard label="Vitórias" value={String(data.wins)} />
-            <StatCard label="Derrotas" value={String(data.losses)} />
-            <StatCard label="Empates" value={String(data.draws)} />
-          </SimpleGrid>
+          <Stack gap="xs">
+            <UnscopedNotice show={showsUnscopedNotice("summary")} />
+            <SimpleGrid cols={{ base: 2, sm: 3 }}>
+              <StatCard label="Partidas" value={String(data.matches)} />
+              <StatCard label="Jogadores únicos" value={String(data.uniquePlayers)} />
+              <StatCard label="Score médio" value={data.avgScore.toFixed(1)} />
+              <StatCard label="Vitórias" value={String(data.wins)} />
+              <StatCard label="Derrotas" value={String(data.losses)} />
+              <StatCard label="Empates" value={String(data.draws)} />
+            </SimpleGrid>
+          </Stack>
         ),
       });
     }
@@ -140,7 +196,13 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "queue-daily",
         title: "Partidas por dia",
         defaultH: 9,
-        render: () => <DailyLineChart data={data.daily} label="Partidas" />,
+        icon: ARCHETYPE_META.queue_arena.icon,
+        render: () => (
+          <Stack gap="xs">
+            <UnscopedNotice show={showsUnscopedNotice("queue-daily")} />
+            <DailyLineChart data={data.daily} label="Partidas" />
+          </Stack>
+        ),
       });
     }
 
@@ -149,43 +211,39 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "outcomes-donut",
         title: "Vitórias × derrotas × empates",
         defaultH: 8,
+        icon: ARCHETYPE_META.queue_arena.icon,
         render: () => (
-          <DonutChart
-            size={160}
-            thickness={22}
-            withLabelsLine
-            withLabels
-            data={[
-              { name: "Vitórias", value: data.wins, color: "green.6" },
-              { name: "Derrotas", value: data.losses, color: "red.6" },
-              { name: "Empates", value: data.draws, color: "yellow.6" },
-            ]}
-          />
+          <Stack gap="xs">
+            <UnscopedNotice show={showsUnscopedNotice("outcomes-donut")} />
+            <DonutChart
+              size={160}
+              thickness={22}
+              withLabelsLine
+              withLabels
+              data={[
+                { name: "Vitórias", value: data.wins, color: "green.6" },
+                { name: "Derrotas", value: data.losses, color: "red.6" },
+                { name: "Empates", value: data.draws, color: "yellow.6" },
+              ]}
+            />
+          </Stack>
         ),
       });
     }
 
     // host_world_dropin (spec 004/020/009): participações por papel/evento/outcome.
+    // Seletor de modo interno REMOVIDO (spec 064) — superado pelo seletor de
+    // página, que já filtra no backend; modeIdsInData só tem >1 elemento
+    // quando "Todos os modos" está selecionado (um modo específico já vem
+    // filtrado, então a coluna "Modo" não teria variação pra mostrar).
     if (roleChart) {
       out.push({
         id: "participations-role",
         title: "Participações por papel",
         defaultH: Math.max(11, Math.ceil(roleChart.data.length * 70 / 30) + 6),
+        icon: ARCHETYPE_META.host_world_dropin.icon,
         render: () => (
           <Stack gap="md">
-            {modeIds.length > 1 && (
-              <Select
-                label="Modo"
-                w={240}
-                allowDeselect={false}
-                value={selectedMode}
-                onChange={(v) => v && setSelectedMode(v)}
-                data={[
-                  { value: ALL_MODES, label: "Todos os modos" },
-                  ...modeIds.map((id) => ({ value: id || NO_MODE, label: modeLabel(id, modes) })),
-                ]}
-              />
-            )}
             <BarChart
               h={Math.max(160, roleChart.data.length * 70)}
               data={roleChart.data}
@@ -201,7 +259,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
             <Table striped withTableBorder>
               <Table.Thead>
                 <Table.Tr>
-                  {modeIds.length > 1 && <Table.Th>Modo</Table.Th>}
+                  {modeIdsInData.length > 1 && <Table.Th>Modo</Table.Th>}
                   <Table.Th>Papel</Table.Th>
                   <Table.Th>Evento</Table.Th>
                   <Table.Th>Desfecho</Table.Th>
@@ -211,7 +269,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               <Table.Tbody>
                 {participations.map((p) => (
                   <Table.Tr key={`${p.modeId}-${p.role}-${p.event}-${p.outcome}`}>
-                    {modeIds.length > 1 && <Table.Td c="dimmed">{modeLabel(p.modeId, modes)}</Table.Td>}
+                    {modeIdsInData.length > 1 && <Table.Td c="dimmed">{modeLabel(p.modeId, modes)}</Table.Td>}
                     <Table.Td>{ROLE_LABELS[p.role] ?? p.role}</Table.Td>
                     <Table.Td>{EVENT_LABELS[p.event] ?? p.event}</Table.Td>
                     <Table.Td c="dimmed">{OUTCOME_LABELS[p.outcome] ?? (p.outcome || "—")}</Table.Td>
@@ -232,8 +290,10 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "placement-distribution",
         title: "Distribuição de colocação",
         defaultH: 12,
+        icon: ARCHETYPE_META.battle_royale.icon,
         render: () => (
           <Stack gap="md">
+            <UnscopedNotice show={showsUnscopedNotice("placement-distribution")} />
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
               <StatCard label="1º lugar" value={String(placement.winners)} />
               <StatCard label="Top 10" value={String(placement.topN)} />
@@ -263,6 +323,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "placement-daily",
         title: "Partidas de battle royale por dia",
         defaultH: 9,
+        icon: ARCHETYPE_META.battle_royale.icon,
         render: () => <DailyLineChart data={data.placementDaily} label="Partidas" />,
       });
     }
@@ -274,8 +335,10 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "mission-distribution",
         title: "Desfecho das missões",
         defaultH: 10,
+        icon: ARCHETYPE_META.coop_mission.icon,
         render: () => (
           <Stack gap="md">
+            <UnscopedNotice show={showsUnscopedNotice("mission-distribution")} />
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
               <StatCard label="Missões cumpridas" value={String(mission.successes)} />
               <StatCard label="Missões falhas" value={String(mission.failures)} />
@@ -302,6 +365,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "mission-daily",
         title: "Missões por dia",
         defaultH: 9,
+        icon: ARCHETYPE_META.coop_mission.icon,
         render: () => <DailyLineChart data={data.missionDaily} label="Missões" />,
       });
     }
@@ -313,11 +377,14 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         id: "participation-daily",
         title: "Eventos de participação por dia",
         defaultH: 9,
+        icon: ARCHETYPE_META.host_world_dropin.icon,
         render: () => <DailyLineChart data={data.participationDaily} label="Eventos" />,
       });
     }
 
     // stats brutos (spec 011): resumo agregado (soma/contagem/média) por métrica.
+    // Sem ícone (spec 064): cross-arquétipo por natureza, já vem corretamente
+    // filtrado pelo backend quando um modo está selecionado (spec 012).
     if (data.stats.length > 0) {
       const stats = data.stats;
       out.push({
@@ -349,14 +416,31 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       });
     }
 
-    return out;
+    // filtra o catálogo pelo arquétipo do modo selecionado (spec 064) — só
+    // widgets desse arquétipo + raw-stats (sempre elegível, cross-arquétipo).
+    if (!selectedArchetype) return out;
+    return out.filter((w) => w.id === "raw-stats" || WIDGET_ARCHETYPE[w.id] === selectedArchetype);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, hasData, hasOutcomes, roleChart, participations, modeIds, selectedMode, modes]);
+  }, [data, hasData, hasOutcomes, roleChart, participations, modeIdsInData, selectedArchetype, modes]);
 
   return (
     <Stack>
       {loading && !data && <Loader />}
       {!!error && !data && <Alert color="critical">Analytics indisponível (analytics-service fora?).</Alert>}
+
+      {modes.length > 1 && (
+        <Select
+          label="Modo"
+          w={280}
+          allowDeselect={false}
+          value={selectedMode}
+          onChange={(v) => v && setSelectedMode(v)}
+          data={[
+            { value: ALL_MODES, label: "Todos os modos" },
+            ...modes.map((m) => ({ value: m.modeId, label: modeLabel(m.modeId, modes) })),
+          ]}
+        />
+      )}
 
       {data && widgets.length === 0 && (
         <Text c="dimmed">
