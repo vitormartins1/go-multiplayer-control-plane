@@ -99,6 +99,14 @@ func (c *Consumer) handleBatch(ctx context.Context, msgs []types.Message) {
 				continue
 			}
 			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitCollective(ctx, cr)})
+		case kind == "session_closed":
+			// fechamento de sessão (session-service/028): session health, spec 013.
+			evt, err := parseSessionClosed(body)
+			if err != nil {
+				c.log.Error("session_closed inválido (vai à DLQ)", slog.String("err", err.Error()))
+				continue
+			}
+			inflight = append(inflight, pending{msg: m, done: c.pool.SubmitSessionClosed(ctx, evt)})
 		case kind == "win_loss_draw" || matchID != "":
 			match, err := parse(body)
 			if err != nil {
@@ -215,6 +223,38 @@ func parseCollective(body []byte) (domain.CollectiveResult, error) {
 		cr.Players = append(cr.Players, domain.CollectivePlayerStat{PlayerID: p.PlayerID, Stats: p.Stats})
 	}
 	return cr, nil
+}
+
+// parseSessionClosed desserializa o envelope session_closed
+// (session-service/028) — fechamento de sessão, qualquer arquétipo/motivo.
+// Timestamps malformados são erro (envelope mal formado, vai à DLQ como os
+// demais parsers).
+func parseSessionClosed(body []byte) (domain.SessionCloseEvent, error) {
+	var env struct {
+		SessionID   string `json:"sessionId"`
+		GameID      string `json:"gameId"`
+		ModeID      string `json:"modeId"`
+		Archetype   string `json:"archetype"`
+		CloseReason string `json:"closeReason"`
+		OpenedAt    string `json:"openedAt"`
+		ClosedAt    string `json:"closedAt"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return domain.SessionCloseEvent{}, fmt.Errorf("unmarshal session closed: %w", err)
+	}
+	openedAt, err := time.Parse(time.RFC3339, env.OpenedAt)
+	if err != nil {
+		return domain.SessionCloseEvent{}, fmt.Errorf("session closed: openedAt: %w", err)
+	}
+	closedAt, err := time.Parse(time.RFC3339, env.ClosedAt)
+	if err != nil {
+		return domain.SessionCloseEvent{}, fmt.Errorf("session closed: closedAt: %w", err)
+	}
+	return domain.SessionCloseEvent{
+		SessionID: env.SessionID, GameID: env.GameID, ModeID: env.ModeID,
+		Archetype: env.Archetype, CloseReason: env.CloseReason,
+		OpenedAt: openedAt, ClosedAt: closedAt,
+	}, nil
 }
 
 // parse desserializa o envelope do fan-out (struct próprio, desacoplado).

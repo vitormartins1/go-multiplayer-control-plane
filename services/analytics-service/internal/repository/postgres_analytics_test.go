@@ -10,6 +10,7 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/007_participation_mode_id.sql",
 			"../../migrations/008_archetype_daily.sql",
 			"../../migrations/009_player_stats.sql",
+			"../../migrations/010_session_health.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -620,4 +622,86 @@ func TestGameAnalytics_ModeIDFiltro_IsolaSeriesDiarias(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, a.PlacementDaily, 1)
 	assert.Equal(t, int64(1), a.PlacementDaily[0].Matches, "filtrado: só o modo pedido")
+}
+
+// closeEvent monta um SessionCloseEvent com duração derivada de opened/closed.
+func closeEvent(sessionID, gameID, modeID, archetype, closeReason string, opened, closed time.Time) domain.SessionCloseEvent {
+	return domain.SessionCloseEvent{
+		SessionID: sessionID, GameID: gameID, ModeID: modeID, Archetype: archetype,
+		CloseReason: closeReason, OpenedAt: opened, ClosedAt: closed,
+	}
+}
+
+// TestApplySessionClosed_GravaRollupPorMotivo (spec 013): count + duração
+// somada por (game, mode, closeReason).
+func TestApplySessionClosed_GravaRollupPorMotivo(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "mundo-vivo", "host_world_dropin", "host_left", base, base.Add(6*time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "mundo-vivo", "host_world_dropin", "host_left", base, base.Add(4*time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("s3", "g1", "mundo-vivo", "host_world_dropin", "ttl", base, base.Add(30*time.Minute)))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, ga.SessionHealth, 2)
+
+	byReason := map[string]domain.SessionCloseStat{}
+	for _, h := range ga.SessionHealth {
+		byReason[h.CloseReason] = h
+	}
+	require.Contains(t, byReason, "host_left")
+	assert.Equal(t, int64(2), byReason["host_left"].Count)
+	assert.Equal(t, int64(10*60*1000), byReason["host_left"].DurationSumMs, "6min + 4min")
+	assert.InDelta(t, 5*60*1000, byReason["host_left"].AvgDurationMs, 0.001)
+	assert.Equal(t, "host_world_dropin", byReason["host_left"].Archetype)
+
+	require.Contains(t, byReason, "ttl")
+	assert.Equal(t, int64(1), byReason["ttl"].Count)
+}
+
+func TestApplySessionClosed_Reprocessado_NaoDobra(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	evt := closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(2*time.Minute))
+	dup1, err := repo.ApplySessionClosed(ctx, evt)
+	require.NoError(t, err)
+	assert.False(t, dup1)
+
+	dup2, err := repo.ApplySessionClosed(ctx, evt)
+	require.NoError(t, err)
+	assert.True(t, dup2, "reentrega do mesmo sessionId é no-op")
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.Len(t, ga.SessionHealth, 1)
+	assert.Equal(t, int64(1), ga.SessionHealth[0].Count, "não dobrou")
+}
+
+// TestGameAnalytics_SessionHealth_FiltraPorModo (spec 013): a tabela já
+// nasce com mode_id, sem a lacuna do item D.
+func TestGameAnalytics_SessionHealth_FiltraPorModo(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "modo-a", "queue_arena", "result", base, base.Add(time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "modo-b", "queue_arena", "result", base, base.Add(time.Minute)))
+	require.NoError(t, err)
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	assert.Len(t, all.SessionHealth, 2, "sem filtro: os 2 modos")
+
+	a, err := repo.GameAnalytics(ctx, "g1", 30, "modo-a")
+	require.NoError(t, err)
+	require.Len(t, a.SessionHealth, 1)
+	assert.Equal(t, "modo-a", a.SessionHealth[0].ModeID)
 }

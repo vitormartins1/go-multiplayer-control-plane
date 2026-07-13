@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -179,4 +180,25 @@ func TestParse_EnvelopeV1_FallbackPorWon(t *testing.T) {
 	require.Len(t, m.Results, 2)
 	assert.Equal(t, domain.OutcomeWin, m.Results[0].Outcome)
 	assert.Equal(t, domain.OutcomeLoss, m.Results[1].Outcome)
+}
+
+// TestParseSessionClosed_LeCamposCorretos (spec 013): sessionId/gameId/
+// modeId/archetype/closeReason/timestamps extraídos corretamente.
+func TestParseSessionClosed_LeCamposCorretos(t *testing.T) {
+	body := []byte(`{"kind":"session_closed","sessionId":"s1","gameId":"g1","modeId":"mundo-vivo","archetype":"host_world_dropin","closeReason":"host_left","openedAt":"2026-07-13T10:00:00Z","closedAt":"2026-07-13T10:06:00Z"}`)
+	evt, err := parseSessionClosed(body)
+	require.NoError(t, err)
+	assert.Equal(t, "s1", evt.SessionID)
+	assert.Equal(t, "g1", evt.GameID)
+	assert.Equal(t, "mundo-vivo", evt.ModeID)
+	assert.Equal(t, "host_world_dropin", evt.Archetype)
+	assert.Equal(t, "host_left", evt.CloseReason)
+	assert.Equal(t, time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC), evt.OpenedAt)
+	assert.Equal(t, time.Date(2026, 7, 13, 10, 6, 0, 0, time.UTC), evt.ClosedAt)
+}
+
+func TestParseSessionClosed_TimestampInvalido_Erro(t *testing.T) {
+	body := []byte(`{"kind":"session_closed","sessionId":"s1","gameId":"g1","closeReason":"result","openedAt":"not-a-time","closedAt":"2026-07-13T10:06:00Z"}`)
+	_, err := parseSessionClosed(body)
+	assert.Error(t, err)
 }

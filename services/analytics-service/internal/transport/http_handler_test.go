@@ -210,6 +210,45 @@ func TestGameAnalytics_200_ExpoeStats(t *testing.T) {
 	assert.Equal(t, 4.2, body.Stats[0].Avg)
 }
 
+// TestGameAnalytics_200_ExpoeSessionHealth (spec 013): distribuição por
+// motivo de fechamento no DTO.
+func TestGameAnalytics_200_ExpoeSessionHealth(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{
+		GameStat: domain.GameStat{GameID: "g1"},
+		SessionHealth: []domain.SessionCloseStat{
+			{ModeID: "mundo-vivo", Archetype: "host_world_dropin", CloseReason: "host_left", Count: 2, DurationSumMs: 600000, AvgDurationMs: 300000},
+		},
+	}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		SessionHealth []struct {
+			ModeID        string  `json:"modeId"`
+			Archetype     string  `json:"archetype"`
+			CloseReason   string  `json:"closeReason"`
+			Count         int64   `json:"count"`
+			DurationSumMs int64   `json:"durationSumMs"`
+			AvgDurationMs float64 `json:"avgDurationMs"`
+		} `json:"sessionHealth"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.SessionHealth, 1)
+	assert.Equal(t, "host_left", body.SessionHealth[0].CloseReason)
+	assert.Equal(t, int64(2), body.SessionHealth[0].Count)
+	assert.Equal(t, float64(300000), body.SessionHealth[0].AvgDurationMs)
+}
+
+func TestGameAnalytics_SemSessionHealth_ListaVazia(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1"}}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"sessionHealth":[]`, "campo aditivo, vazio sem session_closed processado")
+}
+
 func TestGameAnalytics_SemStats_ListaVazia(t *testing.T) {
 	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1"}}}
 	rec := httptest.NewRecorder()

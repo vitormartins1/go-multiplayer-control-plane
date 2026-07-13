@@ -281,6 +281,41 @@ func insertPlayerStats(ctx context.Context, tx pgx.Tx, gameID, modeID, matchID, 
 	return nil
 }
 
+// ApplySessionClosed agrega um fechamento de sessão numa única transação,
+// idempotente por sessionID (spec 013, session-service/028). A marca em
+// processed_sessions + o UPSERT do rollup vivem na mesma tx: reprocessar
+// (at-least-once do SQS) é no-op.
+func (r *PostgresRepository) ApplySessionClosed(ctx context.Context, evt domain.SessionCloseEvent) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply session closed: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
+
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO processed_sessions (session_id, game_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		evt.SessionID, evt.GameID)
+	if err != nil {
+		return false, fmt.Errorf("analytics repository: apply session closed: mark: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return true, tx.Commit(ctx) // já processado: no-op idempotente
+	}
+
+	durationMs := evt.ClosedAt.Sub(evt.OpenedAt).Milliseconds()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_session_rollup (game_id, mode_id, archetype, close_reason, count, duration_sum_ms)
+		VALUES ($1, $2, $3, $4, 1, $5)
+		ON CONFLICT (game_id, mode_id, close_reason) DO UPDATE
+		  SET count = game_session_rollup.count + 1,
+		      duration_sum_ms = game_session_rollup.duration_sum_ms + EXCLUDED.duration_sum_ms,
+		      archetype = EXCLUDED.archetype`,
+		evt.GameID, evt.ModeID, evt.Archetype, evt.CloseReason, durationMs); err != nil {
+		return false, fmt.Errorf("analytics repository: apply session closed: rollup: %w", err)
+	}
+	return false, tx.Commit(ctx)
+}
+
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -467,6 +502,28 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 		out.Stats = append(out.Stats, s)
 	}
 	if err := srows.Err(); err != nil {
+		return domain.GameAnalytics{}, err
+	}
+
+	// distribuição por motivo de fechamento (spec 013) — já nasce com
+	// mode_id, sem a lacuna do item D que afeta os campos acima.
+	hrows, err := r.pool.Query(ctx, `
+		SELECT mode_id, archetype, close_reason, count, duration_sum_ms
+		FROM game_session_rollup WHERE game_id = $1 AND ($2 = '' OR mode_id = $2)
+		ORDER BY mode_id, close_reason`, gameID, modeID)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: session health: %w", err)
+	}
+	defer hrows.Close()
+	for hrows.Next() {
+		var h domain.SessionCloseStat
+		if err := hrows.Scan(&h.ModeID, &h.Archetype, &h.CloseReason, &h.Count, &h.DurationSumMs); err != nil {
+			return domain.GameAnalytics{}, fmt.Errorf("analytics repository: scan session health: %w", err)
+		}
+		h.AvgDurationMs = avg(h.DurationSumMs, h.Count)
+		out.SessionHealth = append(out.SessionHealth, h)
+	}
+	if err := hrows.Err(); err != nil {
 		return domain.GameAnalytics{}, err
 	}
 	return out, nil
