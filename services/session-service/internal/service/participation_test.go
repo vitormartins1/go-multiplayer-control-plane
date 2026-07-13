@@ -195,6 +195,93 @@ func TestReportParticipation_PublishFalha_NaoMutaSlot(t *testing.T) {
 	assert.Equal(t, float64(1), svc.OccupiedSlots(domain.RoleInvader), "publish falhou -> slot intacto")
 }
 
+// participantOf lê o Participant de um jogador na sessão ativa pela
+// superfície admin (cópia) — espelha worldPlayers, mas devolve o registro
+// completo (spec 027: LastEvent/LastOutcome).
+func participantOf(t *testing.T, svc *Service, sessionID, playerID string) *domain.Participant {
+	t.Helper()
+	active, _ := svc.SessionsByGame("game-1")
+	for _, s := range active {
+		if s.ID != sessionID {
+			continue
+		}
+		for i := range s.Participants {
+			if s.Participants[i].PlayerID == playerID {
+				return &s.Participants[i]
+			}
+		}
+	}
+	return nil
+}
+
+func TestReportParticipation_GravaLastEventLastOutcome(t *testing.T) {
+	svc, _, _, sid := participationSetup(t)
+	_, _, err := svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err)
+
+	err = svc.ReportParticipationEvent(context.Background(), sid, evt("coop-1", domain.RoleCoop, domain.EventBossDefeated, domain.OutcomeSuccess))
+	require.NoError(t, err)
+
+	p := participantOf(t, svc, sid, "coop-1")
+	require.NotNil(t, p)
+	assert.Equal(t, domain.EventBossDefeated, p.LastEvent)
+	assert.Equal(t, domain.OutcomeSuccess, p.LastOutcome)
+}
+
+// DIED libera o slot (RoleSlots) mas não apaga o participante — o outcome
+// precisa sobreviver a essa liberação (achado da revisão do plan.md: as duas
+// mutações acontecem em locks separados).
+func TestReportParticipation_Died_GravaOutcomeMesmoLiberandoSlot(t *testing.T) {
+	svc, _, _, sid := participationSetup(t)
+	_, _, err := svc.JoinWorld(context.Background(), sid, "inv-1", domain.RoleInvader)
+	require.NoError(t, err)
+
+	err = svc.ReportParticipationEvent(context.Background(), sid, evt("inv-1", domain.RoleInvader, domain.EventDied, domain.OutcomeFail))
+	require.NoError(t, err)
+
+	p := participantOf(t, svc, sid, "inv-1")
+	require.NotNil(t, p)
+	assert.Equal(t, domain.EventDied, p.LastEvent)
+	assert.Equal(t, domain.OutcomeFail, p.LastOutcome)
+}
+
+func TestReportParticipation_DiedAusente_NaoGravaOutcome(t *testing.T) {
+	svc, _, _, sid := participationSetup(t)
+	err := svc.ReportParticipationEvent(context.Background(), sid, evt("ghost", domain.RoleCoop, domain.EventDied, domain.OutcomeFail))
+	require.NoError(t, err)
+	assert.Nil(t, participantOf(t, svc, sid, "ghost"), "no-op: evento sem JoinWorld prévio não cria participante")
+}
+
+// Re-entrada com o MESMO papel não reseta o outcome (dedupe da spec 025);
+// papel DIFERENTE reseta (nova ocorrência de participação, spec 027).
+func TestJoinWorld_Reentrada_ResetaOutcomeSoQuandoTrocaDePapel(t *testing.T) {
+	svc, _, _, sid := participationSetup(t)
+	_, _, err := svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err)
+	err = svc.ReportParticipationEvent(context.Background(), sid, evt("coop-1", domain.RoleCoop, domain.EventDied, domain.OutcomeFail))
+	require.NoError(t, err)
+
+	// mesmo papel: outcome permanece.
+	_, _, err = svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err)
+	p := participantOf(t, svc, sid, "coop-1")
+	require.NotNil(t, p)
+	assert.Equal(t, domain.EventDied, p.LastEvent, "mesmo papel não reseta")
+
+	// libera o slot de coop antes de trocar de papel (JoinWorld recusa
+	// re-entrada enquanto o jogador ainda ocupa um slot).
+	err = svc.ReportParticipationEvent(context.Background(), sid, evt("coop-1", domain.RoleCoop, domain.EventLeft, domain.OutcomeNeutral))
+	require.NoError(t, err)
+
+	// papel diferente: outcome reseta.
+	_, _, err = svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleInvader)
+	require.NoError(t, err)
+	p = participantOf(t, svc, sid, "coop-1")
+	require.NotNil(t, p)
+	assert.Empty(t, p.LastEvent, "papel diferente reseta o outcome")
+	assert.Empty(t, p.LastOutcome)
+}
+
 func TestReportParticipation_SemPublisher_Erro(t *testing.T) {
 	// mundo aberto sem WithParticipationPublisher.
 	alloc := &mockAllocator{}

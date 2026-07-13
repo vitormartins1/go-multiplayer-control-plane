@@ -255,11 +255,29 @@ func upsertParticipant(participants []domain.Participant, playerID, role string,
 			if p.Role != role {
 				participants[i].Role = role
 				participants[i].JoinedAt = joinedAt
+				// troca de papel = nova ocorrência de participação (spec 027):
+				// o último evento/outcome conhecido não se aplica mais.
+				participants[i].LastEvent = ""
+				participants[i].LastOutcome = ""
 			}
 			return participants
 		}
 	}
 	return append(participants, domain.Participant{PlayerID: playerID, Role: role, JoinedAt: joinedAt})
+}
+
+// setParticipantOutcome grava o último evento/outcome de participação
+// conhecido (spec 027) no participante correspondente, por PlayerID. No-op
+// se o participante não existe (evento reportado sem JoinWorld/OpenWorld
+// prévio — não é papel deste evento criar participante).
+func setParticipantOutcome(participants []domain.Participant, playerID, event, outcome string) {
+	for i, p := range participants {
+		if p.PlayerID == playerID {
+			participants[i].LastEvent = event
+			participants[i].LastOutcome = outcome
+			return
+		}
+	}
 }
 
 // ReportResult publica o resultado no fan-out e, só então, libera o server e
@@ -893,6 +911,15 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 		return fmt.Errorf("session service: participation event: publish: %w", err)
 	}
 	s.countParticipation(evt.Event)
+
+	// grava o último evento/outcome conhecido do participante (spec 027);
+	// re-lookup sob o lock (a sessão pode ter fechado entre o publish e
+	// aqui — idempotente, mesmo padrão do case Died/Left abaixo).
+	s.mu.Lock()
+	if cur, ok := s.sessions[sessionID]; ok {
+		setParticipantOutcome(cur.Participants, evt.PlayerID, evt.Event, evt.Outcome)
+	}
+	s.mu.Unlock()
 
 	switch evt.Event {
 	case domain.EventDied, domain.EventLeft:

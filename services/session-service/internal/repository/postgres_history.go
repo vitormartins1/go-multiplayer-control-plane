@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -41,23 +42,45 @@ func (r *PostgresHistoryRepository) SaveClosed(ctx context.Context, sess *domain
 		profileHash = sess.Profile.Hash
 	}
 
+	// result/team_by_player (spec 027): nil quando a sessão não tem resultado
+	// (fechamento sem ReportResult) ou times (FFA/host_world) — vira NULL, não
+	// literal JSON "null" (senão json.Unmarshal na leitura teria que distinguir
+	// os dois casos à toa).
+	var resultParam, teamsParam any
+	if sess.Result != nil {
+		b, err := json.Marshal(sess.Result)
+		if err != nil {
+			return fmt.Errorf("session history repository: save closed: marshal result: %w", err)
+		}
+		resultParam = string(b)
+	}
+	if len(sess.TeamByPlayer) > 0 {
+		b, err := json.Marshal(sess.TeamByPlayer)
+		if err != nil {
+			return fmt.Errorf("session history repository: save closed: marshal team_by_player: %w", err)
+		}
+		teamsParam = string(b)
+	}
+
 	const insertSession = `
 		INSERT INTO closed_sessions
 			(session_id, match_id, game_id, mode_id, archetype, origin,
-			 host_player_id, close_reason, profile_hash, opened_at, closed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+			 host_player_id, close_reason, profile_hash, opened_at, closed_at,
+			 result, team_by_player)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)`
 	if _, err := tx.Exec(ctx, insertSession,
 		sess.ID, sess.MatchID, sess.GameID, sess.ModeID, archetype, string(sess.Origin),
 		sess.HostPlayerID, string(sess.CloseReason), profileHash, sess.OpenedAt, sess.ClosedAt,
+		resultParam, teamsParam,
 	); err != nil {
 		return fmt.Errorf("session history repository: save closed: insert session: %w", err)
 	}
 
 	const insertPlayer = `
-		INSERT INTO closed_session_players (session_id, player_id, role, joined_at)
-		VALUES ($1, $2, $3, $4)`
+		INSERT INTO closed_session_players (session_id, player_id, role, joined_at, last_event, last_outcome)
+		VALUES ($1, $2, $3, $4, $5, $6)`
 	for _, p := range sess.Participants {
-		if _, err := tx.Exec(ctx, insertPlayer, sess.ID, p.PlayerID, p.Role, p.JoinedAt); err != nil {
+		if _, err := tx.Exec(ctx, insertPlayer, sess.ID, p.PlayerID, p.Role, p.JoinedAt, p.LastEvent, p.LastOutcome); err != nil {
 			return fmt.Errorf("session history repository: save closed: insert player: %w", err)
 		}
 	}
@@ -68,9 +91,9 @@ func (r *PostgresHistoryRepository) SaveClosed(ctx context.Context, sess *domain
 	return nil
 }
 
-const closedSessionCols = `session_id, match_id, game_id, mode_id, archetype, origin, host_player_id, close_reason, profile_hash, opened_at, closed_at`
+const closedSessionCols = `session_id, match_id, game_id, mode_id, archetype, origin, host_player_id, close_reason, profile_hash, opened_at, closed_at, result, team_by_player`
 
-const closedSessionColsAliased = `cs.session_id, cs.match_id, cs.game_id, cs.mode_id, cs.archetype, cs.origin, cs.host_player_id, cs.close_reason, cs.profile_hash, cs.opened_at, cs.closed_at`
+const closedSessionColsAliased = `cs.session_id, cs.match_id, cs.game_id, cs.mode_id, cs.archetype, cs.origin, cs.host_player_id, cs.close_reason, cs.profile_hash, cs.opened_at, cs.closed_at, cs.result, cs.team_by_player`
 
 // ClosedByGame lista as sessões fechadas do jogo, mais recente primeiro,
 // paginadas por closed_at (before zero = sem cursor).
@@ -126,7 +149,7 @@ func (r *PostgresHistoryRepository) attachParticipants(ctx context.Context, sess
 	}
 
 	const q = `
-		SELECT session_id, player_id, role, joined_at
+		SELECT session_id, player_id, role, joined_at, last_event, last_outcome
 		FROM closed_session_players
 		WHERE session_id = ANY($1)
 		ORDER BY joined_at`
@@ -140,7 +163,7 @@ func (r *PostgresHistoryRepository) attachParticipants(ctx context.Context, sess
 	for rows.Next() {
 		var sessionID string
 		var p domain.Participant
-		if err := rows.Scan(&sessionID, &p.PlayerID, &p.Role, &p.JoinedAt); err != nil {
+		if err := rows.Scan(&sessionID, &p.PlayerID, &p.Role, &p.JoinedAt, &p.LastEvent, &p.LastOutcome); err != nil {
 			return nil, fmt.Errorf("participants: scan: %w", err)
 		}
 		byID[sessionID] = append(byID[sessionID], p)
@@ -161,9 +184,11 @@ func scanClosedSessions(rows pgx.Rows) ([]domain.Session, error) {
 	for rows.Next() {
 		var s domain.Session
 		var archetype, profileHash, origin, closeReason string
+		var resultRaw, teamsRaw []byte
 		if err := rows.Scan(
 			&s.ID, &s.MatchID, &s.GameID, &s.ModeID, &archetype, &origin,
 			&s.HostPlayerID, &closeReason, &profileHash, &s.OpenedAt, &s.ClosedAt,
+			&resultRaw, &teamsRaw,
 		); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
@@ -172,6 +197,18 @@ func scanClosedSessions(rows pgx.Rows) ([]domain.Session, error) {
 		s.State = domain.SessionClosed
 		if archetype != "" || profileHash != "" {
 			s.Profile = &domain.ProfileSnapshot{Archetype: archetype, Hash: profileHash}
+		}
+		if resultRaw != nil {
+			var result domain.MatchOutcome
+			if err := json.Unmarshal(resultRaw, &result); err != nil {
+				return nil, fmt.Errorf("scan: unmarshal result: %w", err)
+			}
+			s.Result = &result
+		}
+		if teamsRaw != nil {
+			if err := json.Unmarshal(teamsRaw, &s.TeamByPlayer); err != nil {
+				return nil, fmt.Errorf("scan: unmarshal team_by_player: %w", err)
+			}
 		}
 		out = append(out, s)
 	}

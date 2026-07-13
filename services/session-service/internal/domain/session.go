@@ -175,6 +175,12 @@ type Participant struct {
 	PlayerID string
 	Role     string // "host" | "coop" | "invader" | "" | "team:<id>" (match)
 	JoinedAt time.Time
+	// LastEvent/LastOutcome são o último evento de participação conhecido
+	// (spec 027) — só existem em host_world_dropin (ReportParticipationEvent).
+	// Vazios = nunca reportou evento além do join (JOINED ainda não chegou,
+	// ou dado legado anterior a esta spec).
+	LastEvent   string // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
+	LastOutcome string // "SUCCESS" | "FAIL" | "NEUTRAL"
 }
 
 // WorldAttributes são os atributos de matchmaking que o host informa ao abrir o
