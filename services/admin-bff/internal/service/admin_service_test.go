@@ -699,7 +699,7 @@ func (f *fakeAnalytics) Overview(context.Context) (domain.AnalyticsOverview, err
 	return f.ov, f.err
 }
 
-func (f *fakeAnalytics) GameAnalytics(_ context.Context, _ string, _ int) (domain.GameAnalyticsDetail, error) {
+func (f *fakeAnalytics) GameAnalytics(_ context.Context, _ string, _ int, _ string) (domain.GameAnalyticsDetail, error) {
 	return f.detail, f.err
 }
 
