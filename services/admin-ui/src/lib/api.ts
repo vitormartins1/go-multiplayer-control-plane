@@ -384,6 +384,9 @@ export interface ParticipationStat {
 export interface GameAnalyticsDetail {
   gameId: string;
   gameName: string;
+  // modeId é o eco do filtro efetivamente aplicado (analytics-service/012,
+  // admin-bff/026); ausente = todos os modos.
+  modeId?: string;
   matches: number;
   uniquePlayers: number;
   wins: number;
@@ -508,8 +511,17 @@ export const api = {
   liveMetrics: (signal?: AbortSignal) => getJSON<LiveMetrics>("/api/metrics/live", signal),
   analyticsOverview: (signal?: AbortSignal) =>
     getJSON<AnalyticsOverview>("/api/analytics/overview", signal),
-  gameAnalytics: (gameId: string, signal?: AbortSignal) =>
-    getJSON<GameAnalyticsDetail>(`/api/analytics/games/${encodeURIComponent(gameId)}`, signal),
+  // modeId (spec 064): filtra o detalhe pelo modo escolhido; ausente = todos
+  // os modos (comportamento atual, default).
+  gameAnalytics: (gameId: string, opts?: { modeId?: string }, signal?: AbortSignal) => {
+    const q = new URLSearchParams();
+    if (opts?.modeId) q.set("modeId", opts.modeId);
+    const qs = q.toString();
+    return getJSON<GameAnalyticsDetail>(
+      `/api/analytics/games/${encodeURIComponent(gameId)}${qs ? `?${qs}` : ""}`,
+      signal,
+    );
+  },
 
   players: (limit: number, offset: number, signal?: AbortSignal) =>
     getJSON<PlayerPage>(`/api/players?limit=${limit}&offset=${offset}`, signal),

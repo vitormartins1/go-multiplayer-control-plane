@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActionIcon, Button, Group, Paper, Text } from "@mantine/core";
 import { IconEyeOff, IconLayoutGrid, IconRestore } from "@tabler/icons-react";
+import type { Icon } from "@tabler/icons-react";
 import ReactGridLayout, { WidthProvider, type Layout } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -13,6 +14,9 @@ export interface WidgetDef {
   id: string;
   title: string;
   defaultH: number; // em linhas do grid (rowHeight)
+  // icon é só apresentação (badge de arquétipo, spec 064) — não entra no
+  // layout persistido (WidgetLayoutItem/localStorage).
+  icon?: Icon;
   render: () => React.ReactNode;
 }
 
@@ -96,9 +100,12 @@ export function DashboardGrid({ gameId, widgets }: { gameId: string; widgets: Wi
             <div key={it.i}>
               <Paper withBorder p="md" h="100%" style={{ overflow: "auto" }}>
                 <Group justify="space-between" mb="xs" wrap="nowrap">
-                  <Text fw={600} size="sm">
-                    {widget.title}
-                  </Text>
+                  <Group gap={6} wrap="nowrap">
+                    {widget.icon && <widget.icon size={14} />}
+                    <Text fw={600} size="sm">
+                      {widget.title}
+                    </Text>
+                  </Group>
                   {editing && (
                     <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => hideWidget(it.i)}>
                       <IconEyeOff size={14} />
