@@ -35,6 +35,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/006_participation_event_id_and_outcome.sql",
 			"../../migrations/007_participation_mode_id.sql",
 			"../../migrations/008_archetype_daily.sql",
+			"../../migrations/009_player_stats.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -441,4 +442,122 @@ func TestOverview_OrdenaPorMatchesESomaTotais(t *testing.T) {
 func mustApply(repo *PostgresRepository, ctx context.Context, m domain.MatchResult) error {
 	_, err := repo.ApplyMatch(ctx, m)
 	return err
+}
+
+// --- spec 011: captura de stats brutos ---
+
+func TestApplyMatch_GravaStatsBrutos(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	_, err := repo.ApplyMatch(ctx, match("m1", "g1",
+		domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 10, Stats: map[string]int64{"kills": 7}},
+		domain.PlayerResult{PlayerID: "p2", Outcome: "loss", Score: 2, Stats: map[string]int64{"kills": 1}},
+	))
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.Stats, 1)
+	assert.Equal(t, "kills", ga.Stats[0].Key)
+	assert.Equal(t, int64(8), ga.Stats[0].Sum)
+	assert.Equal(t, int64(2), ga.Stats[0].Count)
+	assert.InDelta(t, 4.0, ga.Stats[0].Avg, 0.001)
+}
+
+func TestApplyMatch_SemStats_NaoGravaNada(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	require.NoError(t, mustApply(repo, ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Score: 10})))
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	assert.Empty(t, ga.Stats, "jogo sem scoringStats nunca reporta stats")
+}
+
+func TestApplyMatch_Reprocessado_NaoDobraStats(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	m := match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Stats: map[string]int64{"kills": 5}})
+
+	require.NoError(t, mustApply(repo, ctx, m))
+	require.NoError(t, mustApply(repo, ctx, m)) // reentrega at-least-once
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.Stats, 1)
+	assert.Equal(t, int64(5), ga.Stats[0].Sum, "reentrega não dobra")
+	assert.Equal(t, int64(1), ga.Stats[0].Count)
+}
+
+func TestApplyPlacement_GravaStatsBrutos(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	pr := placement("m1", "g1",
+		domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4}},
+		domain.PlacementEntry{PlayerID: "p2", Placement: 2, SurvivedMs: 800000},
+	)
+	_, err := repo.ApplyPlacement(ctx, pr)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.Stats, 1)
+	assert.Equal(t, "kills", ga.Stats[0].Key)
+	assert.Equal(t, int64(4), ga.Stats[0].Sum)
+	assert.Equal(t, int64(1), ga.Stats[0].Count, "só p1 reportou kills")
+}
+
+func TestApplyCollective_GravaStatsBrutos(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	cr := domain.CollectiveResult{
+		MatchID: "m1", GameID: "g1", Outcome: domain.MissionSuccess,
+		Players: []domain.CollectivePlayerStat{
+			{PlayerID: "p1", Stats: map[string]int64{"revives": 2}},
+			{PlayerID: "p2", Stats: map[string]int64{"revives": 1}},
+		},
+	}
+	_, err := repo.ApplyCollective(ctx, cr)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.Stats, 1)
+	assert.Equal(t, "revives", ga.Stats[0].Key)
+	assert.Equal(t, int64(3), ga.Stats[0].Sum)
+	assert.Equal(t, int64(2), ga.Stats[0].Count)
+}
+
+func TestApplyParticipation_GravaStatsBrutos(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	evt := pevt("g1", "w1", "coop-1", "coop", "DIED")
+	evt.Stats = map[string]int64{"deaths": 1}
+	_, err := repo.ApplyParticipation(ctx, evt)
+	require.NoError(t, err)
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.Stats, 1)
+	assert.Equal(t, "deaths", ga.Stats[0].Key)
+	assert.Equal(t, int64(1), ga.Stats[0].Sum)
+}
+
+func TestGameAnalytics_Stats_AgregaEntrePartidasDistintas(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	require.NoError(t, mustApply(repo, ctx, match("m1", "g1", domain.PlayerResult{PlayerID: "p1", Stats: map[string]int64{"kills": 3}})))
+	require.NoError(t, mustApply(repo, ctx, match("m2", "g1", domain.PlayerResult{PlayerID: "p2", Stats: map[string]int64{"kills": 5}})))
+
+	ga, err := repo.GameAnalytics(ctx, "g1", 30)
+	require.NoError(t, err)
+	require.Len(t, ga.Stats, 1)
+	assert.Equal(t, int64(8), ga.Stats[0].Sum)
+	assert.Equal(t, int64(2), ga.Stats[0].Count)
+	assert.InDelta(t, 4.0, ga.Stats[0].Avg, 0.001)
 }

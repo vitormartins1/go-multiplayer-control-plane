@@ -157,3 +157,37 @@ func TestGameAnalytics_200_ExpoeModeID(t *testing.T) {
 	assert.Equal(t, "batizado", body.RoleParticipations[0].ModeID)
 	assert.Equal(t, "", body.RoleParticipations[1].ModeID, "sem modo (dado anterior à spec 009) cai no bucket vazio")
 }
+
+// resumo agregado de stats brutos (spec 011).
+func TestGameAnalytics_200_ExpoeStats(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{
+		GameStat: domain.GameStat{GameID: "g1"},
+		Stats:    []domain.StatSummary{{Key: "kills", Sum: 42, Count: 10, Avg: 4.2}},
+	}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		Stats []struct {
+			Key   string  `json:"key"`
+			Sum   int64   `json:"sum"`
+			Count int64   `json:"count"`
+			Avg   float64 `json:"avg"`
+		} `json:"stats"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Stats, 1)
+	assert.Equal(t, "kills", body.Stats[0].Key)
+	assert.Equal(t, int64(42), body.Stats[0].Sum)
+	assert.Equal(t, 4.2, body.Stats[0].Avg)
+}
+
+func TestGameAnalytics_SemStats_ListaVazia(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1"}}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"stats":[]`, "campo aditivo, vazio sem scoringStats")
+}

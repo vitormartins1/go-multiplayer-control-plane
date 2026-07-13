@@ -61,6 +61,12 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 			m.GameID, p.PlayerID); err != nil {
 			return false, fmt.Errorf("analytics repository: apply match: player seen: %w", err)
 		}
+		// stats brutos por jogador (spec 011); mode_id fica vazio aqui —
+		// MatchResult não carrega o modo (fora de escopo da spec 010 pro
+		// queue_arena, que já tinha game_daily sem mode_id).
+		if err := insertPlayerStats(ctx, tx, m.GameID, "", m.MatchID, p.PlayerID, p.Stats); err != nil {
+			return false, fmt.Errorf("analytics repository: apply match: stats: %w", err)
+		}
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -126,6 +132,12 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 		evt.GameID, evt.ModeID); err != nil {
 		return false, fmt.Errorf("analytics repository: apply participation: daily: %w", err)
 	}
+
+	// stats brutos por jogador (spec 011, destravado por session-service/026):
+	// match_id = session_id — host_world_dropin não tem matchId.
+	if err := insertPlayerStats(ctx, tx, evt.GameID, evt.ModeID, evt.SessionID, evt.PlayerID, evt.Stats); err != nil {
+		return false, fmt.Errorf("analytics repository: apply participation: stats: %w", err)
+	}
 	return false, tx.Commit(ctx)
 }
 
@@ -185,6 +197,13 @@ func (r *PostgresRepository) ApplyPlacement(ctx context.Context, pr domain.Place
 		pr.GameID, pr.ModeID); err != nil {
 		return false, fmt.Errorf("analytics repository: apply placement: daily: %w", err)
 	}
+
+	// stats brutos por jogador (spec 011).
+	for _, e := range pr.Entries {
+		if err := insertPlayerStats(ctx, tx, pr.GameID, pr.ModeID, pr.MatchID, e.PlayerID, e.Stats); err != nil {
+			return false, fmt.Errorf("analytics repository: apply placement: stats: %w", err)
+		}
+	}
 	return false, tx.Commit(ctx)
 }
 
@@ -235,7 +254,31 @@ func (r *PostgresRepository) ApplyCollective(ctx context.Context, cr domain.Coll
 		cr.GameID, cr.ModeID); err != nil {
 		return false, fmt.Errorf("analytics repository: apply collective: daily: %w", err)
 	}
+
+	// stats brutos por jogador (spec 011).
+	for _, p := range cr.Players {
+		if err := insertPlayerStats(ctx, tx, cr.GameID, cr.ModeID, cr.MatchID, p.PlayerID, p.Stats); err != nil {
+			return false, fmt.Errorf("analytics repository: apply collective: stats: %w", err)
+		}
+	}
 	return false, tx.Commit(ctx)
+}
+
+// insertPlayerStats grava as linhas de stats brutos de um jogador (spec 011),
+// dentro da tx já aberta pelo Apply* chamador — sem proteção própria contra
+// reentrega (a tx inteira já está condicionada ao processed_matches/
+// processed_participations do chamador). No-op se stats vier vazio (jogo sem
+// scoringStats).
+func insertPlayerStats(ctx context.Context, tx pgx.Tx, gameID, modeID, matchID, playerID string, stats map[string]int64) error {
+	for key, value := range stats {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO game_player_stats (game_id, mode_id, match_id, player_id, stat_key, stat_value)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			gameID, modeID, matchID, playerID, key, value); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	return nil
 }
 
 // Overview devolve os totais cross-game + os jogos ordenados por matches desc.
@@ -399,6 +442,28 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 	default:
 		md.SuccessRate = ratio(md.Successes, md.Successes+md.Failures)
 		out.Mission = &md
+	}
+
+	// resumo agregado de stats brutos (spec 011): soma/contagem/média entre
+	// TODOS os jogadores e partidas do jogo. Vazio = jogo sem scoringStats.
+	srows, err := r.pool.Query(ctx, `
+		SELECT stat_key, SUM(stat_value), COUNT(*)
+		FROM game_player_stats WHERE game_id = $1
+		GROUP BY stat_key ORDER BY stat_key`, gameID)
+	if err != nil {
+		return domain.GameAnalytics{}, fmt.Errorf("analytics repository: stats: %w", err)
+	}
+	defer srows.Close()
+	for srows.Next() {
+		var s domain.StatSummary
+		if err := srows.Scan(&s.Key, &s.Sum, &s.Count); err != nil {
+			return domain.GameAnalytics{}, fmt.Errorf("analytics repository: scan stats: %w", err)
+		}
+		s.Avg = avg(s.Sum, s.Count)
+		out.Stats = append(out.Stats, s)
+	}
+	if err := srows.Err(); err != nil {
+		return domain.GameAnalytics{}, err
 	}
 	return out, nil
 }

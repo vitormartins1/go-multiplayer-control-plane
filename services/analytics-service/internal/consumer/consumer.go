@@ -147,35 +147,38 @@ func peekKind(body []byte) (kind, matchID string) {
 // parseParticipation desserializa o envelope participation_event (host_world_dropin).
 func parseParticipation(body []byte) (domain.ParticipationEvent, error) {
 	var env struct {
-		GameID    string `json:"gameId"`
-		ModeID    string `json:"modeId"`
-		SessionID string `json:"sessionId"`
-		PlayerID  string `json:"playerId"`
-		Role      string `json:"role"`
-		Event     string `json:"event"`
-		Outcome   string `json:"outcome"`
-		EventID   string `json:"eventId"`
+		GameID    string           `json:"gameId"`
+		ModeID    string           `json:"modeId"`
+		SessionID string           `json:"sessionId"`
+		PlayerID  string           `json:"playerId"`
+		Role      string           `json:"role"`
+		Event     string           `json:"event"`
+		Outcome   string           `json:"outcome"`
+		EventID   string           `json:"eventId"`
+		Stats     map[string]int64 `json:"stats"` // spec 011, destravado por session-service/026
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		return domain.ParticipationEvent{}, fmt.Errorf("unmarshal participation: %w", err)
 	}
 	return domain.ParticipationEvent{
 		GameID: env.GameID, ModeID: env.ModeID, SessionID: env.SessionID, PlayerID: env.PlayerID,
-		Role: env.Role, Event: env.Event, Outcome: env.Outcome, EventID: env.EventID,
+		Role: env.Role, Event: env.Event, Outcome: env.Outcome, EventID: env.EventID, Stats: env.Stats,
 	}, nil
 }
 
 // parsePlacement desserializa o envelope placement (battle_royale, session/015).
 // O analytics agrega colocação + sobrevivência + série diária por modo (spec
-// 010); ignora playerId/teamId/stats.
+// 010) + stats brutos por jogador (spec 011); ignora teamId.
 func parsePlacement(body []byte) (domain.PlacementResult, error) {
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
 		ModeID  string `json:"modeId"`
 		Entries []struct {
-			Placement  int   `json:"placement"`
-			SurvivedMs int64 `json:"survivedMs"`
+			PlayerID   string           `json:"playerId"`
+			Placement  int              `json:"placement"`
+			SurvivedMs int64            `json:"survivedMs"`
+			Stats      map[string]int64 `json:"stats"`
 		} `json:"entries"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -183,25 +186,35 @@ func parsePlacement(body []byte) (domain.PlacementResult, error) {
 	}
 	pr := domain.PlacementResult{MatchID: env.MatchID, GameID: env.GameID, ModeID: env.ModeID}
 	for _, e := range env.Entries {
-		pr.Entries = append(pr.Entries, domain.PlacementEntry{Placement: e.Placement, SurvivedMs: e.SurvivedMs})
+		pr.Entries = append(pr.Entries, domain.PlacementEntry{
+			PlayerID: e.PlayerID, Placement: e.Placement, SurvivedMs: e.SurvivedMs, Stats: e.Stats,
+		})
 	}
 	return pr, nil
 }
 
 // parseCollective desserializa o envelope collective (coop_mission, session/016).
-// O analytics agrega o desfecho da SESSÃO + série diária por modo (spec 010);
-// ignora players/stats.
+// O analytics agrega o desfecho da SESSÃO + série diária por modo (spec 010)
+// + stats brutos por jogador (spec 011); ignora teamId.
 func parseCollective(body []byte) (domain.CollectiveResult, error) {
 	var env struct {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
 		ModeID  string `json:"modeId"`
 		Outcome string `json:"outcome"`
+		Players []struct {
+			PlayerID string           `json:"playerId"`
+			Stats    map[string]int64 `json:"stats"`
+		} `json:"players"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		return domain.CollectiveResult{}, fmt.Errorf("unmarshal collective: %w", err)
 	}
-	return domain.CollectiveResult{MatchID: env.MatchID, GameID: env.GameID, ModeID: env.ModeID, Outcome: env.Outcome}, nil
+	cr := domain.CollectiveResult{MatchID: env.MatchID, GameID: env.GameID, ModeID: env.ModeID, Outcome: env.Outcome}
+	for _, p := range env.Players {
+		cr.Players = append(cr.Players, domain.CollectivePlayerStat{PlayerID: p.PlayerID, Stats: p.Stats})
+	}
+	return cr, nil
 }
 
 // parse desserializa o envelope do fan-out (struct próprio, desacoplado).
@@ -210,10 +223,11 @@ func parse(body []byte) (domain.MatchResult, error) {
 		MatchID string `json:"matchId"`
 		GameID  string `json:"gameId"`
 		Results []struct {
-			PlayerID string `json:"playerId"`
-			Outcome  string `json:"outcome"` // "win"|"loss"|"draw" (ADR-0023)
-			Won      bool   `json:"won"`     // compat/fallback (envelope v1)
-			Score    int64  `json:"score"`
+			PlayerID string           `json:"playerId"`
+			Outcome  string           `json:"outcome"` // "win"|"loss"|"draw" (ADR-0023)
+			Won      bool             `json:"won"`     // compat/fallback (envelope v1)
+			Score    int64            `json:"score"`
+			Stats    map[string]int64 `json:"stats"` // spec 011
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -224,6 +238,7 @@ func parse(body []byte) (domain.MatchResult, error) {
 		m.Results = append(m.Results, domain.PlayerResult{
 			PlayerID: r.PlayerID,
 			Outcome:  outcomeOf(r.Outcome, r.Won),
+			Stats:    r.Stats,
 			Won:      r.Won,
 			Score:    r.Score,
 		})
