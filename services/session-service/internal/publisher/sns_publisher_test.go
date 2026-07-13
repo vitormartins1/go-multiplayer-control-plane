@@ -116,6 +116,35 @@ func TestSNSPublishParticipation_EventIDVazio_OmiteDoEnvelope(t *testing.T) {
 	assert.NotContains(t, raw, "eventId", "omitempty: data plane antigo não manda o campo")
 }
 
+// TestSNSPublishParticipation_StatsPassamParaOEnvelope (spec 026): mesmo
+// padrão dos outros 3 kinds — stats repassados sem validação de conteúdo.
+func TestSNSPublishParticipation_StatsPassamParaOEnvelope(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	evt := domain.ParticipationEvent{
+		PlayerID: "coop-1", Role: domain.RoleCoop, Event: domain.EventBossDefeated, Outcome: domain.OutcomeSuccess,
+		Stats: map[string]int64{"kills": 2, "revives": 1},
+	}
+	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", "default", evt))
+
+	var got participationEnvelope
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &got))
+	assert.Equal(t, map[string]int64{"kills": 2, "revives": 1}, got.Stats)
+}
+
+func TestSNSPublishParticipation_StatsVazio_OmiteDoEnvelope(t *testing.T) {
+	fake := &fakeSNS{}
+	p := &SNS{client: fake, topicARN: "arn:aws:sns:local:match-results", log: logger.New("test")}
+
+	evt := domain.ParticipationEvent{PlayerID: "coop-1", Role: domain.RoleCoop, Event: domain.EventBossDefeated, Outcome: domain.OutcomeSuccess}
+	require.NoError(t, p.PublishParticipation(context.Background(), "game-1", "world-7", "default", evt))
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(*fake.in.Message), &raw))
+	assert.NotContains(t, raw, "stats", "omitempty: data plane antigo não manda o campo")
+}
+
 func TestSNSPublishParticipation_ErroDoSNS_Propaga(t *testing.T) {
 	fake := &fakeSNS{err: errors.New("topic indisponível")}
 	p := &SNS{client: fake, topicARN: "arn", log: logger.New("test")}

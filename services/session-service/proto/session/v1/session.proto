@@ -139,6 +139,7 @@ message ReportParticipationEventRequest {
   string event = 4;   // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
   string outcome = 5; // "SUCCESS" | "FAIL" | "NEUTRAL"
   string event_id = 6; // identifica a ocorrência (follow-up #4, spec 021); vazio = ok, sinks caem no fallback
+  map<string, int64> stats = 7; // métricas opcionais do participante (kills, revives, ...; spec 026)
 }
 
 message ReportParticipationEventResponse {}

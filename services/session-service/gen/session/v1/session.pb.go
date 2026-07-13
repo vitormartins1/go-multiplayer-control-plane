@@ -766,10 +766,11 @@ type ReportParticipationEventRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	PlayerId      string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`                      // "host" | "coop" | "invader"
-	Event         string                 `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`                    // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
-	Outcome       string                 `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`                // "SUCCESS" | "FAIL" | "NEUTRAL"
-	EventId       string                 `protobuf:"bytes,6,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // identifica a ocorrência (follow-up #4, spec 021); vazio = ok, sinks caem no fallback
+	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`                                                                              // "host" | "coop" | "invader"
+	Event         string                 `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`                                                                            // "JOINED" | "BOSS_DEFEATED" | "HOST_KILLED" | "DIED" | "LEFT"
+	Outcome       string                 `protobuf:"bytes,5,opt,name=outcome,proto3" json:"outcome,omitempty"`                                                                        // "SUCCESS" | "FAIL" | "NEUTRAL"
+	EventId       string                 `protobuf:"bytes,6,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`                                                         // identifica a ocorrência (follow-up #4, spec 021); vazio = ok, sinks caem no fallback
+	Stats         map[string]int64       `protobuf:"bytes,7,rep,name=stats,proto3" json:"stats,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // métricas opcionais do participante (kills, revives, ...; spec 026)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -844,6 +845,13 @@ func (x *ReportParticipationEventRequest) GetEventId() string {
 		return x.EventId
 	}
 	return ""
+}
+
+func (x *ReportParticipationEventRequest) GetStats() map[string]int64 {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
 }
 
 type ReportParticipationEventResponse struct {
@@ -1702,7 +1710,7 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
 	"weaponTier\x12,\n" +
 	"\x12free_invader_slots\x18\x04 \x01(\x05R\x10freeInvaderSlots\x12#\n" +
-	"\rpassword_hash\x18\x05 \x01(\tR\fpasswordHash\"\xbc\x01\n" +
+	"\rpassword_hash\x18\x05 \x01(\tR\fpasswordHash\"\xc4\x02\n" +
 	"\x1fReportParticipationEventRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
@@ -1710,7 +1718,12 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12\x14\n" +
 	"\x05event\x18\x04 \x01(\tR\x05event\x12\x18\n" +
 	"\aoutcome\x18\x05 \x01(\tR\aoutcome\x12\x19\n" +
-	"\bevent_id\x18\x06 \x01(\tR\aeventId\"\"\n" +
+	"\bevent_id\x18\x06 \x01(\tR\aeventId\x12L\n" +
+	"\x05stats\x18\a \x03(\v26.session.v1.ReportParticipationEventRequest.StatsEntryR\x05stats\x1a8\n" +
+	"\n" +
+	"StatsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\"\n" +
 	" ReportParticipationEventResponse\"\xa5\x01\n" +
 	"\x14CreateSessionRequest\x12\x19\n" +
 	"\bmatch_id\x18\x01 \x01(\tR\amatchId\x12\x18\n" +
@@ -1799,7 +1812,7 @@ func file_session_v1_session_proto_rawDescGZIP() []byte {
 	return file_session_v1_session_proto_rawDescData
 }
 
-var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_session_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_session_v1_session_proto_goTypes = []any{
 	(*GetSessionConfigRequest)(nil),          // 0: session.v1.GetSessionConfigRequest
 	(*GetSessionConfigResponse)(nil),         // 1: session.v1.GetSessionConfigResponse
@@ -1828,48 +1841,50 @@ var file_session_v1_session_proto_goTypes = []any{
 	(*PlacementEntry)(nil),                   // 24: session.v1.PlacementEntry
 	(*CollectiveResult)(nil),                 // 25: session.v1.CollectiveResult
 	(*CollectivePlayer)(nil),                 // 26: session.v1.CollectivePlayer
-	nil,                                      // 27: session.v1.PlayerOutcome.StatsEntry
-	nil,                                      // 28: session.v1.PlacementEntry.StatsEntry
-	nil,                                      // 29: session.v1.CollectivePlayer.StatsEntry
+	nil,                                      // 27: session.v1.ReportParticipationEventRequest.StatsEntry
+	nil,                                      // 28: session.v1.PlayerOutcome.StatsEntry
+	nil,                                      // 29: session.v1.PlacementEntry.StatsEntry
+	nil,                                      // 30: session.v1.CollectivePlayer.StatsEntry
 }
 var file_session_v1_session_proto_depIdxs = []int32{
 	18, // 0: session.v1.OpenWorldResponse.host_grant:type_name -> session.v1.ConnectGrant
 	18, // 1: session.v1.JoinWorldResponse.grant:type_name -> session.v1.ConnectGrant
 	12, // 2: session.v1.ListInvadableWorldsResponse.worlds:type_name -> session.v1.InvadableWorld
-	16, // 3: session.v1.CreateSessionRequest.teams:type_name -> session.v1.Team
-	18, // 4: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
-	21, // 5: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
-	23, // 6: session.v1.ReportResultRequest.placement:type_name -> session.v1.PlacementResult
-	25, // 7: session.v1.ReportResultRequest.collective:type_name -> session.v1.CollectiveResult
-	22, // 8: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
-	27, // 9: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
-	24, // 10: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
-	28, // 11: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
-	26, // 12: session.v1.CollectiveResult.players:type_name -> session.v1.CollectivePlayer
-	29, // 13: session.v1.CollectivePlayer.stats:type_name -> session.v1.CollectivePlayer.StatsEntry
-	15, // 14: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
-	19, // 15: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
-	2,  // 16: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
-	4,  // 17: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
-	6,  // 18: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
-	8,  // 19: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
-	10, // 20: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
-	13, // 21: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
-	0,  // 22: session.v1.Session.GetSessionConfig:input_type -> session.v1.GetSessionConfigRequest
-	17, // 23: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
-	20, // 24: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
-	3,  // 25: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
-	5,  // 26: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
-	7,  // 27: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
-	9,  // 28: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
-	11, // 29: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
-	14, // 30: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
-	1,  // 31: session.v1.Session.GetSessionConfig:output_type -> session.v1.GetSessionConfigResponse
-	23, // [23:32] is the sub-list for method output_type
-	14, // [14:23] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	27, // 3: session.v1.ReportParticipationEventRequest.stats:type_name -> session.v1.ReportParticipationEventRequest.StatsEntry
+	16, // 4: session.v1.CreateSessionRequest.teams:type_name -> session.v1.Team
+	18, // 5: session.v1.CreateSessionResponse.grants:type_name -> session.v1.ConnectGrant
+	21, // 6: session.v1.ReportResultRequest.win_loss_draw:type_name -> session.v1.WinLossDrawResult
+	23, // 7: session.v1.ReportResultRequest.placement:type_name -> session.v1.PlacementResult
+	25, // 8: session.v1.ReportResultRequest.collective:type_name -> session.v1.CollectiveResult
+	22, // 9: session.v1.WinLossDrawResult.players:type_name -> session.v1.PlayerOutcome
+	28, // 10: session.v1.PlayerOutcome.stats:type_name -> session.v1.PlayerOutcome.StatsEntry
+	24, // 11: session.v1.PlacementResult.entries:type_name -> session.v1.PlacementEntry
+	29, // 12: session.v1.PlacementEntry.stats:type_name -> session.v1.PlacementEntry.StatsEntry
+	26, // 13: session.v1.CollectiveResult.players:type_name -> session.v1.CollectivePlayer
+	30, // 14: session.v1.CollectivePlayer.stats:type_name -> session.v1.CollectivePlayer.StatsEntry
+	15, // 15: session.v1.Session.CreateSession:input_type -> session.v1.CreateSessionRequest
+	19, // 16: session.v1.Session.ReportResult:input_type -> session.v1.ReportResultRequest
+	2,  // 17: session.v1.Session.OpenWorld:input_type -> session.v1.OpenWorldRequest
+	4,  // 18: session.v1.Session.JoinWorld:input_type -> session.v1.JoinWorldRequest
+	6,  // 19: session.v1.Session.LeaveWorld:input_type -> session.v1.LeaveWorldRequest
+	8,  // 20: session.v1.Session.CloseWorld:input_type -> session.v1.CloseWorldRequest
+	10, // 21: session.v1.Session.ListInvadableWorlds:input_type -> session.v1.ListInvadableWorldsRequest
+	13, // 22: session.v1.Session.ReportParticipationEvent:input_type -> session.v1.ReportParticipationEventRequest
+	0,  // 23: session.v1.Session.GetSessionConfig:input_type -> session.v1.GetSessionConfigRequest
+	17, // 24: session.v1.Session.CreateSession:output_type -> session.v1.CreateSessionResponse
+	20, // 25: session.v1.Session.ReportResult:output_type -> session.v1.ReportResultResponse
+	3,  // 26: session.v1.Session.OpenWorld:output_type -> session.v1.OpenWorldResponse
+	5,  // 27: session.v1.Session.JoinWorld:output_type -> session.v1.JoinWorldResponse
+	7,  // 28: session.v1.Session.LeaveWorld:output_type -> session.v1.LeaveWorldResponse
+	9,  // 29: session.v1.Session.CloseWorld:output_type -> session.v1.CloseWorldResponse
+	11, // 30: session.v1.Session.ListInvadableWorlds:output_type -> session.v1.ListInvadableWorldsResponse
+	14, // 31: session.v1.Session.ReportParticipationEvent:output_type -> session.v1.ReportParticipationEventResponse
+	1,  // 32: session.v1.Session.GetSessionConfig:output_type -> session.v1.GetSessionConfigResponse
+	24, // [24:33] is the sub-list for method output_type
+	15, // [15:24] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_session_v1_session_proto_init() }
@@ -1888,7 +1903,7 @@ func file_session_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_session_v1_session_proto_rawDesc), len(file_session_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   30,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

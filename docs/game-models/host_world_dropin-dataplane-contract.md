@@ -96,7 +96,7 @@ O **server do mundo** é quem chama — ao longo da vida da sessão, um por even
 
 ```
 session.v1.Session/ReportParticipationEvent(
-  session_id, player_id, role, event, outcome
+  session_id, player_id, role, event, outcome, event_id, stats
 ) -> {}
 ```
 
@@ -104,6 +104,9 @@ session.v1.Session/ReportParticipationEvent(
 - **`player_id`** / **`role`**: quem e em que papel (o server lê o `role` do token de cada participante).
 - **`event`** ∈ `{ JOINED, BOSS_DEFEATED, HOST_KILLED, DIED, LEFT }`.
 - **`outcome`** ∈ `{ SUCCESS, FAIL, NEUTRAL }` — interpretado **pelo papel** no sink (não pelo session).
+- **`stats`** (`map<string, int64>`, opcional — spec `026`): métricas do participante
+  (kills, revives, ...), mesmo padrão de `ReportResult`. Ausente/vazio = ok
+  (compat total); o session não valida conteúdo, é autoritativo o server.
 
 Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo inexistente/já encerrado — sinal para o server **parar** de reenviar aquele evento).
 
@@ -134,7 +137,8 @@ O session publica cada evento no **mesmo** tópico `match-results` do `queue_are
   "playerId": "<participante>",
   "role": "host | coop | invader",
   "event": "JOINED | BOSS_DEFEATED | HOST_KILLED | DIED | LEFT",
-  "outcome": "SUCCESS | FAIL | NEUTRAL"
+  "outcome": "SUCCESS | FAIL | NEUTRAL",
+  "stats": {"kills": 2}
 }
 ```
 
@@ -168,7 +172,7 @@ O repo Unity implementou o contrato acima integralmente — todos os itens abaix
 | 4 | Reportar **eventos por participante** via `ReportParticipationEvent` (`JOINED` ao entrar; `BOSS_DEFEATED`/`HOST_KILLED`/`DIED`/`LEFT` conforme o gameplay), com `outcome` por papel. **Idempotente/retriável** (reenviar em erro; parar em `NotFound`). | spec `013` | ✅ Feito |
 | 5 | Usar o `session_id` (claim `match_id` do token) como identidade do mundo ao reportar. | spec `013` | ✅ Feito |
 | 6 | `eventId` único por evento para contagem fiel de ocorrências múltiplas na mesma sessão. | follow-up #4 | ✅ Feito |
-| 7 | Preencher `stats` nos eventos (conquistas/leaderboard por stat). | follow-up #6 | ✅ Feito |
+| 7 | Preencher `stats` nos eventos (conquistas/leaderboard por stat). | follow-up #6 | ⚠️ **Corrigido 2026-07-13**: esta linha estava marcada "Feito", mas o campo `stats` **não existia** no proto/envelope até `session-service/026` (achado ao especificar `analytics-service/011`) — o control plane nem aceitava o campo, então não podia ter sido verificado ao vivo. Pendente: confirmar que o Dedicated Server já preenche `stats` na chamada (agora que o campo existe) ou implementar lá. |
 
 Evoluções seguintes (senha, pools por região, reconexão do host) ficam no [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md) e na Fase 6+ do roadmap Unity — não são mudança de contrato, são refinamento sobre o que já está de pé.
 
