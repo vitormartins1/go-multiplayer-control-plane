@@ -23,6 +23,14 @@ Os 4 arquétipos estão **completos no control plane** (ADR-0023), mas o data pl
 
 O `ReportResult` mudou na spec `session/009` (resultado polimórfico, ADR-0023): o formato antigo `PlayerResult{player_id, score, won bool}` foi substituído por `win_loss_draw{players: [PlayerOutcome{player_id, team_id, outcome string, score, stats}]}` (`outcome` = `"win"|"loss"|"draw"`, permite empate explícito; `stats` carrega as métricas declaradas em `scoringStats`). **O `unity-queue-arena-data-plane` ainda reporta o formato antigo** — o contrato já quebrou, não é uma migração cosmética. Detalhe completo (5 mudanças necessárias, priorizadas) em [`queue_arena-dataplane-contract.md`](game-models/queue_arena-dataplane-contract.md#mudanças-necessárias-no-go-game-dataplane-queue_arena). Isso **não bloqueia o control plane** (os serviços Go funcionam e são testados isoladamente) — é trabalho pendente só do lado Unity.
 
+## ℹ️ Campo novo (aditivo) em `host_world_dropin` — `stats` no `ReportParticipationEvent`
+
+`session-service/026` (2026-07-13) adicionou `map<string, int64> stats` ao
+`ReportParticipationEventRequest` — mesmo padrão de `ReportResult`. É
+**aditivo** (não quebra nada; ausente = comportamento atual). Ainda não há
+confirmação de que o `unity-host-world-dropin-data-plane` preenche o campo
+— ver a nota de correção em [`host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md#6-critério-de-conquista-por-stat-para-participação--feito-no-control-plane-2026-07-13). Preencher `stats` destrava achievements por métrica (`kills`, `deaths`, etc.) e o resumo agregado da aba Analytics (`analytics-service/011`) nesse arquétipo.
+
 ## Visão geral
 
 - **Control plane (Go, este repo):** identity, matchmaking, session, leaderboard, achievements, player-data, cloud-save, analytics. Agnóstico de arquétipo (orientado por perfil, ADR-0023).

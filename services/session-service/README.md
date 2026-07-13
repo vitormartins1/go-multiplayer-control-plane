@@ -3,7 +3,7 @@
 ≈ **GameLift (orquestração de frota/sessão)** — **capstone** do control plane (ADR-0010). Não simula nada: a partir de um match ou da abertura de um mundo, aloca um game server, emite o **connect token (Ed25519)** que o Unity Dedicated Server valida offline, e recebe de volta o desfecho (resultado terminal ou eventos por participante), com fan-out para os serviços de dados.
 
 - **Protocolo:** gRPC (unary no MVP) + HTTP (JWKS do connect token, métricas, admin)
-- **Storage:** memória (sessões/mundos ativos)
+- **Storage:** memória (sessões/mundos ativos) + Postgres próprio (`session-postgres`) pro histórico de sessões fechadas — sobrevive a restart, ao contrário do ring in-memory (spec 025)
 - **Dependências:** matchmaking (recebe match / injeta phantom), identity (control plane interno); cluster Agones no modo `agones`
 - **Multi-tenant por jogo** (ADR-0017)
 
@@ -45,7 +45,7 @@ Aqui não há match: a identidade do mundo é o próprio `session_id`, derivado 
 - **`LeaveWorld`** — libera o slot do jogador; o mundo **segue aberto**. No-op idempotente se o jogador já não estiver presente. Se quem sai é o host, encerra o mundo.
 - **`CloseWorld`** — encerra o mundo (host saiu) e libera o server. `NotFound` se não houver mundo aberto para o `session_id`.
 - **`ListInvadableWorlds`** (spec 012) — devolve os mundos abertos do jogo com vaga de invasor livre + atributos do host (`host_soul_level`, `weapon_tier`, `free_invader_slots`, `password_hash`). Fonte de dados pura para o matchmaking casar por faixa/senha — sem filtro aqui; lista vazia se nada casar.
-- **`ReportParticipationEvent`** (spec 013) — o server do mundo reporta um evento por participante ao longo de toda a vida da sessão: `role` (`host`|`coop`|`invader`) × `event` (`JOINED`|`BOSS_DEFEATED`|`HOST_KILLED`|`DIED`|`LEFT`) × `outcome` (`SUCCESS`|`FAIL`|`NEUTRAL`), com `event_id` opcional (spec 021, dedup em sinks). Publica no fan-out (`kind=participation_event`) e aplica o efeito no slot: `DIED`/`LEFT` liberam; `HOST_KILLED` encerra o mundo. `InvalidArgument` (vocabulário inválido), `NotFound` (mundo inexistente/fechado). Idempotente/retriável — o publish ocorre antes da mutação do slot.
+- **`ReportParticipationEvent`** (spec 013) — o server do mundo reporta um evento por participante ao longo de toda a vida da sessão: `role` (`host`|`coop`|`invader`) × `event` (`JOINED`|`BOSS_DEFEATED`|`HOST_KILLED`|`DIED`|`LEFT`) × `outcome` (`SUCCESS`|`FAIL`|`NEUTRAL`), com `event_id` opcional (spec 021, dedup em sinks) e `stats` opcional (`map<string,int64>`, spec 026 — kills/revives/etc., mesmo padrão de `ReportResult`; pendente confirmar se o Dedicated Server Unity já preenche). Publica no fan-out (`kind=participation_event`) e aplica o efeito no slot: `DIED`/`LEFT` liberam; `HOST_KILLED` encerra o mundo. `InvalidArgument` (vocabulário inválido), `NotFound` (mundo inexistente/fechado). Idempotente/retriável — o publish ocorre antes da mutação do slot.
 - **`GetSessionConfig`** (ADR-0024, spec 017) — devolve o **session manifest**: o snapshot do perfil do modo congelado na criação (`archetype`, `mode_id`, `params_json`, `profile_hash`). Chamado pelo game server no boot da sessão; `ref_id` aceita `match_id` (arquétipos de partida) ou `session_id` (host_world). `NotFound` se a sessão não existir ou já estiver fechada. O data plane lê só as chaves de `params_json` que conhece — nenhuma capacidade/regra fica hardcoded no client.
 
 ## Admin (HTTP)
@@ -54,7 +54,8 @@ Rotas sem auth no serviço — internal key na borda (ADR-0018), mesmo padrão d
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/admin/games/{gameId}/sessions` | sessões (ativas + fechadas) de um jogo — aba Sessions do console (spec 005) |
+| GET | `/admin/games/{gameId}/sessions` | sessões de um jogo — sem `state=`, ativas (mapa) + fechadas recentes (ring in-memory); com `state=closed`, fechadas **persistidas** no Postgres, paginadas por `limit`/`before` (spec 025). `503 history_unavailable` se o Postgres do histórico estiver fora |
+| GET | `/admin/players/{playerId}/sessions?gameId=` | sessões fechadas do jogo em que o player participou (aba History, spec 025), mesma paginação por cursor |
 | GET | `/admin/sessions` | board global de sessões, todos os jogos (spec 007) |
 | POST | `/admin/sessions/{matchId}/close` | force-close administrativo; o path aceita **`matchId` OU `sessionId`** (spec 024) — resolve pelo caminho certo conforme o arquétipo da sessão |
 | GET | `/admin/fleet-status/{fleetName}` | status real da Fleet Agones (réplicas, ready/allocated) — só populado no modo `agones` (spec 023) |
@@ -69,7 +70,7 @@ Rotas sem auth no serviço — internal key na borda (ADR-0018), mesmo padrão d
 
 ## Observabilidade
 
-Métricas: `session_active_sessions` (gauge), `sessions_closed_total{reason}` (counter). `/metrics` na porta do serviço (**Service Overview**, `$job=session-service`). Tracing no Tempo. Status real de Fleet (réplicas, allocated) exposto via `/admin/fleet-status/{fleetName}` no modo `agones` (spec 023).
+Métricas: `session_active_sessions` (gauge), `sessions_closed_total{reason}` (counter), `session_history_persist_failures_total` (counter — falha ao persistir o histórico, spec 025; fechamento nunca depende disso). `/metrics` na porta do serviço (**Service Overview**, `$job=session-service`). Tracing no Tempo. Status real de Fleet (réplicas, allocated) exposto via `/admin/fleet-status/{fleetName}` no modo `agones` (spec 023).
 
 ## Testar / Specs
 

@@ -28,9 +28,9 @@ Sem auth própria no serviço (`/admin` fica atrás da internal key na borda, AD
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/admin/analytics/overview` | Panorama **cross-game**: totais (partidas, jogadores únicos, jogos ativos), rollup por jogo, série "partidas por dia" somada entre todos os jogos (últimos 30 dias) |
-| GET | `/admin/games/{gameId}/analytics?days=N` | Detalhe de **um jogo**: rollup + série diária dos últimos `N` dias (default 30, máx. 365) + `roleParticipations` (host_world_dropin) + `placement` (battle_royale, omitido fora dele) + `mission` (coop_mission, omitido fora dele) |
+| GET | `/admin/games/{gameId}/analytics?days=N` | Detalhe de **um jogo**: rollup + série diária dos últimos `N` dias (default 30, máx. 365) + `roleParticipations` (host_world_dropin) + `placement` (battle_royale, omitido fora dele) + `mission` (coop_mission, omitido fora dele) + `placementDaily`/`missionDaily`/`participationDaily` (série diária dos 3 arquétipos que só tinham rollup cumulativo, spec 010) + `stats` (resumo agregado — soma/contagem/média — de stats brutos por `stat_key`, spec 011) |
 
-`roleParticipations` é a quebra por `(modeId, role, event, outcome, count)` — vazia em jogos `queue_arena`. `placement`/`mission` são `null` (omitidos no JSON) para jogos fora do arquétipo correspondente — campos aditivos, não union type.
+`roleParticipations` é a quebra por `(modeId, role, event, outcome, count)` — vazia em jogos `queue_arena`. `placement`/`mission` são `null` (omitidos no JSON) para jogos fora do arquétipo correspondente — campos aditivos, não union type. `placementDaily`/`missionDaily`/`participationDaily` e `stats` seguem o mesmo padrão aditivo (listas vazias, nunca `null`).
 
 ## Modelo de dados
 
@@ -46,8 +46,10 @@ Postgres, rollups incrementais (não há tabela de eventos crus). Cada família 
 | `game_participation_rollup` (003; +`outcome` na 006; +`mode_id` na 007) | contagem por `(game_id, mode_id, role, event, outcome)` — o funil de invasão/co-op do host_world_dropin, com outcome e modo nomeado como dimensões |
 | `game_placement_rollup` (004) | histograma de colocação do battle_royale por jogo: `winners` (1º), `top_n` (2..10, `BattleRoyaleTopNThreshold`), `rest`, `entries` (denominador), `sum_survived_ms` (`avgSurvivedMs` derivado no read) |
 | `game_mission_rollup` (005) | contagem `successes`/`failures` do coop_mission por jogo (`successRate` derivado no read) |
+| `game_placement_daily` / `game_mission_daily` / `game_participation_daily` (008, spec 010) | série "por dia" por `(game_id, mode_id, day)` — os 3 arquétipos que só tinham rollup cumulativo (sem dimensão de tempo) até esta spec. `game_participation_daily` conta EVENTOS (`events`), não sessões — host_world_dropin não tem partida terminal |
+| `game_player_stats` (009, spec 011) | stats brutos write-many, uma linha por `(game_id, mode_id, match_id, player_id, stat_key)` — captura os 4 kinds do fan-out (incl. `participation_event`, destravado por `session-service/026`). Sem UNIQUE própria: idempotência herdada da mesma tx do rollup/`processed_*` |
 
-Dados agregados antes de uma dimensão existir caem em bucket "vazio" explícito (`outcome=''`, `mode_id=''`) em vez de serem perdidos ou reconstituídos — mesmo padrão nas migrations 006 e 007.
+Dados agregados antes de uma dimensão existir caem em bucket "vazio" explícito (`outcome=''`, `mode_id=''`) em vez de serem perdidos ou reconstituídos — mesmo padrão nas migrations 006 e 007. As tabelas diárias novas (008) já nascem com `mode_id` na PK — os rollups cumulativos (`game_rollup`/`game_placement_rollup`/`game_mission_rollup`) continuam sem essa dimensão (fora de escopo da spec 010, deliberado).
 
 ## Observabilidade
 
