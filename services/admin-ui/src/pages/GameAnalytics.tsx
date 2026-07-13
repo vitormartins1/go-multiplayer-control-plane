@@ -47,6 +47,27 @@ function modeLabel(modeId: string, modes: MultiplayerMode[]): string {
   return modes.find((m) => m.modeId === modeId)?.displayName || modeId;
 }
 
+// rótulos amigáveis dos motivos de fechamento (spec 065, session health) —
+// dado cru, sem pré-classificar o que "conta como abandono" (decisão do
+// analytics-service, spec 013): o usuário lê os motivos e interpreta.
+const CLOSE_REASON_LABELS: Record<string, string> = {
+  result: "Concluída",
+  ttl: "Expirou (TTL)",
+  admin: "Encerrada pelo operador",
+  abandoned: "Abandonada (crash)",
+  host_left: "Host saiu",
+  host_killed: "Host morto",
+};
+
+const CLOSE_REASON_COLORS: Record<string, string> = {
+  result: "green.6",
+  ttl: "gray.5",
+  admin: "blue.5",
+  abandoned: "red.6",
+  host_left: "teal.5",
+  host_killed: "grape.5",
+};
+
 // rótulos amigáveis dos eventos de participação (host_world_dropin).
 const EVENT_LABELS: Record<string, string> = {
   JOINED: "Entrou",
@@ -416,10 +437,66 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       });
     }
 
+    // saúde das sessões (spec 065/013): distribuição por motivo de
+    // fechamento. Sem ícone fixo (mesmo tratamento de raw-stats): a tabela
+    // de origem cobre TODO arquétipo (todo closeSession publica o evento).
+    // Sem legenda de aviso — essa tabela já nasce com mode_id, o filtro por
+    // modo funciona de verdade aqui (diferente dos 5 widgets cumulativos
+    // acima, item D ainda pendente).
+    if (data.sessionHealth.length > 0) {
+      const health = data.sessionHealth;
+      const healthModeIds = [...new Set(health.map((h) => h.modeId ?? ""))];
+      out.push({
+        id: "session-health",
+        title: "Saúde das sessões",
+        defaultH: 10 + health.length * 2,
+        render: () => (
+          <Stack gap="md">
+            <DonutChart
+              size={160}
+              thickness={22}
+              withLabelsLine
+              withLabels
+              data={health.map((h) => ({
+                name: CLOSE_REASON_LABELS[h.closeReason] ?? h.closeReason,
+                value: h.count,
+                color: CLOSE_REASON_COLORS[h.closeReason] ?? "gray.4",
+              }))}
+            />
+            <Table striped withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  {healthModeIds.length > 1 && <Table.Th>Modo</Table.Th>}
+                  <Table.Th>Motivo</Table.Th>
+                  <Table.Th ta="right">Contagem</Table.Th>
+                  <Table.Th ta="right">Duração média</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {health.map((h) => (
+                  <Table.Tr key={`${h.modeId}-${h.closeReason}`}>
+                    {healthModeIds.length > 1 && (
+                      <Table.Td c="dimmed">{modeLabel(h.modeId ?? "", modes)}</Table.Td>
+                    )}
+                    <Table.Td>{CLOSE_REASON_LABELS[h.closeReason] ?? h.closeReason}</Table.Td>
+                    <Table.Td ta="right" ff="monospace">{h.count}</Table.Td>
+                    <Table.Td ta="right" ff="monospace">{formatDuration(h.avgDurationMs)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Stack>
+        ),
+      });
+    }
+
     // filtra o catálogo pelo arquétipo do modo selecionado (spec 064) — só
-    // widgets desse arquétipo + raw-stats (sempre elegível, cross-arquétipo).
+    // widgets desse arquétipo + raw-stats/session-health (sempre elegíveis,
+    // cross-arquétipo, spec 064/065).
     if (!selectedArchetype) return out;
-    return out.filter((w) => w.id === "raw-stats" || WIDGET_ARCHETYPE[w.id] === selectedArchetype);
+    return out.filter(
+      (w) => w.id === "raw-stats" || w.id === "session-health" || WIDGET_ARCHETYPE[w.id] === selectedArchetype,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, hasData, hasOutcomes, roleChart, participations, modeIdsInData, selectedArchetype, modes]);
 
