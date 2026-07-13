@@ -18,6 +18,10 @@ type PlayerResult struct {
 	Outcome  string // "win" | "loss" | "draw"
 	Won      bool
 	Score    int64
+	// Stats são métricas opcionais do jogador (kills, assists, ...; spec
+	// 011) — publicadas no envelope desde a origem, descartadas aqui até
+	// esta spec. Nil/vazio = jogo sem scoringStats (sem regressão).
+	Stats map[string]int64
 }
 
 // MatchResult é o resultado de uma partida ingerido do fan-out (ADR-0020/0021).
@@ -45,11 +49,16 @@ type PlacementResult struct {
 	Entries []PlacementEntry
 }
 
-// PlacementEntry é a colocação de um participante. O analytics só agrega
-// distribuição e sobrevivência (não guarda playerId).
+// PlacementEntry é a colocação de um participante. O analytics agrega
+// distribuição, sobrevivência e (spec 011) stats brutos por jogador.
 type PlacementEntry struct {
+	// PlayerID identifica o jogador — usado só pra gravar stats brutos (spec
+	// 011); o histograma de colocação continua agregado, sem guardar quem é
+	// quem.
+	PlayerID   string
 	Placement  int
 	SurvivedMs int64
+	Stats      map[string]int64 // spec 011; nil/vazio = sem scoringStats
 }
 
 // PlacementDistribution é o histograma de colocação de um jogo + sobrevivência
@@ -69,8 +78,8 @@ const (
 )
 
 // CollectiveResult é o desfecho coletivo da missão (coop_mission, C3) ingerido do
-// fan-out (kind=collective, session/016). O analytics só agrega o desfecho da
-// SESSÃO (ignora players/stats). Unidade do caminho collective do pool.
+// fan-out (kind=collective, session/016). O analytics agrega o desfecho da
+// SESSÃO (rollup) e, por jogador (spec 011), os stats brutos.
 type CollectiveResult struct {
 	MatchID string
 	GameID  string
@@ -78,6 +87,18 @@ type CollectiveResult struct {
 	// fechada na spec 010.
 	ModeID  string
 	Outcome string // MISSION_SUCCESS | MISSION_FAILURE
+	// Players carrega os stats brutos por jogador (spec 011) — o desfecho
+	// continua sendo só o Outcome da sessão (não por jogador). Vazio = envelope
+	// antigo ou jogo sem scoringStats.
+	Players []CollectivePlayerStat
+}
+
+// CollectivePlayerStat é a participação de um jogador na missão, só pra
+// captura de stats brutos (spec 011) — o desfecho é coletivo (Outcome acima),
+// não por jogador.
+type CollectivePlayerStat struct {
+	PlayerID string
+	Stats    map[string]int64
 }
 
 // MissionDistribution é a distribuição de desfecho da missão de um jogo (read
@@ -144,6 +165,21 @@ type GameAnalytics struct {
 	PlacementDaily     []DailyPoint // battle_royale
 	MissionDaily       []DailyPoint // coop_mission
 	ParticipationDaily []DailyPoint // host_world_dropin (conta EVENTOS, não sessões)
+
+	// Stats é o resumo agregado por stat_key (spec 011) — soma/contagem/média
+	// entre TODOS os jogadores e partidas do jogo. Vazio = jogo sem
+	// scoringStats (nunca reportou stats). Não expõe valor por jogador (isso
+	// é papel do leaderboard-service).
+	Stats []StatSummary
+}
+
+// StatSummary é o panorama agregado de uma métrica do jogo (spec 011): soma,
+// número de ocorrências (jogador×partida) e média derivada.
+type StatSummary struct {
+	Key   string
+	Sum   int64
+	Count int64
+	Avg   float64
 }
 
 // ParticipationEvent é um evento de participação ingerido do fan-out
@@ -162,6 +198,9 @@ type ParticipationEvent struct {
 	// ModeID é o modo nomeado do mundo (ADR-0024, spec 009); "" = evento
 	// anterior a essa dimensão existir (bucket "sem modo").
 	ModeID string
+	// Stats são métricas opcionais do participante (spec 011, destravado por
+	// session-service/026). Nil/vazio = data plane antigo ou sem scoringStats.
+	Stats map[string]int64
 }
 
 // ParticipationStat é a contagem agregada de um (modo, papel, evento, outcome)

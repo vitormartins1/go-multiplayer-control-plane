@@ -72,6 +72,8 @@ func TestParseParticipation_LeModeID(t *testing.T) {
 }
 
 // O envelope placement (battle_royale) é lido em colocação + sobrevivência.
+// O envelope placement (battle_royale) é lido em colocação + sobrevivência +
+// (spec 011) playerId/stats por entrada, pra captura de stats brutos.
 func TestParsePlacement_LeEntradas(t *testing.T) {
 	body := []byte(`{"kind":"placement","matchId":"m1","gameId":"g1","entries":[
 		{"playerId":"p1","teamId":"squad-1","placement":1,"survivedMs":900000,"stats":{"kills":4}},
@@ -82,17 +84,37 @@ func TestParsePlacement_LeEntradas(t *testing.T) {
 	assert.Equal(t, "m1", pr.MatchID)
 	assert.Equal(t, "g1", pr.GameID)
 	require.Len(t, pr.Entries, 2)
-	assert.Equal(t, domain.PlacementEntry{Placement: 1, SurvivedMs: 900000}, pr.Entries[0])
-	assert.Equal(t, domain.PlacementEntry{Placement: 42, SurvivedMs: 100000}, pr.Entries[1])
+	assert.Equal(t, domain.PlacementEntry{PlayerID: "p1", Placement: 1, SurvivedMs: 900000, Stats: map[string]int64{"kills": 4}}, pr.Entries[0])
+	assert.Equal(t, domain.PlacementEntry{PlayerID: "p2", Placement: 42, SurvivedMs: 100000}, pr.Entries[1])
 }
 
 // O envelope collective (coop_mission) é lido em matchId/gameId/outcome (o
-// analytics ignora players/stats — o desfecho é da sessão).
+// desfecho é da sessão) + (spec 011) players/stats, pra captura de stats brutos.
 func TestParseCollective_LeDesfecho(t *testing.T) {
 	body := []byte(`{"kind":"collective","matchId":"m1","gameId":"g1","outcome":"MISSION_SUCCESS","players":[{"playerId":"p1","stats":{"kills":9}}]}`)
 	cr, err := parseCollective(body)
 	require.NoError(t, err)
-	assert.Equal(t, domain.CollectiveResult{MatchID: "m1", GameID: "g1", Outcome: "MISSION_SUCCESS"}, cr)
+	assert.Equal(t, domain.CollectiveResult{
+		MatchID: "m1", GameID: "g1", Outcome: "MISSION_SUCCESS",
+		Players: []domain.CollectivePlayerStat{{PlayerID: "p1", Stats: map[string]int64{"kills": 9}}},
+	}, cr)
+}
+
+// stats brutos (spec 011): o envelope win_loss_draw já publica; o parse
+// passa a lê-los, pra captura em game_player_stats.
+func TestParse_LeStats(t *testing.T) {
+	body := []byte(`{"matchId":"m1","gameId":"g1","results":[{"playerId":"p1","outcome":"win","score":10,"stats":{"kills":7,"assists":2}}]}`)
+	m, err := parse(body)
+	require.NoError(t, err)
+	require.Len(t, m.Results, 1)
+	assert.Equal(t, map[string]int64{"kills": 7, "assists": 2}, m.Results[0].Stats)
+}
+
+func TestParseParticipation_LeStats(t *testing.T) {
+	body := []byte(`{"kind":"participation_event","gameId":"g1","sessionId":"w1","playerId":"coop-1","role":"coop","event":"BOSS_DEFEATED","outcome":"SUCCESS","stats":{"kills":2}}`)
+	evt, err := parseParticipation(body)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int64{"kills": 2}, evt.Stats)
 }
 
 // modeId (spec 010): mesma lacuna que a 009 fechou pra participação — o

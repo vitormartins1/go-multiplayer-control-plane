@@ -1,7 +1,9 @@
 # Spec: 011-raw-stat-capture
 
 **Serviço:** analytics-service
-**Status:** Proposed
+**Status:** Done (2026-07-13) — validado ao vivo nos 4 kinds (win_loss_draw,
+placement, collective, participation_event via grpcurl, jogos neon-breach e
+Achievements Test); soma/contagem/média agregadas conferidas.
 **Data:** 2026-07-13
 **Parte de:** "Analytics Fase 2/3" (docs/NEXT-STEPS.md, item 6).
 

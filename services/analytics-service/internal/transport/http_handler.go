@@ -89,6 +89,18 @@ type gameAnalyticsDTO struct {
 	PlacementDaily     []dailyDTO `json:"placementDaily"`
 	MissionDaily       []dailyDTO `json:"missionDaily"`
 	ParticipationDaily []dailyDTO `json:"participationDaily"`
+
+	// Stats é o resumo agregado por stat_key (spec 011) — vazio se o jogo
+	// nunca reportou stats (sem scoringStats no perfil).
+	Stats []statSummaryDTO `json:"stats"`
+}
+
+// statSummaryDTO é o panorama agregado de uma métrica do jogo (spec 011).
+type statSummaryDTO struct {
+	Key   string  `json:"key"`
+	Sum   int64   `json:"sum"`
+	Count int64   `json:"count"`
+	Avg   float64 `json:"avg"`
 }
 
 // placementDTO é a distribuição de colocação do battle_royale (spec 005).
@@ -140,6 +152,10 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	dto := gameAnalyticsDTO{
 		gameStatDTO: toGameStatDTO(ga.GameStat), Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{},
 		PlacementDaily: []dailyDTO{}, MissionDaily: []dailyDTO{}, ParticipationDaily: []dailyDTO{},
+		Stats: []statSummaryDTO{},
+	}
+	for _, s := range ga.Stats {
+		dto.Stats = append(dto.Stats, statSummaryDTO{Key: s.Key, Sum: s.Sum, Count: s.Count, Avg: s.Avg})
 	}
 	for _, d := range ga.Daily {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
