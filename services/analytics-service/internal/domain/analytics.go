@@ -2,7 +2,10 @@
 // dependências externas (ADR-0002). Tudo escopado por gameID (ADR-0017).
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Vocabulário do desfecho (ADR-0023, arquétipo queue_arena).
 const (
@@ -181,6 +184,12 @@ type GameAnalytics struct {
 	// scoringStats (nunca reportou stats). Não expõe valor por jogador (isso
 	// é papel do leaderboard-service).
 	Stats []StatSummary
+
+	// SessionHealth é a distribuição por motivo de fechamento (spec 013) —
+	// já filtrada por modeID quando aplicável (a tabela de origem nasce COM
+	// mode_id, sem a lacuna do item D que afeta os demais campos deste
+	// struct). Vazio = jogo sem nenhum session_closed processado ainda.
+	SessionHealth []SessionCloseStat
 }
 
 // StatSummary é o panorama agregado de uma métrica do jogo (spec 011): soma,
@@ -190,6 +199,31 @@ type StatSummary struct {
 	Sum   int64
 	Count int64
 	Avg   float64
+}
+
+// SessionCloseEvent é o fechamento de uma sessão, qualquer arquétipo/motivo
+// (session-service/028, kind=session_closed). Unidade de trabalho do
+// caminho de "session health" do pool.
+type SessionCloseEvent struct {
+	SessionID   string
+	GameID      string
+	ModeID      string
+	Archetype   string
+	CloseReason string
+	OpenedAt    time.Time
+	ClosedAt    time.Time
+}
+
+// SessionCloseStat é a distribuição agregada por motivo de fechamento (spec
+// 013) — conta + duração total. Avg é computado no read (DurationSumMs /
+// Count), mesmo padrão de StatSummary.Avg.
+type SessionCloseStat struct {
+	ModeID        string
+	Archetype     string
+	CloseReason   string
+	Count         int64
+	DurationSumMs int64
+	AvgDurationMs float64
 }
 
 // ParticipationEvent é um evento de participação ingerido do fan-out
@@ -241,6 +275,10 @@ type MatchRepository interface {
 	// idempotente por matchID (processed_matches). dup=true se a partida já havia
 	// sido processada (no-op). Spec 006.
 	ApplyCollective(ctx context.Context, cr CollectiveResult) (dup bool, err error)
+	// ApplySessionClosed agrega um fechamento de sessão (spec 013),
+	// idempotente por sessionID (processed_sessions) numa tx. dup=true se
+	// já processado (no-op).
+	ApplySessionClosed(ctx context.Context, evt SessionCloseEvent) (dup bool, err error)
 	// Overview devolve os totais cross-game + os jogos ordenados por matches desc.
 	Overview(ctx context.Context) (Overview, error)
 	// GameAnalytics devolve o resumo do jogo + a série diária dos últimos
@@ -266,4 +304,7 @@ type Ingestor interface {
 	// SubmitCollective entrega um desfecho de missão ao pool (spec 006), pelo
 	// mesmo mecanismo de fan-in do Submit.
 	SubmitCollective(ctx context.Context, cr CollectiveResult) <-chan error
+	// SubmitSessionClosed entrega um fechamento de sessão ao pool (spec 013),
+	// pelo mesmo mecanismo de fan-in do Submit.
+	SubmitSessionClosed(ctx context.Context, evt SessionCloseEvent) <-chan error
 }

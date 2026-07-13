@@ -96,6 +96,10 @@ type gameAnalyticsDTO struct {
 	// Stats é o resumo agregado por stat_key (spec 011) — vazio se o jogo
 	// nunca reportou stats (sem scoringStats no perfil).
 	Stats []statSummaryDTO `json:"stats"`
+
+	// SessionHealth é a distribuição por motivo de fechamento (spec 013) —
+	// vazio se o jogo não tem nenhum session_closed processado ainda.
+	SessionHealth []sessionCloseStatDTO `json:"sessionHealth"`
 }
 
 // statSummaryDTO é o panorama agregado de uma métrica do jogo (spec 011).
@@ -104,6 +108,17 @@ type statSummaryDTO struct {
 	Sum   int64   `json:"sum"`
 	Count int64   `json:"count"`
 	Avg   float64 `json:"avg"`
+}
+
+// sessionCloseStatDTO é a distribuição agregada por motivo de fechamento
+// (spec 013).
+type sessionCloseStatDTO struct {
+	ModeID        string  `json:"modeId,omitempty"`
+	Archetype     string  `json:"archetype,omitempty"`
+	CloseReason   string  `json:"closeReason"`
+	Count         int64   `json:"count"`
+	DurationSumMs int64   `json:"durationSumMs"`
+	AvgDurationMs float64 `json:"avgDurationMs"`
 }
 
 // placementDTO é a distribuição de colocação do battle_royale (spec 005).
@@ -156,10 +171,16 @@ func (h *AdminHandler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 	dto := gameAnalyticsDTO{
 		gameStatDTO: toGameStatDTO(ga.GameStat), ModeID: ga.ModeID, Daily: []dailyDTO{}, RoleParticipations: []participationStatDTO{},
 		PlacementDaily: []dailyDTO{}, MissionDaily: []dailyDTO{}, ParticipationDaily: []dailyDTO{},
-		Stats: []statSummaryDTO{},
+		Stats: []statSummaryDTO{}, SessionHealth: []sessionCloseStatDTO{},
 	}
 	for _, s := range ga.Stats {
 		dto.Stats = append(dto.Stats, statSummaryDTO{Key: s.Key, Sum: s.Sum, Count: s.Count, Avg: s.Avg})
+	}
+	for _, h := range ga.SessionHealth {
+		dto.SessionHealth = append(dto.SessionHealth, sessionCloseStatDTO{
+			ModeID: h.ModeID, Archetype: h.Archetype, CloseReason: h.CloseReason,
+			Count: h.Count, DurationSumMs: h.DurationSumMs, AvgDurationMs: h.AvgDurationMs,
+		})
 	}
 	for _, d := range ga.Daily {
 		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})

@@ -67,6 +67,16 @@ func (f *fakeRepo) ApplyCollective(_ context.Context, cr domain.CollectiveResult
 	f.mu.Unlock()
 	return false, nil
 }
+func (f *fakeRepo) ApplySessionClosed(_ context.Context, evt domain.SessionCloseEvent) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	f.collected.Add(1)
+	f.mu.Lock()
+	f.byGame[evt.GameID]++
+	f.mu.Unlock()
+	return false, nil
+}
 func (f *fakeRepo) Overview(context.Context) (domain.Overview, error) { return domain.Overview{}, nil }
 func (f *fakeRepo) GameAnalytics(context.Context, string, int, string) (domain.GameAnalytics, error) {
 	return domain.GameAnalytics{}, nil

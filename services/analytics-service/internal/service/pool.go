@@ -24,6 +24,7 @@ type job struct {
 	participation *domain.ParticipationEvent
 	placement     *domain.PlacementResult
 	collective    *domain.CollectiveResult
+	sessionClosed *domain.SessionCloseEvent
 	done          chan error
 }
 
@@ -92,6 +93,8 @@ func (p *Pool) process(ctx context.Context, j job) {
 		dup, err = p.repo.ApplyPlacement(ctx, *j.placement)
 	case j.participation != nil:
 		dup, err = p.repo.ApplyParticipation(ctx, *j.participation)
+	case j.sessionClosed != nil:
+		dup, err = p.repo.ApplySessionClosed(ctx, *j.sessionClosed)
 	default:
 		dup, err = p.repo.ApplyMatch(ctx, j.match)
 	}
@@ -156,6 +159,21 @@ func (p *Pool) SubmitCollective(ctx context.Context, cr domain.CollectiveResult)
 	case <-ctx.Done():
 		done <- ctx.Err()
 	case p.jobs <- job{collective: &cr, done: done}:
+	}
+	return done
+}
+
+// SubmitSessionClosed entrega um fechamento de sessão ao pool (spec 013),
+// pelo mesmo mecanismo de fan-in (channel de retorno) do Submit.
+func (p *Pool) SubmitSessionClosed(ctx context.Context, evt domain.SessionCloseEvent) <-chan error {
+	done := make(chan error, 1)
+	if p.metrics != nil {
+		p.metrics.received.Inc()
+	}
+	select {
+	case <-ctx.Done():
+		done <- ctx.Err()
+	case p.jobs <- job{sessionClosed: &evt, done: done}:
 	}
 	return done
 }
