@@ -51,6 +51,21 @@ papéis, lobby, missões).
 - Tornar os badges clicáveis/navegáveis (ex.: pular pro board do
   leaderboard daquele stat) — melhoria futura, não pedida agora.
 
+## Addendum: limite de largura + "+N" (achado em uso real, mesmo dia)
+
+Um modo `host_world_dropin` com 16 `scoringStats` (jogo "Achievements
+Test", modo "Mundo Vivo") estourava a célula "Configuração" — a tabela é
+auto-layout, então o conteúdo mais largo dita a coluna: ID quebrava em 2
+linhas, o badge de Arquétipo truncava com "…". Correção:
+
+- `<Stack maw={320}>` ao redor do conteúdo da célula — o wrap acontece
+  DENTRO da célula (linha cresce em altura), não mais roubando largura
+  das colunas vizinhas.
+- Acima de `STATS_VISIBLE = 6` stats, corta e agrupa o resto num badge
+  `+N` (`variant="outline"`, cinza — visualmente distinto dos badges de
+  stat reais) com `Tooltip` listando o restante.
+- Jogos com poucas stats (≤6, o caso comum) não mudam nada visualmente.
+
 ## Critérios de Aceite
 
 1. Jogo com modos que declaram `scoringStats` -> a tabela "Modos de

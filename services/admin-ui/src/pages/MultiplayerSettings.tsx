@@ -50,6 +50,11 @@ import { SessionAvatar } from "../components/SessionAvatar";
 
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
 
+// STATS_VISIBLE (spec 076): quantas stats mostrar cru na tabela de modos
+// antes de agrupar o resto num badge "+N" — acima disso a linha cresce sem
+// necessidade (achado com host_world_dropin declarando 16 stats).
+const STATS_VISIBLE = 6;
+
 const QA_DEFAULTS: QueueArenaParams = {
   structure: "ffa",
   playerCount: 2,
@@ -1242,18 +1247,33 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                       apareciam dentro do form de edição ou no grafo do
                       Pipeline de dados, mais abaixo na página. Cor laranja
                       = mesma convenção do badge de critério "por métrica"
-                      no catálogo de conquistas (Achievements). */}
-                  <Stack gap={4}>
+                      no catálogo de conquistas (Achievements).
+                      maw (achado, 2026-07-13): um modo com muitas stats
+                      (ex.: host_world_dropin com 16) esticava esta célula
+                      e roubava largura de ID/Arquétipo/Snapshot — a tabela
+                      é auto-layout, então o conteúdo mais largo dita a
+                      coluna. maw força o wrap DENTRO da célula (linha
+                      cresce em altura, não a coluna em largura); acima de
+                      STATS_VISIBLE, corta com "+N" (tooltip com o resto)
+                      em vez de deixar a linha crescer sem limite. */}
+                  <Stack gap={4} maw={320}>
                     <Text size="sm" c="dimmed">
                       {modeSummary(m)}
                     </Text>
                     {stats.length > 0 && (
                       <Group gap={4}>
-                        {stats.map((s) => (
+                        {stats.slice(0, STATS_VISIBLE).map((s) => (
                           <Badge key={s} size="xs" variant="light" color="orange">
                             {s}
                           </Badge>
                         ))}
+                        {stats.length > STATS_VISIBLE && (
+                          <Tooltip label={stats.slice(STATS_VISIBLE).join(", ")} multiline w={260}>
+                            <Badge size="xs" variant="outline" color="gray" style={{ cursor: "default" }}>
+                              +{stats.length - STATS_VISIBLE}
+                            </Badge>
+                          </Tooltip>
+                        )}
                       </Group>
                     )}
                   </Stack>
