@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
-import { Alert, Loader, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { Alert, Grid, Group, Loader, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
 import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { StatCard } from "../components/StatCard";
-import { DashboardGrid, type WidgetDef } from "../components/DashboardGrid";
 import { formatDuration } from "../lib/format";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 
@@ -22,6 +21,31 @@ const WIDGET_ARCHETYPE: Record<string, MultiplayerProfile["archetype"]> = {
   "mission-distribution": "coop_mission",
   "mission-daily": "coop_mission",
 };
+
+// arquétipos na ordem canônica (mesma de ARCHETYPE_META/badges do header do
+// GameDetail) — define a ordem das seções do layout estático (spec 067).
+const ARCHETYPE_ORDER: MultiplayerProfile["archetype"][] = [
+  "queue_arena",
+  "host_world_dropin",
+  "battle_royale",
+  "coop_mission",
+];
+
+// Card = um widget com posição fixa no grid de 12 colunas (spec 067: layout
+// estático e responsivo, substitui o dashboard editável da spec 062).
+interface CardDef {
+  id: string;
+  title: string;
+  span: number; // colunas de 12 (Grid do Mantine) — responsivo via Grid.Col
+  render: () => React.ReactNode;
+}
+
+// Section agrupa cards por arquétipo (spec 067) — archetype ausente = seção
+// final cross-arquétipo (raw-stats/session-health), sem cabeçalho de ícone.
+interface Section {
+  archetype?: MultiplayerProfile["archetype"];
+  cards: CardDef[];
+}
 
 // seletor de modo (spec 009/064): sentinela porque o Select do Mantine não
 // lida bem com value="" (cai no branch de "sem seleção").
@@ -160,16 +184,15 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   // disponível só quando a condição de dado (mesma de antes, agora
   // centralizada) é satisfeita. A ordem aqui é só o default inicial — o
   // operador reordena/redimensiona/esconde livremente (persistido por jogo).
-  const widgets = useMemo<WidgetDef[]>(() => {
+  const cards = useMemo<CardDef[]>(() => {
     if (!data) return [];
-    const out: WidgetDef[] = [];
+    const out: CardDef[] = [];
 
     if (hasData) {
       out.push({
         id: "summary",
         title: "Resumo",
-        defaultH: 5,
-        icon: ARCHETYPE_META.queue_arena.icon,
+        span: 12,
         render: () => (
           <SimpleGrid cols={{ base: 2, sm: 3 }}>
             <StatCard label="Partidas" value={String(data.matches)} />
@@ -187,8 +210,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "queue-daily",
         title: "Partidas por dia",
-        defaultH: 9,
-        icon: ARCHETYPE_META.queue_arena.icon,
+        span: 6,
         render: () => <DailyLineChart data={data.daily} label="Partidas" />,
       });
     }
@@ -197,8 +219,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "outcomes-donut",
         title: "Vitórias × derrotas × empates",
-        defaultH: 8,
-        icon: ARCHETYPE_META.queue_arena.icon,
+        span: 6,
         render: () => (
           <DonutChart
             size={160}
@@ -224,8 +245,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "participations-role",
         title: "Participações por papel",
-        defaultH: Math.max(11, Math.ceil(roleChart.data.length * 70 / 30) + 6),
-        icon: ARCHETYPE_META.host_world_dropin.icon,
+        span: 12,
         render: () => (
           <Stack gap="md">
             <BarChart
@@ -273,8 +293,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "placement-distribution",
         title: "Distribuição de colocação",
-        defaultH: 12,
-        icon: ARCHETYPE_META.battle_royale.icon,
+        span: 6,
         render: () => (
           <Stack gap="md">
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
@@ -305,8 +324,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "placement-daily",
         title: "Partidas de battle royale por dia",
-        defaultH: 9,
-        icon: ARCHETYPE_META.battle_royale.icon,
+        span: 6,
         render: () => <DailyLineChart data={data.placementDaily} label="Partidas" />,
       });
     }
@@ -317,8 +335,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "mission-distribution",
         title: "Desfecho das missões",
-        defaultH: 10,
-        icon: ARCHETYPE_META.coop_mission.icon,
+        span: 6,
         render: () => (
           <Stack gap="md">
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
@@ -346,8 +363,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "mission-daily",
         title: "Missões por dia",
-        defaultH: 9,
-        icon: ARCHETYPE_META.coop_mission.icon,
+        span: 6,
         render: () => <DailyLineChart data={data.missionDaily} label="Missões" />,
       });
     }
@@ -358,8 +374,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "participation-daily",
         title: "Eventos de participação por dia",
-        defaultH: 9,
-        icon: ARCHETYPE_META.host_world_dropin.icon,
+        span: 12,
         render: () => <DailyLineChart data={data.participationDaily} label="Eventos" />,
       });
     }
@@ -372,7 +387,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "raw-stats",
         title: "Stats agregados",
-        defaultH: 4 + stats.length * 2,
+        span: 6,
         render: () => (
           <Table striped withTableBorder>
             <Table.Thead>
@@ -399,15 +414,16 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     }
 
     // saúde das sessões (spec 065/013): distribuição por motivo de
-    // fechamento. Sem ícone fixo (mesmo tratamento de raw-stats): a tabela
-    // de origem cobre TODO arquétipo (todo closeSession publica o evento).
+    // fechamento. Cross-arquétipo (mesmo tratamento de raw-stats): a
+    // tabela de origem cobre TODO arquétipo (todo closeSession publica o
+    // evento).
     if (data.sessionHealth.length > 0) {
       const health = data.sessionHealth;
       const healthModeIds = [...new Set(health.map((h) => h.modeId ?? ""))];
       out.push({
         id: "session-health",
         title: "Saúde das sessões",
-        defaultH: 10 + health.length * 2,
+        span: 6,
         render: () => (
           <Stack gap="md">
             <DonutChart
@@ -458,6 +474,29 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, hasData, hasOutcomes, roleChart, participations, modeIdsInData, selectedArchetype, modes]);
 
+  // Agrupa os cards em seções por arquétipo, ordem fixa (spec 067: layout
+  // estático — substitui o dashboard editável da spec 062). Cards sem
+  // arquétipo (raw-stats/session-health) formam a seção final, sem cabeçalho.
+  const sections = useMemo<Section[]>(() => {
+    const byArchetype = new Map<MultiplayerProfile["archetype"], CardDef[]>();
+    const crossArchetype: CardDef[] = [];
+    for (const card of cards) {
+      const archetype = WIDGET_ARCHETYPE[card.id];
+      if (!archetype) {
+        crossArchetype.push(card);
+        continue;
+      }
+      if (!byArchetype.has(archetype)) byArchetype.set(archetype, []);
+      byArchetype.get(archetype)!.push(card);
+    }
+    const out: Section[] = ARCHETYPE_ORDER.filter((a) => byArchetype.has(a)).map((archetype) => ({
+      archetype,
+      cards: byArchetype.get(archetype)!,
+    }));
+    if (crossArchetype.length > 0) out.push({ archetype: undefined, cards: crossArchetype });
+    return out;
+  }, [cards]);
+
   return (
     <Stack>
       {loading && !data && <Loader />}
@@ -477,13 +516,37 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         />
       )}
 
-      {data && widgets.length === 0 && (
+      {data && cards.length === 0 && (
         <Text c="dimmed">
           Sem dados ainda — os agregados aparecem conforme as partidas terminam e reportam resultado.
         </Text>
       )}
 
-      {widgets.length > 0 && <DashboardGrid gameId={gameId} widgets={widgets} />}
+      {sections.map((section) => {
+        const meta = section.archetype ? ARCHETYPE_META[section.archetype] : undefined;
+        return (
+          <Stack key={section.archetype ?? "geral"} gap="sm">
+            {meta && (
+              <Group gap={6}>
+                <meta.icon size={18} />
+                <Title order={4}>{meta.label}</Title>
+              </Group>
+            )}
+            <Grid>
+              {section.cards.map((card) => (
+                <Grid.Col key={card.id} span={{ base: 12, md: card.span }}>
+                  <Paper withBorder p="md" h="100%">
+                    <Text fw={600} size="sm" mb="xs">
+                      {card.title}
+                    </Text>
+                    {card.render()}
+                  </Paper>
+                </Grid.Col>
+              ))}
+            </Grid>
+          </Stack>
+        );
+      })}
     </Stack>
   );
 }
