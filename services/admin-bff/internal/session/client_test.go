@@ -226,6 +226,32 @@ func TestClosedSessionsByGame_ParseiaPaginaEParticipantes(t *testing.T) {
 	require.NotNil(t, got.NextBefore)
 }
 
+// TestClosedSessionsByGame_RepassaLastEventLastOutcome (spec 025 do
+// admin-bff / spec 027 do session-service): passthrough 1:1, sem
+// transformação.
+func TestClosedSessionsByGame_RepassaLastEventLastOutcome(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"closed": [{"sessionId":"s0","gameId":"g1","state":"closed","players":["host-1","coop-1"],
+				"openedAt":"2026-07-12T10:00:00Z","closedAt":"2026-07-12T10:10:00Z","closeReason":"host_killed",
+				"origin":"host_world","hostPlayerId":"host-1",
+				"participants":[{"playerId":"host-1","role":"host","joinedAt":"2026-07-12T10:00:00Z"},
+				                {"playerId":"coop-1","role":"coop","joinedAt":"2026-07-12T10:05:00Z","lastEvent":"DIED","lastOutcome":"FAIL"}]}]
+		}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).ClosedSessionsByGame(context.Background(), "g1", 10, time.Time{})
+
+	require.NoError(t, err)
+	require.Len(t, got.Closed, 1)
+	require.Len(t, got.Closed[0].Participants, 2)
+	assert.Empty(t, got.Closed[0].Participants[0].LastEvent, "host sem evento reportado")
+	assert.Equal(t, "DIED", got.Closed[0].Participants[1].LastEvent)
+	assert.Equal(t, "FAIL", got.Closed[0].Participants[1].LastOutcome)
+}
+
 func TestClosedSessionsByGame_ComBefore_RepassaCursorNaQuery(t *testing.T) {
 	var gotQuery string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -72,10 +72,14 @@ type sessionDTO struct {
 
 // participantDTO espelha domain.SessionParticipant (spec 025) — sem Handle
 // (o session-service não conhece identity; o service do admin-bff enriquece).
+// LastEvent/LastOutcome (spec 027 do session-service): último evento de
+// participação conhecido — só existem em host_world_dropin.
 type participantDTO struct {
-	PlayerID string    `json:"playerId"`
-	Role     string    `json:"role"`
-	JoinedAt time.Time `json:"joinedAt"`
+	PlayerID    string    `json:"playerId"`
+	Role        string    `json:"role"`
+	JoinedAt    time.Time `json:"joinedAt"`
+	LastEvent   string    `json:"lastEvent"`
+	LastOutcome string    `json:"lastOutcome"`
 }
 
 // SessionsByGame lê as sessões do jogo, repassando o filtro state.
@@ -257,7 +261,10 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 		}
 		var participants []domain.SessionParticipant
 		for _, p := range d.Participants {
-			participants = append(participants, domain.SessionParticipant{PlayerID: p.PlayerID, Role: p.Role, JoinedAt: p.JoinedAt}) // handle: service enriquece
+			participants = append(participants, domain.SessionParticipant{
+				PlayerID: p.PlayerID, Role: p.Role, JoinedAt: p.JoinedAt, // handle: service enriquece
+				LastEvent: p.LastEvent, LastOutcome: p.LastOutcome,
+			})
 		}
 		out = append(out, domain.GameSession{
 			SessionID:     d.SessionID,
