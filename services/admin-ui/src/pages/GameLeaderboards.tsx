@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
@@ -259,7 +259,11 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       {mode === "overview" &&
         shownBoards.map((b) => (
           <Stack key={b.value} gap="sm">
-            <Divider label={b.label} labelPosition="left" />
+            {/* Title order={5} (padronização, 2026-07-13): mesma convenção de
+                cabeçalho de subseção do Overview.tsx/Analytics.tsx — o Divider
+                label ficava pequeno demais pra separar até 5 grupos de board
+                empilhados ("Todas"). */}
+            <Title order={5}>{b.label}</Title>
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               {WINDOW_OPTIONS.map((w) => (
                 <MiniBoardTable
