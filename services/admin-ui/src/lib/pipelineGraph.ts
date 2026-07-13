@@ -94,13 +94,19 @@ function modeHeight(modeId: string, stats: string[]): number {
   return cardHeight([modeId, statsLine], MODE_MAX_CHARS_PER_LINE);
 }
 
+// modeScoringStats extrai as stats declaradas por um modo (mesmo campo nos 4
+// arquétipos) — exportado (spec 075) pra MultiplayerSettings.tsx reusar a
+// mesma extração na tabela de modos, sem duplicar a lógica.
+export function modeScoringStats(m: MultiplayerMode): string[] {
+  return "scoringStats" in m.params ? m.params.scoringStats : [];
+}
+
 export function buildPipelineGraph(
   modes: MultiplayerMode[],
   rules: EventRule[],
   catalog: CatalogAchievement[],
 ): { nodes: Node[]; edges: Edge[] } {
-  const stats = (m: MultiplayerMode): string[] =>
-    "scoringStats" in m.params ? m.params.scoringStats : [];
+  const stats = modeScoringStats;
 
   // Camada 1 — modos do jogo.
   const modeNodes = modes.map((m) => ({

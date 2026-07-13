@@ -44,6 +44,7 @@ import {
   type CoopMissionParams,
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
+import { modeScoringStats } from "../lib/pipelineGraph";
 import { FormSection } from "../components/FormSection";
 import { SessionAvatar } from "../components/SessionAvatar";
 
@@ -1196,6 +1197,7 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
           {modes.map((m) => {
             const meta = ARCHETYPE_META[m.archetype];
             const hash = snapshotHashes[m.modeId];
+            const stats = modeScoringStats(m);
             return (
               <Table.Tr key={m.modeId}>
                 <Table.Td>
@@ -1236,9 +1238,25 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                   )}
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm" c="dimmed">
-                    {modeSummary(m)}
-                  </Text>
+                  {/* stats de pontuação visíveis aqui (spec 075) — antes só
+                      apareciam dentro do form de edição ou no grafo do
+                      Pipeline de dados, mais abaixo na página. Cor laranja
+                      = mesma convenção do badge de critério "por métrica"
+                      no catálogo de conquistas (Achievements). */}
+                  <Stack gap={4}>
+                    <Text size="sm" c="dimmed">
+                      {modeSummary(m)}
+                    </Text>
+                    {stats.length > 0 && (
+                      <Group gap={4}>
+                        {stats.map((s) => (
+                          <Badge key={s} size="xs" variant="light" color="orange">
+                            {s}
+                          </Badge>
+                        ))}
+                      </Group>
+                    )}
+                  </Stack>
                 </Table.Td>
                 <Table.Td>
                   <Group gap={4} justify="flex-end" wrap="nowrap">
