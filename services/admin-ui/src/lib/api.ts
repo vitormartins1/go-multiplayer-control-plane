@@ -293,6 +293,10 @@ export interface SessionParticipant {
   handle: string; // vazio quando o identity não resolveu (best-effort do BFF)
   role?: string;
   joinedAt: string;
+  // lastEvent/lastOutcome (spec 027 do session-service): último evento de
+  // participação conhecido — só existem em host_world_dropin.
+  lastEvent?: string;
+  lastOutcome?: "SUCCESS" | "FAIL" | "NEUTRAL";
 }
 
 // Um lado da formação registrada no match (rótulo canônico do session).

@@ -14,7 +14,7 @@ import {
 import type { ReactNode } from "react";
 import type { Icon } from "@tabler/icons-react";
 import { IconCrown, IconTargetArrow, IconTrophy } from "@tabler/icons-react";
-import type { GameSession, PlacementEntry, PlayerOutcome, SessionPlayer } from "../lib/api";
+import type { GameSession, PlacementEntry, PlayerOutcome, SessionParticipant, SessionPlayer } from "../lib/api";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { GuestBadge } from "./GuestBadge";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
@@ -481,6 +481,85 @@ function CoopPanel({ session: s, handleOf }: { session: GameSession; handleOf: (
 // mundo) e um card por slot (co-op/invasor) com ocupantes e vagas livres.
 function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handleOf: (id: string) => string }) {
   const slots = s.roleSlots ?? [];
+  const byParticipant = new Map((s.participants ?? []).map((p) => [p.playerId, p]));
+  const hostParticipant = s.hostPlayerId ? byParticipant.get(s.hostPlayerId) : undefined;
+
+  // sessão fechada (spec 027/063): roleSlots só existe ao vivo (mapa em
+  // memória do session-service) — o histórico persistido nunca o teve.
+  // participants[].role sobrevive ao fechamento, então vira a fonte quando
+  // não há slots (em vez de cair direto no roster achatado de "outros").
+  if (slots.length === 0) {
+    const roleGroups = new Map<string, SessionParticipant[]>();
+    for (const p of s.participants ?? []) {
+      if (!p.role || p.role === "host") continue; // host já tem card dedicado
+      if (!roleGroups.has(p.role)) roleGroups.set(p.role, []);
+      roleGroups.get(p.role)!.push(p);
+    }
+    if (roleGroups.size > 0) {
+      return (
+        <Stack gap={4}>
+          <SectionLabel>MUNDO</SectionLabel>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: Math.min(1 + roleGroups.size, 4) }} spacing="sm">
+            <Paper withBorder radius="md" p="sm" style={{ borderColor: "var(--mantine-color-blue-6)" }}>
+              <Group justify="space-between" wrap="nowrap">
+                <Badge variant="light" color="blue" leftSection={<IconCrown size={12} />}>
+                  host
+                </Badge>
+              </Group>
+              <Divider my="xs" />
+              {s.hostPlayerId ? (
+                <Group gap={6} wrap="nowrap">
+                  <PlayerCell id={s.hostPlayerId} handle={handleOf(s.hostPlayerId)} />
+                  <ParticipantOutcomeBadge participant={hostParticipant} />
+                </Group>
+              ) : (
+                <Text size="xs" c="dimmed">
+                  —
+                </Text>
+              )}
+            </Paper>
+            {[...roleGroups.entries()].map(([role, participants]) => {
+              const meta = ROLE_META[role] ?? { label: role, color: "gray" };
+              return (
+                <Paper key={role} withBorder radius="md" p="sm">
+                  <Badge variant="light" color={meta.color}>
+                    {meta.label}
+                  </Badge>
+                  <Divider my="xs" />
+                  <Stack gap={6}>
+                    {participants.map((p) => (
+                      <Group key={p.playerId} gap={6} wrap="nowrap">
+                        <PlayerCell id={p.playerId} handle={handleOf(p.playerId)} />
+                        <ParticipantOutcomeBadge participant={p} />
+                      </Group>
+                    ))}
+                  </Stack>
+                </Paper>
+              );
+            })}
+          </SimpleGrid>
+        </Stack>
+      );
+    }
+    // sem roleSlots e sem role em participants (sessão legada, pré-spec-025,
+    // ou arquétipo sem papéis): fallback achatado original.
+    const others = s.players.filter((p) => p.id !== s.hostPlayerId);
+    return (
+      <Stack gap={4}>
+        <SectionLabel>MUNDO</SectionLabel>
+        {s.hostPlayerId && (
+          <Group gap={6} wrap="nowrap">
+            <Badge variant="light" color="blue" leftSection={<IconCrown size={12} />}>
+              host
+            </Badge>
+            <PlayerCell id={s.hostPlayerId} handle={handleOf(s.hostPlayerId)} />
+          </Group>
+        )}
+        {others.length > 0 && <RosterBlock players={others} title="OUTROS PARTICIPANTES" />}
+      </Stack>
+    );
+  }
+
   const assigned = new Set([s.hostPlayerId, ...slots.flatMap((sl) => sl.occupants ?? [])]);
   const others = s.players.filter((p) => p.id !== s.hostPlayerId && !assigned.has(p.id));
 
@@ -499,7 +578,10 @@ function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handle
           </Group>
           <Divider my="xs" />
           {s.hostPlayerId ? (
-            <PlayerCell id={s.hostPlayerId} handle={handleOf(s.hostPlayerId)} />
+            <Group gap={6} wrap="nowrap">
+              <PlayerCell id={s.hostPlayerId} handle={handleOf(s.hostPlayerId)} />
+              <ParticipantOutcomeBadge participant={hostParticipant} />
+            </Group>
           ) : (
             <Text size="xs" c="dimmed">
               —
@@ -537,7 +619,10 @@ function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handle
               <Divider my="xs" />
               <Stack gap={6}>
                 {occ.map((id) => (
-                  <PlayerCell key={id} id={id} handle={handleOf(id)} />
+                  <Group key={id} gap={6} wrap="nowrap">
+                    <PlayerCell id={id} handle={handleOf(id)} />
+                    <ParticipantOutcomeBadge participant={byParticipant.get(id)} />
+                  </Group>
                 ))}
                 {Array.from({ length: unnamed }, (_, i) => (
                   <Text key={`unnamed-${i}`} size="xs" c="dimmed">
@@ -563,6 +648,31 @@ function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handle
       </SimpleGrid>
       {others.length > 0 && <RosterBlock players={others} title="OUTROS PARTICIPANTES" />}
     </Stack>
+  );
+}
+
+// PARTICIPANT_OUTCOME_META: vocabulário do host_world_dropin
+// (ReportParticipationEvent, spec 013/027) — distinto de OUTCOME_META
+// (win/loss/draw do queue_arena).
+const PARTICIPANT_OUTCOME_META: Record<string, { label: string; color: string }> = {
+  SUCCESS: { label: "sucesso", color: "green" },
+  FAIL: { label: "falha", color: "red" },
+  NEUTRAL: { label: "neutro", color: "gray" },
+};
+
+// ParticipantOutcomeBadge mostra o último desfecho conhecido do participante
+// (spec 027/063) — nada renderizado se ausente (não inventar "desconhecido").
+// Tooltip traz o evento cru (JOINED/BOSS_DEFEATED/HOST_KILLED/DIED/LEFT).
+// Exportado: reusado em PlayerHistory.tsx (aba History do player, spec 063).
+export function ParticipantOutcomeBadge({ participant }: { participant?: SessionParticipant }) {
+  if (!participant?.lastOutcome) return null;
+  const meta = PARTICIPANT_OUTCOME_META[participant.lastOutcome] ?? { label: participant.lastOutcome, color: "gray" };
+  return (
+    <Tooltip label={participant.lastEvent || participant.lastOutcome} withArrow openDelay={300}>
+      <Badge size="xs" variant="light" color={meta.color}>
+        {meta.label}
+      </Badge>
+    </Tooltip>
   );
 }
 
