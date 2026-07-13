@@ -80,6 +80,22 @@ func TestGameAnalytics_RepassaSessionHealth(t *testing.T) {
 	}, d.SessionHealth[0])
 }
 
+// TestGameAnalytics_RepassaSessionCloseDaily (spec 028 — passthrough do
+// analytics-service/015): série "sessões fechadas por dia".
+func TestGameAnalytics_RepassaSessionCloseDaily(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"hw","matches":0,"daily":[],"roleParticipations":[],
+			"sessionCloseDaily":[{"day":"2026-07-13","matches":5}]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7, "")
+	require.NoError(t, err)
+	require.Len(t, d.SessionCloseDaily, 1)
+	assert.Equal(t, domain.AnalyticsDaily{Day: "2026-07-13", Matches: 5}, d.SessionCloseDaily[0])
+}
+
 // TestGameAnalytics_RepassaModeIdEEcoa (spec 026 — passthrough do filtro da
 // analytics-service/012): modeId vai na query, e o eco no DTO é propagado.
 func TestGameAnalytics_RepassaModeIdEEcoa(t *testing.T) {

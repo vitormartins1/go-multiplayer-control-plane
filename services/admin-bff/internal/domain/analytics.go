@@ -86,6 +86,10 @@ type GameAnalyticsDetail struct {
 	// (analytics-service/013) — vazio se o jogo não tem nenhum
 	// session_closed processado ainda.
 	SessionHealth []SessionCloseStat `json:"sessionHealth"`
+
+	// SessionCloseDaily é a série "sessões fechadas por dia"
+	// (analytics-service/015), mesmo padrão das outras séries diárias.
+	SessionCloseDaily []AnalyticsDaily `json:"sessionCloseDaily"`
 }
 
 // SessionCloseStat é a distribuição agregada por motivo de fechamento
