@@ -390,6 +390,23 @@ export interface GameAnalyticsDetail {
   roleParticipations: ParticipationStat[];
   placement?: PlacementDistribution; // battle_royale (BR4); ausente fora do BR
   mission?: MissionDistribution; // coop_mission (C4); ausente fora do coop
+
+  // Séries diárias dos 3 arquétipos que não tinham (analytics-service/010) —
+  // vazias fora do arquétipo correspondente, mesmo padrão de placement/mission.
+  placementDaily: AnalyticsDaily[];
+  missionDaily: AnalyticsDaily[];
+  participationDaily: AnalyticsDaily[];
+  // Resumo agregado de stats brutos por stat_key (analytics-service/011) —
+  // vazio se o jogo nunca reportou stats (sem scoringStats no perfil).
+  stats: StatSummary[];
+}
+
+// StatSummary é o panorama agregado de uma métrica do jogo (analytics-service/011).
+export interface StatSummary {
+  key: string;
+  sum: number;
+  count: number;
+  avg: number;
 }
 
 // PlacementDistribution é o histograma de colocação do battle_royale (BR3/BR4).
