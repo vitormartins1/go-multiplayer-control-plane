@@ -384,7 +384,10 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "raw-stats",
         title: "Stats agregados",
-        span: 6,
+        // span 12 (spec 070): sem par natural na seção cross-arquétipo —
+        // session-health e session-closed-daily formam o par "distribuição
+        // + diário", raw-stats fica sozinho, full-width.
+        span: 12,
         render: () => (
           <Table striped withTableBorder>
             <Table.Thead>
@@ -461,12 +464,27 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       });
     }
 
+    // sessões fechadas por dia (spec 015/070): pareado com session-health,
+    // mesmo tratamento cross-arquétipo (sem ícone, sempre elegível).
+    if (data.sessionCloseDaily.length > 0) {
+      out.push({
+        id: "session-closed-daily",
+        title: "Sessões fechadas por dia",
+        span: 6,
+        render: () => <DailyLineChart data={data.sessionCloseDaily} label="Sessões" />,
+      });
+    }
+
     // filtra o catálogo pelo arquétipo do modo selecionado (spec 064) — só
-    // widgets desse arquétipo + raw-stats/session-health (sempre elegíveis,
-    // cross-arquétipo, spec 064/065).
+    // widgets desse arquétipo + raw-stats/session-health/session-closed-daily
+    // (sempre elegíveis, cross-arquétipo, spec 064/065/070).
     if (!selectedArchetype) return out;
     return out.filter(
-      (w) => w.id === "raw-stats" || w.id === "session-health" || WIDGET_ARCHETYPE[w.id] === selectedArchetype,
+      (w) =>
+        w.id === "raw-stats" ||
+        w.id === "session-health" ||
+        w.id === "session-closed-daily" ||
+        WIDGET_ARCHETYPE[w.id] === selectedArchetype,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, hasData, hasOutcomes, roleChart, participations, modeIdsInData, selectedArchetype, modes]);
