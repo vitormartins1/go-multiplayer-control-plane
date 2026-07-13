@@ -257,3 +257,35 @@ func TestGameAnalytics_SemStats_ListaVazia(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"stats":[]`, "campo aditivo, vazio sem scoringStats")
 }
+
+// TestGameAnalytics_200_ExpoeSessionCloseDaily (spec 015): série "sessões
+// fechadas por dia" no DTO, mesmo padrão das outras 3 séries diárias.
+func TestGameAnalytics_200_ExpoeSessionCloseDaily(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{
+		GameStat:          domain.GameStat{GameID: "g1"},
+		SessionCloseDaily: []domain.DailyPoint{{Day: "2026-07-13", Matches: 5}},
+	}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		SessionCloseDaily []struct {
+			Day     string `json:"day"`
+			Matches int64  `json:"matches"`
+		} `json:"sessionCloseDaily"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.SessionCloseDaily, 1)
+	assert.Equal(t, "2026-07-13", body.SessionCloseDaily[0].Day)
+	assert.Equal(t, int64(5), body.SessionCloseDaily[0].Matches)
+}
+
+func TestGameAnalytics_SemSessionCloseDaily_ListaVazia(t *testing.T) {
+	r := &fakeReader{ga: domain.GameAnalytics{GameStat: domain.GameStat{GameID: "g1"}}}
+	rec := httptest.NewRecorder()
+	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/games/g1/analytics", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"sessionCloseDaily":[]`, "campo aditivo, vazio sem session_closed processado")
+}

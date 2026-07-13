@@ -190,6 +190,11 @@ type GameAnalytics struct {
 	// mode_id, sem a lacuna do item D que afeta os demais campos deste
 	// struct). Vazio = jogo sem nenhum session_closed processado ainda.
 	SessionHealth []SessionCloseStat
+
+	// SessionCloseDaily é a série "sessões fechadas por dia" (spec 015) —
+	// total por dia, todos os motivos somados (o detalhe por motivo já
+	// está em SessionHealth). Mesmo padrão das outras 3 séries diárias.
+	SessionCloseDaily []DailyPoint
 }
 
 // StatSummary é o panorama agregado de uma métrica do jogo (spec 011): soma,
