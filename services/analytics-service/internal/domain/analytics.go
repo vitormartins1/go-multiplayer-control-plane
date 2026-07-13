@@ -38,6 +38,10 @@ const BattleRoyaleTopNThreshold = 10
 type PlacementResult struct {
 	MatchID string
 	GameID  string
+	// ModeID é o modo do jogo (ADR-0024) — publicado no envelope desde a
+	// origem, descartado aqui até a spec 010 (mesma lacuna que a 009 fechou
+	// pra participação).
+	ModeID  string
 	Entries []PlacementEntry
 }
 
@@ -70,6 +74,9 @@ const (
 type CollectiveResult struct {
 	MatchID string
 	GameID  string
+	// ModeID é o modo do jogo (ADR-0024) — mesma lacuna de PlacementResult,
+	// fechada na spec 010.
+	ModeID  string
 	Outcome string // MISSION_SUCCESS | MISSION_FAILURE
 }
 
@@ -130,6 +137,13 @@ type GameAnalytics struct {
 	// Mission é a distribuição de desfecho da missão do coop_mission (C3, spec 006).
 	// nil fora do coop_mission. Aditivo.
 	Mission *MissionDistribution
+
+	// Séries diárias dos 3 arquétipos que não tinham (spec 010) — mesmo
+	// padrão nil-able de Placement/Mission: vazia fora do arquétipo
+	// correspondente. Soma todos os modos (sem seletor nesta v1).
+	PlacementDaily     []DailyPoint // battle_royale
+	MissionDaily       []DailyPoint // coop_mission
+	ParticipationDaily []DailyPoint // host_world_dropin (conta EVENTOS, não sessões)
 }
 
 // ParticipationEvent é um evento de participação ingerido do fan-out
