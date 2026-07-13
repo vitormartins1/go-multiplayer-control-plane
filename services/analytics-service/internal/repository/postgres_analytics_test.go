@@ -38,6 +38,7 @@ func newTestRepo(t *testing.T) *PostgresRepository {
 			"../../migrations/008_archetype_daily.sql",
 			"../../migrations/009_player_stats.sql",
 			"../../migrations/010_session_health.sql",
+			"../../migrations/011_mode_scoped_cumulative_rollups.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -704,4 +705,121 @@ func TestGameAnalytics_SessionHealth_FiltraPorModo(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, a.SessionHealth, 1)
 	assert.Equal(t, "modo-a", a.SessionHealth[0].ModeID)
+}
+
+// TestGameAnalytics_ModeID_IsolaRollupCumulativo (spec 014): game_rollup/
+// game_daily/game_player_seen agora respeitam o filtro de modo — a
+// lacuna que a spec 012 documentou como "fora de escopo".
+func TestGameAnalytics_ModeID_IsolaRollupCumulativo(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m1", "g1", "ffa",
+		domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 10})))
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m2", "g1", "teams-2v2",
+		domain.PlayerResult{PlayerID: "p2", Outcome: "loss", Score: 3})))
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), all.Matches, "sem filtro: soma os 2 modos")
+	assert.Equal(t, int64(1), all.Wins)
+	assert.Equal(t, int64(1), all.Losses)
+	require.Len(t, all.Daily, 1)
+	assert.Equal(t, int64(2), all.Daily[0].Matches)
+	assert.Equal(t, int64(2), all.UniquePlayers, "p1 e p2 são jogadores distintos")
+
+	ffa, err := repo.GameAnalytics(ctx, "g1", 30, "ffa")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), ffa.Matches, "filtrado: só o modo pedido")
+	assert.Equal(t, int64(1), ffa.Wins)
+	assert.Equal(t, int64(0), ffa.Losses)
+	require.Len(t, ffa.Daily, 1)
+	assert.Equal(t, int64(1), ffa.Daily[0].Matches)
+	assert.Equal(t, int64(1), ffa.UniquePlayers)
+}
+
+// TestGameAnalytics_ModeID_JogadorEmDoisModos_UniquePlayersNaoDuplica
+// (spec 014): jogador que jogou 2 modos do mesmo jogo conta 1 vez no
+// total global e 1 vez em CADA modo (não é duplicata, são fatos distintos).
+func TestGameAnalytics_ModeID_JogadorEmDoisModos_UniquePlayersNaoDuplica(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m1", "g1", "ffa",
+		domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 1})))
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m2", "g1", "teams-2v2",
+		domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 1})))
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), all.UniquePlayers, "mesmo jogador nos 2 modos: 1 no total global")
+
+	ffa, err := repo.GameAnalytics(ctx, "g1", 30, "ffa")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), ffa.UniquePlayers)
+}
+
+// TestGameAnalytics_ModeID_IsolaPlacementEMission (spec 014):
+// game_placement_rollup/game_mission_rollup agora respeitam o filtro.
+func TestGameAnalytics_ModeID_IsolaPlacementEMission(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	pr1 := placement("m1", "g1", domain.PlacementEntry{Placement: 1, SurvivedMs: 1000})
+	pr1.ModeID = "royale-a"
+	_, err := repo.ApplyPlacement(ctx, pr1)
+	require.NoError(t, err)
+	pr2 := placement("m2", "g1", domain.PlacementEntry{Placement: 1, SurvivedMs: 2000})
+	pr2.ModeID = "royale-b"
+	_, err = repo.ApplyPlacement(ctx, pr2)
+	require.NoError(t, err)
+
+	all, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.NotNil(t, all.Placement)
+	assert.Equal(t, int64(2), all.Placement.Entries, "sem filtro: soma os 2 modos")
+
+	a, err := repo.GameAnalytics(ctx, "g1", 30, "royale-a")
+	require.NoError(t, err)
+	require.NotNil(t, a.Placement)
+	assert.Equal(t, int64(1), a.Placement.Entries)
+	assert.InDelta(t, 1000.0, a.Placement.AvgSurvivedMs, 0.001)
+
+	cr1 := domain.CollectiveResult{MatchID: "m3", GameID: "g1", ModeID: "coop-a", Outcome: domain.MissionSuccess}
+	_, err = repo.ApplyCollective(ctx, cr1)
+	require.NoError(t, err)
+	cr2 := domain.CollectiveResult{MatchID: "m4", GameID: "g1", ModeID: "coop-b", Outcome: domain.MissionFailure}
+	_, err = repo.ApplyCollective(ctx, cr2)
+	require.NoError(t, err)
+
+	allM, err := repo.GameAnalytics(ctx, "g1", 30, "")
+	require.NoError(t, err)
+	require.NotNil(t, allM.Mission)
+	assert.Equal(t, int64(1), allM.Mission.Successes)
+	assert.Equal(t, int64(1), allM.Mission.Failures)
+
+	coopA, err := repo.GameAnalytics(ctx, "g1", 30, "coop-a")
+	require.NoError(t, err)
+	require.NotNil(t, coopA.Mission)
+	assert.Equal(t, int64(1), coopA.Mission.Successes)
+	assert.Equal(t, int64(0), coopA.Mission.Failures)
+}
+
+// TestOverview_JogoComDoisModos_NaoDuplica (spec 014): achado crítico da
+// revisão — sem GROUP BY, um jogo com 2+ modos apareceria 2x no board.
+func TestOverview_JogoComDoisModos_NaoDuplica(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m1", "g1", "ffa",
+		domain.PlayerResult{PlayerID: "p1", Outcome: "win", Score: 5})))
+	require.NoError(t, mustApply(repo, ctx, matchWithMode("m2", "g1", "teams-2v2",
+		domain.PlayerResult{PlayerID: "p2", Outcome: "loss", Score: 2})))
+
+	ov, err := repo.Overview(ctx)
+	require.NoError(t, err)
+	require.Len(t, ov.Games, 1, "jogo com 2 modos aparece UMA vez só")
+	assert.Equal(t, "g1", ov.Games[0].GameID)
+	assert.Equal(t, int64(2), ov.Games[0].Matches, "totais somados entre os modos")
+	assert.Equal(t, int64(2), ov.Totals.UniquePlayers)
 }
