@@ -213,6 +213,35 @@ func TestAdminSessions_StateClosed_LeDoHistoryStorePaginado(t *testing.T) {
 	assert.Nil(t, page.NextBefore, "menos itens que o limite: sem próxima página")
 }
 
+// TestAdminSessions_Participante_LastEventLastOutcome (spec 027): o DTO
+// propaga o último evento/outcome conhecido, presente ou omitido.
+func TestAdminSessions_Participante_LastEventLastOutcome(t *testing.T) {
+	closedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	history := &fakeHistory{sessions: []domain.Session{
+		{ID: "s0", GameID: "g1", State: domain.SessionClosed, CloseReason: domain.CloseHostKilled, ClosedAt: closedAt,
+			Participants: []domain.Participant{
+				{PlayerID: "coop-1", Role: domain.RoleCoop, JoinedAt: closedAt, LastEvent: domain.EventDied, LastOutcome: domain.OutcomeFail},
+				{PlayerID: "host-1", Role: domain.RoleHost, JoinedAt: closedAt},
+			}},
+	}}
+	mux := newAdminMuxWithHistory(&fakeDirectory{}, history)
+
+	rec, page := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed&limit=10")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, page.Closed, 1)
+	require.Len(t, page.Closed[0].Participants, 2)
+
+	byID := map[string]participantDTO{}
+	for _, p := range page.Closed[0].Participants {
+		byID[p.PlayerID] = p
+	}
+	assert.Equal(t, domain.EventDied, byID["coop-1"].LastEvent)
+	assert.Equal(t, domain.OutcomeFail, byID["coop-1"].LastOutcome)
+	assert.Empty(t, byID["host-1"].LastEvent, "sem evento reportado -> vazio")
+
+	assert.NotContains(t, rec.Body.String(), `"lastEvent":""`, "omitempty: campo vazio não aparece no JSON")
+}
+
 func TestAdminSessions_StateClosed_SemHistoryStore_503(t *testing.T) {
 	mux := newAdminMux(&fakeDirectory{}) // sem WithHistoryStore
 	rec, _ := doGetPage(t, mux, "/admin/games/g1/sessions?state=closed")

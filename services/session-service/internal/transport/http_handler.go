@@ -97,11 +97,14 @@ type sessionDTO struct {
 	Participants []participantDTO `json:"participants,omitempty"`
 }
 
-// participantDTO espelha domain.Participant (spec 025).
+// participantDTO espelha domain.Participant (spec 025). LastEvent/LastOutcome
+// (spec 027) só existem em host_world_dropin — omitidos quando vazios.
 type participantDTO struct {
-	PlayerID string    `json:"playerId"`
-	Role     string    `json:"role,omitempty"`
-	JoinedAt time.Time `json:"joinedAt"`
+	PlayerID    string    `json:"playerId"`
+	Role        string    `json:"role,omitempty"`
+	JoinedAt    time.Time `json:"joinedAt"`
+	LastEvent   string    `json:"lastEvent,omitempty"`
+	LastOutcome string    `json:"lastOutcome,omitempty"`
 }
 
 // teamDTO é um lado da formação registrada no Create (ADR-0023) — o rótulo
@@ -403,7 +406,13 @@ func participantsDTO(participants []domain.Participant) []participantDTO {
 	}
 	out := make([]participantDTO, len(participants))
 	for i, p := range participants {
-		out[i] = participantDTO{PlayerID: p.PlayerID, Role: p.Role, JoinedAt: p.JoinedAt}
+		out[i] = participantDTO{
+			PlayerID:    p.PlayerID,
+			Role:        p.Role,
+			JoinedAt:    p.JoinedAt,
+			LastEvent:   p.LastEvent,
+			LastOutcome: p.LastOutcome,
+		}
 	}
 	return out
 }

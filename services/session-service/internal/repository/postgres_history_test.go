@@ -30,6 +30,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithInitScripts(
 			"../../migrations/001_create_closed_sessions.sql",
 			"../../migrations/002_create_closed_session_players.sql",
+			"../../migrations/003_closed_session_result_and_outcome.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -135,6 +136,89 @@ func TestPostgresHistoryRepository_ClosedByPlayer_SoSessoesQueParticipou(t *test
 	require.NoError(t, err)
 	require.Len(t, got, 1, "coop-1 só participou de s1")
 	assert.Equal(t, "s1", got[0].ID)
+}
+
+// TestPostgresHistoryRepository_SaveClosed_PersisteResultETeams (spec 027):
+// os dois achados centrais da revisão — Result e TeamByPlayer nunca
+// sobreviviam ao fechamento da sessão.
+func TestPostgresHistoryRepository_SaveClosed_PersisteResultETeams(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresHistoryRepository(pool)
+	ctx := context.Background()
+
+	closedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	sess := closedSession("s1", "game-1", closedAt,
+		domain.Participant{PlayerID: "p1", Role: "team:blue", JoinedAt: closedAt.Add(-5 * time.Minute)},
+	)
+	sess.Result = &domain.MatchOutcome{
+		Kind: "win_loss_draw",
+		WinLossDraw: &domain.WinLossDrawResult{
+			Players: []domain.PlayerOutcome{{PlayerID: "p1", TeamID: "blue", Outcome: "win", Score: 10}},
+		},
+	}
+	sess.TeamByPlayer = map[string]string{"p1": "blue"}
+	require.NoError(t, repo.SaveClosed(ctx, sess))
+
+	got, err := repo.ClosedByGame(ctx, "game-1", 10, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+
+	require.NotNil(t, got[0].Result)
+	require.NotNil(t, got[0].Result.WinLossDraw)
+	require.Len(t, got[0].Result.WinLossDraw.Players, 1)
+	assert.Equal(t, "p1", got[0].Result.WinLossDraw.Players[0].PlayerID)
+	assert.Equal(t, "win", got[0].Result.WinLossDraw.Players[0].Outcome)
+	assert.Equal(t, int64(10), got[0].Result.WinLossDraw.Players[0].Score)
+
+	assert.Equal(t, map[string]string{"p1": "blue"}, got[0].TeamByPlayer)
+}
+
+// TestPostgresHistoryRepository_SaveClosed_SemResultadoNemTimes_FicaNil cobre
+// o caminho oposto: sessão fechada sem ReportResult (ttl/admin/abandoned/
+// host_left/host_killed) e sem times (FFA/host_world) -> NULL, não erro.
+func TestPostgresHistoryRepository_SaveClosed_SemResultadoNemTimes_FicaNil(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresHistoryRepository(pool)
+	ctx := context.Background()
+
+	closedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, repo.SaveClosed(ctx, closedSession("s1", "game-1", closedAt)))
+
+	got, err := repo.ClosedByGame(ctx, "game-1", 10, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Nil(t, got[0].Result)
+	assert.Nil(t, got[0].TeamByPlayer)
+}
+
+// TestPostgresHistoryRepository_SaveClosed_PersisteLastEventLastOutcome
+// (spec 027): outcome por participante do host_world_dropin sobrevive ao
+// fechamento.
+func TestPostgresHistoryRepository_SaveClosed_PersisteLastEventLastOutcome(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresHistoryRepository(pool)
+	ctx := context.Background()
+
+	closedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	sess := closedSession("s1", "game-1", closedAt,
+		domain.Participant{PlayerID: "coop-1", Role: domain.RoleCoop, JoinedAt: closedAt.Add(-5 * time.Minute),
+			LastEvent: domain.EventDied, LastOutcome: domain.OutcomeFail},
+		domain.Participant{PlayerID: "host-1", Role: domain.RoleHost, JoinedAt: closedAt.Add(-10 * time.Minute)},
+	)
+	require.NoError(t, repo.SaveClosed(ctx, sess))
+
+	got, err := repo.ClosedByGame(ctx, "game-1", 10, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Participants, 2)
+
+	byID := map[string]domain.Participant{}
+	for _, p := range got[0].Participants {
+		byID[p.PlayerID] = p
+	}
+	assert.Equal(t, domain.EventDied, byID["coop-1"].LastEvent)
+	assert.Equal(t, domain.OutcomeFail, byID["coop-1"].LastOutcome)
+	assert.Empty(t, byID["host-1"].LastEvent, "host nunca reporta evento sobre si mesmo")
 }
 
 func TestPostgresHistoryRepository_ClosedByPlayer_SemHistorico_ListaVazia(t *testing.T) {
