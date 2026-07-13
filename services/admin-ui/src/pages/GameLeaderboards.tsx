@@ -316,8 +316,12 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
               <Table.Tr key={e.playerId}>
                 <Table.Td ff="monospace">{e.rank}</Table.Td>
                 <Table.Td>
+                  {/* size=32 (padronização das tabelas, 2026-07-13): iguala a
+                      densidade da tabela de referência (Achievements/Players)
+                      — a mini-tabela da Visão geral continua compacta (20px),
+                      contexto diferente (grid denso de vários boards). */}
                   <Group gap={6} wrap="nowrap">
-                    <PlayerAvatar seed={e.playerId} size={24} />
+                    <PlayerAvatar seed={e.playerId} size={32} />
                     <Text size="sm" c="dimmed" ff="monospace">
                       {e.playerId}
                     </Text>

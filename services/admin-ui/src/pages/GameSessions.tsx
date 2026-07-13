@@ -219,8 +219,10 @@ function SessionRow({
         onClick={onToggle}
       >
         <Table.Td>
+          {/* size=32 (padronização das tabelas, 2026-07-13): iguala a
+              densidade da tabela de referência (Achievements/Players). */}
           <Group gap={6} wrap="nowrap">
-            <SessionAvatar seed={s.profileHash || s.sessionId} />
+            <SessionAvatar seed={s.profileHash || s.sessionId} size={32} />
             <Text ff="monospace" size="sm">
               {truncate(s.matchId)}
             </Text>
@@ -247,8 +249,9 @@ function SessionRow({
           )}
         </Table.Td>
         <Table.Td>
-          {/* resumo compacto (034): a lista completa vive no painel expandido. */}
-          <PlayersSummary players={s.players} />
+          {/* resumo compacto (034): a lista completa vive no painel expandido.
+              size=32 (padronização das tabelas): mesmo motivo do avatar acima. */}
+          <PlayersSummary players={s.players} size={32} />
         </Table.Td>
         <Table.Td>
           <Text ff="monospace" size="sm">

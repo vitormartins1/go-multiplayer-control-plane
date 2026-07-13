@@ -7,10 +7,23 @@ const MAX_AVATARS = 3;
 // PlayersSummary é o resumo compacto da coluna Players nas listagens de sessão
 // (034): stack dos 3 primeiros avatares + contador (N ou N/capacidade), com a
 // lista completa no tooltip. A lista aberta vive no painel expandido.
-export function PlayersSummary({ players, capacity }: { players: SessionPlayer[]; capacity?: number }) {
+// size (padronização das tabelas, 2026-07-13): default 24 preserva o Rooms.tsx
+// (view cross-jogo, deliberadamente compacta — 45+ linhas de uma vez); a aba
+// Sessions de um jogo passa 32 pra igualar a densidade da tabela de referência
+// (Achievements/Players — mesmo ícone de 32px, mesma altura de linha).
+export function PlayersSummary({
+  players,
+  capacity,
+  size = 24,
+}: {
+  players: SessionPlayer[];
+  capacity?: number;
+  size?: number;
+}) {
   const label = players
     .map((p) => `${p.handle || p.id}${isGuest(p.id) ? " (guest)" : ""}`)
     .join("\n");
+  const overlap = -Math.round(size / 3);
 
   return (
     <Tooltip label={label} multiline style={{ whiteSpace: "pre-line" }} withArrow>
@@ -20,13 +33,13 @@ export function PlayersSummary({ players, capacity }: { players: SessionPlayer[]
             <Box
               key={p.id}
               style={{
-                marginLeft: i === 0 ? 0 : -8,
+                marginLeft: i === 0 ? 0 : overlap,
                 borderRadius: 8,
                 // aro da cor do fundo para separar os avatares sobrepostos
                 boxShadow: "0 0 0 2px var(--mantine-color-body)",
               }}
             >
-              <PlayerAvatar seed={p.id} size={24} />
+              <PlayerAvatar seed={p.id} size={size} />
             </Box>
           ))}
         </Group>
