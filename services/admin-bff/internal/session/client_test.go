@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -192,4 +193,87 @@ func TestSessionsByGame_DetalheRico_RepassaSnapshotEResultado(t *testing.T) {
 	require.Len(t, s.Result.WinLossDraw, 2)
 	assert.Equal(t, "win", s.Result.WinLossDraw[0].Outcome)
 	assert.Equal(t, int64(4), s.Result.WinLossDraw[0].Stats["orbs"])
+}
+
+// --- spec 025: histórico persistido paginado ---
+
+func TestClosedSessionsByGame_ParseiaPaginaEParticipantes(t *testing.T) {
+	var gotPath, gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"closed": [{"sessionId":"s0","gameId":"g1","state":"closed","players":["host-1","coop-1"],
+				"openedAt":"2026-07-12T10:00:00Z","closedAt":"2026-07-12T10:10:00Z","closeReason":"host_left",
+				"origin":"host_world","hostPlayerId":"host-1",
+				"participants":[{"playerId":"host-1","role":"host","joinedAt":"2026-07-12T10:00:00Z"},
+				                {"playerId":"coop-1","role":"coop","joinedAt":"2026-07-12T10:05:00Z"}]}],
+			"nextBefore":"2026-07-12T10:00:00Z"
+		}`))
+	}))
+	defer upstream.Close()
+
+	got, err := New(upstream.URL, nil).ClosedSessionsByGame(context.Background(), "g1", 10, time.Time{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "/admin/games/g1/sessions", gotPath)
+	assert.Equal(t, "state=closed&limit=10", gotQuery)
+	require.Len(t, got.Closed, 1)
+	require.Len(t, got.Closed[0].Participants, 2)
+	assert.Equal(t, "coop-1", got.Closed[0].Participants[1].PlayerID)
+	assert.Equal(t, "coop", got.Closed[0].Participants[1].Role)
+	assert.Empty(t, got.Closed[0].Participants[1].Handle, "handle vazio: quem enriquece é o service")
+	require.NotNil(t, got.NextBefore)
+}
+
+func TestClosedSessionsByGame_ComBefore_RepassaCursorNaQuery(t *testing.T) {
+	var gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"closed": []}`))
+	}))
+	defer upstream.Close()
+
+	before := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	_, err := New(upstream.URL, nil).ClosedSessionsByGame(context.Background(), "g1", 5, before)
+	require.NoError(t, err)
+	assert.Equal(t, "state=closed&limit=5&before=2026-07-12T10%3A00%3A00Z", gotQuery)
+}
+
+func TestClosedSessionsByGame_503_ErrHistoryUnavailable(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+
+	_, err := New(upstream.URL, nil).ClosedSessionsByGame(context.Background(), "g1", 10, time.Time{})
+	assert.ErrorIs(t, err, domain.ErrHistoryUnavailable)
+}
+
+func TestClosedSessionsByGame_400_UpstreamError(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer upstream.Close()
+
+	_, err := New(upstream.URL, nil).ClosedSessionsByGame(context.Background(), "g1", 10, time.Time{})
+	var ue *domain.UpstreamError
+	require.ErrorAs(t, err, &ue)
+	assert.Equal(t, http.StatusBadRequest, ue.Status)
+}
+
+func TestPlayerSessions_ChamaRotaComGameIdNaQuery(t *testing.T) {
+	var gotPath, gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"closed": []}`))
+	}))
+	defer upstream.Close()
+
+	_, err := New(upstream.URL, nil).PlayerSessions(context.Background(), "coop-1", "g1", 20, time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, "/admin/players/coop-1/sessions", gotPath)
+	assert.Equal(t, "gameId=g1&limit=20", gotQuery)
 }

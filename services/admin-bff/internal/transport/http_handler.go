@@ -7,9 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/admin-bff/internal/domain"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/httpkit"
@@ -57,6 +59,8 @@ type AdminService interface {
 	GameSessions(ctx context.Context, gameID, state string) (domain.GameSessions, error)
 	Rooms(ctx context.Context, state string) (domain.GameSessions, error)
 	CloseRoom(ctx context.Context, matchID string) (domain.GameSession, error)
+	ClosedSessionsByGame(ctx context.Context, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error)
+	PlayerSessions(ctx context.Context, playerID, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error)
 	FanoutHealth(ctx context.Context) (domain.FanoutHealth, error)
 	AnalyticsOverview(ctx context.Context) (domain.AnalyticsOverview, error)
 	GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalyticsDetail, error)
@@ -116,6 +120,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/{gameId}/players", h.gamePlayers)
 	mux.HandleFunc("GET /api/games/{gameId}/sessions", h.gameSessions)
 	mux.HandleFunc("GET /api/players/{playerID}/games", h.playerGames)
+	// histórico persistido por jogador (spec 025) — a aba History do player.
+	mux.HandleFunc("GET /api/players/{playerID}/sessions", h.playerSessions)
 	mux.HandleFunc("GET /api/rooms", h.rooms)
 	mux.HandleFunc("POST /api/rooms/{matchId}/close", h.closeRoom)
 	mux.HandleFunc("GET /api/health/fanout", h.fanoutHealth)
@@ -604,8 +610,19 @@ func (h *Handler) playerGames(w http.ResponseWriter, r *http.Request) {
 
 // gameSessions: partidas do jogo (session-service), players enriquecidos com
 // handle (best-effort no service). state= repassado como filtro.
+//
+// state=closed muda de fonte (spec 025): lê o store PERSISTIDO, paginado por
+// limit/before (sobrevive a restart do session-service) — em vez do ring
+// in-memory que os demais valores de state usam. Resposta troca de shape
+// junto (closedSessionsPage em vez de domain.GameSessions).
 func (h *Handler) gameSessions(w http.ResponseWriter, r *http.Request) {
-	sessions, err := h.svc.GameSessions(r.Context(), r.PathValue("gameId"), r.URL.Query().Get("state"))
+	state := r.URL.Query().Get("state")
+	if state == "closed" {
+		h.closedGameSessions(w, r)
+		return
+	}
+
+	sessions, err := h.svc.GameSessions(r.Context(), r.PathValue("gameId"), state)
 	if err != nil {
 		writeUpstream(w, err)
 		return
@@ -617,6 +634,73 @@ func (h *Handler) gameSessions(w http.ResponseWriter, r *http.Request) {
 		sessions.Closed = []domain.GameSession{}
 	}
 	httpkit.WriteJSON(w, http.StatusOK, sessions)
+}
+
+// closedGameSessions responde a página de fechadas persistidas do jogo (spec
+// 025) — desvio de gameSessions quando state=closed.
+func (h *Handler) closedGameSessions(w http.ResponseWriter, r *http.Request) {
+	limit, before, err := parsePagination(r)
+	if err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination")
+		return
+	}
+	page, err := h.svc.ClosedSessionsByGame(r.Context(), r.PathValue("gameId"), limit, before)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if page.Closed == nil {
+		page.Closed = []domain.GameSession{}
+	}
+	httpkit.WriteJSON(w, http.StatusOK, page)
+}
+
+// playerSessions: histórico de sessões fechadas do jogador no jogo (spec 025,
+// aba History do player), paginado. gameId é obrigatório — o histórico é
+// sempre escopado a um jogo (a página do player já é escopada via presença,
+// ADR-0019).
+func (h *Handler) playerSessions(w http.ResponseWriter, r *http.Request) {
+	gameID := r.URL.Query().Get("gameId")
+	if gameID == "" {
+		httpkit.WriteError(w, http.StatusBadRequest, "missing_game_id")
+		return
+	}
+	limit, before, err := parsePagination(r)
+	if err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "invalid_pagination")
+		return
+	}
+	page, err := h.svc.PlayerSessions(r.Context(), r.PathValue("playerID"), gameID, limit, before)
+	if err != nil {
+		writeUpstream(w, err)
+		return
+	}
+	if page.Closed == nil {
+		page.Closed = []domain.GameSession{}
+	}
+	httpkit.WriteJSON(w, http.StatusOK, page)
+}
+
+// parsePagination lê limit (default 50, máx 200) e before (RFC3339; vazio =
+// sem cursor, primeira página) da query — mesmo contrato do session-service
+// (spec 025).
+func parsePagination(r *http.Request) (limit int, before time.Time, err error) {
+	const defaultLimit, maxLimit = 50, 200
+	limit = defaultLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, convErr := strconv.Atoi(raw)
+		if convErr != nil || n <= 0 {
+			return 0, time.Time{}, fmt.Errorf("limit inválido: %q", raw)
+		}
+		limit = min(n, maxLimit)
+	}
+	if raw := r.URL.Query().Get("before"); raw != "" {
+		before, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return 0, time.Time{}, fmt.Errorf("before inválido: %q", raw)
+		}
+	}
+	return limit, before, nil
 }
 
 // rooms é o board global de sessões (todos os jogos), enriquecido. state filtra.
@@ -760,6 +844,8 @@ func writeUpstream(w http.ResponseWriter, err error) {
 		httpkit.WriteError(w, http.StatusBadGateway, "cloud_save_unavailable")
 	case errors.Is(err, domain.ErrSessionsUnavailable):
 		httpkit.WriteError(w, http.StatusBadGateway, "sessions_unavailable")
+	case errors.Is(err, domain.ErrHistoryUnavailable):
+		httpkit.WriteError(w, http.StatusServiceUnavailable, "history_unavailable")
 	default:
 		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}

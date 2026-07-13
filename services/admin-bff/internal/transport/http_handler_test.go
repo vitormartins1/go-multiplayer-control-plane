@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,6 +70,9 @@ type fakeService struct {
 	eventRulesErr    error
 	gotEventRule     domain.EventRule
 	gotEventRuleID   string
+	closedPage       domain.ClosedSessionsPage
+	closedPageErr    error
+	gotBefore        time.Time
 }
 
 func (f *fakeService) Topology(context.Context) (domain.Topology, error) {
@@ -209,6 +213,16 @@ func (f *fakeService) GameSessions(_ context.Context, gameID, state string) (dom
 func (f *fakeService) Rooms(_ context.Context, state string) (domain.GameSessions, error) {
 	f.gotState = state
 	return f.sessions, f.sessionsErr
+}
+
+func (f *fakeService) ClosedSessionsByGame(_ context.Context, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	f.gotGameID, f.gotLimit, f.gotBefore = gameID, limit, before
+	return f.closedPage, f.closedPageErr
+}
+
+func (f *fakeService) PlayerSessions(_ context.Context, playerID, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	f.gotPlayer, f.gotGameID, f.gotLimit, f.gotBefore = playerID, gameID, limit, before
+	return f.closedPage, f.closedPageErr
 }
 
 func (f *fakeService) CloseRoom(_ context.Context, matchID string) (domain.GameSession, error) {
@@ -766,6 +780,92 @@ func TestGameSessions_SessionFora_502(t *testing.T) {
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.Equal(t, "sessions_unavailable", body["error"])
+}
+
+// --- spec 025: state=closed desvia pro store persistido, paginado ---
+
+func TestGameSessions_StateClosed_DesviaProPaginadoDoStore(t *testing.T) {
+	closedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	svc := &fakeService{closedPage: domain.ClosedSessionsPage{
+		Closed: []domain.GameSession{{SessionID: "s0", Participants: []domain.SessionParticipant{
+			{PlayerID: "host-1", Role: "host", Handle: "alice"},
+		}}},
+		NextBefore: &closedAt,
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/sessions?state=closed&limit=10")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Equal(t, 10, svc.gotLimit)
+
+	var body struct {
+		Closed []struct {
+			SessionID    string `json:"sessionId"`
+			Participants []struct {
+				PlayerID string `json:"playerId"`
+				Handle   string `json:"handle"`
+			} `json:"participants"`
+		} `json:"closed"`
+		NextBefore *time.Time `json:"nextBefore"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Len(t, body.Closed, 1)
+	assert.Equal(t, "s0", body.Closed[0].SessionID)
+	assert.Equal(t, "alice", body.Closed[0].Participants[0].Handle)
+	require.NotNil(t, body.NextBefore)
+}
+
+func TestGameSessions_StateClosed_HistoryFora_503(t *testing.T) {
+	svc := &fakeService{closedPageErr: domain.ErrHistoryUnavailable}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/sessions?state=closed")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	var body map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "history_unavailable", body["error"])
+}
+
+func TestGameSessions_StateClosed_LimitInvalido_400(t *testing.T) {
+	srv := newServer(&fakeService{})
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/games/g1/sessions?state=closed&limit=abc")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// --- spec 025: aba History do player ---
+
+func TestPlayerSessions_200_RepassaParametros(t *testing.T) {
+	svc := &fakeService{closedPage: domain.ClosedSessionsPage{
+		Closed: []domain.GameSession{{SessionID: "s1"}},
+	}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players/p1/sessions?gameId=g1&limit=5")
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "p1", svc.gotPlayer)
+	assert.Equal(t, "g1", svc.gotGameID)
+	assert.Equal(t, 5, svc.gotLimit)
+}
+
+func TestPlayerSessions_SemGameId_400(t *testing.T) {
+	srv := newServer(&fakeService{})
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/players/p1/sessions")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestRooms_200_RepassaState(t *testing.T) {

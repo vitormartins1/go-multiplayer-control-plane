@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -511,9 +512,13 @@ func TestCloudSave_DelegaComJogoEPlayer(t *testing.T) {
 type fakeSessions struct {
 	sessions    domain.GameSessions
 	fleetStatus domain.FleetStatus
+	closedPage  domain.ClosedSessionsPage
 	err         error
 	gotGameID   string
 	gotState    string
+	gotPlayer   string
+	gotLimit    int
+	gotBefore   time.Time
 }
 
 func (f *fakeSessions) SessionsByGame(_ context.Context, gameID, state string) (domain.GameSessions, error) {
@@ -537,6 +542,16 @@ func (f *fakeSessions) CloseSession(_ context.Context, matchID string) (domain.G
 func (f *fakeSessions) FleetStatus(_ context.Context, fleetName string) (domain.FleetStatus, error) {
 	f.gotGameID = fleetName // reaproveita o campo p/ capturar o nome da fleet
 	return f.fleetStatus, f.err
+}
+
+func (f *fakeSessions) ClosedSessionsByGame(_ context.Context, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	f.gotGameID, f.gotLimit, f.gotBefore = gameID, limit, before
+	return f.closedPage, f.err
+}
+
+func (f *fakeSessions) PlayerSessions(_ context.Context, playerID, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	f.gotPlayer, f.gotGameID, f.gotLimit, f.gotBefore = playerID, gameID, limit, before
+	return f.closedPage, f.err
 }
 
 func TestRooms_EnriqueceHandleENomeDoJogo(t *testing.T) {
@@ -626,6 +641,52 @@ func TestGameSessions_SessionFora_PropagaErro(t *testing.T) {
 
 	_, err := svc.GameSessions(context.Background(), "g1", "")
 	assert.ErrorIs(t, err, domain.ErrSessionsUnavailable)
+}
+
+// --- spec 025: histórico persistido paginado ---
+
+func TestClosedSessionsByGame_RepassaParametrosEEnriqueceHandles(t *testing.T) {
+	sessions := &fakeSessions{closedPage: domain.ClosedSessionsPage{
+		Closed: []domain.GameSession{{SessionID: "s1", Participants: []domain.SessionParticipant{
+			{PlayerID: "p1", Role: "host"}, {PlayerID: "p-desconhecido", Role: "coop"},
+		}}},
+	}}
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 1, Players: []domain.Player{{ID: "p1", Handle: "alice"}}}}
+	svc := New(Deps{Sessions: sessions, Directory: dir})
+
+	before := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	got, err := svc.ClosedSessionsByGame(context.Background(), "g1", 10, before)
+
+	require.NoError(t, err)
+	assert.Equal(t, "g1", sessions.gotGameID)
+	assert.Equal(t, 10, sessions.gotLimit)
+	assert.Equal(t, before, sessions.gotBefore)
+	assert.Equal(t, "alice", got.Closed[0].Participants[0].Handle)
+	assert.Empty(t, got.Closed[0].Participants[1].Handle, "id sem cadastro fica com handle vazio")
+}
+
+func TestClosedSessionsByGame_HistoryFora_PropagaErro(t *testing.T) {
+	sessions := &fakeSessions{err: domain.ErrHistoryUnavailable}
+	svc := New(Deps{Sessions: sessions, Directory: &fakeDirectory{}})
+
+	_, err := svc.ClosedSessionsByGame(context.Background(), "g1", 10, time.Time{})
+	assert.ErrorIs(t, err, domain.ErrHistoryUnavailable)
+}
+
+func TestPlayerSessions_RepassaParametrosEEnriqueceHandles(t *testing.T) {
+	sessions := &fakeSessions{closedPage: domain.ClosedSessionsPage{
+		Closed: []domain.GameSession{{SessionID: "s1", Participants: []domain.SessionParticipant{{PlayerID: "p1", Role: "coop"}}}},
+	}}
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 1, Players: []domain.Player{{ID: "p1", Handle: "alice"}}}}
+	svc := New(Deps{Sessions: sessions, Directory: dir})
+
+	got, err := svc.PlayerSessions(context.Background(), "p1", "g1", 5, time.Time{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "p1", sessions.gotPlayer)
+	assert.Equal(t, "g1", sessions.gotGameID)
+	assert.Equal(t, 5, sessions.gotLimit)
+	assert.Equal(t, "alice", got.Closed[0].Participants[0].Handle)
 }
 
 type fakeAnalytics struct {

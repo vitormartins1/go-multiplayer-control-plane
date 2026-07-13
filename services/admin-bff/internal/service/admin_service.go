@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -296,17 +297,46 @@ func (s *Service) GameSessions(ctx context.Context, gameID, state string) (domai
 		return domain.GameSessions{}, err
 	}
 
+	s.enrichSessionHandles(ctx, sessions.Active)
+	s.enrichSessionHandles(ctx, sessions.Closed)
+	return sessions, nil
+}
+
+// enrichSessionHandles preenche o handle do identity nos players E nos
+// participantes (spec 025) — best-effort, reusa a mesma resolução de handles
+// das demais superfícies de sessão.
+func (s *Service) enrichSessionHandles(ctx context.Context, sessions []domain.GameSession) {
 	handles := s.handlesByID(ctx)
-	enrich := func(list []domain.GameSession) {
-		for i := range list {
-			for j := range list[i].Players {
-				list[i].Players[j].Handle = handles[list[i].Players[j].ID]
-			}
+	for i := range sessions {
+		for j := range sessions[i].Players {
+			sessions[i].Players[j].Handle = handles[sessions[i].Players[j].ID]
+		}
+		for j := range sessions[i].Participants {
+			sessions[i].Participants[j].Handle = handles[sessions[i].Participants[j].PlayerID]
 		}
 	}
-	enrich(sessions.Active)
-	enrich(sessions.Closed)
-	return sessions, nil
+}
+
+// ClosedSessionsByGame lê as sessões fechadas PERSISTIDAS do jogo, paginadas
+// (spec 025), com players/participantes enriquecidos com handle.
+func (s *Service) ClosedSessionsByGame(ctx context.Context, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	page, err := s.sessions.ClosedSessionsByGame(ctx, gameID, limit, before)
+	if err != nil {
+		return domain.ClosedSessionsPage{}, err
+	}
+	s.enrichSessionHandles(ctx, page.Closed)
+	return page, nil
+}
+
+// PlayerSessions lê as sessões fechadas do jogo em que o player participou
+// (spec 025, aba History do player), paginadas, enriquecidas com handle.
+func (s *Service) PlayerSessions(ctx context.Context, playerID, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error) {
+	page, err := s.sessions.PlayerSessions(ctx, playerID, gameID, limit, before)
+	if err != nil {
+		return domain.ClosedSessionsPage{}, err
+	}
+	s.enrichSessionHandles(ctx, page.Closed)
+	return page, nil
 }
 
 // Rooms lê as sessões de TODOS os jogos (board global do console, 008) e
@@ -318,18 +348,16 @@ func (s *Service) Rooms(ctx context.Context, state string) (domain.GameSessions,
 		return domain.GameSessions{}, err
 	}
 
-	handles := s.handlesByID(ctx)
 	names := s.gameNamesByID(ctx)
-	enrich := func(list []domain.GameSession) {
+	nameEnrich := func(list []domain.GameSession) {
 		for i := range list {
 			list[i].GameName = names[list[i].GameID]
-			for j := range list[i].Players {
-				list[i].Players[j].Handle = handles[list[i].Players[j].ID]
-			}
 		}
 	}
-	enrich(sessions.Active)
-	enrich(sessions.Closed)
+	nameEnrich(sessions.Active)
+	nameEnrich(sessions.Closed)
+	s.enrichSessionHandles(ctx, sessions.Active)
+	s.enrichSessionHandles(ctx, sessions.Closed)
 	return sessions, nil
 }
 
