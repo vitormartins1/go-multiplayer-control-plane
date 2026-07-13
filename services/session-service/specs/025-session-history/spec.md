@@ -1,6 +1,6 @@
 # Spec: 025-session-history
 **Serviço:** session-service (fatias em admin-bff e admin-ui)
-**Status:** Proposed (2026-07-12) — pronta para implementação futura; nada implementado
+**Status:** Done (2026-07-13) — Fatias 1-4 implementadas e validadas (ver tasks.md)
 **Data:** 2026-07-12
 
 ## Contexto
