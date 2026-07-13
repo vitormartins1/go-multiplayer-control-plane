@@ -107,6 +107,48 @@ func TestGameAnalytics_ParseiaMission(t *testing.T) {
 	assert.InDelta(t, 2.0/3.0, d.Mission.SuccessRate, 0.001)
 }
 
+// séries diárias novas + stats brutos (analytics-service/010+011, spec
+// admin-bff/024) — decodificam sem perder dado.
+func TestGameAnalytics_ParseiaSeriesDiariasEStats(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"g1","matches":1,"daily":[],"roleParticipations":[],
+			"placementDaily":[{"day":"2026-07-13","matches":3}],
+			"missionDaily":[{"day":"2026-07-13","matches":1}],
+			"participationDaily":[{"day":"2026-07-13","matches":42}],
+			"stats":[{"key":"kills","sum":42,"count":10,"avg":4.2}]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "g1", 0)
+	require.NoError(t, err)
+	require.Len(t, d.PlacementDaily, 1)
+	assert.Equal(t, int64(3), d.PlacementDaily[0].Matches)
+	require.Len(t, d.MissionDaily, 1)
+	assert.Equal(t, int64(1), d.MissionDaily[0].Matches)
+	require.Len(t, d.ParticipationDaily, 1)
+	assert.Equal(t, int64(42), d.ParticipationDaily[0].Matches)
+	require.Len(t, d.Stats, 1)
+	assert.Equal(t, domain.StatSummary{Key: "kills", Sum: 42, Count: 10, Avg: 4.2}, d.Stats[0])
+}
+
+// Jogo sem os campos novos no upstream (resposta antiga/sem dado) -> slices
+// vazias, sem quebrar a decodificação.
+func TestGameAnalytics_SemCamposNovos_ListasVazias(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"g1","matches":1,"daily":[],"roleParticipations":[]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "g1", 0)
+	require.NoError(t, err)
+	assert.Empty(t, d.PlacementDaily)
+	assert.Empty(t, d.MissionDaily)
+	assert.Empty(t, d.ParticipationDaily)
+	assert.Empty(t, d.Stats)
+}
+
 func TestGameAnalytics_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)

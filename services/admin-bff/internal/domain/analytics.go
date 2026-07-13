@@ -68,6 +68,26 @@ type GameAnalyticsDetail struct {
 	RoleParticipations []ParticipationStat    `json:"roleParticipations"`
 	Placement          *PlacementDistribution `json:"placement,omitempty"` // battle_royale (BR4); nil fora do BR
 	Mission            *MissionDistribution   `json:"mission,omitempty"`   // coop_mission (C4); nil fora do coop
+
+	// Séries diárias dos 3 arquétipos que não tinham (analytics-service/010)
+	// — vazias fora do arquétipo correspondente, mesmo padrão de Placement/Mission.
+	PlacementDaily     []AnalyticsDaily `json:"placementDaily"`
+	MissionDaily       []AnalyticsDaily `json:"missionDaily"`
+	ParticipationDaily []AnalyticsDaily `json:"participationDaily"`
+
+	// Stats é o resumo agregado por stat_key (analytics-service/011) — vazio
+	// se o jogo nunca reportou stats (sem scoringStats no perfil).
+	Stats []StatSummary `json:"stats"`
+}
+
+// StatSummary é o panorama agregado de uma métrica do jogo
+// (analytics-service/011): soma, contagem de ocorrências e média derivada.
+// Passthrough do analytics.
+type StatSummary struct {
+	Key   string  `json:"key"`
+	Sum   int64   `json:"sum"`
+	Count int64   `json:"count"`
+	Avg   float64 `json:"avg"`
 }
 
 // PlacementDistribution é a distribuição de colocação do battle_royale (BR3/BR4):
