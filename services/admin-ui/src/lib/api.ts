@@ -409,6 +409,9 @@ export interface GameAnalyticsDetail {
   // Distribuição por motivo de fechamento (analytics-service/013) — vazio
   // se o jogo não tem nenhum session_closed processado ainda.
   sessionHealth: SessionCloseStat[];
+  // Série "sessões fechadas por dia" (analytics-service/015) — mesmo
+  // padrão das outras séries diárias, sem quebra por closeReason.
+  sessionCloseDaily: AnalyticsDaily[];
 }
 
 // SessionCloseStat é a distribuição agregada por motivo de fechamento
