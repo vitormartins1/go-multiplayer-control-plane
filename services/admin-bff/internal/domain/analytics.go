@@ -81,6 +81,22 @@ type GameAnalyticsDetail struct {
 	// Stats é o resumo agregado por stat_key (analytics-service/011) — vazio
 	// se o jogo nunca reportou stats (sem scoringStats no perfil).
 	Stats []StatSummary `json:"stats"`
+
+	// SessionHealth é a distribuição por motivo de fechamento
+	// (analytics-service/013) — vazio se o jogo não tem nenhum
+	// session_closed processado ainda.
+	SessionHealth []SessionCloseStat `json:"sessionHealth"`
+}
+
+// SessionCloseStat é a distribuição agregada por motivo de fechamento
+// (analytics-service/013). Passthrough do analytics.
+type SessionCloseStat struct {
+	ModeID        string  `json:"modeId,omitempty"`
+	Archetype     string  `json:"archetype,omitempty"`
+	CloseReason   string  `json:"closeReason"`
+	Count         int64   `json:"count"`
+	DurationSumMs int64   `json:"durationSumMs"`
+	AvgDurationMs float64 `json:"avgDurationMs"`
 }
 
 // StatSummary é o panorama agregado de uma métrica do jogo

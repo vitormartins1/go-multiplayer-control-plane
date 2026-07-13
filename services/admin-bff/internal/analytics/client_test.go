@@ -61,6 +61,25 @@ func TestGameAnalytics_ParseiaRoleParticipations(t *testing.T) {
 	assert.Empty(t, d.GameName, "nome é injetado pelo service")
 }
 
+// TestGameAnalytics_RepassaSessionHealth (spec 027 — passthrough do
+// analytics-service/013): distribuição por motivo de fechamento.
+func TestGameAnalytics_RepassaSessionHealth(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"hw","matches":0,"daily":[],"roleParticipations":[],
+			"sessionHealth":[{"modeId":"mundo-vivo","archetype":"host_world_dropin","closeReason":"host_left","count":2,"durationSumMs":600000,"avgDurationMs":300000}]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7, "")
+	require.NoError(t, err)
+	require.Len(t, d.SessionHealth, 1)
+	assert.Equal(t, domain.SessionCloseStat{
+		ModeID: "mundo-vivo", Archetype: "host_world_dropin", CloseReason: "host_left",
+		Count: 2, DurationSumMs: 600000, AvgDurationMs: 300000,
+	}, d.SessionHealth[0])
+}
+
 // TestGameAnalytics_RepassaModeIdEEcoa (spec 026 — passthrough do filtro da
 // analytics-service/012): modeId vai na query, e o eco no DTO é propagado.
 func TestGameAnalytics_RepassaModeIdEEcoa(t *testing.T) {
