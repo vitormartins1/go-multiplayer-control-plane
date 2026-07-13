@@ -1,10 +1,15 @@
-# NEXT-STEPS — handoff (atualizado 2026-07-10)
+# NEXT-STEPS — handoff (atualizado 2026-07-12)
 
 Ponto de retomada após limpar o contexto. Resume **o estado atual**, **o que fica pendente de você**, **o que foi feito nesta sessão** e o **backlog priorizado**.
 
 > **Trilha de serviços do control plane: 100% construída e validada — os 4 arquétipos ponta a ponta, motor de achievements/event-rules maduro, Analytics com gráficos.** O que falta de verdade agora é **fora deste repo** (data planes Unity) ou **infra real** (AWS). Ver "Estado desde 2026-07-08" logo abaixo pro que mudou nas últimas sessões.
 
 ## Estado desde 2026-07-08 (o que este doc ainda não registrava)
+
+**Fix do achado da bateria real do host_world_dropin + spec de histórico de sessão (2026-07-12):**
+
+- **session-service — phantom morto sumia da sala do admin (follow-up #15 do arquétipo, FEITO):** o achado ao vivo "coop via sinais nunca aparece na sala" tinha causa real em `DIED`/`LEFT` apagando o jogador de `Players` (não no caminho dos sinais, que estava correto — repro limpa via grpcurl provou). `Players` de host_world agora acumula **participantes** (dedupe na re-entrada; rollback de token não vaza); `RoleSlots` seguem sendo a presença/capacidade. 176 testes verdes; validado ao vivo (DIED → slot libera, participante permanece).
+- **`session/025-session-history` (spec Proposed, NADA implementado):** sessões são 100% in-memory (restart apaga — outro achado da bateria). A spec (spec/plan/tasks completos) cobre: `Participants{PlayerID, Role}` no domínio, Postgres próprio do session-service (write-once no close, best-effort), endpoints admin paginados (fechadas por jogo; sessões por player), aba **History** na página do player (após Achievements, escopo do jogo selecionado) e fechadas persistidas na aba Sessions do jogo. Implementar quando priorizado — item novo no backlog abaixo.
 
 **Motor de regras de achievements — V2 completo (ADR-0027 + ADR-0028), 2026-07-09/10:**
 
@@ -95,14 +100,15 @@ Modelo final = **dois eixos** (identidade global + presença; ver ADR-0019). Nã
 
 Uma feature por branch `feat/<serviço>/<NNN-slug>`, merge `--no-ff` (`docs/GIT-WORKFLOW.md`). Itens concluídos desde a última revisão deste doc foram removidos da lista (ficam registrados no histórico de commits e nas seções acima); ordem sugerida do que resta:
 
-1. **Cross-repo Unity — em andamento, maior frente ativa.** `unity-queue-arena-data-plane` (Fases 0–7) e `unity-host-world-dropin-data-plane` (Fases 0–4 done, ver "Estado desde 2026-07-08" acima) têm data plane real; falta a **Fase 5** (e2e orquestrado k3d→Pi 5 + Fleet própria) do segundo — agora mais simples de bootstrapar graças à ADR-0029 (infra Agones centralizada) — e `battle_royale`/`coop_mission` ainda não têm repo (contrato pronto, zero código Unity).
-2. **Infra / deploy — payoff da tese (ADR-0008).** Falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005 — hoje só decidido "diferido"). É a medição de custo/performance vs AWS GameKit que a tese promete; ainda não começou.
-3. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR antes de implementar.
-4. **SQS queue depth no Grafana** (observabilidade futura): precisa de `yet-another-cloudwatch-exporter` (YACE) — só faz sentido quando houver AWS real (item 2).
-5. **Analytics Fase 2/3** (gated por evidência): série temporal pros outros 3 arquétipos (schema novo, mesma lacuna de `mode_id` que a spec 009 já fechou só pra participações); captura de `stats` brutos (kills/deaths) no analytics-service; dashboard configurável por widget.
-6. **V2c do motor de regras** (prioridade/exclusividade first-match-wins) — gated por evidência.
-7. **As duas limitações do motor de achievements** achadas no estresse-teste (janela de tempo intra-partida; streak entre partidas) — sem plano de ação ainda, só documentadas.
-8. **Fatia 2 da ADR-0029** (registry de imagem por jogo + CI/GHCR) — gated por evidência (2º arquétipo real em produção, ou outro dev precisando mexer sem acesso ao cluster).
+1. **Histórico de sessão — spec PRONTA (`session/025-session-history`, Proposed):** persistência das fechadas + aba History do player + Sessions do jogo. É a resposta estrutural aos dois achados da bateria de 2026-07-12 (salas in-memory somem no restart; participação por player não existe em lugar nenhum). Fatias 1-4 no `tasks.md` da spec.
+2. **Cross-repo Unity — em andamento, maior frente ativa.** `unity-queue-arena-data-plane` (Fases 0–7) e `unity-host-world-dropin-data-plane` (Fases 0–4 done, ver "Estado desde 2026-07-08" acima) têm data plane real; falta a **Fase 5** (e2e orquestrado k3d→Pi 5 + Fleet própria) do segundo — agora mais simples de bootstrapar graças à ADR-0029 (infra Agones centralizada) — e `battle_royale`/`coop_mission` ainda não têm repo (contrato pronto, zero código Unity).
+3. **Infra / deploy — payoff da tese (ADR-0008).** Falta o grosso: demais serviços em Terraform, `environments/prod` (AWS real), compute por serviço (ADR-0005 — hoje só decidido "diferido"). É a medição de custo/performance vs AWS GameKit que a tese promete; ainda não começou.
+4. **Service JWT** (evolução do ADR-0018): trocar a internal key compartilhada por tokens por serviço. Abrir ADR antes de implementar.
+5. **SQS queue depth no Grafana** (observabilidade futura): precisa de `yet-another-cloudwatch-exporter` (YACE) — só faz sentido quando houver AWS real (item 2).
+6. **Analytics Fase 2/3** (gated por evidência): série temporal pros outros 3 arquétipos (schema novo, mesma lacuna de `mode_id` que a spec 009 já fechou só pra participações); captura de `stats` brutos (kills/deaths) no analytics-service; dashboard configurável por widget.
+7. **V2c do motor de regras** (prioridade/exclusividade first-match-wins) — gated por evidência.
+8. **As duas limitações do motor de achievements** achadas no estresse-teste (janela de tempo intra-partida; streak entre partidas) — sem plano de ação ainda, só documentadas.
+9. **Fatia 2 da ADR-0029** (registry de imagem por jogo + CI/GHCR) — gated por evidência (2º arquétipo real em produção, ou outro dev precisando mexer sem acesso ao cluster).
 
 ## Gotchas operacionais
 
