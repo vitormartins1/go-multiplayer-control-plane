@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -673,7 +674,12 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrRoleFull)
 	}
 	slot.Occupants = append(slot.Occupants, playerID)
-	sess.Players = append(sess.Players, playerID)
+	// Players acumula PARTICIPANTES (ver domain.Session): re-entrada de quem já
+	// morreu neste mundo (novo sinal/invasão) não duplica a lista.
+	firstJoin := !slices.Contains(sess.Players, playerID)
+	if firstJoin {
+		sess.Players = append(sess.Players, playerID)
+	}
 	serverAddr := sess.ServerAddress
 	modeID := sess.ModeID
 	s.mu.Unlock()
@@ -682,6 +688,10 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 	if err != nil {
 		s.mu.Lock()
 		removeFromWorld(sess, playerID) // reverte a reserva do slot
+		if firstJoin {
+			// nunca chegou a entrar: não conta como participante
+			sess.Players = slices.DeleteFunc(sess.Players, func(p string) bool { return p == playerID })
+		}
 		s.mu.Unlock()
 		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: issue token: %w", err)
 	}
@@ -864,19 +874,15 @@ func playerInWorld(sess *domain.Session, playerID string) bool {
 	return false
 }
 
-// removeFromWorld tira o jogador do slot que o contém e da lista de players.
-// Deve ser chamado sob o lock. Idempotente: no-op se o jogador não está presente.
+// removeFromWorld tira o jogador do slot que o contém — libera a CAPACIDADE.
+// NÃO mexe em Players: participação é histórica (quem morreu/saiu continua na
+// lista da sala; ver domain.Session.Players). Deve ser chamado sob o lock.
+// Idempotente: no-op se o jogador não está em nenhum slot.
 func removeFromWorld(sess *domain.Session, playerID string) {
 	for _, slot := range sess.RoleSlots {
 		for i, p := range slot.Occupants {
 			if p == playerID {
 				slot.Occupants = append(slot.Occupants[:i], slot.Occupants[i+1:]...)
-				for j, pp := range sess.Players {
-					if pp == playerID {
-						sess.Players = append(sess.Players[:j], sess.Players[j+1:]...)
-						break
-					}
-				}
 				return
 			}
 		}

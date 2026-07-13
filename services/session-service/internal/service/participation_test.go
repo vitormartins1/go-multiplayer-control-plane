@@ -78,6 +78,48 @@ func TestReportParticipation_Left_LiberaSlot(t *testing.T) {
 	assert.Equal(t, float64(0), svc.OccupiedSlots(domain.RoleCoop))
 }
 
+// worldPlayers lê o Players da sessão ativa pela superfície admin (cópia).
+func worldPlayers(t *testing.T, svc *Service, sessionID string) []string {
+	t.Helper()
+	active, _ := svc.SessionsByGame("game-1")
+	for _, s := range active {
+		if s.ID == sessionID {
+			return s.Players
+		}
+	}
+	t.Fatalf("sessão %s não encontrada entre as ativas", sessionID)
+	return nil
+}
+
+// Achado ao vivo (bateria 2026-07-12): o coop morria e SUMIA da sala do admin
+// como se nunca tivesse entrado. DIED/LEFT liberam a CAPACIDADE (slot), mas a
+// participação é histórica — Players mantém quem passou pelo mundo.
+func TestReportParticipation_Died_MantemParticipanteNaSala(t *testing.T) {
+	svc, _, _, sid := participationSetup(t)
+	_, _, err := svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err)
+
+	err = svc.ReportParticipationEvent(context.Background(), sid, evt("coop-1", domain.RoleCoop, domain.EventDied, domain.OutcomeFail))
+	require.NoError(t, err)
+	assert.Equal(t, float64(0), svc.OccupiedSlots(domain.RoleCoop), "DIED libera o slot")
+	assert.Equal(t, []string{"host-1", "coop-1"}, worldPlayers(t, svc, sid), "morto continua participante da sala")
+}
+
+// Re-entrada de quem já morreu neste mundo (novo sinal) ocupa slot de novo mas
+// não duplica a lista de participantes.
+func TestJoinWorld_ReentradaAposMorte_NaoDuplicaParticipante(t *testing.T) {
+	svc, _, _, sid := participationSetup(t)
+	_, _, err := svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err)
+	err = svc.ReportParticipationEvent(context.Background(), sid, evt("coop-1", domain.RoleCoop, domain.EventDied, domain.OutcomeFail))
+	require.NoError(t, err)
+
+	_, _, err = svc.JoinWorld(context.Background(), sid, "coop-1", domain.RoleCoop)
+	require.NoError(t, err, "morto pode ser invocado de novo (slot livre)")
+	assert.Equal(t, float64(1), svc.OccupiedSlots(domain.RoleCoop))
+	assert.Equal(t, []string{"host-1", "coop-1"}, worldPlayers(t, svc, sid), "sem duplicata na re-entrada")
+}
+
 func TestReportParticipation_DiedAusente_NoOp(t *testing.T) {
 	svc, _, _, sid := participationSetup(t)
 	// ninguém entrou; DIED de um phantom ausente é no-op idempotente.
