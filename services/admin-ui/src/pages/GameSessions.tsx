@@ -3,6 +3,7 @@ import {
   Alert,
   Badge,
   Box,
+  Button,
   Collapse,
   Group,
   Loader,
@@ -12,6 +13,7 @@ import {
   Table,
   Text,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
@@ -21,17 +23,38 @@ import { SessionMatchDetail } from "../components/SessionMatchDetail";
 import { archetypeMetaOf } from "../lib/archetypeMeta";
 
 const POLL_MS = 5000;
+const CLOSED_PAGE = 20;
 
 // GameSessions é a aba de operação/debug das partidas do jogo (spec 007):
-// abertas ao vivo + histórico de fechadas (em memória no session-service).
-// Polling de 5s enquanto a aba está montada (GameDetail usa keepMounted=false,
-// então sair da aba desmonta e para o polling).
+// abertas ao vivo (mapa in-memory, polling 5s) + histórico de fechadas
+// PERSISTIDO (spec 025), paginado com "carregar mais". Polling só das
+// abertas — o histórico não muda sozinho, recarrega só ao trocar de jogo ou
+// via "carregar mais". GameDetail usa keepMounted=false, então sair da aba
+// desmonta e para o polling.
 export function GameSessions({ gameId }: { gameId: string }) {
   const { data, loading, error, reload } = useAsync((s) => api.gameSessions(gameId, s), [gameId]);
+  // Histórico persistido (spec 025): 1ª página vem do useAsync; "carregar
+  // mais" acumula em closedExtra e avança o cursor (mesmo padrão do
+  // leaderboard, spec 039). Postgres do histórico fora (503) -> cai pro ring
+  // in-memory de `data.closed` (plan D6), com aviso.
+  const { data: closedPage, error: closedError } = useAsync(
+    (s) => api.closedGameSessions(gameId, { limit: CLOSED_PAGE }, s),
+    [gameId],
+  );
+  const [closedExtra, setClosedExtra] = useState<GameSession[]>([]);
+  const [closedCursor, setClosedCursor] = useState<string | undefined>(undefined);
+  const [closedNoMore, setClosedNoMore] = useState(false);
+  const [loadingMoreClosed, setLoadingMoreClosed] = useState(false);
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
   const [modeFilter, setModeFilter] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setClosedExtra([]);
+    setClosedCursor(undefined);
+    setClosedNoMore(false);
+  }, [gameId]);
 
   useEffect(() => {
     const id = setInterval(reload, POLL_MS);
@@ -43,15 +66,40 @@ export function GameSessions({ gameId }: { gameId: string }) {
     if (data) setLastUpdate(new Date());
   }, [data]);
 
+  // Postgres do histórico fora -> fallback pro ring in-memory do gameSessions
+  // (plan D6): mostra o que der (bounded, ~200 fechadas globais), sem "carregar
+  // mais" (o ring não pagina).
+  const historyUnavailable = !!closedError;
+  const closedRows = useMemo(() => {
+    if (historyUnavailable) return data?.closed ?? [];
+    return [...(closedPage?.closed ?? []), ...closedExtra];
+  }, [historyUnavailable, data, closedPage, closedExtra]);
+  const hasMoreClosed = !historyUnavailable && !closedNoMore && !!(closedCursor ?? closedPage?.nextBefore);
+
+  async function loadMoreClosed() {
+    const before = closedCursor ?? closedPage?.nextBefore;
+    if (!before) return;
+    setLoadingMoreClosed(true);
+    try {
+      const page = await api.closedGameSessions(gameId, { limit: CLOSED_PAGE, before });
+      setClosedExtra((prev) => [...prev, ...page.closed]);
+      setClosedCursor(page.nextBefore);
+      if (!page.nextBefore) setClosedNoMore(true);
+    } catch {
+      notifications.show({ color: "critical", message: "Falha ao carregar mais sessões fechadas." });
+    } finally {
+      setLoadingMoreClosed(false);
+    }
+  }
+
   // modo de cada sessão (ADR-0024, 028): ausente em sessões legadas = default.
   const modeOf = (s: GameSession) => s.modeId || "default";
 
   const allRows = useMemo(() => {
-    if (!data) return [];
-    const active = filter === "closed" ? [] : data.active;
-    const closed = filter === "open" ? [] : data.closed;
+    const active = filter === "closed" ? [] : (data?.active ?? []);
+    const closed = filter === "open" ? [] : closedRows;
     return [...active, ...closed];
-  }, [data, filter]);
+  }, [data, closedRows, filter]);
 
   // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
   const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
@@ -67,7 +115,8 @@ export function GameSessions({ gameId }: { gameId: string }) {
           Partidas{" "}
           {data ? (
             <Text span c="dimmed">
-              · {data.active.length} aberta(s), {data.closed.length} fechada(s)
+              · {data.active.length} aberta(s), {closedRows.length}
+              {hasMoreClosed ? "+" : ""} fechada(s)
             </Text>
           ) : null}
         </Text>
@@ -103,10 +152,16 @@ export function GameSessions({ gameId }: { gameId: string }) {
 
       {loading && !data && <Loader />}
       {!!error && <Alert color="critical">sessões indisponíveis (session-service fora?).</Alert>}
+      {historyUnavailable && (
+        <Alert color="yellow">
+          Histórico persistido indisponível (Postgres do session-service fora?) — mostrando só as fechadas
+          recentes em memória, sem paginação.
+        </Alert>
+      )}
       {data && rows.length === 0 && (
         <Text c="dimmed">
-          Nenhuma partida por aqui — abertas aparecem ao vivo quando um match é formado. O histórico de
-          fechadas vive em memória no session-service (some no restart).
+          Nenhuma partida por aqui — abertas aparecem ao vivo quando um match é formado; fechadas ficam
+          persistidas no histórico do jogo.
         </Text>
       )}
       {rows.length > 0 && (
@@ -134,6 +189,13 @@ export function GameSessions({ gameId }: { gameId: string }) {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
+      )}
+      {hasMoreClosed && (filter === "all" || filter === "closed") && (
+        <Group justify="center">
+          <Button variant="default" size="xs" onClick={loadMoreClosed} loading={loadingMoreClosed}>
+            Carregar mais fechadas
+          </Button>
+        </Group>
       )}
     </Stack>
   );

@@ -1,10 +1,11 @@
 import { Alert, Anchor, Breadcrumbs, Group, Loader, Stack, Tabs, Text, Title } from "@mantine/core";
-import { IconCloud, IconDatabase, IconTrophy } from "@tabler/icons-react";
+import { IconCloud, IconDatabase, IconHistory, IconTrophy } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { PlayerAchievements } from "./PlayerAchievements";
+import { PlayerHistory } from "./PlayerHistory";
 import { PlayerDataView } from "./PlayerDataView";
 import { CloudSaveView } from "./CloudSaveView";
 import { PlayerAvatar, isGuest } from "../components/PlayerAvatar";
@@ -82,6 +83,9 @@ export function PlayerDetail() {
             <Tabs.Tab value="achievements" leftSection={<IconTrophy size={16} />}>
               Achievements
             </Tabs.Tab>
+            <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>
+              History
+            </Tabs.Tab>
             <Tabs.Tab value="player-data" leftSection={<IconDatabase size={16} />}>
               Player data
             </Tabs.Tab>
@@ -92,6 +96,9 @@ export function PlayerDetail() {
 
           <Tabs.Panel value="achievements" pt="md">
             <PlayerAchievements playerId={playerId} gameId={gameId} />
+          </Tabs.Panel>
+          <Tabs.Panel value="history" pt="md">
+            <PlayerHistory playerId={playerId} gameId={gameId} />
           </Tabs.Panel>
           <Tabs.Panel value="player-data" pt="md">
             <PlayerDataView playerId={playerId} gameId={gameId} />
