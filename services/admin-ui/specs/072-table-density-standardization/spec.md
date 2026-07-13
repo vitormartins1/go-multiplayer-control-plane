@@ -54,6 +54,16 @@ diferença de densidade percebida vinha inteiramente do tamanho do
   já usa 40px, maior que a referência — não é uma linha de tabela, é
   um header de detalhe, contexto diferente.
 
+## Addendum: fallback "—" na coluna Server (achado durante a revisão da aba Sessions)
+
+Ao revisar a aba Sessions com mais atenção (pedido do usuário, depois da
+padronização acima): a coluna "Server" da tabela ficava em branco puro
+quando `serverAddress` está vazio (sessão fechada, servidor já
+desalocado) — o painel expandido já tinha o fallback `|| "—"`, só a
+linha da tabela não. Célula em branco lê como bug de carregamento;
+corrigido em `GameSessions.tsx` e no mesmo padrão em `Rooms.tsx` (mesma
+coluna, mesmo componente de linha replicado).
+
 ## Critérios de Aceite
 
 1. Achievements, Players (aba do jogo), Leaderboards (tabela única) e

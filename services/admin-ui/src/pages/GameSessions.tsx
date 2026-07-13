@@ -254,8 +254,11 @@ function SessionRow({
           <PlayersSummary players={s.players} size={32} />
         </Table.Td>
         <Table.Td>
-          <Text ff="monospace" size="sm">
-            {truncate(s.serverAddress)}
+          {/* fallback "—" (achado: coluna ficava em branco em sessão
+              fechada — servidor já desalocado — e parecia bug de
+              carregamento; o painel expandido já tinha o fallback). */}
+          <Text ff="monospace" size="sm" c={s.serverAddress ? undefined : "dimmed"}>
+            {s.serverAddress ? truncate(s.serverAddress) : "—"}
           </Text>
         </Table.Td>
         <Table.Td>

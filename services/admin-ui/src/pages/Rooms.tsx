@@ -563,8 +563,10 @@ function RoomRow({
           )}
         </Table.Td>
         <Table.Td>
-          <Text ff="monospace" size="sm">
-            {truncate(s.serverAddress)}
+          {/* fallback "—" (mesmo achado do GameSessions.tsx): coluna ficava em
+              branco em sessão fechada — servidor já desalocado. */}
+          <Text ff="monospace" size="sm" c={s.serverAddress ? undefined : "dimmed"}>
+            {s.serverAddress ? truncate(s.serverAddress) : "—"}
           </Text>
         </Table.Td>
         <Table.Td>
