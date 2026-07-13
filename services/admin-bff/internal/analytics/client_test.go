@@ -52,13 +52,41 @@ func TestGameAnalytics_ParseiaRoleParticipations(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7)
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7, "")
 	require.NoError(t, err)
 	assert.Equal(t, "hw", d.GameID)
 	require.Len(t, d.RoleParticipations, 2)
 	assert.Equal(t, domain.ParticipationStat{ModeID: "batizado", Role: "invader", Event: "HOST_KILLED", Count: 3}, d.RoleParticipations[0])
 	assert.Empty(t, d.RoleParticipations[1].ModeID, "sem modo (dado anterior à spec 009) cai no bucket vazio")
 	assert.Empty(t, d.GameName, "nome é injetado pelo service")
+}
+
+// TestGameAnalytics_RepassaModeIdEEcoa (spec 026 — passthrough do filtro da
+// analytics-service/012): modeId vai na query, e o eco no DTO é propagado.
+func TestGameAnalytics_RepassaModeIdEEcoa(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "mundo-vivo", r.URL.Query().Get("modeId"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"hw","modeId":"mundo-vivo","matches":0,"daily":[],"roleParticipations":[]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7, "mundo-vivo")
+	require.NoError(t, err)
+	assert.Equal(t, "mundo-vivo", d.ModeID)
+}
+
+func TestGameAnalytics_SemModeId_NaoVaiNaQuery(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Empty(t, r.URL.Query().Get("modeId"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"gameId":"hw","matches":0,"daily":[],"roleParticipations":[]}`))
+	}))
+	defer upstream.Close()
+
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 7, "")
+	require.NoError(t, err)
+	assert.Empty(t, d.ModeID)
 }
 
 // battle_royale (BR4): o campo placement do analytics é propagado no detalhe.
@@ -70,7 +98,7 @@ func TestGameAnalytics_ParseiaPlacement(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "br", 0)
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "br", 0, "")
 	require.NoError(t, err)
 	require.NotNil(t, d.Placement)
 	assert.Equal(t, domain.PlacementDistribution{Winners: 1, TopN: 9, Rest: 2, Entries: 12, AvgSurvivedMs: 6500}, *d.Placement)
@@ -84,7 +112,7 @@ func TestGameAnalytics_SemPlacement_Nil(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "qa", 0)
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "qa", 0, "")
 	require.NoError(t, err)
 	assert.Nil(t, d.Placement)
 	assert.Nil(t, d.Mission)
@@ -99,7 +127,7 @@ func TestGameAnalytics_ParseiaMission(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "coop", 0)
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "coop", 0, "")
 	require.NoError(t, err)
 	require.NotNil(t, d.Mission)
 	assert.Equal(t, int64(2), d.Mission.Successes)
@@ -120,7 +148,7 @@ func TestGameAnalytics_ParseiaSeriesDiariasEStats(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "g1", 0)
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "g1", 0, "")
 	require.NoError(t, err)
 	require.Len(t, d.PlacementDaily, 1)
 	assert.Equal(t, int64(3), d.PlacementDaily[0].Matches)
@@ -141,7 +169,7 @@ func TestGameAnalytics_SemCamposNovos_ListasVazias(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "g1", 0)
+	d, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "g1", 0, "")
 	require.NoError(t, err)
 	assert.Empty(t, d.PlacementDaily)
 	assert.Empty(t, d.MissionDaily)
@@ -154,6 +182,6 @@ func TestGameAnalytics_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer upstream.Close()
-	_, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 0)
+	_, err := New(upstream.URL, nil).GameAnalytics(context.Background(), "hw", 0, "")
 	assert.ErrorIs(t, err, domain.ErrAnalyticsUnavailable)
 }

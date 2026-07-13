@@ -63,7 +63,7 @@ type AdminService interface {
 	PlayerSessions(ctx context.Context, playerID, gameID string, limit int, before time.Time) (domain.ClosedSessionsPage, error)
 	FanoutHealth(ctx context.Context) (domain.FanoutHealth, error)
 	AnalyticsOverview(ctx context.Context) (domain.AnalyticsOverview, error)
-	GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalyticsDetail, error)
+	GameAnalytics(ctx context.Context, gameID string, days int, modeID string) (domain.GameAnalyticsDetail, error)
 }
 
 // Handler expõe a API HTTP do admin-bff (consumida pelo admin-ui).
@@ -758,7 +758,8 @@ func (h *Handler) gameAnalytics(w http.ResponseWriter, r *http.Request) {
 			days = n
 		}
 	}
-	d, err := h.svc.GameAnalytics(r.Context(), r.PathValue("gameId"), days)
+	modeID := r.URL.Query().Get("modeId")
+	d, err := h.svc.GameAnalytics(r.Context(), r.PathValue("gameId"), days, modeID)
 	if err != nil {
 		if errors.Is(err, domain.ErrAnalyticsUnavailable) {
 			httpkit.WriteError(w, http.StatusBadGateway, "analytics_unavailable")

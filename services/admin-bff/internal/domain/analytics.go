@@ -56,8 +56,11 @@ type ParticipationStat struct {
 // + participações por papel + distribuição de colocação). gameName é injetado
 // pelo BFF (spec 014).
 type GameAnalyticsDetail struct {
-	GameID             string                 `json:"gameId"`
-	GameName           string                 `json:"gameName"`
+	GameID   string `json:"gameId"`
+	GameName string `json:"gameName"`
+	// ModeID é o filtro efetivamente aplicado (analytics-service/012); "" =
+	// todos os modos. Eco do parâmetro de entrada.
+	ModeID             string                 `json:"modeId,omitempty"`
 	Matches            int64                  `json:"matches"`
 	UniquePlayers      int64                  `json:"uniquePlayers"`
 	Wins               int64                  `json:"wins"`
@@ -113,5 +116,6 @@ type AnalyticsReader interface {
 	Overview(ctx context.Context) (AnalyticsOverview, error)
 	// GameAnalytics lê o detalhe por jogo (GET /admin/games/{id}/analytics),
 	// incluindo roleParticipations (host_world_dropin). Fora -> ErrAnalyticsUnavailable.
-	GameAnalytics(ctx context.Context, gameID string, days int) (GameAnalyticsDetail, error)
+	// modeID == "" agrega todos os modos (analytics-service/012).
+	GameAnalytics(ctx context.Context, gameID string, days int, modeID string) (GameAnalyticsDetail, error)
 }

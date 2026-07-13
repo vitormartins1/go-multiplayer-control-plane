@@ -54,11 +54,19 @@ func (c *Client) Overview(ctx context.Context) (domain.AnalyticsOverview, error)
 }
 
 // GameAnalytics lê GET /admin/games/{id}/analytics (detalhe por jogo, com
-// roleParticipations). Indisponibilidade -> ErrAnalyticsUnavailable.
-func (c *Client) GameAnalytics(ctx context.Context, gameID string, days int) (domain.GameAnalyticsDetail, error) {
+// roleParticipations). modeID == "" agrega todos os modos (analytics-
+// service/012). Indisponibilidade -> ErrAnalyticsUnavailable.
+func (c *Client) GameAnalytics(ctx context.Context, gameID string, days int, modeID string) (domain.GameAnalyticsDetail, error) {
 	u := c.baseURL + "/admin/games/" + url.PathEscape(gameID) + "/analytics"
+	q := url.Values{}
 	if days > 0 {
-		u += "?days=" + strconv.Itoa(days)
+		q.Set("days", strconv.Itoa(days))
+	}
+	if modeID != "" {
+		q.Set("modeId", modeID)
+	}
+	if len(q) > 0 {
+		u += "?" + q.Encode()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

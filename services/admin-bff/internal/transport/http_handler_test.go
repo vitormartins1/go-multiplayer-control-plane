@@ -241,8 +241,8 @@ func (f *fakeService) AnalyticsOverview(context.Context) (domain.AnalyticsOvervi
 	return f.analytics, f.analyticsErr
 }
 
-func (f *fakeService) GameAnalytics(_ context.Context, gameID string, _ int) (domain.GameAnalyticsDetail, error) {
-	f.gotGameID = gameID
+func (f *fakeService) GameAnalytics(_ context.Context, gameID string, _ int, modeID string) (domain.GameAnalyticsDetail, error) {
+	f.gotGameID, f.gotModeID = gameID, modeID
 	return f.gameAnalytics, f.gameAnalyticsErr
 }
 
@@ -980,6 +980,24 @@ func TestGameAnalytics_200_ComRoleParticipations(t *testing.T) {
 	require.Len(t, body.RoleParticipations, 1)
 	assert.Equal(t, "batizado", body.RoleParticipations[0].ModeID, "modeId (spec 009) propagado até o admin-ui")
 	assert.Equal(t, int64(3), body.RoleParticipations[0].Count)
+}
+
+// TestGameAnalytics_ModeIdQuery_RepassaAoService (spec 026): o filtro de
+// modo (analytics-service/012) é lido da query e repassado ao service.
+func TestGameAnalytics_ModeIdQuery_RepassaAoService(t *testing.T) {
+	svc := &fakeService{gameAnalytics: domain.GameAnalyticsDetail{GameID: "hw", ModeID: "mundo-vivo"}}
+	srv := newServer(svc)
+	defer srv.Close()
+
+	resp := get(t, srv, "/api/analytics/games/hw?modeId=mundo-vivo")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "mundo-vivo", svc.gotModeID)
+	var body struct {
+		ModeID string `json:"modeId"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "mundo-vivo", body.ModeID)
 }
 
 func TestGameAnalytics_Fora_502(t *testing.T) {
