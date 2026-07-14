@@ -28,6 +28,7 @@ import {
   IconAlertTriangle,
   IconChartBar,
   IconDownload,
+  IconGitBranch,
   IconPencil,
   IconPlus,
   IconRefresh,
@@ -207,6 +208,11 @@ function RuleFocusMiniCanvas({
       // proporcionalmente demais da área e os nodes ficavam pequenos demais
       // pra ler (achado do Vitor).
       fitMargin={24}
+      // scrollZoom=false (pedido do Vitor): a prévia fica inline na própria
+      // tabela — rolar a página com o mouse sobre o canvas expandido não pode
+      // "travar" (zoomar em vez de rolar). Zoom continua dando pra mudar
+      // pelos botões do Controls e pelo minimapa (interactive segue true).
+      scrollZoom={false}
     />
   );
 }
@@ -705,6 +711,20 @@ export function GameAchievements({
                     <Table.Td>{a.target}</Table.Td>
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">
+                        {/* Event Rules (pedido do Vitor): mesmo ícone da aba
+                            "Event Rules" (GameDetail.tsx) — abre a MESMA
+                            prévia read-only que já existia ao clicar no badge
+                            de critério (focusRow), só que também acessível
+                            aqui na coluna de ações, sem precisar mirar no
+                            badge. */}
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          onClick={() => (expanded ? focusRow(null) : focusRow(a.id))}
+                          aria-label="Ver regras do evento"
+                        >
+                          <IconGitBranch size={16} />
+                        </ActionIcon>
                         <ActionIcon variant="subtle" color="signal" onClick={() => openProgress(a)} aria-label="Ver progresso">
                           <IconChartBar size={16} />
                         </ActionIcon>

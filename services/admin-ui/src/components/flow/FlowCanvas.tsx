@@ -82,6 +82,7 @@ export function FlowCanvas({
   fitMargin,
   interactive = true,
   minimap = true,
+  scrollZoom,
   emptyState,
 }: {
   nodes: Node[];
@@ -124,6 +125,16 @@ export function FlowCanvas({
   // faz sentido num canvas só-leitura sem pan/zoom pra navegar. Default true
   // preserva o comportamento de sempre nos outros canvas.
   minimap?: boolean;
+  // scrollZoom=false (pedido do Vitor, prévia de achievements): destrava o
+  // scroll do MOUSE sobre o canvas — sem isso, o wheel sobre a área do
+  // ReactFlow sempre zoom (zoomOnScroll) e sempre chama preventDefault()
+  // (preventScrolling), mesmo com interactive=true, então rolar a página com
+  // o mouse em cima do mini-canvas expandido "trava" e zoom ao invés de
+  // rolar. Continua sendo possível mudar o zoom pelos botões do Controls e
+  // pelo minimapa (esses dependem só de `interactive`, não deste prop).
+  // Default = `interactive` (preserva o comportamento de sempre no canvas
+  // grande de Event Rules e no Pipeline).
+  scrollZoom?: boolean;
   // emptyState (achado, revisão Event Rules): mensagem central, só quando
   // nodes.length === 0 — o Event Rules fica deliberadamente vazio até uma
   // regra ser focada (spec 055), mas isso deixava o canvas em branco sem
@@ -132,6 +143,7 @@ export function FlowCanvas({
   // (sempre focada) não precisam disso.
   emptyState?: ReactNode;
 }) {
+  const wheelZooms = scrollZoom ?? interactive;
   return (
     <div
       className="flow-wrap"
@@ -150,15 +162,18 @@ export function FlowCanvas({
         nodesConnectable={false}
         nodesDraggable={interactive}
         panOnDrag={interactive}
-        zoomOnScroll={interactive}
+        zoomOnScroll={wheelZooms}
         zoomOnPinch={interactive}
         zoomOnDoubleClick={interactive}
         // preventScrolling (achado do Vitor, pipeline): o ReactFlow chama
         // event.preventDefault() em QUALQUER wheel sobre o canvas por padrão,
         // mesmo com zoomOnScroll desligado — sem isso, um canvas read-only
         // (interactive=false) trava o scroll da página quando o mouse passa
-        // por cima dele.
-        preventScrolling={interactive}
+        // por cima dele. Segue `wheelZooms` (não `interactive`): a prévia de
+        // achievements quer manter zoom via Controls/minimapa (interactive
+        // continua true) mas SEM capturar o wheel — só `scrollZoom=false`
+        // desliga isso.
+        preventScrolling={wheelZooms}
         edgesFocusable={false}
         deleteKeyCode={null}
         onNodeClick={onNodeClick ? (_, n) => onNodeClick(n.id) : undefined}
