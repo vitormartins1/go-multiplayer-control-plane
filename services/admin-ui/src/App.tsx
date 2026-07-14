@@ -1,4 +1,4 @@
-import { AppShell, Badge, Box, Burger, Center, Group, Loader, NavLink, Text, Title } from "@mantine/core";
+import { AppShell, Badge, Box, Burger, Center, Divider, Group, Loader, NavLink, Stack, Text, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { lazy, Suspense, useEffect } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -38,10 +38,14 @@ const NAV = [
   // Infrastructure abaixo (saúde da plataforma) — ícone distinto de propósito.
   { to: "/fleet", label: "Fleet", icon: IconServer2 },
   { to: "/infrastructure", label: "Infrastructure", icon: IconServer },
-  // Settings (spec 082): preferências do control plane em geral — distinto
-  // da aba "Configurações" por-jogo (essa mora dentro de cada GameDetail).
-  { to: "/settings", label: "Settings", icon: IconSettings },
 ];
+
+// SETTINGS_NAV (spec 083): renderizado à parte, fixo no rodapé do navbar —
+// preferências do control plane em geral são uma categoria diferente dos
+// itens de produto acima (não é "mais uma seção de dado", é configuração
+// do console em si), mesmo padrão de posicionamento que Slack/Notion/etc.
+// usam pra separar "conteúdo" de "preferências".
+const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: IconSettings };
 
 const HEALTH_POLL_MS = 10000;
 
@@ -133,21 +137,39 @@ export function App() {
       </AppShell.Header>
 
       <AppShell.Navbar p="sm">
-        {NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            component={Link}
-            to={n.to}
-            label={n.label}
-            leftSection={<n.icon size={18} />}
-            // Localização agregada da frota (spec 023, follow-up) só no item
-            // Fleet — ícone+texto à esquerda (leftSection, já existente),
-            // badge de onde está rodando à direita.
-            rightSection={n.to === "/fleet" ? <FleetNavBadge /> : undefined}
-            active={active(n.to)}
-            onClick={closeNav}
-          />
-        ))}
+        {/* justify="space-between" + h="100%" (spec 083): empurra Settings
+            pro rodapé, separado por Divider — preferências do console são
+            categoria diferente dos itens de produto acima. */}
+        <Stack h="100%" justify="space-between" gap="sm">
+          <Stack gap={0}>
+            {NAV.map((n) => (
+              <NavLink
+                key={n.to}
+                component={Link}
+                to={n.to}
+                label={n.label}
+                leftSection={<n.icon size={18} />}
+                // Localização agregada da frota (spec 023, follow-up) só no item
+                // Fleet — ícone+texto à esquerda (leftSection, já existente),
+                // badge de onde está rodando à direita.
+                rightSection={n.to === "/fleet" ? <FleetNavBadge /> : undefined}
+                active={active(n.to)}
+                onClick={closeNav}
+              />
+            ))}
+          </Stack>
+          <Stack gap={0}>
+            <Divider mb="sm" />
+            <NavLink
+              component={Link}
+              to={SETTINGS_NAV.to}
+              label={SETTINGS_NAV.label}
+              leftSection={<SETTINGS_NAV.icon size={18} />}
+              active={active(SETTINGS_NAV.to)}
+              onClick={closeNav}
+            />
+          </Stack>
+        </Stack>
       </AppShell.Navbar>
 
       <AppShell.Main>
