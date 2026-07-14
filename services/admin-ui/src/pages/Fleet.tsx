@@ -34,6 +34,7 @@ import { useAsync } from "../lib/useAsync";
 import { GameCover } from "../components/GameCover";
 import { FleetLocationBadge } from "../components/FleetLocationBadge";
 import { ChannelStrip } from "../components/ChannelStrip";
+import { MockZone } from "../components/MockZone";
 import { fleetLocationOf } from "../lib/fleetLocation";
 
 // mockFleetStatus (Fase 0, spec 059; enriquecido na spec 077 — mesma natureza
@@ -297,24 +298,7 @@ function FleetOverviewCard({ game }: { game: Game }) {
           Empilha em telas estreitas (base=12). */}
       <Grid mt="md" gutter="sm">
         <Grid.Col span={{ base: 12, md: 5 }}>
-          <Box
-            p="sm"
-            h="100%"
-            style={{
-              border: "1px dashed var(--mantine-color-dark-4)",
-              borderRadius: 8,
-              background: "var(--mantine-color-dark-8)",
-            }}
-          >
-            <Group justify="space-between" mb={6}>
-              <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: "0.04em" }}>
-                Saúde (game servers)
-              </Text>
-              <Badge size="xs" variant="light" color="yellow">
-                mock
-              </Badge>
-            </Group>
-
+          <MockZone label="Saúde (game servers)" h="100%">
             {/* réplicas atual/desejado — mesma convenção do "READY" do
                 kubectl get deployment (2/4): current/desired, não um número
                 solto. Desired vem de Fleet.spec.replicas (não do status). */}
@@ -345,28 +329,11 @@ function FleetOverviewCard({ game }: { game: Game }) {
                 </Text>
               </Stack>
             </SimpleGrid>
-          </Box>
+          </MockZone>
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, md: 7 }}>
-          <Box
-            p="sm"
-            h="100%"
-            style={{
-              border: "1px dashed var(--mantine-color-dark-4)",
-              borderRadius: 8,
-              background: "var(--mantine-color-dark-8)",
-            }}
-          >
-            <Group justify="space-between" mb={6}>
-              <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: "0.04em" }}>
-                Imagem &amp; versões
-              </Text>
-              <Badge size="xs" variant="light" color="yellow">
-                mock
-              </Badge>
-            </Group>
-
+          <MockZone label="Imagem & versões" h="100%">
             <Group gap={6} wrap="nowrap" mb="xs">
               <IconTag size={14} color="var(--mantine-color-dimmed)" style={{ flexShrink: 0 }} />
               <Code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -403,7 +370,7 @@ function FleetOverviewCard({ game }: { game: Game }) {
                 </Button>
               </Tooltip>
             </Group>
-          </Box>
+          </MockZone>
         </Grid.Col>
       </Grid>
     </Paper>
