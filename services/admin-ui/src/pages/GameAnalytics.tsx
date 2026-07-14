@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Grid, Loader, Paper, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { Alert, Grid, Group, Loader, Paper, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
 import { IconActivity } from "@tabler/icons-react";
 import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
@@ -237,25 +237,25 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "summary",
         title: "Resumo",
-        span: 6,
-        // Vitórias/derrotas/empates aparecem no grid de stats E no donut logo
-        // abaixo (fundidos num card só, spec 068) — o donut é só a MESMA
-        // proporção em forma visual, não um dado novo; separar em 2 cards
-        // duplicava a informação e desperdiçava espaço vertical.
+        // span 8 (spec 086): a dupla de cards fundidos (grid de stats + donut,
+        // spec 068) precisa de mais respiro horizontal que o par "por dia" ao
+        // lado (que é só um LineChart) — 50/50 deixava os valores grandes
+        // apertados nas caixinhas. 8/4 (≈67/33) em vez de 6/6.
+        span: 8,
         render: () => (
-          <Stack gap="sm">
-            <SimpleGrid cols={{ base: 2, sm: 3 }}>
-              <StatCard label="Partidas" value={String(data.matches)} />
-              <StatCard label="Jogadores únicos" value={String(data.uniquePlayers)} />
-              <StatCard label="Score médio" value={data.avgScore.toFixed(1)} />
-              <StatCard label="Vitórias" value={String(data.wins)} />
-              <StatCard label="Derrotas" value={String(data.losses)} />
-              <StatCard label="Empates" value={String(data.draws)} />
+          <Group align="center" wrap="wrap" gap="lg">
+            <SimpleGrid cols={{ base: 2, sm: 3 }} style={{ flex: "1 1 260px" }}>
+              <StatCard size="lg" label="Partidas" value={String(data.matches)} />
+              <StatCard size="lg" label="Jogadores únicos" value={String(data.uniquePlayers)} />
+              <StatCard size="lg" label="Score médio" value={data.avgScore.toFixed(1)} />
+              <StatCard size="lg" label="Vitórias" value={String(data.wins)} />
+              <StatCard size="lg" label="Derrotas" value={String(data.losses)} />
+              <StatCard size="lg" label="Empates" value={String(data.draws)} />
             </SimpleGrid>
             {hasOutcomes && (
               <DonutChart
-                size={140}
-                thickness={20}
+                size={120}
+                thickness={18}
                 withLabelsLine
                 withLabels
                 data={[
@@ -265,7 +265,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
                 ]}
               />
             )}
-          </Stack>
+          </Group>
         ),
       });
     }
@@ -274,7 +274,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "queue-daily",
         title: "Partidas por dia",
-        span: 6,
+        span: 4,
         render: () => <DailyLineChart data={data.daily} label="Partidas" />,
       });
     }
@@ -336,19 +336,19 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "placement-distribution",
         title: "Distribuição de colocação",
-        span: 6,
+        span: 8, // spec 086: mesmo tratamento de "summary" — ver comentário lá.
         render: () => (
-          <Stack gap="md">
-            <SimpleGrid cols={{ base: 2, sm: 3 }}>
-              <StatCard label="1º lugar" value={String(placement.winners)} />
-              <StatCard label="Top 10" value={String(placement.topN)} />
-              <StatCard label="Resto" value={String(placement.rest)} />
-              <StatCard label="Participações" value={String(placement.entries)} />
-              <StatCard label="Sobrevivência média" value={formatDuration(placement.avgSurvivedMs)} />
+          <Group align="center" wrap="wrap" gap="lg">
+            <SimpleGrid cols={{ base: 2, sm: 3 }} style={{ flex: "1 1 260px" }}>
+              <StatCard size="lg" label="1º lugar" value={String(placement.winners)} />
+              <StatCard size="lg" label="Top 10" value={String(placement.topN)} />
+              <StatCard size="lg" label="Resto" value={String(placement.rest)} />
+              <StatCard size="lg" label="Participações" value={String(placement.entries)} />
+              <StatCard size="lg" label="Sobrevivência média" value={formatDuration(placement.avgSurvivedMs)} />
             </SimpleGrid>
             <DonutChart
-              size={140}
-              thickness={20}
+              size={120}
+              thickness={18}
               withLabelsLine
               withLabels
               data={[
@@ -357,7 +357,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
                 { name: "Resto", value: placement.rest, color: "gray.5" },
               ]}
             />
-          </Stack>
+          </Group>
         ),
       });
     }
@@ -367,7 +367,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "placement-daily",
         title: "Partidas de battle royale por dia",
-        span: 6,
+        span: 4,
         render: () => <DailyLineChart data={data.placementDaily} label="Partidas" />,
       });
     }
@@ -378,17 +378,17 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "mission-distribution",
         title: "Desfecho das missões",
-        span: 6,
+        span: 8, // spec 086: mesmo tratamento de "summary" — ver comentário lá.
         render: () => (
-          <Stack gap="md">
-            <SimpleGrid cols={{ base: 2, sm: 3 }}>
-              <StatCard label="Missões cumpridas" value={String(mission.successes)} />
-              <StatCard label="Missões falhas" value={String(mission.failures)} />
-              <StatCard label="Taxa de sucesso" value={`${(mission.successRate * 100).toFixed(1)}%`} />
+          <Group align="center" wrap="wrap" gap="lg">
+            <SimpleGrid cols={{ base: 2, sm: 3 }} style={{ flex: "1 1 260px" }}>
+              <StatCard size="lg" label="Missões cumpridas" value={String(mission.successes)} />
+              <StatCard size="lg" label="Missões falhas" value={String(mission.failures)} />
+              <StatCard size="lg" label="Taxa de sucesso" value={`${(mission.successRate * 100).toFixed(1)}%`} />
             </SimpleGrid>
             <DonutChart
-              size={140}
-              thickness={20}
+              size={120}
+              thickness={18}
               withLabelsLine
               withLabels
               data={[
@@ -396,7 +396,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
                 { name: "Falhas", value: mission.failures, color: "red.6" },
               ]}
             />
-          </Stack>
+          </Group>
         ),
       });
     }
@@ -406,7 +406,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "mission-daily",
         title: "Missões por dia",
-        span: 6,
+        span: 4,
         render: () => <DailyLineChart data={data.missionDaily} label="Missões" />,
       });
     }
@@ -480,29 +480,36 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "session-health",
         title: "Saúde das sessões",
-        span: 6,
+        span: 8, // spec 086: mesmo tratamento de "summary" — ver comentário lá.
         render: () => (
           <Stack gap="md">
-            <SimpleGrid cols={3}>
-              <StatCard label={CLOSE_REASON_CATEGORY_LABELS.concluded} value={summary(categoryTotals.concluded)} />
-              <StatCard label={CLOSE_REASON_CATEGORY_LABELS.manual} value={summary(categoryTotals.manual)} />
-              <StatCard
-                label={CLOSE_REASON_CATEGORY_LABELS.abandoned}
-                value={summary(categoryTotals.abandoned)}
-                bad={categoryTotals.abandoned > 0}
+            <Group align="center" wrap="wrap" gap="lg">
+              <SimpleGrid cols={3} style={{ flex: "1 1 260px" }}>
+                <StatCard
+                  size="lg"
+                  label={CLOSE_REASON_CATEGORY_LABELS.concluded}
+                  value={summary(categoryTotals.concluded)}
+                />
+                <StatCard size="lg" label={CLOSE_REASON_CATEGORY_LABELS.manual} value={summary(categoryTotals.manual)} />
+                <StatCard
+                  size="lg"
+                  label={CLOSE_REASON_CATEGORY_LABELS.abandoned}
+                  value={summary(categoryTotals.abandoned)}
+                  bad={categoryTotals.abandoned > 0}
+                />
+              </SimpleGrid>
+              <DonutChart
+                size={120}
+                thickness={18}
+                withLabelsLine
+                withLabels
+                data={health.map((h) => ({
+                  name: CLOSE_REASON_LABELS[h.closeReason] ?? h.closeReason,
+                  value: h.count,
+                  color: CLOSE_REASON_COLORS[h.closeReason] ?? "gray.4",
+                }))}
               />
-            </SimpleGrid>
-            <DonutChart
-              size={140}
-              thickness={20}
-              withLabelsLine
-              withLabels
-              data={health.map((h) => ({
-                name: CLOSE_REASON_LABELS[h.closeReason] ?? h.closeReason,
-                value: h.count,
-                color: CLOSE_REASON_COLORS[h.closeReason] ?? "gray.4",
-              }))}
-            />
+            </Group>
             <Table striped withTableBorder>
               <Table.Thead>
                 <Table.Tr>
@@ -536,7 +543,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       out.push({
         id: "session-closed-daily",
         title: "Sessões fechadas por dia",
-        span: 6,
+        span: 4,
         render: () => <DailyLineChart data={data.sessionCloseDaily} label="Sessões" />,
       });
     }
@@ -609,15 +616,21 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
         return (
           <Stack key={section.archetype ?? "geral"} gap="sm" mt={i > 0 ? "lg" : undefined}>
             <ChannelStrip icon={meta?.icon ?? IconActivity} label={meta?.label ?? "Geral"} readout={readout} />
-            {/* align="flex-start" (spec 068): sem isso, o Grid estica todo
-                card da linha pra altura do vizinho mais alto — um donut
-                sozinho ficava gigante e vazio ao lado de um card com stat
-                grid + gráfico. Cada card agora só ocupa a altura do que
-                de fato mostra. */}
-            <Grid align="flex-start">
+            {/* align="stretch" (default do Grid, spec 086): os pares da seção
+                (ex.: Resumo + Partidas por dia) ficam com a MESMA altura — a
+                spec 068 tinha desligado isso (align="flex-start") porque o
+                donut empilhado abaixo do grid de stats deixava o card
+                desproporcionalmente alto; agora que o donut fica ao lado
+                (não embaixo), as duas metades do par já nascem com altura
+                parecida, então esticar pra igualar fica bem (pedido do
+                Vitor: "cada subseção ali... ficar alinhada com a mesma
+                altura"). Paper h="100%" é o que de fato preenche a coluna
+                esticada — sem isso o Grid.Col cresce mas o Paper de dentro
+                continua só do tamanho do conteúdo. */}
+            <Grid>
               {section.cards.map((card) => (
                 <Grid.Col key={card.id} span={{ base: 12, md: card.span }}>
-                  <Paper withBorder p="md">
+                  <Paper withBorder p="md" h="100%">
                     <Text fw={600} size="sm" mb="xs">
                       {card.title}
                     </Text>
