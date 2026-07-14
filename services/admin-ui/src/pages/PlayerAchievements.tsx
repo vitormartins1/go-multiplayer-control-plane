@@ -18,7 +18,9 @@ function AchievementRow({ a }: { a: PlayerAchievement }) {
     <Table.Tr>
       <Table.Td>
         <Group gap="sm" wrap="nowrap">
-          <AchievementIcon seed={a.id} size={28} />
+          {/* size default (32px, padronização das tabelas, spec 072/076):
+              mesma altura de linha (47px) das outras tabelas do console. */}
+          <AchievementIcon seed={a.id} />
           <Text size="sm" truncate>
             {a.name}
           </Text>

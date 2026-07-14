@@ -132,7 +132,9 @@ function PlayerHistoryRow({ session: s, playerId }: { session: GameSession; play
         <Text size="sm">{duration}</Text>
       </Table.Td>
       <Table.Td>
-        <PlayersSummary players={s.players} />
+        {/* size=32 (padronização das tabelas, spec 072/076): mesma altura
+            de linha (47px) das outras tabelas do console. */}
+        <PlayersSummary players={s.players} size={32} />
       </Table.Td>
     </Table.Tr>
   );
