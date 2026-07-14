@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Code,
+  Grid,
   Group,
   Loader,
   Paper,
@@ -77,27 +78,48 @@ function agoLabel(daysAgo: number): string {
   return daysAgo === 0 ? "hoje" : `há ${daysAgo}d`;
 }
 
-// mockFleetHealth (spec 078): breakdown por estado do GameServer Agones —
-// hoje FleetStatus (spec 023) só expõe o agregado ready/desired/allocated
-// da Fleet inteira; o detalhe por GameServer individual (Ready/Allocated/
-// Reserved/Unhealthy — os estados reais da state machine do Agones) não
-// existe em nenhum endpoint ainda. Determinístico por fleet, mesmo espírito
-// do resto do mock desta página.
+// mockFleetHealth (spec 079): breakdown por estado do GameServer Agones —
+// nomenclatura conferida na documentação real do Agones (agones.dev/site/
+// docs/reference/fleet, .../guides/health-checking):
+//   FleetStatus real tem Replicas (atual), ReadyReplicas, ReservedReplicas,
+//   AllocatedReplicas — "Desired" vem do Fleet.spec.replicas, não do status.
+//   Um GameServer individual passa por Scheduled → RequestReady → Ready, e
+//   dali pode ir a Allocated (jogadores conectados) ou Reserved (não é
+//   removido em scale-down, mas também não conta pro autoscaler) — ou cair
+//   em Unhealthy se o container morrer enquanto Ready/Allocated/Reserved
+//   (falha de health check). Nenhum desses campos existe em endpoint
+//   nenhum hoje (FleetStatus real, spec 023, só tem o agregado da Fleet
+//   inteira: cluster/fleetExists/desired/current/ready/allocated — sem
+//   reserved nem unhealthy). Determinístico por fleet, mesmo espírito do
+//   resto do mock desta página.
 interface MockFleetHealth {
+  desired: number;
+  current: number;
   ready: number;
   allocated: number;
   reserved: number;
   unhealthy: number;
 }
 
-function mockFleetHealth(fleetName: string, total: number): MockFleetHealth {
+function mockFleetHealth(fleetName: string): MockFleetHealth {
   const seed = [...fleetName].reduce((h, c) => (h * 17 + c.charCodeAt(0)) >>> 0, 11);
-  const allocated = total > 0 ? seed % total : 0;
+  const desired = 2 + (seed % 3); // 2..4
+  const allocated = seed % (desired + 1);
+  // >>> (sem sinal), não >> — achado: com >>, um seed acima de 2^31 vira
+  // negativo (ToInt32 reinterpreta o bit alto como sinal) e "% 2" preserva
+  // o sinal do dividendo em JS, gerando "Reserved: -1" (visto ao vivo com
+  // a fleet "packet-arena").
+  const reserved = (seed >>> 2) % 2;
+  const ready = Math.max(0, desired - allocated - reserved);
   return {
-    ready: Math.max(0, total - allocated),
+    desired,
+    current: ready + allocated + reserved,
+    ready,
     allocated,
-    reserved: seed % 2,
-    unhealthy: seed % 3 === 0 ? 1 : 0,
+    reserved,
+    // Unhealthy é transiente (o Fleet controller recicla o GameServer) —
+    // raro no estado estável, por isso 0 na maioria das seeds.
+    unhealthy: seed % 5 === 0 ? 1 : 0,
   };
 }
 
@@ -230,7 +252,7 @@ export function Fleet() {
 // ficavam lado a lado sem nenhuma distinção visual).
 function FleetOverviewCard({ game }: { game: Game }) {
   const mock = mockFleetStatus(game.fleet!);
-  const health = mockFleetHealth(game.fleet!, mock.total);
+  const health = mockFleetHealth(game.fleet!);
   const { data: status, loading, error } = useAsync((s) => api.fleetStatus(game.id, s), [game.id]);
 
   return (
@@ -269,104 +291,121 @@ function FleetOverviewCard({ game }: { game: Game }) {
 
       {/* zona mockada — borda tracejada + fundo levemente diferente marcam
           visualmente "isto não é dado real", reforçando o texto "(mock)".
-          Saúde por GameServer (spec 078): FleetStatus real só tem o
-          agregado da Fleet inteira; o detalhe por estado do GameServer
-          (Ready/Allocated/Reserved/Unhealthy) ainda não existe em nenhum
-          endpoint — pedido explícito do usuário, mockado do mesmo jeito. */}
-      <Box
-        mt="md"
-        p="sm"
-        style={{
-          border: "1px dashed var(--mantine-color-dark-4)",
-          borderRadius: 8,
-          background: "var(--mantine-color-dark-8)",
-        }}
-      >
-        <Group justify="space-between" mb={6}>
-          <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: "0.04em" }}>
-            Saúde (game servers)
-          </Text>
-          <Badge size="xs" variant="light" color="yellow">
-            mock
-          </Badge>
-        </Group>
-        <SimpleGrid cols={4} spacing="xs">
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">Ready</Text>
-            <Text size="sm" fw={600} c="nominal" ff="monospace">{health.ready}</Text>
-          </Stack>
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">Allocated</Text>
-            <Text size="sm" fw={600} c="signal" ff="monospace">{health.allocated}</Text>
-          </Stack>
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">Reserved</Text>
-            <Text size="sm" fw={600} ff="monospace">{health.reserved}</Text>
-          </Stack>
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">Unhealthy</Text>
-            <Text size="sm" fw={600} c={health.unhealthy > 0 ? "critical" : undefined} ff="monospace">
-              {health.unhealthy}
-            </Text>
-          </Stack>
-        </SimpleGrid>
-      </Box>
-
-      <Box
-        mt="sm"
-        p="sm"
-        style={{
-          border: "1px dashed var(--mantine-color-dark-4)",
-          borderRadius: 8,
-          background: "var(--mantine-color-dark-8)",
-        }}
-      >
-        <Group justify="space-between" mb={6}>
-          <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: "0.04em" }}>
-            Imagem &amp; versões
-          </Text>
-          <Badge size="xs" variant="light" color="yellow">
-            mock
-          </Badge>
-        </Group>
-
-        <Group gap={6} wrap="nowrap" mb="xs">
-          <IconTag size={14} color="var(--mantine-color-dimmed)" style={{ flexShrink: 0 }} />
-          <Code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {mock.imageRef}:{mock.currentTag}
-          </Code>
-        </Group>
-
-        <Group gap={6} mb="sm">
-          {mock.versions.map((v) => (
-            <Tooltip key={v.tag} label={`publicada ${agoLabel(v.daysAgo)} (mock)`}>
-              <Badge
-                size="xs"
-                variant={v.current ? "filled" : "outline"}
-                color={v.current ? "nominal" : "gray"}
-                ff="monospace"
-                style={{ cursor: "default" }}
-              >
-                {v.tag}
+          Grid 5/7 (~40/60, pedido do usuário): Saúde à esquerda, mais
+          compacta (poucos números); Imagem & versões à direita, precisa de
+          mais largura pra a referência de imagem + tags não truncarem tanto.
+          Empilha em telas estreitas (base=12). */}
+      <Grid mt="md" gutter="sm">
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Box
+            p="sm"
+            h="100%"
+            style={{
+              border: "1px dashed var(--mantine-color-dark-4)",
+              borderRadius: 8,
+              background: "var(--mantine-color-dark-8)",
+            }}
+          >
+            <Group justify="space-between" mb={6}>
+              <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: "0.04em" }}>
+                Saúde (game servers)
+              </Text>
+              <Badge size="xs" variant="light" color="yellow">
+                mock
               </Badge>
-            </Tooltip>
-          ))}
-        </Group>
+            </Group>
 
-        <Group gap={6}>
-          <Select
-            data={mock.versions.map((v) => v.tag)}
-            defaultValue={mock.currentTag}
-            w={170}
-            size="xs"
-          />
-          <Tooltip label="Integração com o registry de imagens ainda não implementada (ADR-0029, fatia 2)">
-            <Button size="xs" variant="light" disabled>
-              Promover
-            </Button>
-          </Tooltip>
-        </Group>
-      </Box>
+            {/* réplicas atual/desejado — mesma convenção do "READY" do
+                kubectl get deployment (2/4): current/desired, não um número
+                solto. Desired vem de Fleet.spec.replicas (não do status). */}
+            <Group gap={6} mb="xs" wrap="nowrap">
+              <Text size="xs" c="dimmed">Réplicas</Text>
+              <Text size="sm" fw={600} ff="monospace">
+                {health.current}/{health.desired}
+              </Text>
+            </Group>
+
+            <SimpleGrid cols={2} spacing="xs">
+              <Stack gap={0}>
+                <Text size="xs" c="dimmed">Ready</Text>
+                <Text size="sm" fw={600} c="nominal" ff="monospace">{health.ready}</Text>
+              </Stack>
+              <Stack gap={0}>
+                <Text size="xs" c="dimmed">Allocated</Text>
+                <Text size="sm" fw={600} c="signal" ff="monospace">{health.allocated}</Text>
+              </Stack>
+              <Stack gap={0}>
+                <Text size="xs" c="dimmed">Reserved</Text>
+                <Text size="sm" fw={600} ff="monospace">{health.reserved}</Text>
+              </Stack>
+              <Stack gap={0}>
+                <Text size="xs" c="dimmed">Unhealthy</Text>
+                <Text size="sm" fw={600} c={health.unhealthy > 0 ? "critical" : undefined} ff="monospace">
+                  {health.unhealthy}
+                </Text>
+              </Stack>
+            </SimpleGrid>
+          </Box>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Box
+            p="sm"
+            h="100%"
+            style={{
+              border: "1px dashed var(--mantine-color-dark-4)",
+              borderRadius: 8,
+              background: "var(--mantine-color-dark-8)",
+            }}
+          >
+            <Group justify="space-between" mb={6}>
+              <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: "0.04em" }}>
+                Imagem &amp; versões
+              </Text>
+              <Badge size="xs" variant="light" color="yellow">
+                mock
+              </Badge>
+            </Group>
+
+            <Group gap={6} wrap="nowrap" mb="xs">
+              <IconTag size={14} color="var(--mantine-color-dimmed)" style={{ flexShrink: 0 }} />
+              <Code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {mock.imageRef}:{mock.currentTag}
+              </Code>
+            </Group>
+
+            <Group gap={6} mb="sm">
+              {mock.versions.map((v) => (
+                <Tooltip key={v.tag} label={`publicada ${agoLabel(v.daysAgo)} (mock)`}>
+                  <Badge
+                    size="xs"
+                    variant={v.current ? "filled" : "outline"}
+                    color={v.current ? "nominal" : "gray"}
+                    ff="monospace"
+                    style={{ cursor: "default" }}
+                  >
+                    {v.tag}
+                  </Badge>
+                </Tooltip>
+              ))}
+            </Group>
+
+            <Group gap={6}>
+              <Select
+                data={mock.versions.map((v) => v.tag)}
+                defaultValue={mock.currentTag}
+                w={170}
+                size="xs"
+              />
+              <Tooltip label="Integração com o registry de imagens ainda não implementada (ADR-0029, fatia 2)">
+                <Button size="xs" variant="light" disabled>
+                  Promover
+                </Button>
+              </Tooltip>
+            </Group>
+          </Box>
+        </Grid.Col>
+      </Grid>
     </Paper>
   );
 }
@@ -375,6 +414,14 @@ function FleetOverviewCard({ game }: { game: Game }) {
 // MOCK_AGONES_CLUSTERS). Mesma borda tracejada + badge "mock" das zonas
 // mockadas da Visão geral — vocabulário visual único pra "isto é ilustrativo"
 // em toda a página.
+//
+// EVOLUÇÃO FUTURA (documentada a pedido do usuário, 2026-07-13 — não
+// implementar agora): hover no card revela um ícone de lápis ao lado do
+// badge "mock"; clicar troca os campos (Runtime/Nós/Kubernetes/Agones) pra
+// inputs editáveis inline, no mesmo padrão de TextInput+Salvar já usado em
+// FleetConfigRow. Só faz sentido quando existir de fato um endpoint de
+// perfis de cluster — hoje `MOCK_AGONES_CLUSTERS` é uma constante hardcoded
+// no frontend, sem persistência nenhuma.
 function ClusterCard({ cluster: c }: { cluster: (typeof MOCK_AGONES_CLUSTERS)[number] }) {
   const Icon = c.icon;
   return (
@@ -421,6 +468,16 @@ function ClusterCard({ cluster: c }: { cluster: (typeof MOCK_AGONES_CLUSTERS)[nu
 // sem fleet ainda) + coluna preparada (desabilitada) pro imageRepository —
 // schema que só existe na Fatia 2 do ADR-0029, gated por evidência; a coluna
 // já deixa a evolução visível sem implementar nada.
+//
+// EVOLUÇÃO FUTURA (documentada a pedido do usuário, 2026-07-13 — não
+// implementar agora): hoje "cadastrar fleet" é só preencher o TextInput e
+// salvar — funciona, mas é uma ação pouco guiada. Uma versão melhor seria
+// um fluxo de setup dedicado pra jogo sem fleet: sugerir um nome de fleet a
+// partir do slug do jogo, deixar escolher um dos clusters da seção acima
+// (hoje só cadastro descritivo, sem capacidade real de "aplicar fleet num
+// cluster"), salvar e já destacar/rolar até o card novo na Visão geral. A
+// versão atual (badge "sem fleet" + botão "Ativar") é o passo intermediário
+// — deixa a ação mais clara sem construir o fluxo guiado completo ainda.
 function FleetConfigTable({ games, onSaved }: { games: Game[]; onSaved: () => void }) {
   return (
     <Table verticalSpacing="sm" highlightOnHover>
@@ -444,6 +501,7 @@ function FleetConfigRow({ game, onSaved }: { game: Game; onSaved: () => void }) 
   const [fleetInput, setFleetInput] = useState(game.fleet ?? "");
   const [saving, setSaving] = useState(false);
   const dirty = fleetInput.trim() !== (game.fleet ?? "");
+  const hasFleet = !!game.fleet;
 
   async function save() {
     setSaving(true);
@@ -463,6 +521,14 @@ function FleetConfigRow({ game, onSaved }: { game: Game; onSaved: () => void }) 
           <Text size="sm" fw={500}>
             {game.name}
           </Text>
+          {/* badge + verbo do botão (spec 079): sinaliza que preencher +
+              salvar aqui é o que faz o jogo aparecer na Visão geral — sem
+              isso a linha não se distinguia de "edição comum". */}
+          {!hasFleet && (
+            <Badge size="xs" variant="outline" color="gray">
+              sem fleet
+            </Badge>
+          )}
         </Group>
       </Table.Td>
       <Table.Td>
@@ -475,7 +541,7 @@ function FleetConfigRow({ game, onSaved }: { game: Game; onSaved: () => void }) 
             w={200}
           />
           <Button size="xs" onClick={save} loading={saving} disabled={!dirty}>
-            Salvar
+            {hasFleet ? "Salvar" : "Ativar"}
           </Button>
         </Group>
       </Table.Td>
