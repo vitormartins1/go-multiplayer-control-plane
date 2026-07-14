@@ -29,6 +29,11 @@ flowchart LR
   F3 -. "direto, SEM regra" .-> A2
 ```
 
+O mesmo modelo, no canvas real do console (aba Event Rules — regra global
+`COOP_BOSS_HELPED` selecionada, com o detalhe do match à direita):
+
+![Canvas de Event Rules com uma regra selecionada — facts à esquerda, regra no centro, event type e achievement à direita](images/event-rules-canvas.png)
+
 Duas vias alimentam conquistas, e elas **não se misturam no achievement**:
 
 | | Achievement por EVENTO | Achievement por MÉTRICA |
@@ -132,3 +137,8 @@ Armadilhas que o console detecta pra você:
   no canvas e na vista Pipeline (Analytics → Pipeline).
 - **O caminho completo dos dados**: Analytics → Pipeline (envelope → 3
   consumers; regras só existem no ramo do achievements).
+
+A aba Achievements também abre essa mesma prévia read-only sem trocar de
+aba — clique no critério ou no ícone de Event Rules na linha da conquista:
+
+![Linha de achievement expandida mostrando a prévia read-only do grafo de regras](images/achievements-event-preview.png)

@@ -6,6 +6,8 @@
 
 Um **backend de jogos multiplayer self-hosted + console de operação**, agnóstico do tipo de jogo: um estúdio cadastra o jogo, declara a **forma** do multiplayer (arquétipo + parâmetros) e o resto do sistema — matchmaking, sessão/orquestração de servidor, conquistas, leaderboard, analytics — se comporta certo automaticamente, sem código novo por jogo. O painel de operação (`admin-ui`) é o "console AWS" desse backend: uma tela só pra tudo que um operador de live-ops precisa (salas ao vivo, saúde da frota, regras de conquista, métricas por jogo).
 
+![Biblioteca de jogos do console — cada jogo com capa gerada e badges de arquétipo](images/games-grid.png)
+
 ## Capacidades
 
 ### 1. Multiplayer por arquétipo — sem redeploy por jogo
@@ -30,13 +32,21 @@ Trocar de modo, ajustar tamanho de time, ligar/desligar invasão, exigir senha �
 
 Cada sessão/mundo aloca um **Dedicated Server real** via Agones (não um mock) — por jogo, numa **Fleet própria** (não uma Fleet fixa compartilhada). O servidor recebe um **connect token assinado (Ed25519)**, validado offline via JWKS, com o papel do jogador (host/coop/invader/time) — o jogo não confia em nada que o cliente diga sem essa validação. Sessões órfãs (server morreu, ninguém reportou) são reconciliadas contra o cluster automaticamente.
 
+![Aba Fleet — saúde dos game servers e imagem/versão por jogo, dados reais do cluster Agones](images/fleet.png)
+
 ### 4. Motor de conquistas visual e data-driven
 
 Em vez de 4 funções Go hardcoded traduzindo cada arquétipo pra um vocabulário fixo de eventos, existe um **motor de regras genérico**: fatos da partida (resultado, papel, evento, métricas) → regras editáveis (`campo = valor` ou comparadores `lt/lte/gt/gte/ne/in`) → tipos de evento → conquistas. Um jogo pode ter regras **globais** (compartilhadas por todo arquétipo) e regras **próprias**, e pode **suprimir** uma regra global só para si sem afetar os demais. Tudo isso é editado num **canvas visual** no admin-ui (grafo de 4 camadas) — sem redeploy, sem PR.
 
+![Canvas visual de Event Rules — fact → regra → event type → achievement, com o detalhe da regra selecionada](images/event-rules-canvas.png)
+
+Ver [`EVENT-RULES-GUIDE.md`](EVENT-RULES-GUIDE.md) para o guia completo de modelagem.
+
 ### 5. Leaderboards multi-board × multi-janela
 
 Cada jogo pode ter N rankings (`board`, um por métrica) × 4 janelas temporais (`alltime`/`daily`/`weekly`/`monthly`), highscore ou cumulativo, alimentados tanto por chamada direta do jogo quanto pelo fan-out do resultado de partida — com idempotência garantida mesmo com entrega duplicada.
+
+![Leaderboard de um jogo — ranking com handle do jogador resolvido, janela e board selecionáveis](images/leaderboards.png)
 
 ### 6. Dados de jogador e save na nuvem
 
@@ -46,13 +56,19 @@ Dados arbitrários por jogador (JSON, sem schema fixo) e um slot de save opaco (
 
 Agregados pré-computados (não é um event store) por jogo: total de partidas, jogadores únicos, série diária, e — por arquétipo — quebra de participação por papel/evento (mundos persistentes), histograma de colocação (battle royale) ou taxa de sucesso de missão (coop). Visão cross-game no overview do console.
 
+![Analytics de um jogo — seções por arquétipo (Queue Arena, Battle Royale), resumo + distribuição lado a lado com o gráfico "por dia"](images/game-analytics.png)
+
 ### 8. Console de operação único
 
 Um estúdio real não quer abrir o console da AWS, um cliente de banco e o Grafana separadamente. O `admin-ui` é **games-first**: entra pela lista de jogos, cada jogo abre com sub-abas (conquistas + editor visual de regras, leaderboards, jogadores, sessões, analytics, configurações), mais visões cross-game (Rooms — salas ao vivo de todos os jogos, agrupável/ordenável —, Players, Analytics, Fleet, Infrastructure).
 
+![Analytics cross-game — visão "Geral" do overview do console, todos os jogos agregados](images/analytics-global.png)
+
 ### 9. Observabilidade desde o primeiro serviço
 
 Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distribuído (Tempo/OpenTelemetry) atravessando até a chamada do Dedicated Server Unity, dashboards Grafana por domínio (serviço, Postgres, Redis, Agones/Fleet). Não é um adendo: é o instrumento que valida a própria tese do projeto (custo/performance vs. AWS gerenciado).
+
+![Aba Infrastructure — cada serviço com o equivalente AWS correspondente, materializando a tese do ADR-0008](images/infrastructure.png)
 
 ## Fluxos ponta a ponta
 
