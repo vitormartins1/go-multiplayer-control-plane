@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
   Chip,
   Collapse,
@@ -26,6 +27,7 @@ import {
   IconBan,
   IconChevronDown,
   IconChevronUp,
+  IconHandClick,
   IconInfoCircle,
   IconPlus,
   IconRefresh,
@@ -761,6 +763,23 @@ export function GameEventRulesCanvas({
         fitKey={`${arch}|${focusRuleId ?? "none"}|${[...relatedKinds].sort().join(",")}|${statIgnoreValue}|${!!draft}|${nodes.length}`}
         height="calc(100vh - 224px)"
         dockReservedWidth={listPanelWidth}
+        // emptyState (achado, revisão Event Rules): antes o canvas ficava
+        // em branco (spec 055 é deliberada — sem regra focada, sem grafo),
+        // mas sem nenhuma pista pro usuário. Só aparece quando nodes.length
+        // é 0 de verdade (FlowCanvas já filtra isso). visibleFrom="sm": em
+        // mobile o dock (lista de regras) já ocupa a largura toda — este
+        // canvas é desktop-first por natureza (grafo com pan/zoom/drag),
+        // sem isso a dica ficava por cima da lista.
+        emptyState={
+          <Box visibleFrom="sm">
+            <Stack align="center" gap={6}>
+              <IconHandClick size={28} color="var(--mantine-color-dimmed)" />
+              <Text size="sm" c="dimmed">
+                Selecione uma regra na lista à esquerda pra ver o grafo
+              </Text>
+            </Stack>
+          </Box>
+        }
         dock={
           <EventRulesDock
             rules={rules}

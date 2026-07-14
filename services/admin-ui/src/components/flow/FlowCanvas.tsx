@@ -82,6 +82,7 @@ export function FlowCanvas({
   fitMargin,
   interactive = true,
   minimap = true,
+  emptyState,
 }: {
   nodes: Node[];
   edges: Edge[];
@@ -123,6 +124,13 @@ export function FlowCanvas({
   // faz sentido num canvas só-leitura sem pan/zoom pra navegar. Default true
   // preserva o comportamento de sempre nos outros canvas.
   minimap?: boolean;
+  // emptyState (achado, revisão Event Rules): mensagem central, só quando
+  // nodes.length === 0 — o Event Rules fica deliberadamente vazio até uma
+  // regra ser focada (spec 055), mas isso deixava o canvas em branco sem
+  // nenhuma pista pro usuário na primeira visita. Opt-in (só quem passa o
+  // prop usa) — o Pipeline (sempre populado) e a prévia mini de achievements
+  // (sempre focada) não precisam disso.
+  emptyState?: ReactNode;
 }) {
   return (
     <div
@@ -163,6 +171,11 @@ export function FlowCanvas({
         )}
         {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
+        {emptyState && nodes.length === 0 && (
+          <Panel position="top-center" style={{ top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+            {emptyState}
+          </Panel>
+        )}
         {interactive && (
           <Controls
             showInteractive={false}
