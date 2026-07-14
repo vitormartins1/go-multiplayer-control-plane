@@ -13,6 +13,7 @@ import {
   Stack,
   Table,
   Text,
+  Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useLocalStorage } from "@mantine/hooks";
@@ -264,10 +265,12 @@ export function Rooms() {
     <Stack>
       <Group justify="space-between">
         <div>
-          <Text fw={600} size="lg">
-            Rooms
-          </Text>
-          <Text size="sm" c="dimmed">
+          {/* Title order={3} (padronização, 2026-07-13): mesma convenção das
+              outras páginas do nav (Games/Players/Analytics) — antes usava
+              Text size="lg", visivelmente menor (corpo, não a fonte de
+              display do tema). */}
+          <Title order={3}>Rooms</Title>
+          <Text size="sm" c="dimmed" mt={-4}>
             Salas ao vivo de todos os jogos{" "}
             {data ? `· ${data.active.length} aberta(s), ${data.closed.length} fechada(s)` : ""}
           </Text>
