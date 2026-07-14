@@ -1,5 +1,17 @@
 import { useMemo, useState } from "react";
-import { Alert, Grid, Group, Loader, Paper, Select, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import {
+  Alert,
+  Grid,
+  Group,
+  Loader,
+  Paper,
+  SegmentedControl,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+} from "@mantine/core";
 import { BarChart, DonutChart, LineChart } from "@mantine/charts";
 import { IconActivity } from "@tabler/icons-react";
 import { api, type MultiplayerMode, type MultiplayerProfile, type ParticipationStat } from "../lib/api";
@@ -47,10 +59,6 @@ interface Section {
   archetype?: MultiplayerProfile["archetype"];
   cards: CardDef[];
 }
-
-// seletor de modo (spec 009/064): sentinela porque o Select do Mantine não
-// lida bem com value="" (cai no branch de "sem seleção").
-const ALL_MODES = "__all__";
 
 function modeLabel(modeId: string, modes: MultiplayerMode[]): string {
   if (!modeId) return "Sem modo";
@@ -175,13 +183,17 @@ function DailyLineChart({ data, label }: { data: { day: string; matches: number 
 }
 
 export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: MultiplayerMode[] }) {
-  // "" (sentinela ALL_MODES) = sem filtro, mostra todos os modos somados
-  // (spec 064: o seletor de página só oferece modos REAIS + "todos" — o
-  // sentinela NO_MODE do widget antigo não sobrevive, ver plan.md: o
-  // backend não distingue "filtrar por modo vazio" de "sem filtro", então
-  // oferecer essa opção no seletor de página seria enganoso).
-  const [selectedMode, setSelectedMode] = useState(ALL_MODES);
-  const modeIdParam = selectedMode === ALL_MODES ? undefined : selectedMode;
+  // scope (spec 087, pedido do Vitor): a escolha PRIMÁRIA é binária — ver
+  // tudo agregado ou entrar num modo específico — então virou um
+  // SegmentedControl em vez de item perdido dentro de um Select. O Select
+  // de modo só existe (e só faz sentido existir) quando scope="by-mode":
+  // ali sim é "qual dos N modos", uma escolha genuinamente de lista.
+  const [scope, setScope] = useState<"all" | "by-mode">("all");
+  // selectedMode (modeId real) só é lido quando scope="by-mode" —
+  // inicializado no clique do SegmentedControl (ver abaixo), nunca fica
+  // "by-mode" com seleção vazia.
+  const [selectedMode, setSelectedMode] = useState<string | null>(null);
+  const modeIdParam = scope === "by-mode" ? (selectedMode ?? undefined) : undefined;
   const { data, loading, error } = useAsync(
     (s) => api.gameAnalytics(gameId, { modeId: modeIdParam }, s),
     [gameId, modeIdParam],
@@ -201,7 +213,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   // mostrar widgets desse arquétipo (+ raw-stats/session-health, sempre
   // elegíveis).
   const selectedArchetype =
-    selectedMode !== ALL_MODES ? modes.find((m) => m.modeId === selectedMode)?.archetype : undefined;
+    scope === "by-mode" ? modes.find((m) => m.modeId === selectedMode)?.archetype : undefined;
 
   // leitura mono de cada canal (ChannelStrip) — um total por arquétipo, o
   // dado mais "de assinatura" de cada um (partidas/eventos/participações/
@@ -591,17 +603,34 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       {!!error && !data && <Alert color="critical">Analytics indisponível (analytics-service fora?).</Alert>}
 
       {modes.length > 1 && (
-        <Select
-          label="Modo"
-          w={280}
-          allowDeselect={false}
-          value={selectedMode}
-          onChange={(v) => v && setSelectedMode(v)}
-          data={[
-            { value: ALL_MODES, label: "Todos os modos" },
-            ...modes.map((m) => ({ value: m.modeId, label: modeLabel(m.modeId, modes) })),
-          ]}
-        />
+        <Group gap="md" align="flex-end">
+          <SegmentedControl
+            value={scope}
+            onChange={(v) => {
+              const next = v as "all" | "by-mode";
+              setScope(next);
+              // 1ª vez entrando em "by-mode" sem seleção prévia: assume o
+              // 1º modo em vez de deixar o Select vazio (pedido do Vitor —
+              // o filtro por modo só faz sentido ali dentro, então já
+              // chega mostrando algo, não um estado "escolha um modo").
+              if (next === "by-mode" && !selectedMode) setSelectedMode(modes[0]?.modeId ?? null);
+            }}
+            data={[
+              { label: "Todos os modos", value: "all" },
+              { label: "Por modo", value: "by-mode" },
+            ]}
+          />
+          {scope === "by-mode" && (
+            <Select
+              label="Modo"
+              w={240}
+              allowDeselect={false}
+              value={selectedMode}
+              onChange={(v) => v && setSelectedMode(v)}
+              data={modes.map((m) => ({ value: m.modeId, label: modeLabel(m.modeId, modes) }))}
+            />
+          )}
+        </Group>
       )}
 
       {data && cards.length === 0 && (
