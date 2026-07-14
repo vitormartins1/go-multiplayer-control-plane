@@ -1,9 +1,20 @@
 import { Avatar as DicebearAvatar } from "@dicebear/core";
-import { Badge, Box, Group, SimpleGrid, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import {
+  Badge,
+  Box,
+  Group,
+  SegmentedControl,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+  Tooltip,
+  UnstyledButton,
+} from "@mantine/core";
 import { useMemo } from "react";
 import { FormSection } from "../components/FormSection";
 import { COVER_STYLES } from "../components/GameCover";
-import { GAME_COVER_STYLES, useSettings, type GameCoverStyle } from "../lib/settings";
+import { GAME_COVER_STYLES, PAGE_SIZE_OPTIONS, POLLING_OPTIONS, useSettings, type GameCoverStyle } from "../lib/settings";
 
 // PREVIEW_SEED: fixa, igual pra todo estilo — o picker compara o MESMO
 // "jogo" em estilos diferentes, não estilos diferentes em jogos diferentes
@@ -61,7 +72,7 @@ function StyleOption({
 // (DiceBear). Guardado no navegador (lib/settings.tsx) — ver comentário lá
 // pra por que não é um campo por-jogo no backend.
 export function Settings() {
-  const { gameCoverStyle, setGameCoverStyle } = useSettings();
+  const { gameCoverStyle, setGameCoverStyle, pageSize, setPageSize, pollingMs, setPollingMs } = useSettings();
 
   return (
     <Stack>
@@ -120,6 +131,35 @@ export function Settings() {
             ))}
           </SimpleGrid>
         </Box>
+      </FormSection>
+
+      {/* Paginação/Atualização automática (spec 084): achado revisando o
+          console — cada página paginada usava um tamanho de página diferente
+          (20/50) e cada polling ao vivo usava um intervalo diferente (5s/10s)
+          sem motivo real de divergir. Duas preferências globais, mesma
+          mecânica de SegmentedControl que o resto do console já usa pra
+          escolha exclusiva. */}
+      <FormSection label="Paginação">
+        <Text size="sm" c="dimmed" mb="sm">
+          Quantos itens por página nas tabelas paginadas (Players, Leaderboards, Sessions, History).
+        </Text>
+        <SegmentedControl
+          value={String(pageSize)}
+          onChange={(v) => setPageSize(Number(v) as typeof pageSize)}
+          data={PAGE_SIZE_OPTIONS.map((n) => ({ label: String(n), value: String(n) }))}
+        />
+      </FormSection>
+
+      <FormSection label="Atualização automática">
+        <Text size="sm" c="dimmed" mb="sm">
+          Intervalo de polling das telas que atualizam sozinhas (status da frota, salas, partidas ao vivo).
+          "Pausado" desliga o polling — útil pra debugar sem o console recarregando por baixo.
+        </Text>
+        <SegmentedControl
+          value={String(pollingMs)}
+          onChange={(v) => setPollingMs(Number(v) as typeof pollingMs)}
+          data={POLLING_OPTIONS.map((o) => ({ label: o.label, value: String(o.value) }))}
+        />
       </FormSection>
     </Stack>
   );

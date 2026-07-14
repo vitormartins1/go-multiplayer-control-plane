@@ -20,14 +20,14 @@ import { useLocalStorage } from "@mantine/hooks";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Game } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { usePolling } from "../lib/usePolling";
+import { useSettings } from "../lib/settings";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { GameCover } from "../components/GameCover";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { ROLE_META, SessionMatchDetail } from "../components/SessionMatchDetail";
 import { archetypeMetaOf } from "../lib/archetypeMeta";
-
-const POLL_MS = 5000;
 
 // Ordenação (spec 060): única, compartilhada entre a visão Geral e cada
 // seção da visão Por jogo (item 9 da spec) — evita um estado de sort por
@@ -148,11 +148,8 @@ export function Rooms() {
   // cache de perfis por gameId (battle_royale mostra lobby/modo na sala, BR4).
   const [profiles, setProfiles] = useState<Record<string, MultiplayerProfile | null>>({});
 
-  useEffect(() => {
-    const id = setInterval(reload, POLL_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { pollingMs } = useSettings();
+  usePolling(reload, pollingMs);
 
   useEffect(() => {
     if (data) setLastUpdate(new Date());

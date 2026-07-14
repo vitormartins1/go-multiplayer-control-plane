@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   Alert,
   Box,
@@ -36,12 +35,12 @@ import {
 } from "@tabler/icons-react";
 import { api, type FanoutHealth, type LiveMetrics, type ServiceNode, type Topology } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { usePolling } from "../lib/usePolling";
+import { useSettings } from "../lib/settings";
 import { StatusBadge } from "../components/StatusBadge";
 import { StatCard } from "../components/StatCard";
 import { ChannelStrip } from "../components/ChannelStrip";
 import { MockZone } from "../components/MockZone";
-
-const LIVE_POLL_MS = 10000;
 
 // SERVICE_META (spec 081): mapeamento serviço -> equivalente AWS + papel,
 // citado direto do mapa canônico de serviços (docs/ARCHITECTURE.md §3) — dado
@@ -76,15 +75,11 @@ export function Overview() {
   const { data, loading, error, reload } = useAsync((s) => api.topology(s), []);
   const live = useAsync((s) => api.liveMetrics(s), []);
   const fanout = useAsync((s) => api.fanoutHealth(s), []);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      live.reload();
-      fanout.reload();
-    }, LIVE_POLL_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { pollingMs } = useSettings();
+  usePolling(() => {
+    live.reload();
+    fanout.reload();
+  }, pollingMs);
 
   const upCount = data ? data.nodes.filter((n) => n.up).length : 0;
 

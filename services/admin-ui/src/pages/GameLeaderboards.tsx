@@ -4,13 +4,16 @@ import { useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { api, type LeaderEntry } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { useSettings } from "../lib/settings";
 import { PlayerAvatar } from "../components/PlayerAvatar";
 import { GuestBadge } from "../components/GuestBadge";
 import { ChannelStrip } from "../components/ChannelStrip";
 
 const SCORE_BOARD = "score";
 const ALL_BOARDS = "all"; // valor do switch de boards; nunca vai para a API
-const PAGE = 20;
+// OVERVIEW_TOP (fixo, spec 084): topo-5 das mini-tabelas da visão "Geral" é um
+// preview de tamanho fixo, não uma página — não segue a preferência global de
+// itens-por-página (essa só se aplica à tabela grande, paginada/editável).
 const OVERVIEW_TOP = 5;
 
 // Janelas de tempo (leaderboard/007): derivadas do relógio no serviço.
@@ -122,6 +125,7 @@ function BoardChannelStrip({ gameId, board, label }: { gameId: string; board: st
 }
 
 export function GameLeaderboards({ gameId }: { gameId: string }) {
+  const { pageSize: PAGE } = useSettings();
   const [board, setBoard] = useState(SCORE_BOARD);
   const [window, setWindow] = useState("alltime");
   // Dois eixos independentes (spec 041): mode controla JANELAS ("single" = a
@@ -163,7 +167,7 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
       board === ALL_BOARDS
         ? Promise.resolve<LeaderEntry[]>([])
         : api.gameLeaderboard(gameId, { board: boardParam, window, limit: PAGE }, s),
-    [gameId, board, window],
+    [gameId, board, window, PAGE],
   );
 
   const rows = data ? [...data, ...extra] : null;

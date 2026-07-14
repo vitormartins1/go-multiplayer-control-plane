@@ -1,6 +1,6 @@
 import { AppShell, Badge, Box, Burger, Center, Divider, Group, Loader, NavLink, Stack, Text, Title } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   IconChartBar,
@@ -13,6 +13,8 @@ import {
 } from "@tabler/icons-react";
 import { api } from "./lib/api";
 import { useAsync } from "./lib/useAsync";
+import { usePolling } from "./lib/usePolling";
+import { useSettings } from "./lib/settings";
 import { FleetLocationBadge } from "./components/FleetLocationBadge";
 import { fleetLocationOf } from "./lib/fleetLocation";
 
@@ -47,8 +49,6 @@ const NAV = [
 // usam pra separar "conteúdo" de "preferências".
 const SETTINGS_NAV = { to: "/settings", label: "Settings", icon: IconSettings };
 
-const HEALTH_POLL_MS = 10000;
-
 // HealthStrip (assinatura do redesign — POC, ver conversa): faixa no topo do
 // header cuja cor reflete a saúde agregada da topologia real (mesmo endpoint
 // que o Overview usa) — não é decoração, é o console "respirando" com o que
@@ -56,12 +56,8 @@ const HEALTH_POLL_MS = 10000;
 // cinza = Prometheus indisponível (sem dado pra avaliar).
 function HealthStrip() {
   const { data, reload } = useAsync((s) => api.topology(s), []);
-
-  useEffect(() => {
-    const id = setInterval(reload, HEALTH_POLL_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { pollingMs } = useSettings();
+  usePolling(reload, pollingMs);
 
   const color =
     !data || !data.sourceAvailable
@@ -90,12 +86,8 @@ function FleetNavBadge() {
     reload,
   } = useAsync((s) => (fleetGameID ? api.fleetStatus(fleetGameID, s) : Promise.resolve(undefined)), [fleetGameID]);
 
-  useEffect(() => {
-    if (!fleetGameID) return;
-    const id = setInterval(reload, HEALTH_POLL_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fleetGameID]);
+  const { pollingMs } = useSettings();
+  usePolling(reload, fleetGameID ? pollingMs : 0);
 
   if (gamesLoading || statusLoading) return null; // sem flicker enquanto carrega
   if (error) return <FleetLocationBadge location="unknown" />;

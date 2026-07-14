@@ -16,30 +16,31 @@ import {
 import { notifications } from "@mantine/notifications";
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { usePolling } from "../lib/usePolling";
+import { useSettings } from "../lib/settings";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { SessionMatchDetail } from "../components/SessionMatchDetail";
 import { archetypeMetaOf } from "../lib/archetypeMeta";
 
-const POLL_MS = 5000;
-const CLOSED_PAGE = 20;
-
 // GameSessions é a aba de operação/debug das partidas do jogo (spec 007):
-// abertas ao vivo (mapa in-memory, polling 5s) + histórico de fechadas
-// PERSISTIDO (spec 025), paginado com "carregar mais". Polling só das
-// abertas — o histórico não muda sozinho, recarrega só ao trocar de jogo ou
-// via "carregar mais". GameDetail usa keepMounted=false, então sair da aba
-// desmonta e para o polling.
+// abertas ao vivo (mapa in-memory, polling da preferência global) + histórico
+// de fechadas PERSISTIDO (spec 025), paginado com "carregar mais" (tamanho
+// da preferência global, spec 084). Polling só das abertas — o histórico não
+// muda sozinho, recarrega só ao trocar de jogo ou via "carregar mais".
+// GameDetail usa keepMounted=false, então sair da aba desmonta e para o
+// polling.
 export function GameSessions({ gameId }: { gameId: string }) {
+  const { pageSize, pollingMs } = useSettings();
   const { data, loading, error, reload } = useAsync((s) => api.gameSessions(gameId, s), [gameId]);
   // Histórico persistido (spec 025): 1ª página vem do useAsync; "carregar
   // mais" acumula em closedExtra e avança o cursor (mesmo padrão do
   // leaderboard, spec 039). Postgres do histórico fora (503) -> cai pro ring
   // in-memory de `data.closed` (plan D6), com aviso.
   const { data: closedPage, error: closedError } = useAsync(
-    (s) => api.closedGameSessions(gameId, { limit: CLOSED_PAGE }, s),
-    [gameId],
+    (s) => api.closedGameSessions(gameId, { limit: pageSize }, s),
+    [gameId, pageSize],
   );
   const [closedExtra, setClosedExtra] = useState<GameSession[]>([]);
   const [closedCursor, setClosedCursor] = useState<string | undefined>(undefined);
@@ -56,11 +57,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
     setClosedNoMore(false);
   }, [gameId]);
 
-  useEffect(() => {
-    const id = setInterval(reload, POLL_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
+  usePolling(reload, pollingMs);
 
   useEffect(() => {
     if (data) setLastUpdate(new Date());
@@ -81,7 +78,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
     if (!before) return;
     setLoadingMoreClosed(true);
     try {
-      const page = await api.closedGameSessions(gameId, { limit: CLOSED_PAGE, before });
+      const page = await api.closedGameSessions(gameId, { limit: pageSize, before });
       setClosedExtra((prev) => [...prev, ...page.closed]);
       setClosedCursor(page.nextBefore);
       if (!page.nextBefore) setClosedNoMore(true);

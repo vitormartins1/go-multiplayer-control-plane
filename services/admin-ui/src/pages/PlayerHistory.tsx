@@ -4,20 +4,20 @@ import { IconRefresh } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { useSettings } from "../lib/settings";
 import { closeReasonLabel, formatDuration } from "../lib/format";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { ParticipantOutcomeBadge } from "../components/SessionMatchDetail";
-
-const PAGE = 20;
 
 // PlayerHistory é a aba History do jogador (spec 025): sessões fechadas
 // PERSISTIDAS do jogo selecionado em que ele participou — sobrevive a restart
 // do session-service, ao contrário da aba Sessions (ring in-memory). gameId
 // vem do seletor de jogo do PlayerDetail (contexto do jogador, ADR-0019).
 export function PlayerHistory({ playerId, gameId }: { playerId: string; gameId: string | null }) {
+  const { pageSize: PAGE } = useSettings();
   const { data, loading, error, reload } = useAsync(
     (s) => (gameId ? api.playerSessions(playerId, gameId, { limit: PAGE }, s) : Promise.resolve(null)),
-    [gameId, playerId],
+    [gameId, playerId, PAGE],
   );
   // Paginação por cursor (mesmo padrão do "Carregar mais" do leaderboard, spec
   // 039): a 1ª página vem do useAsync; cursor acumula o nextBefore mais recente.

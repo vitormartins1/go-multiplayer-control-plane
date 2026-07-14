@@ -4,18 +4,18 @@ import { useState } from "react";
 import { IconRefresh, IconSearch } from "@tabler/icons-react";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { useSettings } from "../lib/settings";
 import { PlayerAvatar } from "../components/PlayerAvatar";
-
-const PAGE = 50;
 
 // Players é a base GLOBAL de usuários (identity) — independente de jogo. Abrir um
 // jogador leva ao detalhe, onde se escolhe entre os jogos DELE. Para ver "quem
 // joga o jogo X", use Games → [jogo] → aba Players.
 export function Players() {
   const nav = useNavigate();
+  const { pageSize: PAGE } = useSettings();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
-  const { data, loading, error, reload } = useAsync((s) => api.players(PAGE, offset, s), [offset]);
+  const { data, loading, error, reload } = useAsync((s) => api.players(PAGE, offset, s), [offset, PAGE]);
 
   const filtered = data?.players.filter((p) =>
     search.trim() === "" || p.handle.toLowerCase().includes(search.toLowerCase()),
