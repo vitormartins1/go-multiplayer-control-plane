@@ -8,6 +8,7 @@ import {
   IconDoorEnter,
   IconServer,
   IconServer2,
+  IconSettings,
   IconUsers,
 } from "@tabler/icons-react";
 import { api } from "./lib/api";
@@ -26,6 +27,7 @@ const PlayerDetail = lazy(() => import("./pages/PlayerDetail").then((m) => ({ de
 const Analytics = lazy(() => import("./pages/Analytics").then((m) => ({ default: m.Analytics })));
 const Rooms = lazy(() => import("./pages/Rooms").then((m) => ({ default: m.Rooms })));
 const Fleet = lazy(() => import("./pages/Fleet").then((m) => ({ default: m.Fleet })));
+const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
 
 const NAV = [
   { to: "/games", label: "Games", icon: IconDeviceGamepad2 },
@@ -36,6 +38,9 @@ const NAV = [
   // Infrastructure abaixo (saúde da plataforma) — ícone distinto de propósito.
   { to: "/fleet", label: "Fleet", icon: IconServer2 },
   { to: "/infrastructure", label: "Infrastructure", icon: IconServer },
+  // Settings (spec 082): preferências do control plane em geral — distinto
+  // da aba "Configurações" por-jogo (essa mora dentro de cada GameDetail).
+  { to: "/settings", label: "Settings", icon: IconSettings },
 ];
 
 const HEALTH_POLL_MS = 10000;
@@ -163,6 +168,7 @@ export function App() {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/fleet" element={<Fleet />} />
             <Route path="/infrastructure" element={<Overview />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/games" replace />} />
           </Routes>
         </Suspense>

@@ -69,10 +69,12 @@ function GameCreateForm({ onClose, onCreated }: { onClose: () => void; onCreated
   // Switch desmarcado por padrão: o form de multiplayer já vem aberto pra
   // preencher agora; marcar "configurar depois" esconde os campos e pula.
   const [skipMultiplayer, setSkipMultiplayer] = useState(false);
-  // Primeiro modo do jogo (lockDefault=true, sem outros IDs pra colidir) —
-  // mesma identidade (ID travado em "default" + nome de exibição livre) do
-  // bootstrap "Configurar multiplayer" em Configurações.
-  const modeIdentity = useModeIdentityState(null, true, []);
+  // Primeiro modo do jogo — lockDefault=false (achado do Vitor, spec 082):
+  // antes travava em "default" sem alternativa; ID do modo agora é livre
+  // (mesma validação MODE_ID_RE de sempre, existingModeIds=[] pois é o
+  // primeiro modo, nada pra colidir), igual ao fluxo de "adicionar modo"
+  // em Configurações → Multiplayer.
+  const modeIdentity = useModeIdentityState(null, false, []);
   const profile = useModeProfileState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);

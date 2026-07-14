@@ -1,0 +1,22 @@
+/* Games.tsx (spec 082) — hover do card de capa via CSS puro no lugar da
+   mutação de estilo via JS (onMouseEnter/onMouseLeave) que existia antes:
+   mesmo efeito, sem reimplementar o que o navegador já faz de graça, e
+   respeita prefers-reduced-motion automaticamente (a versão em JS não). */
+.game-card {
+  transition: transform 120ms ease;
+}
+
+.game-card:hover,
+.game-card:focus-visible {
+  transform: scale(1.03);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-card {
+    transition: none;
+  }
+  .game-card:hover,
+  .game-card:focus-visible {
+    transform: none;
+  }
+}

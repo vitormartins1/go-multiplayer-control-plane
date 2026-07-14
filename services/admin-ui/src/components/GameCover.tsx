@@ -2,19 +2,31 @@ import { AspectRatio, Box, Group, Text, Tooltip } from "@mantine/core";
 import { useMemo } from "react";
 import { Style, Avatar } from "@dicebear/core";
 import shapesDef from "@dicebear/styles/shapes.json";
+import stripesDef from "@dicebear/styles/stripes.json";
+import trianglesDef from "@dicebear/styles/triangles.json";
+import shapeGridDef from "@dicebear/styles/shape-grid.json";
+import initialsDef from "@dicebear/styles/initials.json";
 import glassDef from "@dicebear/styles/glass.json";
-import ringsDef from "@dicebear/styles/rings.json";
+import discoDef from "@dicebear/styles/disco.json";
 import type { Game } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
+import { useSettings, type GameCoverStyle } from "../lib/settings";
 
-// Estilos suportados (abstratos/geométricos, não-avatar). O backend manda o
-// nome em generatedImageStyle; trocar/adicionar gerador é só mexer aqui.
-const shapesStyle = new Style(shapesDef);
-const glassStyle = new Style(glassDef);
-const ringsStyle = new Style(ringsDef);
+// Estilos suportados (abstratos/geométricos, não-avatar) — os 7 do picker de
+// Settings (spec 082). `generatedImageStyle` do jogo (backend) não é mais
+// consultado aqui: hoje é sempre "shapes" fixo (game-registry, sem endpoint
+// de update) — quem decide o estilo é a preferência global (useSettings),
+// não o campo por-jogo. Ver lib/settings.tsx.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const STYLES: Record<string, Style<any>> = { shapes: shapesStyle, glass: glassStyle, rings: ringsStyle };
-const DEFAULT_STYLE = "shapes";
+export const COVER_STYLES: Record<GameCoverStyle, Style<any>> = {
+  shapes: new Style(shapesDef),
+  stripes: new Style(stripesDef),
+  triangles: new Style(trianglesDef),
+  "shape-grid": new Style(shapeGridDef),
+  initials: new Style(initialsDef),
+  glass: new Style(glassDef),
+  disco: new Style(discoDef),
+};
 
 // coverSeed: a seed determinística da capa. Cai no slug se o backend não mandou
 // generatedImageSeed (registros antigos / respostas sem o campo).
@@ -24,10 +36,9 @@ export function coverSeed(game: Game): string {
 
 // coverDataUri gera a imagem determinística (DiceBear) como data-URI SVG. Se no
 // futuro houver upload (imageSource="upload" + image), usa a imagem direto.
-function coverDataUri(game: Game): string {
+function coverDataUri(game: Game, style: GameCoverStyle): string {
   if (game.imageSource === "upload" && game.image) return game.image;
-  const style = STYLES[game.generatedImageStyle ?? DEFAULT_STYLE] ?? shapesStyle;
-  return new Avatar(style, { seed: coverSeed(game) }).toDataUri();
+  return new Avatar(COVER_STYLES[style], { seed: coverSeed(game) }).toDataUri();
 }
 
 function initial(name: string): string {
@@ -56,7 +67,11 @@ interface GameCoverProps {
 // "cover" = card 9:16 da biblioteca (imagem + faixa com o nome, proporção
 // customizável via `ratio`); "mini" = swatch quadrado para o seletor do header.
 export function GameCover({ game, variant = "cover", withName = true, modes, ratio }: GameCoverProps) {
-  const uri = useMemo(() => coverDataUri(game), [game.id, game.generatedImageSeed, game.generatedImageStyle, game.slug, game.image, game.imageSource]);
+  const { gameCoverStyle } = useSettings();
+  const uri = useMemo(
+    () => coverDataUri(game, gameCoverStyle),
+    [game.id, game.generatedImageSeed, game.slug, game.image, game.imageSource, gameCoverStyle],
+  );
 
   if (variant === "mini") {
     return (

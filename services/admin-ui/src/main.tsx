@@ -26,6 +26,7 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "./index.css";
 
 import { App } from "./App";
+import { SettingsProvider } from "./lib/settings";
 
 // Paleta "painel de instrumentos" (POC de redesign, ver conversa): fundo
 // quase-preto com tinta azul-slate (não o cinza neutro padrão da Mantine) +
@@ -99,9 +100,11 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="dark">
       <Notifications />
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <SettingsProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </SettingsProvider>
     </MantineProvider>
   </StrictMode>,
 );
