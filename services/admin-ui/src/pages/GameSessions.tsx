@@ -14,6 +14,7 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { IconActivity } from "@tabler/icons-react";
 import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
@@ -22,6 +23,7 @@ import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { SessionMatchDetail } from "../components/SessionMatchDetail";
+import { EmptyState } from "../components/EmptyState";
 import { archetypeMetaOf } from "../lib/archetypeMeta";
 
 // GameSessions é a aba de operação/debug das partidas do jogo (spec 007):
@@ -156,10 +158,10 @@ export function GameSessions({ gameId }: { gameId: string }) {
         </Alert>
       )}
       {data && rows.length === 0 && (
-        <Text c="dimmed">
-          Nenhuma partida por aqui — abertas aparecem ao vivo quando um match é formado; fechadas ficam
-          persistidas no histórico do jogo.
-        </Text>
+        <EmptyState
+          icon={IconActivity}
+          message="Nenhuma partida por aqui — abertas aparecem ao vivo quando um match é formado; fechadas ficam persistidas no histórico do jogo."
+        />
       )}
       {rows.length > 0 && (
         <Table.ScrollContainer minWidth={640}>

@@ -17,12 +17,13 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useLocalStorage } from "@mantine/hooks";
-import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronUp, IconDoorEnter } from "@tabler/icons-react";
 import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Game } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
 import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
+import { EmptyState } from "../components/EmptyState";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { GameCover } from "../components/GameCover";
 import { PlayersSummary } from "../components/PlayersSummary";
@@ -314,10 +315,10 @@ export function Rooms() {
       {loading && !data && <Loader />}
       {!!error && <Alert color="critical">salas indisponíveis (session-service fora?).</Alert>}
       {data && rows.length === 0 && (
-        <Text c="dimmed">
-          Nenhuma sala {filter === "open" ? "aberta" : filter === "closed" ? "fechada" : "por aqui"} — salas
-          aparecem ao vivo quando um match é formado.
-        </Text>
+        <EmptyState
+          icon={IconDoorEnter}
+          message={`Nenhuma sala ${filter === "open" ? "aberta" : filter === "closed" ? "fechada" : "por aqui"} — salas aparecem ao vivo quando um match é formado.`}
+        />
       )}
       {rows.length > 0 && view === "unified" && (
         <RoomsTable

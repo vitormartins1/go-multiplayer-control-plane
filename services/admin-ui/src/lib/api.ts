@@ -187,6 +187,9 @@ export interface LeaderEntry {
   rank: number;
   playerId: string;
   score: number;
+  // handle (spec 088): resolvido best-effort pelo admin-bff (mesmo padrão de
+  // GameSession.players[].handle) — vazio quando o identity não resolveu.
+  handle?: string;
 }
 
 export interface AchievementProgressEntry {

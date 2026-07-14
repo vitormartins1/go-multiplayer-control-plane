@@ -1,14 +1,24 @@
-import { Alert, Anchor, Breadcrumbs, Group, Loader, Stack, Tabs, Text, Title } from "@mantine/core";
-import { IconCloud, IconDatabase, IconHistory, IconTrophy } from "@tabler/icons-react";
+import { ActionIcon, Alert, Anchor, Breadcrumbs, CopyButton, Group, Loader, Stack, Tabs, Text, Title, Tooltip } from "@mantine/core";
+import {
+  IconCheck,
+  IconCloud,
+  IconCopy,
+  IconDatabase,
+  IconDeviceGamepad2,
+  IconHistory,
+  IconTrophy,
+} from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { truncate } from "../lib/format";
 import { PlayerAchievements } from "./PlayerAchievements";
 import { PlayerHistory } from "./PlayerHistory";
 import { PlayerDataView } from "./PlayerDataView";
 import { CloudSaveView } from "./CloudSaveView";
 import { PlayerAvatar, isGuest } from "../components/PlayerAvatar";
+import { EmptyState } from "../components/EmptyState";
 import { GuestBadge } from "../components/GuestBadge";
 import { GameChipsSelector } from "../components/GameChipsSelector";
 
@@ -61,9 +71,29 @@ export function PlayerDetail() {
               <Title order={3}>{displayName}</Title>
               <GuestBadge playerId={playerId} />
             </Group>
-            <Text c="dimmed" size="sm" mt={-4}>
-              {playerId}
-            </Text>
+            {/* id truncado + copiar (spec 088): o UUID inteiro em mono/sm
+                logo abaixo do nome pesava demais pra um dado secundário —
+                mesmo tratamento de truncate+Tooltip já usado nas tabelas
+                (Achievements/Players/Leaderboards), com um botão de copiar
+                (achado: aqui é o único lugar do console onde o id aparece
+                sozinho, sem estar numa linha de tabela pra copiar por
+                fora). */}
+            <Group gap={4} mt={-2}>
+              <Tooltip label={playerId} openDelay={300}>
+                <Text c="dimmed" size="xs" ff="monospace">
+                  {truncate(playerId)}
+                </Text>
+              </Tooltip>
+              <CopyButton value={playerId}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? "Copiado" : "Copiar id"}>
+                    <ActionIcon variant="subtle" color="gray" size="xs" onClick={copy} aria-label="Copiar id">
+                      {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </CopyButton>
+            </Group>
           </div>
         </Group>
         {games && games.length > 0 && (
@@ -74,7 +104,10 @@ export function PlayerDetail() {
       {loading && <Loader />}
       {!!error && <Alert color="critical">Falha ao carregar os jogos do jogador (game-registry indisponível?).</Alert>}
       {games && games.length === 0 && (
-        <Text c="dimmed">Este jogador ainda não entrou em nenhum jogo (a presença é registrada no login).</Text>
+        <EmptyState
+          icon={IconDeviceGamepad2}
+          message="Este jogador ainda não entrou em nenhum jogo (a presença é registrada no login)."
+        />
       )}
 
       {games && games.length > 0 && (

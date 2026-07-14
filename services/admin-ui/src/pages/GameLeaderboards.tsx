@@ -1,12 +1,11 @@
-import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, SegmentedControl, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconChartBar, IconPencil, IconRefresh } from "@tabler/icons-react";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { api, type LeaderEntry } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { useSettings } from "../lib/settings";
-import { PlayerAvatar } from "../components/PlayerAvatar";
-import { GuestBadge } from "../components/GuestBadge";
+import { PlayerCell } from "../components/SessionMatchDetail";
 import { ChannelStrip } from "../components/ChannelStrip";
 
 const SCORE_BOARD = "score";
@@ -78,13 +77,7 @@ function MiniBoardTable({
               <Table.Tr key={e.playerId}>
                 <Table.Td ff="monospace">{e.rank}</Table.Td>
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <PlayerAvatar seed={e.playerId} size={20} />
-                    <Text size="sm" c="dimmed" ff="monospace" truncate>
-                      {e.playerId}
-                    </Text>
-                    <GuestBadge playerId={e.playerId} />
-                  </Group>
+                  <PlayerCell id={e.playerId} handle={e.handle ?? ""} />
                 </Table.Td>
                 <Table.Td ff="monospace">{e.score}</Table.Td>
               </Table.Tr>
@@ -344,20 +337,10 @@ export function GameLeaderboards({ gameId }: { gameId: string }) {
                       densidade da tabela de referência (Achievements/Players)
                       — a mini-tabela da Visão geral continua compacta (20px),
                       contexto diferente (grid denso de vários boards).
-                      ID truncado + Tooltip (mesmo achado): esta era a única
-                      tabela do console mostrando o UUID inteiro — guest-<uuid>
-                      tem 43 caracteres e estourava a linha. Acompanha o
-                      padrão já usado em Achievements/Players (8 chars + "…",
-                      completo no hover). */}
-                  <Group gap={6} wrap="nowrap">
-                    <PlayerAvatar seed={e.playerId} size={32} />
-                    <Tooltip label={e.playerId}>
-                      <Text size="sm" c="dimmed" ff="monospace">
-                        {e.playerId.slice(0, 8)}…
-                      </Text>
-                    </Tooltip>
-                    <GuestBadge playerId={e.playerId} />
-                  </Group>
+                      PlayerCell (spec 088): handle resolvido pelo admin-bff
+                      em vez do UUID cru — cai pro id truncado só quando o
+                      identity não resolveu (guest antigo, best-effort). */}
+                  <PlayerCell id={e.playerId} handle={e.handle ?? ""} avatarSize={32} textSize="sm" />
                 </Table.Td>
                 <Table.Td ff="monospace">{e.score}</Table.Td>
                 <Table.Td>

@@ -231,14 +231,30 @@ func (s *Service) ImportAchievements(ctx context.Context, gameID string, items [
 }
 
 // GameLeaderboard lê o top-N do board do jogo (leaderboard; janela/offset
-// opcionais, spec 019).
+// opcionais, spec 019) — enriquecido com handle do identity, best-effort
+// (mesmo padrão de GameSessions/enrichSessionHandles): o leaderboard-service
+// só devolve playerId, a tabela do admin-ui mostrava o UUID cru.
 func (s *Service) GameLeaderboard(ctx context.Context, gameID, board, window string, limit, offset int) ([]domain.LeaderboardEntry, error) {
-	return s.leaderboard.TopForGame(ctx, gameID, board, window, limit, offset)
+	entries, err := s.leaderboard.TopForGame(ctx, gameID, board, window, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	s.enrichLeaderboardHandles(ctx, entries)
+	return entries, nil
 }
 
 // SetLeaderboardScore substitui o score do jogador no board (admin override, sem ZADD GT).
 func (s *Service) SetLeaderboardScore(ctx context.Context, gameID, playerID, board string, score int64) (domain.LeaderboardEntry, error) {
 	return s.leaderboard.SetScore(ctx, gameID, playerID, board, score)
+}
+
+// enrichLeaderboardHandles preenche Handle nas entradas do leaderboard —
+// mesma resolução best-effort de enrichSessionHandles.
+func (s *Service) enrichLeaderboardHandles(ctx context.Context, entries []domain.LeaderboardEntry) {
+	handles := s.handlesByID(ctx)
+	for i := range entries {
+		entries[i].Handle = handles[entries[i].PlayerID]
+	}
 }
 
 // AchievementProgress devolve o progresso de todos os jogadores na conquista.

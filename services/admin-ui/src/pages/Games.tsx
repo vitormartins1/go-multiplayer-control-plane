@@ -2,10 +2,11 @@ import { Alert, Button, Group, Loader, SimpleGrid, Stack, Text, TextInput, Title
 import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconPlus, IconRefresh, IconSearch } from "@tabler/icons-react";
+import { IconDeviceGamepad2, IconPlus, IconRefresh, IconSearch } from "@tabler/icons-react";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { GameCover } from "../components/GameCover";
+import { EmptyState } from "../components/EmptyState";
 import { GameCreateWizard } from "./GameCreateWizard";
 import "./Games.css";
 
@@ -58,7 +59,9 @@ export function Games() {
 
       {loading && !games && <Loader />}
       {!!error && <Alert color="critical">game-registry indisponível.</Alert>}
-      {games && games.length === 0 && <Text c="dimmed">Nenhum jogo registrado ainda.</Text>}
+      {games && games.length === 0 && (
+        <EmptyState icon={IconDeviceGamepad2} message="Nenhum jogo registrado ainda." />
+      )}
       {games && games.length > 0 && filtered.length === 0 && (
         <Text c="dimmed">Nenhum resultado para este filtro.</Text>
       )}

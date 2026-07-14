@@ -214,10 +214,14 @@ type GameRegistry interface {
 }
 
 // LeaderboardEntry é uma posição no ranking de um jogo (rank 1-based).
+// Handle é preenchido best-effort pelo Service (enrichLeaderboardHandles,
+// mesmo padrão de GameSessions/enrichSessionHandles) — o leaderboard-service
+// só conhece playerId, nunca handle.
 type LeaderboardEntry struct {
 	Rank     int64  `json:"rank"`
 	PlayerID string `json:"playerId"`
 	Score    int64  `json:"score"`
+	Handle   string `json:"handle,omitempty"`
 }
 
 // LeaderboardReader é a Port de saída para a API admin do leaderboard-service

@@ -716,12 +716,26 @@ function RosterBlock({ players, title = "PLAYERS" }: { players: SessionPlayer[];
 }
 
 // Célula compacta de jogador (cards/tabelas): o id completo fica no tooltip.
-function PlayerCell({ id, handle }: { id: string; handle: string }) {
+// avatarSize/textSize (spec 088, exportado pro Leaderboard reusar): os
+// contextos de tabela do console variam de densidade (20px nas mini-tabelas,
+// 32px nas tabelas de referência tipo Achievements/Players) — os defaults
+// preservam o uso original aqui dentro do painel de partida.
+export function PlayerCell({
+  id,
+  handle,
+  avatarSize = 20,
+  textSize = "xs",
+}: {
+  id: string;
+  handle: string;
+  avatarSize?: number;
+  textSize?: string;
+}) {
   return (
     <Tooltip label={id} withArrow position="top-start" openDelay={300}>
       <Group gap={6} wrap="nowrap">
-        <PlayerAvatar seed={id} size={20} />
-        <Text size="xs" fw={500}>
+        <PlayerAvatar seed={id} size={avatarSize} />
+        <Text size={textSize} fw={500}>
           {handle || shortId(id)}
         </Text>
         <GuestBadge playerId={id} />
