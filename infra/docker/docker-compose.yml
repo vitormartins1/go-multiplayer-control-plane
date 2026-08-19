@@ -412,6 +412,13 @@ services:
   # MinIO p/ S3 — o código só troca o endpoint (AWS_ENDPOINT_URL) na prod.
   localstack:
     image: localstack/localstack:3
+    # 2026-08-19: SIGKILL do Docker Desktop derrubou o localstack e ele ficou
+    # 3 DIAS morto sem ninguém notar (sem restart policy) — todo
+    # ReportParticipationEvent falhava no publish. unless-stopped o traz de
+    # volta; ATENÇÃO: o estado SNS/SQS NÃO persiste — depois de um restart do
+    # localstack, re-rodar `docker compose up messaging-provisioner` (one-shot
+    # terraform) pra recriar tópico+filas.
+    restart: unless-stopped
     environment:
       SERVICES: sns,sqs
       DEBUG: "0"

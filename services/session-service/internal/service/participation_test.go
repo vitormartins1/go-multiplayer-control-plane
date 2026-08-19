@@ -173,7 +173,15 @@ func TestReportParticipation_MundoInexistente_ErrWorldNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrWorldNotFound)
 }
 
-func TestReportParticipation_PublishFalha_NaoMutaSlot(t *testing.T) {
+// Fix 2026-08-19 (bug achado pela bateria do data plane host_world_dropin):
+// a infra de ANALYTICS fora do ar não pode prender o GAMEPLAY. Com o
+// publisher falhando (SNS/localstack morto), o slot do phantom LIBERA mesmo
+// assim; o erro ainda propaga (o server re-reporta com o MESMO event_id e o
+// consumer deduplica — at-least-once preservado) e o retry é idempotente.
+// Substitui o teste que defendia a ordem antiga ("publish antes: falha =>
+// slot intacto"), cuja consequência real era mundo vivo INELEGÍVEL pra
+// reinvasão ("nenhum mundo elegível") sempre que o localstack caía.
+func TestReportParticipation_PublishFalha_SlotLiberaMesmoAssim(t *testing.T) {
 	alloc := &mockAllocator{}
 	iss := &mockIssuer{}
 	prof := &mockProfile{}
@@ -189,10 +197,17 @@ func TestReportParticipation_PublishFalha_NaoMutaSlot(t *testing.T) {
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "inv-1", domain.RoleInvader)
 	require.NoError(t, err)
 
-	// DIED com publish falho: erro propaga e o slot NÃO é liberado.
+	// DIED com publish falho: o erro propaga (server re-reporta), mas o slot
+	// LIBERA — gameplay não é refém de analytics.
 	err = svc.ReportParticipationEvent(context.Background(), sess.ID, evt("inv-1", domain.RoleInvader, domain.EventDied, domain.OutcomeFail))
 	require.Error(t, err)
-	assert.Equal(t, float64(1), svc.OccupiedSlots(domain.RoleInvader), "publish falhou -> slot intacto")
+	assert.Equal(t, float64(0), svc.OccupiedSlots(domain.RoleInvader), "publish falhou -> slot libera mesmo assim")
+
+	// retry do MESMO evento (mesmo event_id no fio real): idempotente — erro
+	// de novo (publisher segue morto), slot segue 0, nada explode.
+	err = svc.ReportParticipationEvent(context.Background(), sess.ID, evt("inv-1", domain.RoleInvader, domain.EventDied, domain.OutcomeFail))
+	require.Error(t, err)
+	assert.Equal(t, float64(0), svc.OccupiedSlots(domain.RoleInvader), "retry idempotente")
 }
 
 // participantOf lê o Participant de um jogador na sessão ativa pela
