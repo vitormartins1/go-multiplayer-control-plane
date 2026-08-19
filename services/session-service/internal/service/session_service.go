@@ -949,15 +949,15 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 	gameID, modeID := sess.GameID, sess.ModeID
 	s.mu.Unlock()
 
-	// publica ANTES de mutar: falha => nada muda, o server refaz o report.
-	if err := s.participation.PublishParticipation(ctx, gameID, sessionID, modeID, evt); err != nil {
-		return fmt.Errorf("session service: participation event: publish: %w", err)
-	}
-	s.countParticipation(evt.Event)
-
-	// grava o último evento/outcome conhecido do participante (spec 027);
-	// re-lookup sob o lock (a sessão pode ter fechado entre o publish e
-	// aqui — idempotente, mesmo padrão do case Died/Left abaixo).
+	// MUTA ANTES de publicar (fix 2026-08-19): o desenho antigo ("publica
+	// antes: falha => nada muda") deixava o GAMEPLAY refém da infra de
+	// analytics — com o SNS/localstack fora, o LEFT nunca liberava o slot do
+	// phantom e o mundo ficava inelegível pra reinvasão (bug achado pela
+	// bateria da spec 011 do data plane). Toda mutação aqui é IDEMPOTENTE
+	// (overwrite de outcome, removeFromWorld no-op, close NotFound-ok), então
+	// o retry do server re-aplica sem efeito colateral; o at-least-once do
+	// publish continua garantido pelo ERRO no fim (o server re-reporta com o
+	// MESMO event_id — o consumer deduplica).
 	s.mu.Lock()
 	if cur, ok := s.sessions[sessionID]; ok {
 		setParticipantOutcome(cur.Participants, evt.PlayerID, evt.Event, evt.Outcome)
@@ -966,8 +966,7 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 
 	switch evt.Event {
 	case domain.EventDied, domain.EventLeft:
-		// libera o slot do phantom; re-lookup sob o lock (o mundo pode ter fechado
-		// entre o publish e a mutação). No-op idempotente se o jogador não está lá.
+		// libera o slot do phantom; no-op idempotente se o jogador não está lá.
 		s.mu.Lock()
 		if cur, ok := s.sessions[sessionID]; ok {
 			removeFromWorld(cur, evt.PlayerID)
@@ -980,6 +979,11 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 			return fmt.Errorf("session service: participation event: close: %w", err)
 		}
 	}
+
+	if err := s.participation.PublishParticipation(ctx, gameID, sessionID, modeID, evt); err != nil {
+		return fmt.Errorf("session service: participation event: publish: %w", err)
+	}
+	s.countParticipation(evt.Event)
 	return nil
 }
 
