@@ -70,6 +70,11 @@ func (m *mockService) DeleteMode(ctx context.Context, gameID, modeID string) err
 func (m *mockService) Delete(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
 }
+func (m *mockService) SetSlug(ctx context.Context, id, slug string) (*domain.Game, error) {
+	args := m.Called(ctx, id, slug)
+	g, _ := args.Get(0).(*domain.Game)
+	return g, args.Error(1)
+}
 func (m *mockService) SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error) {
 	args := m.Called(ctx, id, fleet)
 	g, _ := args.Get(0).(*domain.Game)
@@ -259,6 +264,42 @@ func TestRename_Inexistente_404(t *testing.T) {
 	svc := new(mockService)
 	svc.On("Rename", mock.Anything, "nao", "X").Return((*domain.Game)(nil), domain.ErrGameNotFound)
 	rr := do(newServer(svc), http.MethodPut, "/games/nao", `{"name":"X"}`)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+// Slug (rename de produto, 2026-08-24).
+
+func TestSetSlug_200_AtualizaSlug(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetSlug", mock.Anything, "id-1", "folclore-souls").Return(&domain.Game{ID: "id-1", Slug: "folclore-souls", Name: "Folclore Souls"}, nil)
+
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/slug", `{"slug":"folclore-souls"}`)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), `"slug":"folclore-souls"`)
+	svc.AssertExpectations(t)
+}
+
+func TestSetSlug_FormatoInvalido_400(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetSlug", mock.Anything, "id-1", "Folclore_Souls").Return((*domain.Game)(nil), domain.ErrInvalidSlug)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/slug", `{"slug":"Folclore_Souls"}`)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid_slug")
+}
+
+func TestSetSlug_Duplicado_409(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetSlug", mock.Anything, "id-1", "packet-arena").Return((*domain.Game)(nil), domain.ErrSlugTaken)
+	rr := do(newServer(svc), http.MethodPut, "/games/id-1/slug", `{"slug":"packet-arena"}`)
+	assert.Equal(t, http.StatusConflict, rr.Code)
+	assert.Contains(t, rr.Body.String(), "slug_taken")
+}
+
+func TestSetSlug_Inexistente_404(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetSlug", mock.Anything, "nao", "folclore-souls").Return((*domain.Game)(nil), domain.ErrGameNotFound)
+	rr := do(newServer(svc), http.MethodPut, "/games/nao/slug", `{"slug":"folclore-souls"}`)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 

@@ -43,7 +43,7 @@ novos; num cluster k3d já existente sem essa porta, `up.sh` adiciona via
 Fleets/GameServers já aplicados).
 
 **Cuidado com nomes de Fleet iguais nos dois clusters:** k3d e Pi 5 costumam ter
-Fleets com o mesmo nome (`packet-arena`, `capoeira-souls`) — toda query dos
+Fleets com o mesmo nome (`packet-arena`, `folclore-souls` — ex-`capoeira-souls`) — toda query dos
 dois dashboards filtra por `cluster="local"`/`cluster="pi5"` de propósito; uma
 query nova sem esse filtro soma os dois clusters junto, silenciosamente.
 

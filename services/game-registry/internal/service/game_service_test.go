@@ -31,6 +31,9 @@ func (m *mockRepo) FindByID(ctx context.Context, id string) (*domain.Game, error
 func (m *mockRepo) UpdateName(ctx context.Context, id, name string) error {
 	return m.Called(ctx, id, name).Error(0)
 }
+func (m *mockRepo) UpdateSlug(ctx context.Context, id, slug string) error {
+	return m.Called(ctx, id, slug).Error(0)
+}
 func (m *mockRepo) UpdateFleet(ctx context.Context, id, fleet string) error {
 	return m.Called(ctx, id, fleet).Error(0)
 }
@@ -65,6 +68,39 @@ func TestRename_Inexistente_ErrGameNotFound(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("UpdateName", mock.Anything, "nao", "X").Return(domain.ErrGameNotFound)
 	_, err := New(repo).Rename(context.Background(), "nao", "X")
+	assert.ErrorIs(t, err, domain.ErrGameNotFound)
+}
+
+func TestSetSlug_Valido_Atualiza(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateSlug", mock.Anything, "g1", "folclore-souls").Return(nil)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1", Slug: "folclore-souls", Name: "Folclore Souls"}, nil)
+
+	g, err := New(repo).SetSlug(context.Background(), "g1", "folclore-souls")
+	require.NoError(t, err)
+	assert.Equal(t, "folclore-souls", g.Slug)
+	repo.AssertExpectations(t)
+}
+
+func TestSetSlug_FormatoInvalido_ErrInvalidSlug(t *testing.T) {
+	// mesma régua de formato do Register — maiúscula/underscore/vazio não passam
+	for _, ruim := range []string{"", "Folclore_Souls", "folclore souls", "UPPER"} {
+		_, err := New(new(mockRepo)).SetSlug(context.Background(), "g1", ruim)
+		assert.ErrorIs(t, err, domain.ErrInvalidSlug, "slug %q", ruim)
+	}
+}
+
+func TestSetSlug_Duplicado_ErrSlugTaken(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateSlug", mock.Anything, "g1", "packet-arena").Return(domain.ErrSlugTaken)
+	_, err := New(repo).SetSlug(context.Background(), "g1", "packet-arena")
+	assert.ErrorIs(t, err, domain.ErrSlugTaken)
+}
+
+func TestSetSlug_Inexistente_ErrGameNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("UpdateSlug", mock.Anything, "nao", "folclore-souls").Return(domain.ErrGameNotFound)
+	_, err := New(repo).SetSlug(context.Background(), "nao", "folclore-souls")
 	assert.ErrorIs(t, err, domain.ErrGameNotFound)
 }
 
