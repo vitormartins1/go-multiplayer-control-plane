@@ -209,9 +209,16 @@ type GameService interface {
 	List(ctx context.Context) ([]Game, error)
 	// Get devolve um jogo por id; ErrGameNotFound se ausente.
 	Get(ctx context.Context, id string) (*Game, error)
-	// Rename altera só o nome do jogo (slug/id são estáveis). ErrInvalidName em
-	// entrada inválida; ErrGameNotFound se não existir.
+	// Rename altera só o nome do jogo (o id é estável; o slug muda só pelo
+	// SetSlug, endpoint próprio). ErrInvalidName em entrada inválida;
+	// ErrGameNotFound se não existir.
 	Rename(ctx context.Context, id, name string) (*Game, error)
+	// SetSlug altera o slug do jogo (rename de produto — caso Capoeira Souls →
+	// Folclore Souls, 2026-08-24: a identidade nos clients é o id/UUID; o slug é
+	// rótulo de painel/registro). Mesmas regras de formato do Register
+	// (ErrInvalidSlug) e de unicidade (ErrSlugTaken); ErrGameNotFound se não
+	// existir. A generatedImageSeed NÃO muda junto — a capa gerada é estável.
+	SetSlug(ctx context.Context, id, slug string) (*Game, error)
 	// Delete marca o jogo como removido (soft delete, ADR-0025): a partir daí o
 	// jogo responde como inexistente em toda a API e o slug permanece reservado.
 	// ErrGameNotFound se ausente ou já deletado.
@@ -257,6 +264,9 @@ type GameRepository interface {
 	FindByID(ctx context.Context, id string) (*Game, error)
 	// UpdateName atualiza só o nome do jogo; ErrGameNotFound se não existir.
 	UpdateName(ctx context.Context, id, name string) error
+	// UpdateSlug atualiza o slug do jogo; ErrSlugTaken em violação de unicidade;
+	// ErrGameNotFound se não existir.
+	UpdateSlug(ctx context.Context, id, slug string) error
 	// UpdateFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012);
 	// ErrGameNotFound se não existir. Vazio limpa o campo.
 	UpdateFleet(ctx context.Context, id, fleet string) error

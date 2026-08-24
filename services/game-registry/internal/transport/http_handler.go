@@ -45,6 +45,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games", h.list)
 	mux.HandleFunc("GET /games/{id}", h.get)
 	mux.HandleFunc("PUT /games/{id}", h.rename)
+	// Slug (rename de produto, 2026-08-24 — caso Capoeira Souls → Folclore Souls).
+	mux.HandleFunc("PUT /games/{id}/slug", h.setSlug)
 	mux.HandleFunc("DELETE /games/{id}", h.delete)
 	// Fleet Agones (ADR-0026, spec 012).
 	mux.HandleFunc("PUT /games/{id}/fleet", h.setFleet)
@@ -436,6 +438,24 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := h.games.Rename(r.Context(), r.PathValue("id"), req.Name)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, toDTO(g))
+}
+
+// setSlug altera o slug do jogo (rename de produto — o id/UUID é a identidade
+// dos clients; o slug é rótulo de painel/registro).
+func (h *Handler) setSlug(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug string `json:"slug"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	g, err := h.games.SetSlug(r.Context(), r.PathValue("id"), req.Slug)
 	if err != nil {
 		writeDomainError(w, err)
 		return

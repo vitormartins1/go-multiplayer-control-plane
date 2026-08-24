@@ -1,11 +1,11 @@
-# Fleet do dedicated server do host_world_dropin (Capoeira Souls) — N réplicas
+# Fleet do dedicated server do host_world_dropin (Folclore Souls, ex-Capoeira Souls — ADR-0011 do data plane) — N réplicas
 # Ready aguardando alocação do session-service. Mesmo manifest serve para o
 # k3s do Pi 5 (ver infra/agones/apply-fleet.sh). Origem: unity-host-world-
 # dropin-data-plane, docs/specs/005-e2e-orchestrated-load.
 apiVersion: agones.dev/v1
 kind: Fleet
 metadata:
-  name: capoeira-souls
+  name: folclore-souls
 spec:
   replicas: 2
   template:
@@ -29,11 +29,11 @@ spec:
       template:
         spec:
           containers:
-            - name: capoeira-souls-server
+            - name: folclore-souls-server
               # Imagem local importada via tools/k3d/import-image.sh (sem
               # registry, ADR-0029 Fatia 1) — IfNotPresent para o kubelet não
               # tentar puxar de um registry inexistente.
-              image: capoeira-souls-server:latest
+              image: folclore-souls-server:latest
               imagePullPolicy: IfNotPresent
               env:
                 # O pod alcança o backend do compose via DNS do host.

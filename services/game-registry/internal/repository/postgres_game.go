@@ -52,6 +52,24 @@ func (r *PostgresGameRepository) UpdateName(ctx context.Context, id, name string
 	return nil
 }
 
+// UpdateSlug atualiza o slug do jogo (rename de produto). A unicidade fica com
+// a constraint do banco — mesma tradução 23505→ErrSlugTaken do Create (slug de
+// jogo deletado permanece reservado, ADR-0025, e continua colidindo aqui).
+func (r *PostgresGameRepository) UpdateSlug(ctx context.Context, id, slug string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE games SET slug = $2 WHERE id = $1 AND deleted_at IS NULL`, id, slug)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return domain.ErrSlugTaken
+		}
+		return fmt.Errorf("game-registry repository: update slug: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGameNotFound
+	}
+	return nil
+}
+
 // UpdateFleet atualiza a Fleet Agones do jogo (ADR-0026, spec 012). Vazio
 // persiste NULL (mesma leitura NULL->"" do selectCols).
 func (r *PostgresGameRepository) UpdateFleet(ctx context.Context, id, fleet string) error {

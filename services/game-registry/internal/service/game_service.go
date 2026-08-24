@@ -81,6 +81,23 @@ func (s *service) Rename(ctx context.Context, id, name string) (*domain.Game, er
 	return g, nil
 }
 
+// SetSlug altera o slug do jogo (rename de produto). Mesma validação de
+// formato do Register; unicidade é do repositório (ErrSlugTaken). A
+// generatedImageSeed fica como está — a capa gerada não muda num rename.
+func (s *service) SetSlug(ctx context.Context, id, slug string) (*domain.Game, error) {
+	if !slugRE.MatchString(slug) {
+		return nil, domain.ErrInvalidSlug
+	}
+	if err := s.repo.UpdateSlug(ctx, id, slug); err != nil {
+		return nil, fmt.Errorf("game-registry service: set slug: %w", err)
+	}
+	g, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("game-registry service: set slug: reload: %w", err)
+	}
+	return g, nil
+}
+
 // SetFleet atualiza a Fleet Agones do jogo (ADR-0026). Vazio limpa o campo;
 // não-vazio precisa casar fleetRE.
 func (s *service) SetFleet(ctx context.Context, id, fleet string) (*domain.Game, error) {
