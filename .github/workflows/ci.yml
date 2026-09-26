@@ -53,7 +53,7 @@ jobs:
       - run: golangci-lint run ./...
 
   frontend:
-    name: admin-ui · build
+    name: admin-ui · test + build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -66,4 +66,5 @@ jobs:
           cache: npm
           cache-dependency-path: services/admin-ui/package-lock.json
       - run: npm ci
+      - run: npm test # vitest nos lib/ puros (csv, matchCond, slug)
       - run: npm run build # tsc --noEmit && vite build

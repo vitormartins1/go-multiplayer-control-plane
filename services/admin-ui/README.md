@@ -56,6 +56,6 @@ docker compose -f infra/docker/docker-compose.yml up
 
 ## Testar / Specs
 
-Sem testes automatizados de UI além do type-check (`tsc --noEmit`, parte do `npm run build`); há um `@playwright/test` nas devDependencies para specs que precisem de verificação end-to-end pontual.
+Testes: `npm test` (Vitest) cobre os `lib/` puros — parsing do CSV de importação, montagem/formatação das condições das event-rules, slug — e roda no CI junto com o type-check (`tsc --noEmit`, parte do `npm run build`). Componentes React ainda não têm teste; há um `@playwright/test` nas devDependencies para verificação end-to-end pontual.
 
 Specs individuais (SDD-lite, uma pasta por mudança de tela/UX) vivem em `specs/NNN-slug/` — histórico incremental de como cada área chegou ao estado atual. Exemplos recentes: `057-achievement-rule-preview` (preview de regra a partir do achievement), `058-canvas-first-event-rules` (Event Rules como canvas-first), `059-fleet-tab` (aba/nav Fleet), `060-rooms-grouped-sortable` (Rooms agrupável/ordenável). **Este README é a visão consolidada e atual do app; as specs são o registro incremental de como cada parte foi construída** — para entender "o que o app faz hoje", leia este arquivo; para entender "por que uma tela específica é como é", vá à spec correspondente.
