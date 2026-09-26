@@ -231,6 +231,7 @@ services:
       ANALYTICS_WORKERS: "4"
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: us-east-1
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço nos /admin (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
     depends_on:
       analytics-postgres:

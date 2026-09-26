@@ -29,6 +29,7 @@ import (
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/repository"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/service"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/analytics-service/internal/transport"
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/config"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/middleware"
@@ -116,7 +117,15 @@ func run(log *slog.Logger) error {
 	mux.Handle("GET /metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	transport.NewAdminHandler(repo).Register(mux)
 
-	traced := otelhttp.NewHandler(middleware.RouteSpanName(red.Wrap(mux)), "http.server",
+	// /admin exige a internal key serviço-a-serviço (ADR-0018), como nos demais
+	// serviços; /metrics e /healthz ficam abertos.
+	internalKey := os.Getenv("INTERNAL_API_KEY")
+	if internalKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — os endpoints /admin vão negar (401); configure a chave")
+	}
+	guarded := auth.RequireInternalKey(internalKey, "/admin")(mux)
+
+	traced := otelhttp.NewHandler(middleware.RouteSpanName(red.Wrap(guarded)), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return r.URL.Path != "/healthz" && r.URL.Path != "/metrics"
 		}),

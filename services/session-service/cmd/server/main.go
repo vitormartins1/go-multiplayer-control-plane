@@ -208,7 +208,13 @@ func run(log *slog.Logger) error {
 	// superfície admin (spec 005): a aba Sessions do painel lê via BFF.
 	// historyStore alimenta as rotas paginadas do histórico persistido (spec 025).
 	transport.NewAdminHandler(svc, historyStore, fleets, clusterLabel).Register(mux)
-	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	// /admin exige a internal key serviço-a-serviço (ADR-0018), como nos demais
+	// serviços — inclui o force-close. JWKS, /metrics e /healthz ficam abertos.
+	adminKey := os.Getenv("INTERNAL_API_KEY")
+	if adminKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — os endpoints /admin vão negar (401); configure a chave")
+	}
+	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: auth.RequireInternalKey(adminKey, "/admin")(mux), ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
