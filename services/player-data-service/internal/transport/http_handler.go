@@ -60,14 +60,23 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 	})
 }
 
+// maxValueBytes é o teto de um valor (spec 003): 400 KiB, o mesmo limite de
+// item do DynamoDB por trás do GameKit User Gameplay Data (o par da tese).
+const maxValueBytes = 400 << 10
+
 func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 	gameID := gameHeader(r)
 	if gameID == "" {
 		httpkit.WriteError(w, http.StatusBadRequest, "missing_game")
 		return
 	}
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxValueBytes))
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			httpkit.WriteError(w, http.StatusRequestEntityTooLarge, "value_too_large")
+			return
+		}
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}

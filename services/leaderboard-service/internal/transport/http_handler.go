@@ -31,6 +31,11 @@ const playerIDKey ctxKey = iota
 
 // Register monta as rotas. Player-facing atrás do JWT (jogo no header X-Game-Id);
 // admin (internal key na borda, ADR-0018) com jogo/jogador no path.
+// maxPlayerBodyBytes limita o corpo das rotas de jogador (o payload legítimo
+// tem poucas dezenas de bytes; o teto evita que um corpo gigante seja
+// bufferizado inteiro pelo decoder).
+const maxPlayerBodyBytes = 64 << 10
+
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /scores", h.auth(http.HandlerFunc(h.submit)))
 	mux.Handle("GET /leaderboard", h.auth(http.HandlerFunc(h.top)))
@@ -67,7 +72,8 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Score *int64 `json:"score"` // ponteiro: distingue ausente de zero
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Score == nil {
+	// corpo com teto (rota de jogador): acima dele o decode falha e vira 400.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPlayerBodyBytes)).Decode(&req); err != nil || req.Score == nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "invalid_score")
 		return
 	}

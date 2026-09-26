@@ -166,8 +166,12 @@ func atoiOr(s string, def int) int {
 	return def
 }
 
+// maxBodyBytes limita o corpo das rotas do identity (credenciais e gameId são
+// pequenos; /accounts e /sessions não exigem auth, então o teto importa).
+const maxBodyBytes = 64 << 10
+
 func decode(r *http.Request, v any) error {
-	dec := json.NewDecoder(r.Body)
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBodyBytes))
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)
 }

@@ -241,3 +241,28 @@ func TestAdminListForPlayer_RetornaLista_200(t *testing.T) {
 	assert.JSONEq(t, `100`, string(got.Data[0].Value))
 	assert.JSONEq(t, `{"total":10}`, string(got.Data[1].Value))
 }
+
+// Spec 003: valor acima de 400 KiB -> 413 sem chegar ao service; no limite -> 204.
+func TestPut_ValorAcimaDoLimite_413(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	big := `"` + strings.Repeat("x", maxValueBytes-1) + `"` // JSON válido com maxValueBytes+1 bytes
+	resp := do(t, srv, http.MethodPut, "/me/data/inventory/gold", "tok", "g1", big)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	assert.Empty(t, svc.gotGameID, "não chegou ao service")
+}
+
+func TestPut_ValorNoLimite_204(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc, fakeVerifier{playerID: "p1"})
+	defer srv.Close()
+
+	exact := `"` + strings.Repeat("x", maxValueBytes-2) + `"` // exatamente maxValueBytes
+	resp := do(t, srv, http.MethodPut, "/me/data/inventory/gold", "tok", "g1", exact)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Len(t, svc.putBody, maxValueBytes)
+}

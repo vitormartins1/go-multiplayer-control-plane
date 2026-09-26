@@ -10,7 +10,7 @@
 
 | Método | Rota | Descrição |
 |---|---|---|
-| PUT | `/me/data/{namespace}/{key}` | grava um valor JSON (last-write-wins) |
+| PUT | `/me/data/{namespace}/{key}` | grava um valor JSON (last-write-wins); até 400 KiB, acima -> 413 `value_too_large` (spec 003) |
 | GET | `/me/data/{namespace}/{key}` | lê um valor (404 se ausente) |
 | GET | `/me/data/{namespace}` | todos os pares do namespace |
 | DELETE | `/me/data/{namespace}/{key}` | remove (idempotente) |

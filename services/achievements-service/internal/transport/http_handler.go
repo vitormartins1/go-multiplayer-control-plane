@@ -38,6 +38,11 @@ const playerIDKey ctxKey = iota
 // de jogador o game_id vem do header X-Game-Id (contexto ambiente); nas de
 // /admin vem do path {gameId}. As de jogador ficam atrás do auth; as de /admin
 // são control plane interno (sem auth no MVP).
+// maxPlayerBodyBytes limita o corpo das rotas de jogador (o payload legítimo
+// tem poucas dezenas de bytes; o teto evita que um corpo gigante seja
+// bufferizado inteiro pelo decoder).
+const maxPlayerBodyBytes = 64 << 10
+
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /events", h.auth(http.HandlerFunc(h.recordEvent)))
 	mux.Handle("GET /achievements", h.auth(http.HandlerFunc(h.listCatalog)))
@@ -94,8 +99,9 @@ func (h *Handler) recordEvent(w http.ResponseWriter, r *http.Request) {
 		Type string `json:"type"`
 	}
 	// sem DisallowUnknownFields de propósito: um id de jogador no corpo é
-	// ignorado (o playerID vem do JWT), e o evento é extensível.
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// ignorado (o playerID vem do JWT), e o evento é extensível. Corpo com teto
+	// (rota de jogador): acima dele o decode falha e vira 400.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPlayerBodyBytes)).Decode(&req); err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}

@@ -236,3 +236,15 @@ func TestAdminListPlayers_SemAuthorization_NaoBloqueia(t *testing.T) {
 	rr := do(srv, http.MethodGet, "/admin/players", "") // sem header Authorization
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
+
+// /accounts não exige auth: corpo acima do teto é recusado (400) sem chegar
+// ao service — o decoder não bufferiza um corpo arbitrariamente grande.
+func TestRegister_CorpoAcimaDoTeto_400SemTocarService(t *testing.T) {
+	auth := new(mockAuth)
+	srv := newServer(auth, new(mockTokens))
+
+	body := `{"handle":"vitor","password":"` + strings.Repeat("x", maxBodyBytes) + `"}`
+	rr := do(srv, http.MethodPost, "/accounts", body)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	auth.AssertNotCalled(t, "Register", mock.Anything, mock.Anything, mock.Anything)
+}
