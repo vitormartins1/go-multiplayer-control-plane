@@ -6,14 +6,14 @@ Metodologia: Spec-Driven Development (SDD). Leia `docs/sdd/SDD-GUIDE.md` antes d
 
 ## Stack
 
-- **Linguagem:** Go 1.22+ — **módulo único** na raiz (ainda não multi-módulo; ver ADR-0001)
+- **Linguagem:** Go 1.26 (`go.mod`) — **módulo único** na raiz (ainda não multi-módulo; ver ADR-0001)
 - **Arquitetura interna:** Hexagonal (domain / service / repository / transport)
-- **API:** REST com `net/http` (identity, achievements, player-data, cloud-save, leaderboard, analytics) | gRPC streaming (matchmaking, session)
-- **Banco local:** PostgreSQL via `pgx/v5` (escolha de banco por serviço — ver ADR-0005)
+- **API:** REST com `net/http` (identity, game-registry, achievements, player-data, cloud-save, leaderboard, analytics, admin-bff) | gRPC (matchmaking com streaming; session unário + REST admin)
+- **Banco local:** PostgreSQL via `pgx/v5` por padrão; Redis (leaderboard) e MinIO (cloud-save) — banco por serviço, ver ADR-0015
 - **Cloud:** AWS — compute por serviço (Lambda/Fargate/ECS-EC2/EC2/EKS — ver ADR-0005), DynamoDB, SQS, API Gateway, ECR
 - **IaC:** Terraform (local → LocalStack, prod → AWS)
 - **Observabilidade:** Prometheus + Grafana + OpenTelemetry
-- **CI/CD:** GitHub Actions (deploy seletivo por serviço)
+- **CI/CD:** GitHub Actions — um workflow (`.github/workflows/ci.yml`: build, vet, test -race, integração, lint, build do admin-ui); deploy seletivo por serviço ainda não existe
 
 ## Comandos essenciais
 
@@ -33,11 +33,10 @@ cd services/identity-service && go build ./cmd/server/...
 # Lint
 golangci-lint run ./...
 
-# Terraform local (LocalStack)
-cd infra/terraform/environments/local && terraform init && terraform apply
+# Terraform local (LocalStack) — hoje só a mensageria (SNS/SQS); o compose já aplica no boot
+cd infra/terraform/environments/local/messaging && terraform init && terraform apply
 
-# Terraform prod (requer AWS credentials)
-cd infra/terraform/environments/prod/identity-service && terraform init && terraform apply
+# Terraform prod: ainda não existe (ver docs/review/REVISAO-2026-09.md, G10)
 ```
 
 ## Estrutura dos serviços

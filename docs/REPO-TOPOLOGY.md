@@ -29,7 +29,7 @@ unity-<archetype>-data-plane        # um por arquétipo (Unity)
 | `queue_arena` | `unity-queue-arena-data-plane` | `unity-queue-arena-data-plane` | ✅ **rename COMPLETO (2026-07-08)**: conteúdo (namespace/asmdefs `QueueArena.*`, docs, codegen) + `mv` da pasta + GitHub privado (`vitormartins1/unity-queue-arena-data-plane`) |
 | `battle_royale` | `unity-battle-royale-data-plane` | — | ⬜ planejado (criar quando atacar o arquétipo) |
 | `coop_mission` | `unity-coop-mission-data-plane` | — | ⬜ planejado |
-| `host_world_dropin` | `unity-host-world-dropin-data-plane` | `unity-host-world-dropin-data-plane` | 🟡 **em andamento** — repo real, GitHub privado (`vitormartins1/unity-host-world-dropin-data-plane`), 28 commits. **Fases 0–4 done** (bootstrap → mundo do host → phantoms join-in-progress → invasão/sinais via matchmaking, incl. senha → combate/boss com ciclo de vida completo), tudo verificado ao vivo (server ARM64 real + clients headless). Falta **Fase 5** (e2e orquestrado k3d→Pi 5, sem Fleet própria ainda) e **Fase 6+** (refinamento). Ver `docs/ROADMAP.md` do repo. |
+| `host_world_dropin` | `unity-host-world-dropin-data-plane` | `unity-host-world-dropin-data-plane` | 🟡 **em andamento** — repo real, GitHub privado (`vitormartins1/unity-host-world-dropin-data-plane`), 28 commits. **Fases 0–5 done** (Fase 5 = e2e orquestrado k3d→Pi 5, 2026-07-11; desde agosto o jogo é o **Folclore Souls** e o foco é gameplay) (bootstrap → mundo do host → phantoms join-in-progress → invasão/sinais via matchmaking, incl. senha → combate/boss com ciclo de vida completo), tudo verificado ao vivo (server ARM64 real + clients headless). Falta **Fase 5** (e2e orquestrado k3d→Pi 5, sem Fleet própria ainda) e **Fase 6+** (refinamento). Ver `docs/ROADMAP.md` do repo. |
 | — (control plane) | `go-multiplayer-control-plane` | `go-multiplayer-control-plane` | ✅ **renomeado por completo** (module path + docs 2026-07-07; `mv` da pasta 2026-07-08) + GitHub privado |
 
 > `go-game-unity` (repo vazio, órfão): resquício do plano antigo (memória "dataplane-repo"). Data plane real virou `go-game-dataplane`. **Arquivar/remover** no rename.
@@ -40,7 +40,7 @@ flowchart TB
   QA["unity-queue-arena-data-plane<br/>(Unity) ✅ existe"]
   BR["unity-battle-royale-data-plane<br/>⬜ planejado"]
   CM["unity-coop-mission-data-plane<br/>⬜ planejado"]
-  HW["unity-host-world-dropin-data-plane<br/>🟡 Fases 0-4 done"]
+  HW["unity-host-world-dropin-data-plane<br/>🟡 Fases 0-5 done"]
   CP -- "perfil queue_arena" --> QA
   CP -- "perfil battle_royale" --> BR
   CP -- "perfil coop_mission" --> CM
@@ -63,9 +63,9 @@ Renomear toca o module path Go e várias referências. Estado:
 ## Próximos passos
 
 - [x] ~~Fechar os nomes~~ — decididos em 2026-07-07 (control plane `go-multiplayer-control-plane`; data planes `unity-<archetype>-data-plane`).
-- [x] ~~Executar o rename do control plane~~ — module path + protos + docs feitos em 2026-07-07; falta só o `mv` da pasta (nota no topo).
+- [x] ~~Executar o rename do control plane~~ — module path + protos + docs feitos em 2026-07-07; `mv` da pasta feito em 2026-07-08.
 - [x] ~~Renomear o `go-game-dataplane`~~ — **feito (2026-07-08)**: `unity-queue-arena-data-plane` (conteúdo + pasta + GitHub).
-- [x] ~~Criar o repo do `host_world_dropin`~~ — **em andamento**: `unity-host-world-dropin-data-plane` criado com o nome do padrão, Fases 0–4 done (ver tabela acima).
+- [x] ~~Criar o repo do `host_world_dropin`~~ — **em andamento**: `unity-host-world-dropin-data-plane` criado com o nome do padrão, Fases 0–5 done (ver tabela acima).
 - [ ] Criar os repos data plane de `battle_royale`/`coop_mission` conforme cada arquétipo for atacado (já com o nome do padrão).
 - [ ] **Futuro:** extrair o SDK Unity compartilhado (`unity-controlplane-sdk`, princípio 5) quando o primeiro jogo final entrar em cena.
 - [ ] (Opcional) Registrar como **ADR** se quiser tornar a convenção formal — hoje é decisão deste doc.

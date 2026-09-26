@@ -36,8 +36,8 @@ Além da trilha, o projeto generalizou o multiplayer por **arquétipo** (ADR-002
 
 ## CI/CD — GitHub Actions
 
-- **CI por serviço** (paralelo), filtrado por `services/<nome>/**`: `go test ./... -race -cover` + `go build`. Testes de integração exigem Docker no runner (testcontainers).
-- **CD seletivo:** só deploya o serviço que mudou (`dorny/paths-filter`), respeitando o compute escolhido para cada um (ADR-0005).
+- **Hoje (CI único):** `.github/workflows/ci.yml` roda para o repo inteiro — `go build`/`go vet`/`go test ./... -race -cover`, integração com testcontainers (`-tags=integration`), `golangci-lint` v2.12.2 e o build do admin-ui. Sem filtro por path e sem deploy.
+- **Plano (quando houver deploy):** CI/CD por serviço, filtrado por `services/<nome>/**` (`dorny/paths-filter`), deployando só o que mudou e respeitando o compute escolhido para cada um (ADR-0005).
 
 ## FinOps — controle de custo
 

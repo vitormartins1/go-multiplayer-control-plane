@@ -3,8 +3,10 @@
 **Plan:** [plan.md](plan.md)
 **Data:** 2026-07-03
 
-- [ ] Ring buffer de fechadas no `closeSession` (`SESSION_HISTORY_LIMIT`, mutex compartilhado) + testes
-- [ ] `SessionsByGame(gameID)` (active + closed, desc)
-- [ ] `GET /admin/games/{gameId}/sessions` (+ `state=`) no mux HTTP; DTO camelCase; httptest
-- [ ] Env no main; README do serviço atualizado
-- [ ] Commits `feat(session): admin sessions`, merge --no-ff
+- [x] Ring buffer de fechadas no `closeSession` (`SESSION_HISTORY_LIMIT`, mutex compartilhado) + testes
+- [x] `SessionsByGame(gameID)` (active + closed, desc)
+- [x] `GET /admin/games/{gameId}/sessions` (+ `state=`) no mux HTTP; DTO camelCase; httptest
+- [x] Env no main; README do serviço atualizado
+- [x] Commits `feat(session): admin sessions`, merge --no-ff
+
+> **Revisão 2026-09:** checkboxes marcados retroativamente — o código existe na `main` (verificado na revisão de produto, `docs/review/REVISAO-2026-09.md`). Validação visual ao vivo, quando houver, segue pendente.

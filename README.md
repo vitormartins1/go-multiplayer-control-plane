@@ -1,88 +1,129 @@
 # go-multiplayer-control-plane
 
-Monorepo de microsserviços em **Go** para o **control plane** de jogos multiplayer.
+**Control plane de multiplayer self-hosted, em Go.** Login, cadastro de jogos e modos, matchmaking, orquestração
+de servidores dedicados no **Agones**, conquistas por regras editáveis, leaderboard, analytics e um console de
+operação — para jogos cujo realtime roda num **Unity Dedicated Server** (o data plane, em repos separados).
 
-> Nome de repo decidido (rename ainda não executado): **`go-multiplayer-control-plane`**. Ver [`docs/REPO-TOPOLOGY.md`](docs/REPO-TOPOLOGY.md).
+Nasceu para estudar Go reimplementando o que a AWS vende pronto (GameKit/GameLift — ADR-0008) e hoje serve um jogo
+real: o **Folclore Souls**, um Souls-like em Unity que usa o arquétipo `host_world_dropin` (mundo do host, co-op
+por sinais, invasões, eventos por participante).
 
-## Tese
+## Arquitetura em uma figura
 
-Reimplementar em Go, sobre infraestrutura própria e barata, os serviços de backend que a **AWS** (GameKit, GameLift) e a **Unity** vendem prontos — e comparar **custo, performance e eficiência** com a oferta gerenciada. Dois objetivos: aprender Go de forma séria e construir infra reutilizável para jogos próprios. (ADR-0008)
+```mermaid
+flowchart LR
+  subgraph DP["Data plane (Unity, repos separados)"]
+    C["Cliente do jogo"]
+    GS["Dedicated Server<br/>(GameServer Agones)"]
+  end
+  subgraph CP["Control plane (este repo, Go)"]
+    ID["identity<br/>REST · JWT EdDSA"]
+    GR["game-registry<br/>jogos · modos · fleet"]
+    MM["matchmaking<br/>gRPC (fila, invasão, sinais)"]
+    SE["session<br/>gRPC · aloca no Agones<br/>connect token + JWKS"]
+    T[("SNS match-results<br/>→ SQS por consumidor")]
+    ACH["achievements<br/>(event-rules)"]
+    LB["leaderboard<br/>(Redis)"]
+    AN["analytics"]
+    PD["player-data · cloud-save"]
+    BFF["admin-bff"] --> UI["admin-ui (React)"]
+  end
+  C -->|login| ID
+  C -->|FindMatch / Invade / sinais| MM --> SE
+  C -->|OpenWorld / JoinWorld| SE
+  SE -->|aloca por jogo| GS
+  C -.->|connect token| GS
+  GS -->|ReportResult / ReportParticipationEvent| SE
+  SE --> T --> ACH & LB & AN
+  MM & SE -->|perfil do modo| GR
+  BFF --> ID & GR & SE & ACH & LB & AN & PD
+```
 
-O realtime de gameplay **não** é Go: roda no **Unity Dedicated Server** (data plane, repos separados por arquétipo — ver topologia). O Go cuida do **control plane** — auth, matchmaking, sessão, persistência, leaderboard, achievements, analytics — como o GameLift: orquestra, não simula. (ADR-0010)
+Detalhe e decisões: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) e os [ADRs](docs/adr/README.md) (0001–0029).
 
-## Multiplayer por arquétipo (ADR-0023)
+## O que tem de interessante (para quem lê o código)
 
-O control plane é **agnóstico de tipo de jogo**: cada jogo declara no game-registry um **perfil de multiplayer** (arquétipo + parâmetros), e matchmaking/session/fan-out se pré-configuram a partir dele. A generalização é dirigida por **engenharia reversa de jogos reais** em [`docs/game-models/`](docs/game-models/README.md).
+- **Arquitetura hexagonal idiomática** em todos os serviços (`domain` sem dependências → `service` só com
+  interfaces → `repository`/`transport` nas bordas), um módulo Go único (ADR-0001).
+- **Fan-out durável e idempotente**: o session publica o resultado uma vez; cada consumidor deduplica na mesma
+  transação do efeito (ADR-0020). Gameplay nunca fica refém do analytics (a mutação vem antes do publish).
+- **Multiplayer por arquétipo**, não por jogo: o jogo declara modos (arquétipo + parâmetros) no game-registry e
+  matchmaking/sessão/conquistas se configuram sozinhos (ADR-0023/0024). Sem `if game == X`.
+- **Agones de verdade**: fleet por jogo (ADR-0026), reconciliação de sessões órfãs contra o cluster (ADR-0022),
+  connect token Ed25519 validado offline pelo servidor via JWKS.
+- **Observável desde o primeiro serviço**: métricas RED, tracing OTel (inclusive `otelpgx`), 10 dashboards Grafana.
+- **Processo documentado**: Spec-Driven Development ([guia](docs/sdd/SDD-GUIDE.md)), 29 ADRs e um diário de
+  aprendizados de Go ([GO-LEARNINGS](docs/GO-LEARNINGS.md)).
 
-| Arquétipo | Forma | Estado (control plane) | Data plane Unity |
-|---|---|---|---|
-| `queue_arena` | partida simétrica FFA/NvN, resultado win/loss/draw + stats | ✅ completo | ✅ rodando de verdade (`unity-queue-arena-data-plane`) |
-| `host_world_dropin` | Souls-like: mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento | ✅ completo | ✅ rodando de verdade (`unity-host-world-dropin-data-plane`, Fases 0–5 done, e2e k3d→Pi 5 + carga) |
-| `battle_royale`, `coop_mission` | colocação ordinal / resultado coletivo | ✅ completo | ⬜ repo Unity ainda não criado |
+## Serviços
 
-Estado por fatia: [`docs/game-models/README.md`](docs/game-models/README.md) → "Estado da implementação".
-
-## Serviços (control plane)
-
-Cada um reimplementa um equivalente AWS e forma um par de comparação. Detalhes: README de cada serviço e [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (mapa canônico).
-
-| Serviço | Equivalente AWS | Protocolo | Storage | Status |
+| Serviço | Faz | Protocolo | Storage | Porta local |
 |---|---|---|---|---|
-| [identity](services/identity-service) | GameKit Identity (Cognito) | REST | Postgres | ✅ |
-| [game-registry](services/game-registry) | (sem equivalente 1:1 — fonte de jogos multi-tenant, ADR-0017) | REST | Postgres | ✅ |
-| [achievements](services/achievements-service) | GameKit Achievements | REST + consumer SQS | Postgres | ✅ |
-| [player-data](services/player-data-service) | GameKit User Gameplay Data | REST | Postgres (JSONB) | ✅ |
-| [cloud-save](services/cloud-save-service) | GameKit Game State Saving | REST | MinIO / S3 | ✅ |
-| [leaderboard](services/leaderboard-service) | ref. DynamoDB/Redis | REST + consumer SQS | Redis (sorted set) | ✅ |
-| [matchmaking](services/matchmaking-service) | GameLift FlexMatch | gRPC | memória | ✅ |
-| [session](services/session-service) | GameLift (orquestração) | gRPC | memória | ✅ |
-| [analytics](services/analytics-service) | Game Analytics Pipeline | consumer SQS | Postgres | ✅ |
-| [admin-bff](services/admin-bff) + [admin-ui](services/admin-ui) | painel de operação | REST + React | — | ✅ |
+| [identity](services/identity-service) | contas, login anônimo, JWT EdDSA + JWKS | REST | Postgres | 8081 |
+| [game-registry](services/game-registry) | jogos, modos (perfil multiplayer), fleet, presença | REST | Postgres | 8090 |
+| [matchmaking](services/matchmaking-service) | fila, invasão, quadro de sinais | gRPC (streaming) | memória | 50051 (+8086 métricas) |
+| [session](services/session-service) | sessões/mundos, alocação Agones, connect token, eventos | gRPC + REST admin | memória (ativas) + Postgres (histórico) | 50052 · 8087 |
+| [achievements](services/achievements-service) | catálogo + motor de regras data-driven | REST + consumer SQS | Postgres | 8082 |
+| [leaderboard](services/leaderboard-service) | boards × janelas (all/daily/weekly/monthly) | REST + consumer SQS | Redis | 8085 |
+| [analytics](services/analytics-service) | rollups por jogo/modo/papel | REST admin + consumer SQS | Postgres | 8091 |
+| [player-data](services/player-data-service) | dados JSON por jogador | REST | Postgres | 8083 |
+| [cloud-save](services/cloud-save-service) | blob de save por jogador | REST | MinIO/S3 | 8084 |
+| [admin-bff](services/admin-bff) + [admin-ui](services/admin-ui) | console de operação | REST + React | — | 8088 · **8089** |
 
-Fan-out durável do resultado via **SNS→SQS** (ADR-0020): o session publica no tópico `match-results`; achievements/leaderboard/analytics são consumidores idempotentes. **Polyglot persistence** proposital (ADR-0015): cada domínio usa o storage que seu padrão pede.
+### Arquétipos
 
-## Stack
+| Arquétipo | Forma | Jogo real |
+|---|---|---|
+| `host_world_dropin` | mundo do host; co-op/invasor entram no meio; resultado por evento | **Folclore Souls** |
+| `queue_arena` | partida simétrica por fila; win/loss/draw + stats | Packet Arena (protótipo) |
+| `battle_royale`, `coop_mission` | colocação ordinal / desfecho coletivo | nenhum ainda — contrato pronto, sem jogo |
 
-Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Redis · Terraform + LocalStack · AWS (compute por serviço) · Prometheus + Grafana + OpenTelemetry (Tempo) · GitHub Actions
+Contratos com o data plane: [`docs/game-models/`](docs/game-models/README.md).
 
-## Metodologia
+## Rodando
 
-**Spec-Driven Development (SDD)** em dois níveis por tamanho da fatia — completo (`spec → plan → tasks → código`) para fatias substanciais, enxuto (spec curta) para aditivas. A spec é a fonte de verdade. Ver [`docs/sdd/SDD-GUIDE.md`](docs/sdd/SDD-GUIDE.md).
+Requisitos: Go 1.26 (o `go.mod` pede 1.26; com Go mais antigo use `GOTOOLCHAIN=auto`), Docker, Node 20 (só para
+o admin-ui fora do compose).
+
+```bash
+# stack completa: serviços + Postgres/Redis/MinIO/LocalStack + Prometheus/Grafana/Tempo
+docker compose -f infra/docker/docker-compose.yml up --build
+
+# console:     http://localhost:8089
+# Grafana:     http://localhost:3000   (pasta game-backend)
+# Prometheus:  http://localhost:9090
+
+# criar uma conta e logar (identity)
+curl -s -XPOST localhost:8081/accounts  -d '{"handle":"vitor","password":"supersecret"}'
+curl -s -XPOST localhost:8081/sessions  -d '{"handle":"vitor","password":"supersecret"}'
+
+# testes (unitários, com race detector)
+go test ./... -race -cover
+# testes de integração (testcontainers — precisa de Docker)
+go test -tags=integration ./...
+# lint (mesma versão do CI)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 && golangci-lint run ./...
+```
+
+Mapa de portas e dashboards: [`infra/docker/README.md`](infra/docker/README.md). Coleções `.http` por serviço em
+`services/<svc>/api/`; matchmaking e session são gRPC com reflection ligada (`grpcurl -plaintext localhost:50052 list`).
+
+## Estado (2026-09)
+
+- Control plane completo para os 4 arquétipos; `host_world_dropin` exercitado de ponta a ponta pelo Folclore Souls
+  (k3d → Raspberry Pi 5) e `queue_arena` pelo protótipo Packet Arena.
+- **Não pronto para exposição pública**: o gRPC do session ainda não autentica jogador nem game server e o console
+  não tem login — ver a [revisão 2026-09](docs/review/REVISAO-2026-09.md) (riscos R1/R5, decisões D1/D6).
+- Deploy em AWS e a medição de custo da tese (ADR-0008) ainda não começaram; só a mensageria tem Terraform (LocalStack).
 
 ## Documentação
 
 | Documento | Conteúdo |
 |---|---|
-| [docs/PRODUCT-OVERVIEW.md](docs/PRODUCT-OVERVIEW.md) | **O que o sistema FAZ** — capacidades e fluxos, visão de produto (não de arquitetura) |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **Panorama canônico** da arquitetura (control/data plane, serviços, hexagonal, infra) |
-| [docs/game-models/README.md](docs/game-models/README.md) | Taxonomia de arquétipos + estado de implementação por fatia |
-| [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md) | Control plane + data planes por arquétipo (nomenclatura de repos) |
-| [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | Aprendizados de Go (exemplos comentados) |
-| [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) | Handoff — estado atual e backlog priorizado |
-| [docs/adr/README.md](docs/adr/README.md) | Índice de ADRs (0001–0029) |
-| [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) · [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Metodologia SDD · branches/commits |
-| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) · [infra/docker/README.md](infra/docker/README.md) | Observabilidade local · stack local (portas, dashboards) |
-| [docs/ROADMAP.md](docs/ROADMAP.md) · [docs/FEATURE-MAP.md](docs/FEATURE-MAP.md) | Fases de estudo/FinOps · índice de features por serviço |
-
-## Status
-
-**Trilha de serviços 100% construída** (10 serviços Go + painel admin), rodando localmente via Docker Compose com observabilidade completa (Prometheus + Grafana + Tempo). **4 arquétipos de multiplayer completos** no control plane (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) — cross-repo, `queue_arena` e `host_world_dropin` já têm data plane Unity rodando de verdade, `battle_royale`/`coop_mission` ainda sem repo Unity. Decisões em **ADRs 0001–0029**. Deploy em AWS (Terraform) fica para o fim — a prioridade é validar o máximo localmente.
-
-## Comandos
-
-```bash
-# Ambiente local completo (todos os serviços + observabilidade)
-docker compose -f infra/docker/docker-compose.yml up --build
-#   ver infra/docker/README.md para o mapa de portas e dashboards
-
-# Um serviço isolado (ex: identity)
-cd services/identity-service && go run ./cmd/server/
-
-# Testes unitários (com race detector)
-go test ./... -race -cover
-
-# Testes de integração (testcontainers; requer Docker)
-go test ./... -tags=integration
-
-# Teste manual: coleção .http por serviço; matchmaking/session são gRPC (grpcurl / cliente de teste)
-```
+| [docs/review/REVISAO-2026-09.md](docs/review/REVISAO-2026-09.md) | revisão de produto e de código: estado verificado, cortes, lacunas, roadmap |
+| [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) | handoff: estado atual e próximos passos |
+| [docs/PRODUCT-OVERVIEW.md](docs/PRODUCT-OVERVIEW.md) | o que o sistema faz, na visão de quem opera um jogo |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | panorama técnico |
+| [docs/game-models/](docs/game-models/README.md) | arquétipos, contratos com o data plane, follow-ups |
+| [docs/adr/](docs/adr/README.md) · [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) · [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | decisões · metodologia · branches e commits |
+| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) · [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | observabilidade · aprendizados de Go |

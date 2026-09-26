@@ -1,7 +1,7 @@
 # Spec: 028-session-closed-daily-passthrough
 
 **Serviço:** admin-bff
-**Status:** Proposed
+**Status:** Done (implementada e mergeada; status corrigido na revisão 2026-09)
 **Data:** 2026-07-13
 **Parte de:** analytics-service/015-session-closed-daily (fatia pequena/
 aditiva — passthrough, sem decisão técnica nova).

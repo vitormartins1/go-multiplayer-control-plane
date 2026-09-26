@@ -55,7 +55,7 @@
 
 **Gate:** não implementar antes de existir um jogo/validação que precise de dois modos com progressão separada.
 
-> **Evidência para o gate (2026-07-08):** o Capoeira Souls tem **7 modos cadastrados** (6 `host_world_dropin` + 1 `queue_arena`; catálogo em `unity-host-world-dropin-data-plane/docs/MODES.md`) e o analytics local populado com 96 participation events dos 6 modos — **todos colapsando num único rollup `(gameId, role, event)`**: não dá para comparar modos no console (qual retém phantoms? qual está deserto?). A dimensão `modeId` nos rollups do analytics é o primeiro pedaço do M2 com demanda concreta; combina com a dimensão `outcome` (follow-up #5 do arquétipo) para taxa de sucesso de invasão por modo.
+> **Evidência para o gate (2026-07-08):** o Folclore Souls (então Capoeira Souls) tem **7 modos cadastrados** (6 `host_world_dropin` + 1 `queue_arena`; catálogo em `unity-host-world-dropin-data-plane/docs/MODES.md`) e o analytics local populado com 96 participation events dos 6 modos — **todos colapsando num único rollup `(gameId, role, event)`**: não dá para comparar modos no console (qual retém phantoms? qual está deserto?). A dimensão `modeId` nos rollups do analytics é o primeiro pedaço do M2 com demanda concreta; combina com a dimensão `outcome` (follow-up #5 do arquétipo) para taxa de sucesso de invasão por modo.
 
 ---
 

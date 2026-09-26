@@ -4,7 +4,7 @@
 
 ## Por que este documento existe
 
-O backend (matchmaking, session, game-registry, fan-out) precisa dar suporte a **vários tipos de jogo multiplayer** — cooperativo, competitivo, por times, battle royale, turnos, etc. Hoje ele assume **um único arquétipo** (N jogadores independentes, cada um com placar, alguém vence por booleano — ver "Estado atual do backend"). O jogo-exemplo do data plane (Unity) acabou moldando os contratos, e queremos genericidade **com qualidade**, não por acidente.
+O backend (matchmaking, session, game-registry, fan-out) precisa dar suporte a **vários tipos de jogo multiplayer** — cooperativo, competitivo, por times, battle royale, turnos, etc. Até a ADR-0023 ele assumia **um único arquétipo** (N jogadores independentes, cada um com placar, alguém vence por booleano — ver "Estado atual do backend"). O jogo-exemplo do data plane (Unity) acabou moldando os contratos, e queremos genericidade **com qualidade**, não por acidente.
 
 A abordagem é **engenharia reversa de jogos reais**: para cada jogo que nos interessa, dissecamos como funcionam sessão, matchmaking, condição de término e resultado — e daí extraímos o que o backend precisa **modelar, mudar ou generalizar**. Este documento é o input de design; ADRs e specs são o output.
 
@@ -53,7 +53,7 @@ Toda ficha classifica o jogo por estes eixos. São a "linguagem" que torna jogos
 
 ## Baseline histórico do backend (ponto de partida, pré-ADR-0023)
 
-> **Nota:** esta seção descreve o **arquétipo implícito único** de onde partimos — antes do perfil por arquétipo (ADR-0023). Já foi generalizado: hoje há `queue_arena` e `host_world_dropin` completos (ver "Estado da implementação" abaixo). Mantido como registro do gap original.
+> **Nota:** esta seção descreve o **arquétipo implícito único** de onde partimos — antes do perfil por arquétipo (ADR-0023). Já foi generalizado: hoje os 4 arquétipos (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) estão completos no control plane (ver "Estado da implementação" abaixo). Mantido como registro do gap original.
 
 O que os serviços modelavam no baseline — o ponto de partida a ser generalizado. (Refs: `session-service/specs/001,002`, `matchmaking-service/specs/001,003`, `game-registry/specs/001`.)
 
@@ -90,7 +90,7 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 |---|---|---|---|---|
 | Modelo de resultado além de `Won bool`/`Score` | baseline, fichas 01-04 | session, achievements, leaderboard | resultado como **outcome** rico: WIN/LOSS/DRAW (02), **colocação ordinal** (03), **coletivo por sessão** (04), **por evento/papel** (01) — por jogador, time **ou sessão** | ✅ **completo** — os 4 modelos do ADR-0023 na main com sinks: `win_loss_draw` (session `009`), `participation_event` (H2), `placement` (BR2+BR3), `collective` (C2 `session/016` + C3 sinks + C4 console) |
 | Jogo descreve sua **forma** de multiplayer (**perfil/arquétipo**) | baseline, ficha 01 | game-registry | jogo declara um **arquétipo de multiplayer** (`queue_arena`, `host_world_dropin`, …) + parâmetros; demais serviços leem e se pré-configuram | ✅ **ADR-0023** (Accepted) |
-| Matchmaking com **times** e composição | baseline, fichas 02/03 | matchmaking | formar lados (NvN), squads e **lobby grande** (BR), não só N tickets FIFO | 🟡 **NvN na main** (specs `matchmaking/005`+`session/010`, atribuição posicional); squads/lobby grande (BR) e skill/MMR seguem abertos |
+| Matchmaking com **times** e composição | baseline, fichas 02/03 | matchmaking | formar lados (NvN), squads e **lobby grande** (BR), não só N tickets FIFO | 🟡 **NvN na main** (specs `matchmaking/005`+`session/010`, atribuição posicional); squads e lobby grande (BR) feitos em `matchmaking/008`; skill/MMR segue aberto |
 | Condição de vitória **declarada no perfil** (não hardcoded) | ficha 02 | game-registry, session | `first_to_score` / `highest_at_time` / `objective` / `elimination` no cadastro; hoje é `first-to-5` no código | 🟡 **declarada** no perfil (`queue_arena`, spec 006); o **consumo pelo data plane** vem via **session manifest** (ADR-0024, fatia M1) |
 | **Modo de partida** (preset) + **estrutura de rounds** no `queue_arena` | ficha 05 | game-registry, session | `mode` (TDM/FFA/Domination/S&D/CTF) = preset de {social, vitória, granularidade}; `matchStructure = single \| best_of_rounds(N)` | ✅ **absorvido pelo ADR-0024** — modos = **perfis nomeados** (TDM e S&D viram dois perfis `queue_arena` com params diferentes); `matchStructure`/rounds já são params declarados (spec 006) |
 | **Stats estruturadas** no resultado (não só `score int64`) | ficha 05 | session, leaderboard, achievements | resultado carrega mapa de métricas por jogador (kills, assists, objetivos, stealth) → leaderboards ricos (K/D, MVP) | ✅ **feito** — `stats` no outcome (session `009`), boards por métrica (leaderboard `003`/`004`), conquistas por stat (achievements `008`) |
@@ -111,7 +111,7 @@ Fila de mudanças candidatas no backend, alimentada pelas fichas. Só viram ADR/
 
 > **`host_world_dropin`:** as evoluções adiadas (senha, pools, Redis, `eventId`, `outcome` no analytics, alocação sob demanda, …) estão consolidadas em [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md) — o backlog para retomar após validar no data plane.
 
-O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar → formar → produzir resultado → colher). Feito e planejado:
+O arquétipo **`queue_arena`** foi implementado ponta a ponta (declarar → formar → produzir resultado → colher). Feito e planejado:
 
 | Fatia | Serviço (spec) | O que faz | Status |
 |---|---|---|---|
@@ -127,7 +127,7 @@ O arquétipo **`queue_arena`** está sendo implementado ponta a ponta (declarar 
 | **Conquistas por `stats` (A1)** | achievements (`008`) + admin-bff/admin-ui (`018`) | critério por métrica: `cumulative` (soma entre partidas) / `per_match` (melhor de uma); consumer lê `stats`; editor no console. `teamId` fica como follow-up | ✅ **main** |
 | **Leaderboard cumulativo (A2)** | leaderboard (`004`) + admin-ui (`019`) | boards `wins` + `<stat>_total` via `ZINCRBY`, idempotentes por matchID (script Lua atômico); seletor no console | ✅ **main** |
 | **Conquistas por `teamId`** | achievements | conquistas por time / "vencer como time X" (o outcome já carrega `teamId`) | ⬜ planejado |
-| **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ⬜ planejado |
+| **Leaderboard acumulativo / por outcome** | leaderboard | ranking de vitórias (ZINCRBY), total de kills; hoje é só highscore por partida | ✅ coberto pelo leaderboard cumulativo (A2, linha acima) |
 | Usar `winCondition`/`mode`/`rounds` do perfil | session/data plane | o gameplay lê a condição de vitória declarada (hoje `first-to-5` fica no data plane) | ⬜ planejado |
 | **Arquétipo `host_world_dropin` — declaração** | game-registry + admin-ui | `HostWorldDropInParams` (roles, slots, matchmaking criteria, invasion); form no painel com Fieldsets + tooltips; select de arquétipo agora real; refactor completo de `MultiplayerSettings` | ✅ **main** (commit `6fbb3cf`) |
 | **`host_world_dropin` — sessão host-cêntrica (H0)** | session (`011`) | mundo persistente sem match: `OpenWorld`/`JoinWorld`/`LeaveWorld`/`CloseWorld`; slots por papel (coop/invasor) do perfil; connect token com claim `role`; rechaveação por `sessionID` sem regredir queue_arena; GO-LEARNINGS #27 | ✅ **main** |

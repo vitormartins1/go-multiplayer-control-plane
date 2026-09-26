@@ -19,6 +19,12 @@ docker compose -f infra/docker/docker-compose.yml up -d identity-service identit
 | cloud-save-service | 8084 | REST |
 | leaderboard-service | 8085 | REST |
 | matchmaking-service | 50051 (gRPC), 8086 (HTTP métricas) | gRPC |
+| session-service | 50052 (gRPC), 8087 (HTTP: JWKS, `/admin`, métricas) | gRPC + REST |
+| admin-bff | 8088 | REST |
+| admin-ui (console) | 8089 | HTTP (nginx) |
+| game-registry | 8090 | REST |
+| analytics-service | 8091 | REST (`/admin`) |
+| achievements-consumer / leaderboard-consumer | — | workers SQS (sem porta publicada) |
 
 ### Storage
 | Recurso | Porta | Credenciais |
@@ -26,6 +32,10 @@ docker compose -f infra/docker/docker-compose.yml up -d identity-service identit
 | identity-postgres | 5432 | dev / dev (DB `identity`) |
 | achievements-postgres | 5433 | dev / dev (DB `achievements`) |
 | player-data-postgres | 5434 | dev / dev (DB `player_data`) |
+| game-registry-postgres | 5435 | dev / dev (DB `game_registry`) |
+| analytics-postgres | 5436 | dev / dev (DB `analytics`) |
+| session-postgres | 5437 | dev / dev (DB `session`, histórico de sessões) |
+| localstack (SNS/SQS) | 4566 | — (recursos criados pelo `messaging-provisioner`) |
 | redis | 6379 | — |
 | minio | 9000 (API), 9001 (console) | minioadmin / minioadmin |
 
@@ -35,7 +45,7 @@ docker compose -f infra/docker/docker-compose.yml up -d identity-service identit
 | Grafana | 3000 | login anônimo (admin); dashboards provisionados |
 | Prometheus | 9090 | Status → Targets para ver os scrapes |
 | Tempo | 3200 (query), 4317 (OTLP gRPC) | traces |
-| postgres-exporters | 9187 / 9188 / 9189 | identity / achievements / player-data |
+| postgres-exporters | 9187 / 9188 / 9189 / 9190 / 9191 / 9192 | identity / achievements / player-data / game-registry / analytics / session |
 | redis-exporter | 9121 | leaderboard |
 | (MinIO métricas) | 9000 `/minio/v2/metrics/cluster` | nativo, sem exporter |
 
@@ -55,6 +65,8 @@ Ver um trace em waterfall: **Explore → Tempo** → TraceQL, ex. `{ resource.se
 Conceitos e detalhes: [docs/OBSERVABILITY.md](../../docs/OBSERVABILITY.md).
 
 ## Notas
+
+- Todos os serviços de longa duração têm `restart: unless-stopped` (lição do incidente de 2026-08-19); os `/admin` exigem o header `X-Internal-Key: dev-internal-key` (ADR-0018).
 
 - Os bancos recriam o schema na primeira subida (migrations via `docker-entrypoint-initdb.d`); para reaplicar migrations novas, recrie o volume: `docker compose up -d --force-recreate --renew-anon-volumes <svc>-postgres`.
 - Após editar provisioning do Grafana (datasources/dashboards), `docker compose restart grafana` (ele só relê no boot).

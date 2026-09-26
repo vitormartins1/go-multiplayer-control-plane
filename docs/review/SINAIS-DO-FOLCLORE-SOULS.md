@@ -5,6 +5,10 @@
 > (`docs/prompts/PROMPT-REVISAO-PRODUTO.md`). Cada item diz a fonte no repo do jogo; trate como relato,
 > e confirme no código DESTE repo antes de agir.
 
+> **Conferido no código em 2026-09-26** (`REVISAO-2026-09.md` §1.2 e §3.1): o allocator fleet-aware (ADR-0026) **já
+> está implementado** desde 2026-07-10 (o `AGONES_FLEET` fixo não existe mais) e os coops já aparecem em `players[]`.
+> Os demais pedidos seguem abertos; bearer no `OpenWorld` virou a decisão D1 e a identidade do boss, a D3.
+
 ## O jogo, em uma frase
 
 **Folclore Souls** (nome legado *Capoeira Souls*, rename técnico feito em 2026-08-19 no jogo e 2026-08-24 aqui;
@@ -29,7 +33,7 @@ mundo, co-op entra por sinais, invasor entra pelo `Invade`, o servidor reporta *
 ## O que o jogo já pediu ou vai pedir ao backend (fonte: `docs/backlog/netcode-e-backend.md` do jogo)
 
 Contrato e sessão:
-- **Allocator fleet-aware por `game_id`** — ADR-0026 (Proposed) DESTE repo, não implementado. Sem isso, dois jogos
+- **Allocator fleet-aware por `game_id`** — ADR-0026 DESTE repo. *(Revisão 2026-09: já implementado — este item estava desatualizado.)* Sem isso, dois jogos
   no mesmo cluster Agones alocam da fleet errada (hoje `AGONES_FLEET` fixo). Pré-requisito da fase de deploy real.
 - **Alocação sob demanda** (follow-up #10 do arquétipo): hoje aloca no `OpenWorld`; o original (Dark Souls) é P2P e
   o mundo "existe de graça" — com servidor dedicado, o custo pede alocar só quando o mundo abre para multiplayer.
@@ -37,7 +41,7 @@ Contrato e sessão:
   o backend não exige o bearer (`SessionRpcClient.cs`, `JwtPayload.cs` do jogo).
 - **Reconexão do host e de phantom** — nunca previstas no contrato.
 - **Coops no `players[]` da sessão** — achado ao vivo (2026-07-12): o invasor aparecia na sala do admin, os coops
-  via `SummonSign` não (conferir se já foi resolvido pela `session/025`).
+  via `SummonSign` não (conferir se já foi resolvido pela `session/025`). *(Revisão 2026-09: resolvido — follow-up #15 e `session/025`.)*
 - **Identidade do boss no `BOSS_DEFEATED`** — hoje o evento é anônimo; o jogo tem vários bosses e quer
   achievements/analytics por boss (o lore do Boitatá já pede isso).
 - **Fila de espera de invasão** (sem retry automático hoje) e **pools por região** (`areaPools`, follow-up #2).

@@ -12,10 +12,10 @@ O loop MVP (`login → find match → aloca server + connect token → partida �
 | achievements | conquistas secretas / recompensas associadas |
 | player-data | controle de concorrência (optimistic locking); quota por jogador; bulk get/set |
 | cloud-save | múltiplos slots; compressão / sync delta |
-| leaderboard | múltiplos boards por modo/temporada; **ranking de invasões/co-ops** (host_world_dropin, cauda); anti-cheat de score; seasons nomeadas (adiado, precisa de ADR sobre onde vive a config) |
-| analytics | telemetria genérica (`POST /events`); sessionization / funis / retenção; série temporal + stats brutos pros arquétipos além de `queue_arena` (Fase 2 do dashboard por jogo, gated por evidência) |
+| leaderboard | boards por modo/temporada (boards por métrica já existem — spec 003); **ranking de invasões/co-ops** (host_world_dropin, cauda); anti-cheat de score; seasons nomeadas (adiado, precisa de ADR sobre onde vive a config) |
+| analytics | telemetria genérica (`POST /events`); sessionization / funis / retenção; dimensão "boss" nas participações (se o Folclore pedir — ver decisão D3 da revisão 2026-09) |
 | matchmaking | agrupamento por latência/região; relaxamento progressivo; party/grupos, backfill; **pools por região** (host_world_dropin, follow-up) |
-| session | alocação de server **sob demanda** (host_world_dropin, follow-up); reconnection / spectator / migração de sessão |
+| session | **autenticação do jogador e do game server no gRPC** (decisão D1 da revisão 2026-09); alocação de server **sob demanda** (host_world_dropin, follow-up); persistir mundos abertos; reconnection / spectator / migração de sessão |
 | game-registry | purge assíncrono do soft delete (ADR-0025, Opção C — gated por evidência) |
 
 ## Backlog por arquétipo (ADR-0023)

@@ -6,7 +6,7 @@
 ## O que é este projeto
 
 Monorepo de microsserviços em Go para backend de jogos multiplayer. Tese: reimplementar serviços de jogo da AWS (GameKit/GameLift) em Go sobre compute barato e comparar custo/performance (ADR-0008). O realtime de gameplay NÃO é feito em Go — roda no Unity Dedicated Server (data plane, repo separado; ADR-0010).
-Cada serviço em `services/` é um binário/imagem Docker independente, mas todos compartilham o **módulo Go único** da raiz (ver ADR-0001). Dockerfile próprio e infra Terraform própria por serviço.
+Cada serviço em `services/` é um binário/imagem Docker independente, mas todos compartilham o **módulo Go único** da raiz (ver ADR-0001). Dockerfile próprio por serviço; Terraform por serviço é o plano (hoje só existe o da mensageria local).
 
 ## Metodologia: Spec-Driven Development
 

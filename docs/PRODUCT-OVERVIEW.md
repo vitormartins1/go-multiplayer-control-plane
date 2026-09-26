@@ -17,7 +17,7 @@ Um jogo se cadastra e declara um ou mais **modos nomeados** (ex.: "Ranked", "Cas
 | Arquétipo | Forma | Exemplo real |
 |---|---|---|
 | `queue_arena` | partida simétrica FFA/NvN, fila + resultado terminal (win/loss/draw) | Packet Arena |
-| `host_world_dropin` | mundo persistente de um host; co-op/invasores entram e saem no meio (join-in-progress); resultado por evento, não placar final | Capoeira Souls |
+| `host_world_dropin` | mundo persistente de um host; co-op/invasores entram e saem no meio (join-in-progress); resultado por evento, não placar final | Folclore Souls |
 | `battle_royale` | colocação ordinal (1º..Nº) + tempo de sobrevivência | (contrato pronto, sem jogo real ainda) |
 | `coop_mission` | desfecho coletivo da missão (sucesso/fracasso para o time todo) | (contrato pronto, sem jogo real ainda) |
 
@@ -66,7 +66,7 @@ Um estúdio real não quer abrir o console da AWS, um cliente de banco e o Grafa
 
 ### 9. Observabilidade desde o primeiro serviço
 
-Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distribuído (Tempo/OpenTelemetry) atravessando até a chamada do Dedicated Server Unity, dashboards Grafana por domínio (serviço, Postgres, Redis, Agones/Fleet). Não é um adendo: é o instrumento que valida a própria tese do projeto (custo/performance vs. AWS gerenciado).
+Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distribuído (Tempo/OpenTelemetry) cobrindo também as chamadas que o Dedicated Server Unity faz ao control plane (o trace *dentro* do servidor Unity ainda é futuro — ver `OBSERVABILITY.md`), dashboards Grafana por domínio (serviço, Postgres, Redis, Agones/Fleet). Não é um adendo: é o instrumento que valida a própria tese do projeto (custo/performance vs. AWS gerenciado).
 
 ![Aba Infrastructure — cada serviço com o equivalente AWS correspondente, materializando a tese do ADR-0008](images/infrastructure.png)
 

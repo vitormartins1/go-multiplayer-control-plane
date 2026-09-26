@@ -22,6 +22,7 @@ flowchart TB
 
     subgraph CP["Control plane — Go (este repo)"]
         ID["identity (auth)"]
+        GR["game-registry<br/>jogos · modos · fleet"]
         ACH["achievements"]
         PD["player-data"]
         CS["cloud-save"]
@@ -30,6 +31,8 @@ flowchart TB
         MM["matchmaking"]
         SS["session-service<br/>sessão · registry · connect token"]
         MM --> SS
+        MM --> GR
+        SS --> GR
     end
 
     subgraph DP["Data plane — Unity Dedicated Server (repo separado)"]
@@ -65,7 +68,7 @@ flowchart LR
 
 ### Repos: 1 control plane + N data planes (por arquétipo)
 
-Client e Dedicated Server de um jogo são **o mesmo projeto Unity** (dois build targets: client gráfico, server headless) — compartilham o código de jogo. Como o backend virou agnóstico de arquétipo (ADR-0023), a topologia é **um control plane, N data planes**: cada arquétipo tem um data plane Unity de referência, em repo próprio, para validar aquele tipo de jogo isoladamente. Contrato via `.proto` + docs de contrato por arquétipo. Nomenclatura decidida (`go-multiplayer-control-plane` + `unity-<archetype>-data-plane`, rename pendente) e mapa de repos em **`docs/REPO-TOPOLOGY.md`**. (ADR-0010, ADR-0011)
+Client e Dedicated Server de um jogo são **o mesmo projeto Unity** (dois build targets: client gráfico, server headless) — compartilham o código de jogo. Como o backend virou agnóstico de arquétipo (ADR-0023), a topologia é **um control plane, N data planes**: cada arquétipo tem um data plane Unity de referência, em repo próprio, para validar aquele tipo de jogo isoladamente. Contrato via `.proto` + docs de contrato por arquétipo. Nomenclatura decidida (`go-multiplayer-control-plane` + `unity-<archetype>-data-plane`, rename concluído) e mapa de repos em **`docs/REPO-TOPOLOGY.md`**. (ADR-0010, ADR-0011)
 
 ---
 
@@ -76,6 +79,7 @@ Cada serviço é a reimplementação de um equivalente AWS e forma um **par de c
 | # | Serviço | Equivalente AWS | Papel | Estado |
 |---|---|---|---|---|
 | 1 | identity-service | GameKit Identity & Auth | auth/JWT próprio; **fundação** dos demais | ✅ |
+| — | game-registry | (sem equivalente 1:1) | jogos multi-tenant, modos/perfil de multiplayer, fleet por jogo, presença (ADR-0017/0019/0023/0024/0026) | ✅ |
 | 2 | achievements-service | GameKit Achievements | desbloqueio por evento/stat, progresso; consumer SQS | ✅ |
 | 3 | player-data-service | GameKit User Gameplay Data | inventário, stats, cross-play | ✅ |
 | 4 | cloud-save-service | GameKit Game State Saving | save versionado na nuvem | ✅ |
@@ -140,7 +144,7 @@ services/<nome>-service/
 
 ## 5. Infraestrutura e compute
 
-- **Terraform** como IaC; **LocalStack** no local, **AWS** em prod; state independente por serviço. (ADR-0004)
+- **Terraform** como IaC; **LocalStack** no local, **AWS** em prod. Hoje só existe `infra/terraform/environments/local/messaging` (SNS/SQS); Terraform por serviço e o ambiente de prod ainda não foram escritos. (ADR-0004)
 - **Compute por serviço, decidido na hora de construir** — menu Lambda/Fargate/ECS-EC2/EC2/EKS. CRUD stateless → Lambda; worker always-on → ECS/EC2; streaming/stateful → ECS/EKS; game server realtime → EC2/ECS-EC2/Agones (nunca Fargate). A escolha de banco (gerenciado vs auto-provisionado) segue a mesma lógica diferida. (ADR-0005)
 
 ---
@@ -164,7 +168,7 @@ sequenceDiagram
     SS->>GS: aloca / escolhe game server
     SS-->>C: endpoint + connect token (claim team_id)
     C->>GS: conecta (token)
-    GS->>ID: valida connect token (offline, JWKS)
+    GS->>SS: valida connect token (offline, JWKS do session-service)
     Note over GS: partida roda (realtime)
     GS->>SS: ReportResult (win_loss_draw)
     SS->>BE: fan-out (SNS→SQS): leaderboard, achievements, analytics
@@ -176,12 +180,17 @@ sequenceDiagram
 
 Quando o matchmaking fecha uma partida, o `session-service` precisa achar um Dedicated Server livre e saudável para hospedá-la — a reimplementação do *game session placement* do GameLift. Quatro responsabilidades: **registry** (quais servers existem e seu estado), **health** (heartbeat detecta server morto), **allocation** (reivindicar um livre sem corrida) e **reclaim** (devolver ao pool no fim).
 
+> **Nota (2026-09):** esta seção descreve o desenho original, de registry próprio com heartbeat. Na prática o
+> registry, a saúde e o claim atômico ficaram com o **Agones** (ADR-0012): o session-service pede uma
+> `GameServerAllocation` na fleet do jogo (ADR-0026), reconcilia sessões órfãs contra o cluster (ADR-0022) e usa um
+> allocator `static` em dev sem cluster. Os diagramas abaixo continuam válidos como modelo mental.
+
 Ciclo de vida de um game server:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Ready: boot + registra
-    Ready --> Allocated: AllocateSession (claim atômico)
+    Ready --> Allocated: CreateSession/OpenWorld (claim atômico)
     Allocated --> Shutdown: partida termina
     Shutdown --> Ready: reinicia limpo
     Ready --> Down: heartbeat perdido
@@ -201,7 +210,7 @@ sequenceDiagram
     loop a cada N s
         GS->>SS: heartbeat
     end
-    MM->>SS: AllocateSession(matchId, players, região)
+    MM->>SS: CreateSession(matchId, players, game_id)
     SS->>SS: claim atômico Ready -> Allocated
     SS->>GS: hospede matchId (jogadores, chave do token)
     SS-->>C: serverAddress + port + connect token
