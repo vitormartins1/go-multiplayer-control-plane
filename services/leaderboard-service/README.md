@@ -34,7 +34,7 @@ Query params comuns: `?board=<nome>` (default `score`; regex `^[a-z][a-z0-9_]*$`
 | member | `player_id` (`sub` do JWT, ou o `playerID` do path/envelope nas rotas admin/fan-out) |
 | score | pontuação (maior = melhor) |
 | operações | `ZADD GT` (highscore, `Submit`), `ZADD` sem GT (`ForceScore`, admin override), `ZREVRANGE WITHSCORES` (top/around), `ZREVRANK` (posição), `ZINCRBY` (boards cumulativos: `wins`, `top_n_finishes`, `missions_completed`, `<stat>_total`) |
-| idempotência do cumulativo | `SADD` num SET `leaderboard:processed:{gameId}` por `matchId`, atômico com os `ZINCRBY` via script Lua — reprocessar a mesma partida (SQS at-least-once) é no-op |
+| idempotência do cumulativo | uma key `leaderboard:processed:{gameId}:{matchId}` com `SET NX EX` de 30 dias (spec 008), atômica com os `ZINCRBY` via script Lua — reprocessar a mesma partida (SQS at-least-once) é no-op; o SET legado `leaderboard:processed:{gameId}` só é consultado |
 | TTL das janelas | daily 3d, weekly 15d, monthly 45d (sliding, renovado a cada write); all-time sem TTL |
 
 Todo **write** de highscore (`Submit`/`ForceScore`) espalha nas 4 janelas simultaneamente (pipeline Redis); toda **leitura** aponta para a janela pedida (`?window=`, default `alltime`). Compat total com o contrato pré-spec-007 quando `board`/`window` são omitidos.

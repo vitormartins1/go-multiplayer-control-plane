@@ -84,25 +84,41 @@ func windowTTL(window string) time.Duration {
 	}
 }
 
-// processedKey é o SET de matchIDs já aplicados nos boards cumulativos do jogo
-// (guarda de idempotência do ZINCRBY, ADR-0023 A2). Única para todas as
-// janelas: reprocessar é no-op em todas de uma vez.
-func (s *RedisStore) processedKey(gameID string) string {
+// processedTTL é a janela de idempotência dos boards cumulativos (spec 008):
+// cobre a retenção máxima da fila (14 dias na AWS) + a da DLQ (14) com folga.
+const processedTTL = 30 * 24 * time.Hour
+
+// processedKey marca UMA partida já aplicada nos boards cumulativos do jogo
+// (guarda de idempotência do ZINCRBY, ADR-0023 A2), com TTL de processedTTL
+// (spec 008). Única para todas as janelas: reprocessar é no-op em todas.
+func (s *RedisStore) processedKey(gameID, matchID string) string {
+	return s.prefix + ":processed:" + gameID + ":" + matchID
+}
+
+// legacyProcessedKey é o SET único de matchIDs usado até a spec 008. Só é
+// consultado (nunca mais escrito) para uma reentrega de partida aplicada
+// antes do deploy continuar detectada; pode ser apagado 30 dias depois.
+func (s *RedisStore) legacyProcessedKey(gameID string) string {
 	return s.prefix + ":processed:" + gameID
 }
 
 // applyCumulativeScript aplica os ZINCRBY de uma partida sob uma guarda de
 // idempotência, atômico (o Redis executa o script inteiro sem interleaving).
-// KEYS[1] = SET processed; ARGV[1] = matchID; ARGV[2..] = quádruplas (boardKey,
-// member, delta, ttlSeconds — 0 = sem EXPIRE). Se o matchID já estava no SET
-// (SADD devolve 0) -> no-op e retorna 1 (dup); senão soma cada parcela (e
-// renova o TTL das keys periódicas) e retorna 0. É o análogo Redis da tx
-// idempotente do achievements (Postgres): SADD+ZINCRBY num só passo indivisível.
+// KEYS[1] = key da partida; KEYS[2] = SET legado; ARGV[1] = matchID;
+// ARGV[2] = TTL da guarda em segundos; ARGV[3..] = quádruplas (boardKey,
+// member, delta, ttlSeconds — 0 = sem EXPIRE). Se a partida já foi aplicada
+// (key presente ou matchID no SET legado) -> no-op e retorna 1 (dup); senão
+// grava a key com TTL, soma cada parcela (e renova o TTL das keys periódicas)
+// e retorna 0. É o análogo Redis da tx idempotente do achievements
+// (Postgres): guarda + ZINCRBY num só passo indivisível.
 var applyCumulativeScript = redis.NewScript(`
-if redis.call('SADD', KEYS[1], ARGV[1]) == 0 then
+if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then
   return 1
 end
-for i = 2, #ARGV, 4 do
+if not redis.call('SET', KEYS[1], 1, 'NX', 'EX', ARGV[2]) then
+  return 1
+end
+for i = 3, #ARGV, 4 do
   redis.call('ZINCRBY', ARGV[i], ARGV[i+2], ARGV[i+1])
   local ttl = tonumber(ARGV[i+3])
   if ttl > 0 then
@@ -120,15 +136,15 @@ func (s *RedisStore) ApplyCumulative(ctx context.Context, gameID, matchID string
 		return false, nil // nada a somar: não há o que deduplicar
 	}
 	t := s.now()
-	argv := make([]any, 0, 1+len(incrs)*len(domain.Windows)*4)
-	argv = append(argv, matchID)
+	argv := make([]any, 0, 2+len(incrs)*len(domain.Windows)*4)
+	argv = append(argv, matchID, int64(processedTTL.Seconds()))
 	for _, inc := range incrs {
 		for _, w := range domain.Windows {
 			argv = append(argv, s.windowKey(gameID, inc.Board, w, t), inc.PlayerID, inc.Delta,
 				int64(windowTTL(w).Seconds()))
 		}
 	}
-	res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID)}, argv...).Int()
+	res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID, matchID), s.legacyProcessedKey(gameID)}, argv...).Int()
 	if err != nil {
 		return false, fmt.Errorf("leaderboard storage: apply cumulative: %w", err)
 	}

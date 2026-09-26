@@ -872,6 +872,11 @@ return 0
 res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID)}, argv...).Int()
 ```
 
+> **Evolução (spec `leaderboard/008`, 2026-09):** o SET único crescia para sempre — membro de SET não expira. A
+> guarda virou **uma key por partida** com `SET key 1 NX EX <30 dias>` dentro do mesmo script (`NX` devolve nil,
+> que o Lua vê como `false`, quando a key já existe = dup). A janela só precisa cobrir a reentrega possível (retenção
+> da fila + DLQ); o SET antigo segue consultado por `SISMEMBER` até expirar a janela.
+
 **Pegadinha / nuance:** é o **mesmo problema de idempotência, três respostas conforme o storage** — vale internalizar o eixo: (1) `ZADD GT` do highscore é idempotente **por natureza** (só sobe se maior → reaplicar não muda nada, fatia 003); (2) o achievements ([[24]]) resolve com uma **transação Postgres** que marca `processed_matches` e incrementa juntos; (3) aqui, sem transação multi-key trivial no Redis, o **script Lua** é o análogo — a atomicidade vem do engine, não de locks meus. Detalhe cross-storage: passei as keys de board no **ARGV** (não como `KEYS`), o que quebra em Redis Cluster (keys de um script devem casar o mesmo slot, via hash-tag); num nó único (o setup local) é seguro. E `redis.NewScript` usa `EVALSHA` com fallback para `EVAL` sozinho — não preciso gerenciar o cache do script à mão, diferente de chamar `EVAL` cru.
 
 ---
@@ -1321,3 +1326,77 @@ type PlayerAchievement struct {
 ```
 
 **Pegadinha (vs C#):** em C#, `System.Text.Json` tem o mesmo problema com `DateTime` (não é nullable por padrão) — a solução é a mesma: usar `DateTime?` (nullable) em vez de `DateTime`. A diferença é que em Go isso não é opcional/configurável por atributo (não existe um `[JsonIgnoreDefaultValue]` equivalente que funcione pra struct) — o **tipo** é que precisa ser ponteiro. Regra prática: qualquer campo `omitempty` que não seja `string`/número/`bool`/ponteiro/slice/map **não faz o que parece fazer** — vale desconfiar toda vez que `omitempty` aparecer num campo de tipo struct.
+
+---
+
+## 38 — Orçamento de timeout por dependência: `context.WithTimeout` na borda de saída
+
+**O que é / por que importa:** um `ctx` que chega de um handler carrega o deadline **do cliente** — e cliente pode
+não ter deadline nenhum. Se o adapter de saída só repassa esse `ctx`, uma dependência travada (SNS, banco, HTTP)
+pendura a chamada inteira pelo tempo que o cliente aguentar. O idiomático é cada adapter declarar o **seu**
+orçamento: `context.WithTimeout(ctx, x)` deriva um filho que expira no que vier primeiro — o deadline do cliente ou
+o do adapter — e o `defer cancel()` libera o timer.
+
+**Onde no projeto:** `session-service/internal/publisher/sns_publisher.go` — `(*SNS).send`. Achado na bancada da
+revisão 2026-09: com o LocalStack pausado, `ReportParticipationEvent` ficava pendurado; agora devolve `Internal` em
+~5s e o Dedicated Server reenvia (spec `session/029`).
+
+```mermaid
+sequenceDiagram
+    participant GS as Dedicated Server (sem deadline)
+    participant SE as session (handler)
+    participant PUB as publisher.send
+    participant SNS as SNS travado
+    GS->>SE: ReportParticipationEvent(ctx sem deadline)
+    SE->>PUB: Publish(ctx)
+    PUB->>PUB: ctx, cancel := WithTimeout(ctx, 5s)
+    PUB->>SNS: Publish(ctx 5s)
+    Note over SNS: não responde
+    PUB-->>SE: context.DeadlineExceeded (5s)
+    SE-->>GS: codes.Internal → reenviar
+```
+
+```go
+func (s *SNS) send(ctx context.Context, body []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout) // o menor entre o do cliente e o meu
+	defer cancel()                                     // sem isso o timer vaza até expirar
+	_, err := s.client.Publish(ctx, &sns.PublishInput{ /* ... */ })
+	return err
+}
+```
+
+**Pegadinha (vs C#):** é o equivalente a `CancellationTokenSource.CreateLinkedTokenSource(ct)` + `CancelAfter(5s)` —
+só que em Go é uma linha e o "linked" é automático (o filho herda o cancelamento do pai). O `http.Client.Timeout`
+existe para HTTP, mas SDKs (AWS, pgx, gRPC) dependem do `ctx`: sem deadline no `ctx`, o SDK pode tentar de novo
+indefinidamente. Para testar, um fake que só responde `<-ctx.Done()` prova o timeout sem `sleep`.
+
+---
+
+## 39 — `http.MaxBytesReader` + `errors.As(*http.MaxBytesError)`: limite de corpo com o erro certo
+
+**O que é / por que importa:** o `net/http` não limita o tamanho do corpo. `io.ReadAll(r.Body)` ou um
+`json.Decoder` bufferizam o que vier — um corpo de 1 GB vira 1 GB de heap. `http.MaxBytesReader(w, r.Body, n)`
+embrulha o corpo e falha depois de `n` bytes com um `*http.MaxBytesError` (Go 1.19+), que dá para distinguir de um
+JSON inválido com `errors.As` e responder **413** em vez de 400.
+
+**Onde no projeto:** `player-data-service/internal/transport/http_handler.go` — `put` (spec `player-data/003`, 400 KiB,
+o teto de item do DynamoDB); `identity-service` (`decode`, rotas sem auth) e as rotas de jogador do achievements e do
+leaderboard (64 KiB).
+
+```go
+body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxValueBytes))
+if err != nil {
+	var tooLarge *http.MaxBytesError // ponteiro: é assim que o net/http devolve
+	if errors.As(err, &tooLarge) {
+		httpkit.WriteError(w, http.StatusRequestEntityTooLarge, "value_too_large")
+		return
+	}
+	httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+	return
+}
+```
+
+**Pegadinha (vs C#):** no ASP.NET Core o Kestrel já vem com `MaxRequestBodySize` de ~28,6 MB e devolve 413 sozinho;
+em Go o default é **sem limite** — o limite é responsabilidade de cada handler. O `w` pode ser `nil` (útil num
+helper `decode(r, v)` sem acesso ao writer): passar o `w` só serve para o servidor fechar a conexão depois do excesso.
+
