@@ -41,20 +41,31 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | D2/D3 | `2b555b8` | invasão respeita o modo (spec `matchmaking/012`); convenção de boss em `stats`; `docs/contracts/CHANGELOG.md` (1.0.0 → 1.1.0) | unit + transport |
 | — | `d90512d` | CI: `buf breaking` dos protos contra a `main` | local: passa e detecta quebra |
 | D1 | `ad89442` | autenticação no gRPC do session (spec `session/030`, ADR-0030), `warn` → `enforce`; `SummonSign` só pelo host | unit + **demo ao vivo em `enforce`** |
+| Analytics | `4c5238b` | overview cross-game por **sessões** (todos os arquétipos); o Folclore aparecia zerado (spec `analytics/016`) | integração + BFF |
+| Console | `8ba454d` | `lib/vocab.ts` (rótulos únicos; corrige `FAIL`), "Resumo do mundo" para host_world, pipeline vira tabela (−430 linhas), coluna Sessão nas salas (spec `admin-ui/090`) | Playwright com 5 mundos reais |
+| Produto | `af3a677` | `ESTRATEGIA-PRODUTO-2026-09.md`: crítica do colega, Steam/GOG, SaaS × Asset Store × open source, SDK | — |
+| Steam | `aea9f87` | login federado Steam no identity (spec `identity/005-steam-login`), contrato 1.3.0 | unit + integração + **ao vivo com Steam falsa** |
+| Console | `299fca3` | mapa de serviços com o analytics e as dependências reais; capturas novas na documentação | Playwright |
+
 
 ## Em andamento
 
-- Nada. Sessão encerrada com a branch publicada.
+- Nada. Branch publicada.
 
 ## Próximo (executável sem decisão do dono)
 
-1. ESLint no admin-ui (no CI só depois de zerar os avisos) e testes do `rulesGraph.ts`.
-2. P6 — `govulncheck` no CI: **não validável nesta VM** (`vuln.go.dev` bloqueado); rodar localmente antes de ligar.
-3. Refatorar `session_service.go` (1,1k linhas) com a cobertura atual (95%) como rede.
+1. Espelhar conquistas na Steam (consumidor do fan-out → Web API `SetUserStatsForGame`) — precisa do mapeamento
+   conquista → nome da API na Steam por jogo.
+2. Unificar Rooms e Sessions do jogo (`SessionTable`/`SessionDetail` compartilhados) — hoje quase duplicados.
+3. Consolidar as 5 tabelas `*_daily` do analytics numa `game_activity_daily` — pede ADR (altera a ADR-0021).
+4. ESLint no admin-ui; `govulncheck` no CI (validar localmente — a VM não alcança o `vuln.go.dev`).
 
 ## Depende do dono
 
-- Decisões D1–D6 (`REVISAO-2026-09.md` §6) e o aval para mexer em `shared/auth` (G3/G4).
+- Rascunho B da estratégia (topologia P2P host-autoritativa) — depende da decisão de netcode no repo do jogo.
+- Aprovar os rascunhos de ADR da estratégia (A — identidade federada, já implementada como spec; B — P2P).
+- Virar `SESSION_AUTH_MODE=enforce` quando o jogo mandar bearer e chave de servidor.
+- Publisher key e app id da Steam para validar o login contra a Steam real.
 
 ## Para o dono validar localmente
 

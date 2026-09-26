@@ -115,7 +115,7 @@ então medir se há demanda (estrelas, issues, estúdios pedindo) para um kit pa
 
 | # | Item | Depende de | Por quê |
 |---|---|---|---|
-| 1 | **Login federado Steam** no identity (rascunho A) | publisher key do Steamworks (testável sem ela com servidor fake) | é o que torna o backend utilizável com jogadores reais |
+| 1 | **Login federado Steam** no identity (rascunho A) — ✅ **feito** (spec `identity/005-steam-login`, validado com Steam falsa) | publisher key do Steamworks para validar contra a Steam real | é o que torna o backend utilizável com jogadores reais |
 | 2 | **Topologia P2P host-autoritativa** no `host_world_dropin` (rascunho B) | decisão de netcode no repo do jogo | corta o maior custo do lançamento |
 | 3 | Espelhar conquistas na Steam (consumidor do fan-out) | 1 | o jogador vê a conquista onde espera |
 | 4 | Virar o `SESSION_AUTH_MODE` para `enforce` | jogo mandar bearer e chave de servidor | fecha o buraco que a ADR-0030 deixou em `warn` |

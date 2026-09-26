@@ -25,16 +25,17 @@ doc não é changelog. A análise completa que embasa esta versão está em
   achievements, primeiros testes do admin-ui, **demo reproduzível** (`scripts/demo-host-world.sh`) e docs de estado
   sincronizadas com o código. Ver `review/PROGRESSO.md` para os commits.
 
-## Decisões pendentes do dono (detalhe e recomendação em `review/REVISAO-2026-09.md` §6)
+## Decisões do dono
 
-| # | Decisão | Recomendação |
-|---|---|---|
-| D1 | Autenticar o gRPC do session (bearer do jogador no `OpenWorld`/`JoinWorld`; credencial do game server nos reports) — muda o contrato | sim, em duas fatias com período de compatibilidade; ADR evoluindo a 0018 |
-| D2 | Invasão filtrar por modo (`mode_id` opcional no `ListInvadableWorlds`) | sim |
-| D3 | Boss no `BOSS_DEFEATED`: convenção em `stats` × campo novo | convenção em `stats` agora |
-| D4 | Remover os dados fabricados do console (Fleet/Infrastructure) | remover |
-| D5 | `battle_royale`/`coop_mission` | congelar e rotular "experimental" |
-| D6 | Auth do console antes de qualquer deploy | decidir junto com o deploy |
+D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `shared/auth`) — executadas na Fase 3
+(`review/PROGRESSO.md`). Abertas agora, na [estratégia de produto](review/ESTRATEGIA-PRODUTO-2026-09.md):
+
+| Decisão | Recomendação |
+|---|---|
+| Topologia P2P host-autoritativa para o Folclore (rascunho B) | sim, para o lançamento na Steam; depende do netcode do jogo |
+| Rascunho A (identidade federada) virar ADR | sim — já implementado como `identity/005-steam-login` |
+| Virar `SESSION_AUTH_MODE=enforce` | quando o jogo mandar bearer e chave de servidor |
+| Abrir o repo como open source (Apache-2.0) | sim, depois do lançamento ou quando quiser a vitrine |
 
 ## Pendente de você (fora do código)
 
@@ -52,13 +53,13 @@ doc não é changelog. A análise completa que embasa esta versão está em
 
 ## Backlog priorizado
 
-Executáveis sem decisão (próximas sessões), por valor/esforço — detalhe e critério de "feito" em
-`review/REVISAO-2026-09.md` §5:
+Executáveis sem decisão (próximas sessões):
 
-1. **ESLint no admin-ui** (entrar no CI só com zero avisos) e testes do `rulesGraph.ts` (o layout do canvas).
-2. **`govulncheck` no CI** — rodar localmente antes (a VM da revisão não alcançava o `vuln.go.dev`).
-3. **Refatorar `session_service.go`** (1,1k linhas, 4 arquétipos) só com a cobertura atual (95%) garantindo.
-4. **Outbox/robustez do `ReportResult`** (crash entre publish e close) — pede desenho; abrir spec antes.
+1. **Espelhar conquistas na Steam** (consumidor do fan-out → `SetUserStatsForGame`).
+2. **Unificar Rooms e Sessions** do jogo (tabela e detalhe compartilhados).
+3. **Consolidar as séries diárias do analytics** numa tabela (pede ADR sobre a ADR-0021).
+4. **ESLint no admin-ui** e **`govulncheck` no CI** (validar localmente antes).
+5. **Refatorar `session_service.go`** (1,1k linhas) com a cobertura atual como rede.
 
 Dependem de decisão/evidência (não começar sem):
 
