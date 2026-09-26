@@ -100,6 +100,10 @@ docker compose -f infra/docker/docker-compose.yml up --build
 curl -s -XPOST localhost:8081/accounts  -d '{"handle":"vitor","password":"supersecret"}'
 curl -s -XPOST localhost:8081/sessions  -d '{"handle":"vitor","password":"supersecret"}'
 
+# demo do fluxo do Folclore Souls, sem Unity: jogo + modo, host abre o mundo,
+# invasor invade, servidor reporta HOST_KILLED, conquista desbloqueia via fan-out
+scripts/demo-host-world.sh      # precisa de curl, jq e grpcurl
+
 # testes (unitários, com race detector)
 go test ./... -race -cover
 # testes de integração (testcontainers — precisa de Docker)
