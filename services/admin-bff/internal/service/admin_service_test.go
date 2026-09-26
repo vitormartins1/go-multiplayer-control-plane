@@ -458,9 +458,13 @@ func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
 	assert.Equal(t, "speedrun", reader.gotCreate.ID)
 }
 
+// TestGameLeaderboard_DelegaAoLeaderboard: desde a spec 088 o GameLeaderboard
+// enriquece o handle via identity — o teste original não injetava o Directory
+// (nil pointer em handlesByID) e a main ficou vermelha desde c8168bb.
 func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
-	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb}).GameLeaderboard(context.Background(), "game-9", "kills", "weekly", 10, 20)
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 1, Players: []domain.Player{{ID: "bob", Handle: "Bob"}}}}
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb, Directory: dir}).GameLeaderboard(context.Background(), "game-9", "kills", "weekly", 10, 20)
 	require.NoError(t, err)
 	assert.Equal(t, "game-9", lb.gotGameID)
 	assert.Equal(t, "kills", lb.gotBoard)
@@ -469,6 +473,16 @@ func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	assert.Equal(t, 20, lb.gotOffset)
 	require.Len(t, got, 1)
 	assert.Equal(t, "bob", got[0].PlayerID)
+	assert.Equal(t, "Bob", got[0].Handle, "handle resolvido pelo identity (spec 088)")
+}
+
+func TestGameLeaderboard_IdentityFora_HandleVazio_SemErro(t *testing.T) {
+	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
+	dir := &fakeDirectory{err: domain.ErrIdentityUnavailable}
+	got, err := New(Deps{Leaderboard: lb, Directory: dir}).GameLeaderboard(context.Background(), "game-9", "kills", "alltime", 10, 0)
+	require.NoError(t, err, "enriquecimento é best-effort")
+	require.Len(t, got, 1)
+	assert.Empty(t, got[0].Handle)
 }
 
 func TestGamePlayers_DelegaAoRegistry(t *testing.T) {

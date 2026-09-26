@@ -825,13 +825,21 @@ func TestOverview_JogoComDoisModos_NaoDuplica(t *testing.T) {
 	assert.Equal(t, int64(2), ov.Totals.UniquePlayers)
 }
 
+// recentDay devolve ontem às 10h UTC: dentro da janela de 30 dias da série
+// diária e sempre no passado. Os testes da spec 015 usavam a data fixa
+// 2026-07-13 e começaram a falhar sozinhos quando ela saiu da janela.
+func recentDay() time.Time {
+	y := time.Now().UTC().AddDate(0, 0, -1)
+	return time.Date(y.Year(), y.Month(), y.Day(), 10, 0, 0, 0, time.UTC)
+}
+
 // TestApplySessionClosed_GravaSerieDiaria (spec 015): sessões fechadas
 // grava um ponto no dia (derivado de ClosedAt), soma no mesmo dia.
 func TestApplySessionClosed_GravaSerieDiaria(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	base := recentDay()
 	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(time.Minute)))
 	require.NoError(t, err)
 	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "default", "queue_arena", "result", base, base.Add(2*time.Minute)))
@@ -840,7 +848,7 @@ func TestApplySessionClosed_GravaSerieDiaria(t *testing.T) {
 	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.SessionCloseDaily, 1)
-	assert.Equal(t, "2026-07-13", ga.SessionCloseDaily[0].Day)
+	assert.Equal(t, base.Format("2006-01-02"), ga.SessionCloseDaily[0].Day)
 	assert.Equal(t, int64(2), ga.SessionCloseDaily[0].Matches)
 }
 
@@ -848,7 +856,7 @@ func TestApplySessionClosed_Reprocessado_NaoDobraSerieDiaria(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	base := recentDay()
 	evt := closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(time.Minute))
 	_, err := repo.ApplySessionClosed(ctx, evt)
 	require.NoError(t, err)
@@ -865,7 +873,7 @@ func TestApplySessionClosed_SerieDiaria_FiltraPorModo(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	base := recentDay()
 	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "modo-a", "queue_arena", "result", base, base.Add(time.Minute)))
 	require.NoError(t, err)
 	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "modo-b", "queue_arena", "result", base, base.Add(time.Minute)))
