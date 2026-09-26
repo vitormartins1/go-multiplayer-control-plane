@@ -29,12 +29,34 @@ type service struct {
 	tokens   domain.TokenIssuer
 	presence domain.PresenceNotifier // nil-safe: sem notifier, não marca presença
 	log      *slog.Logger
+
+	// identidade federada (spec 005-steam-login); vazio = nenhum provedor.
+	external  domain.ExternalIdentityRepository
+	verifiers map[string]domain.ExternalIdentityVerifier
+}
+
+// Option configura dependências opcionais do service.
+type Option func(*service)
+
+// WithExternalLogin liga o login por provedor externo (Steam, …): o
+// repositório do vínculo e um verificador por provedor (spec 005).
+func WithExternalLogin(repo domain.ExternalIdentityRepository, verifiers ...domain.ExternalIdentityVerifier) Option {
+	return func(s *service) {
+		s.external = repo
+		for _, v := range verifiers {
+			s.verifiers[v.Provider()] = v
+		}
+	}
 }
 
 // New cria o AuthService do identity-service. notifier pode ser nil (sem
 // login-into-game); quando presente, marca presença best-effort (ADR-0019).
-func New(repo domain.AccountRepository, tokens domain.TokenIssuer, notifier domain.PresenceNotifier, log *slog.Logger) domain.AuthService {
-	return &service{repo: repo, tokens: tokens, presence: notifier, log: log}
+func New(repo domain.AccountRepository, tokens domain.TokenIssuer, notifier domain.PresenceNotifier, log *slog.Logger, opts ...Option) domain.AuthService {
+	s := &service{repo: repo, tokens: tokens, presence: notifier, log: log, verifiers: map[string]domain.ExternalIdentityVerifier{}}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // markPresence registra a presença no jogo best-effort: sem gameID/notifier não

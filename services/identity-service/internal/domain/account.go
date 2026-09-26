@@ -25,6 +25,34 @@ type AuthService interface {
 	// LoginAnonymous emite um session token para uma identidade guest
 	// efêmera, sem credenciais e sem persistência (feature 002-anonymous-login).
 	LoginAnonymous(ctx context.Context, gameID string) (token string, err error)
+	// AuthenticateExternal troca um ticket de loja (ex.: Steam) pelo session
+	// token: valida com o provedor, acha ou cria a conta vinculada e emite o
+	// JWT de sempre (spec 005-steam-login). ErrProviderNotSupported,
+	// ErrInvalidTicket, ErrExternalBanned, ErrProviderUnavailable.
+	AuthenticateExternal(ctx context.Context, provider, ticket, gameID string) (token string, err error)
+}
+
+// ExternalIdentity é o jogador como o provedor externo o identifica.
+type ExternalIdentity struct {
+	Provider   string // "steam"
+	ExternalID string // SteamID64
+}
+
+// ExternalIdentityVerifier valida um ticket de um provedor (Steam, GOG, EOS…)
+// e devolve a identidade externa. Port de saída (adapter em internal/steam).
+type ExternalIdentityVerifier interface {
+	Provider() string
+	Verify(ctx context.Context, ticket string) (ExternalIdentity, error)
+}
+
+// ExternalIdentityRepository persiste o vínculo identidade externa → conta.
+type ExternalIdentityRepository interface {
+	// FindByExternal devolve a conta vinculada; ErrAccountNotFound se não há vínculo.
+	FindByExternal(ctx context.Context, provider, externalID string) (*Account, error)
+	// CreateWithExternal cria a conta e o vínculo na mesma transação.
+	// ErrExternalLinked se o vínculo já existe (corrida com outro login);
+	// ErrHandleTaken se o handle já está em uso.
+	CreateWithExternal(ctx context.Context, a *Account, provider, externalID string) error
 }
 
 // PresenceNotifier é a Port de saída que registra a presença do jogador num

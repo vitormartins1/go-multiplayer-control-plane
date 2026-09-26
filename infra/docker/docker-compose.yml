@@ -18,6 +18,12 @@ services:
       # identity gera uma efêmera a cada boot e todo token emitido antes do
       # restart deixa de validar. Gerar uma vez: infra/docker/gen-secrets.sh
       JWT_PRIVATE_KEY_FILE: /run/secrets/identity-jwt-key
+      # Login Steam (spec 005-steam-login): vazio = desligado (POST
+      # /sessions/steam -> 404). Preencher com a publisher key e o app id do
+      # jogo; o cliente pede o ticket com a mesma STEAM_TICKET_IDENTITY.
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      STEAM_APP_ID: ${STEAM_APP_ID:-}
+      STEAM_TICKET_IDENTITY: ${STEAM_TICKET_IDENTITY:-control-plane}
     secrets:
       - identity-jwt-key
     depends_on:
@@ -347,6 +353,7 @@ services:
     volumes:
       # aplica a migration na inicialização do banco
       - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
+      - ../../services/identity-service/migrations/002_external_identities.sql:/docker-entrypoint-initdb.d/002_external_identities.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d identity"]
       interval: 5s

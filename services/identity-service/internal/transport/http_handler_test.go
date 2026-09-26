@@ -30,6 +30,11 @@ func (m *mockAuth) Authenticate(ctx context.Context, handle, password, gameID st
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockAuth) AuthenticateExternal(ctx context.Context, provider, ticket, gameID string) (string, error) {
+	args := m.Called(ctx, provider, ticket, gameID)
+	return args.String(0), args.Error(1)
+}
+
 func (m *mockAuth) LoginAnonymous(ctx context.Context, gameID string) (string, error) {
 	args := m.Called(ctx, gameID)
 	return args.String(0), args.Error(1)
@@ -247,4 +252,37 @@ func TestRegister_CorpoAcimaDoTeto_400SemTocarService(t *testing.T) {
 	rr := do(srv, http.MethodPost, "/accounts", body)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	auth.AssertNotCalled(t, "Register", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Spec 005-steam-login: o ticket vira o token de sempre; cada erro do
+// provedor tem seu código HTTP.
+func TestLoginExternal_Steam_200ComToken(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("AuthenticateExternal", mock.Anything, "steam", "abcd", "g1").Return("jwt", nil)
+	rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/steam", `{"ticket":"abcd","gameId":"g1"}`)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"token":"jwt"}`, rr.Body.String())
+}
+
+func TestLoginExternal_ErrosMapeiamStatus(t *testing.T) {
+	cases := map[error]int{
+		domain.ErrProviderNotSupported: http.StatusNotFound,
+		domain.ErrInvalidTicket:        http.StatusUnauthorized,
+		domain.ErrExternalBanned:       http.StatusForbidden,
+		domain.ErrProviderUnavailable:  http.StatusServiceUnavailable,
+	}
+	for err, want := range cases {
+		auth := new(mockAuth)
+		auth.On("AuthenticateExternal", mock.Anything, "steam", "abcd", "").Return("", err)
+		rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/steam", `{"ticket":"abcd"}`)
+		assert.Equal(t, want, rr.Code, err.Error())
+	}
+}
+
+func TestLoginExternal_AnonymousContinuaNaRotaLiteral(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("LoginAnonymous", mock.Anything, "").Return("guest-jwt", nil)
+	rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/anonymous", ``)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	auth.AssertNotCalled(t, "AuthenticateExternal", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }

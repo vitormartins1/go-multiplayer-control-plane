@@ -32,6 +32,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /accounts", h.register)
 	mux.HandleFunc("POST /sessions", h.login)
 	mux.HandleFunc("POST /sessions/anonymous", h.loginAnonymous)
+	// Login por provedor externo (spec 005-steam-login): o padrão literal
+	// /sessions/anonymous acima é mais específico e continua valendo.
+	mux.HandleFunc("POST /sessions/{provider}", h.loginExternal)
 	mux.HandleFunc("GET /.well-known/jwks.json", h.jwks)
 
 	// Admin (interno, sem auth — ver specs/003-admin-list-users): lista de usuários.
@@ -75,6 +78,25 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, err := h.auth.Authenticate(r.Context(), req.Handle, req.Password, req.GameId)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// loginExternal troca o ticket de um provedor (hoje "steam") pelo session
+// token (spec 005-steam-login).
+func (h *Handler) loginExternal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Ticket string `json:"ticket"`
+		GameId string `json:"gameId"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	token, err := h.auth.AuthenticateExternal(r.Context(), r.PathValue("provider"), req.Ticket, req.GameId)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -187,6 +209,14 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		httpkit.WriteError(w, http.StatusConflict, "handle_taken")
 	case errors.Is(err, domain.ErrInvalidCredentials):
 		httpkit.WriteError(w, http.StatusUnauthorized, "invalid_credentials")
+	case errors.Is(err, domain.ErrProviderNotSupported):
+		httpkit.WriteError(w, http.StatusNotFound, "provider_not_supported")
+	case errors.Is(err, domain.ErrInvalidTicket):
+		httpkit.WriteError(w, http.StatusUnauthorized, "invalid_ticket")
+	case errors.Is(err, domain.ErrExternalBanned):
+		httpkit.WriteError(w, http.StatusForbidden, "banned")
+	case errors.Is(err, domain.ErrProviderUnavailable):
+		httpkit.WriteError(w, http.StatusServiceUnavailable, "provider_unavailable")
 	default:
 		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}

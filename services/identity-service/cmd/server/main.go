@@ -27,6 +27,7 @@ import (
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/presence"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/repository"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/steam"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/token"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/transport"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
@@ -100,7 +101,7 @@ func run(log *slog.Logger) error {
 	}
 
 	repo := repository.NewPostgresAccountRepository(pool)
-	svc := service.New(repo, issuer, notifier, log)
+	svc := service.New(repo, issuer, notifier, log, externalLogin(repo, log)...)
 	lister := service.NewPlayerLister(repo) // listing admin (003-admin-list-users)
 	handler := transport.NewHandler(svc, issuer, lister)
 
@@ -184,3 +185,27 @@ func buildIssuer(cfg config.Config, log *slog.Logger) (*token.Issuer, error) {
 	}
 	return token.New(priv), nil
 }
+
+// externalLogin liga os provedores de login externo configurados (spec
+// 005-steam-login). Steam exige a publisher key e o app id; sem eles a rota
+// POST /sessions/steam responde 404 provider_not_supported.
+func externalLogin(repo *repository.PostgresAccountRepository, log *slog.Logger) []service.Option {
+	key, appID := os.Getenv("STEAM_WEB_API_KEY"), os.Getenv("STEAM_APP_ID")
+	if key == "" || appID == "" {
+		log.Info("login Steam desligado (STEAM_WEB_API_KEY/STEAM_APP_ID ausentes)")
+		return nil
+	}
+	identity := os.Getenv("STEAM_TICKET_IDENTITY")
+	if identity == "" {
+		identity = "control-plane"
+	}
+	v := steam.New(steam.Config{
+		BaseURL:  os.Getenv("STEAM_API_BASE_URL"), // vazio = partner.steam-api.com
+		APIKey:   key,
+		AppID:    appID,
+		Identity: identity,
+	}, nil)
+	log.Info("login Steam ligado", "app_id", appID, "ticket_identity", identity)
+	return []service.Option{service.WithExternalLogin(repo, v)}
+}
+

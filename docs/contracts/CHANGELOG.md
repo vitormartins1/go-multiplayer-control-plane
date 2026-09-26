@@ -17,6 +17,15 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+## [1.3.0] — 2026-09-26
+
+### Added
+- `POST /sessions/steam` no identity (spec `identity/005-steam-login`): o cliente manda o ticket de
+  `ISteamUser::GetAuthTicketForWebApi("<STEAM_TICKET_IDENTITY>")` em hex (`{ticket, gameId?}`) e recebe o mesmo JWT
+  do login por senha (claim extra `idp: "steam"`). Na primeira vez a conta é criada e vinculada ao SteamID64. Erros:
+  401 `invalid_ticket`, 403 `banned`, 503 `provider_unavailable`, 404 `provider_not_supported` (login Steam não
+  configurado no deploy). Nada muda para quem já usa login por senha ou anônimo.
+
 ## [1.2.0] — 2026-09-26
 
 ### Added

@@ -1471,3 +1471,30 @@ _, err, _ := v.sf.Do("jwks", func() (any, error) {
 **Pegadinha (vs C#):** não há equivalente direto na BCL — o mais próximo é compartilhar um `Lazy<Task<T>>`/uma
 `Task` em andamento num dicionário. Em Go o pacote resolve o caso comum; o cuidado é o mesmo em qualquer linguagem:
 o estado que decide "vou buscar?" precisa ser lido no mesmo ponto serializado que faz a busca.
+
+---
+
+## 42 — `ServeMux` do Go 1.22: rota literal vence o curinga, e o método entra no padrão
+
+**O que é / por que importa:** desde o Go 1.22 o `http.ServeMux` da biblioteca padrão aceita método e curinga no
+padrão (`"POST /sessions/{provider}"`) e resolve conflito pela **especificidade**: `"POST /sessions/anonymous"`
+(literal) ganha de `"POST /sessions/{provider}"` (curinga) para o caminho `/sessions/anonymous`, sem depender da
+ordem de registro. O valor do curinga sai com `r.PathValue("provider")`. Isso dispensou roteador de terceiros no
+projeto inteiro — e padrões que se sobrepõem **sem** um ser mais específico que o outro fazem o `Handle` entrar em
+pânico no boot (erro de configuração aparece cedo, não em produção).
+
+**Onde no projeto:** `identity-service/internal/transport/http_handler.go` — `POST /sessions/anonymous` e
+`POST /sessions/{provider}` (spec 005-steam-login); teste
+`TestLoginExternal_AnonymousContinuaNaRotaLiteral`.
+
+```go
+mux.HandleFunc("POST /sessions/anonymous", h.loginAnonymous) // literal: mais específico
+mux.HandleFunc("POST /sessions/{provider}", h.loginExternal)  // curinga: o resto
+// ...
+provider := r.PathValue("provider") // "steam"
+```
+
+**Pegadinha (vs C#):** é o equivalente ao roteamento por template do ASP.NET Core (`[HttpPost("sessions/{provider}")]`
+convivendo com `sessions/anonymous`, onde o literal também tem precedência) — só que sem atributos nem reflexão: o
+padrão é uma string e a precedência é regra da biblioteca padrão. Antes do 1.22, em Go, isso exigia gorilla/mux ou
+chi.
