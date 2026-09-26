@@ -75,7 +75,7 @@ func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, 
 	}
 
 	for attempt := 0; attempt < invadeListAttempts; attempt++ {
-		worlds, err := in.listWorlds(ctx, gameID)
+		worlds, err := in.listWorlds(ctx, gameID, modeID)
 		if err != nil {
 			return domain.Invaded{}, fmt.Errorf("invader: list worlds: %w", err)
 		}
@@ -129,11 +129,13 @@ func (in *Invader) policyOf(ctx context.Context, gameID, modeID string) (domain.
 	return in.policies.InvasionPolicy(ctx, gameID, modeID)
 }
 
-// listWorlds lista os mundos invadíveis com timeout próprio.
-func (in *Invader) listWorlds(ctx context.Context, gameID string) ([]domain.InvadableWorld, error) {
+// listWorlds lista os mundos invadíveis DO MODO do invasor (spec 012) com
+// timeout próprio — a política aplicada é a desse modo, então os mundos
+// também precisam ser dele.
+func (in *Invader) listWorlds(ctx context.Context, gameID, modeID string) ([]domain.InvadableWorld, error) {
 	ctx, cancel := context.WithTimeout(ctx, invadeTimeout)
 	defer cancel()
-	return in.directory.ListInvadableWorlds(ctx, gameID)
+	return in.directory.ListInvadableWorlds(ctx, gameID, modeID)
 }
 
 // inject injeta o invasor num mundo com timeout próprio.

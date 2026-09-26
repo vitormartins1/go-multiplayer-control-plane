@@ -597,6 +597,7 @@ func (*CloseWorldResponse) Descriptor() ([]byte, []int) {
 type ListInvadableWorldsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"` // jogo (multi-tenant, ADR-0017)
+	ModeId        string                 `protobuf:"bytes,2,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"` // spec matchmaking/012: só mundos deste modo; vazio = todos os modos do jogo (compat)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -634,6 +635,13 @@ func (*ListInvadableWorldsRequest) Descriptor() ([]byte, []int) {
 func (x *ListInvadableWorldsRequest) GetGameId() string {
 	if x != nil {
 		return x.GameId
+	}
+	return ""
+}
+
+func (x *ListInvadableWorldsRequest) GetModeId() string {
+	if x != nil {
+		return x.ModeId
 	}
 	return ""
 }
@@ -1698,9 +1706,10 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\x11CloseWorldRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\x14\n" +
-	"\x12CloseWorldResponse\"5\n" +
+	"\x12CloseWorldResponse\"N\n" +
 	"\x1aListInvadableWorldsRequest\x12\x17\n" +
-	"\agame_id\x18\x01 \x01(\tR\x06gameId\"Q\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x17\n" +
+	"\amode_id\x18\x02 \x01(\tR\x06modeId\"Q\n" +
 	"\x1bListInvadableWorldsResponse\x122\n" +
 	"\x06worlds\x18\x01 \x03(\v2\x1a.session.v1.InvadableWorldR\x06worlds\"\xcb\x01\n" +
 	"\x0eInvadableWorld\x12\x1d\n" +

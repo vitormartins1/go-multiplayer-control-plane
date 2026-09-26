@@ -859,8 +859,9 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 // (spec 012), varrendo o mapa de ativas sob o lock — irmão de SessionsByGame. O
 // mapa só contém sessões OPEN (closeSession as remove), então não checa State.
 // Fonte de dados pura: nenhum filtro de faixa/weapon/senha (política é do
-// matchmaking, 006). Vazio → lista vazia, sem erro.
-func (s *Service) ListInvadableWorlds(_ context.Context, gameID string) ([]domain.InvadableWorld, error) {
+// matchmaking, 006). Vazio → lista vazia, sem erro. modeID não vazio filtra
+// pelo modo em que o mundo foi aberto (spec matchmaking/012); vazio = todos.
+func (s *Service) ListInvadableWorlds(_ context.Context, gameID, modeID string) ([]domain.InvadableWorld, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -868,6 +869,9 @@ func (s *Service) ListInvadableWorlds(_ context.Context, gameID string) ([]domai
 	for _, sess := range s.sessions {
 		if sess.Origin != domain.OriginHostWorld || sess.GameID != gameID {
 			continue
+		}
+		if modeID != "" && sess.ModeID != modeID {
+			continue // outro modo do mesmo jogo (spec matchmaking/012)
 		}
 		slot, ok := sess.RoleSlots[domain.RoleInvader]
 		if !ok {

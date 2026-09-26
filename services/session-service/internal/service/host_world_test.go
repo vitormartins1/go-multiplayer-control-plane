@@ -299,7 +299,7 @@ func TestListInvadableWorlds_RefleteHashDaSenha(t *testing.T) {
 	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 1)
 	assert.Equal(t, w.PasswordHash, worlds[0].PasswordHash)
@@ -312,7 +312,7 @@ func TestListInvadableWorlds_SoMundosAbertosComInvasorLivre(t *testing.T) {
 	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{SoulLevel: 80, WeaponTier: 3})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 1)
 	assert.Equal(t, w.ID, worlds[0].SessionID)
@@ -329,7 +329,7 @@ func TestListInvadableWorlds_ExcluiInvasorCheio(t *testing.T) {
 	_, _, err = svc.JoinWorld(ctx, w.ID, "inv-1", domain.RoleInvader) // InvaderSlots=1 → cheio
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "mundo com invasor cheio sai do diretório")
 }
@@ -341,7 +341,7 @@ func TestListInvadableWorlds_ExcluiSemPapelInvasor(t *testing.T) {
 	_, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "mundo sem papel invasor não é invadível")
 }
@@ -357,7 +357,7 @@ func TestListInvadableWorlds_ExcluiOutroJogo(t *testing.T) {
 	w2, _, err := svc.OpenWorld(ctx, "host-2", "game-2", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-2")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-2", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 1)
 	assert.Equal(t, w2.ID, worlds[0].SessionID)
@@ -369,7 +369,7 @@ func TestListInvadableWorlds_ExcluiQueueArena(t *testing.T) {
 	_, _, err := svc.Create(ctx, "match-1", "game-1", "default", []domain.TeamAssignment{{Players: []string{"p1"}}})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "sessão queue_arena (Origin=match) não é invadível")
 }
@@ -404,7 +404,7 @@ func TestListInvadableWorlds_OrdenaPorOpenedAtAsc(t *testing.T) {
 	wB, _, err := svc.OpenWorld(ctx, "host-b", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+2h
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 3)
 	got := []string{worlds[0].SessionID, worlds[1].SessionID, worlds[2].SessionID}
@@ -413,7 +413,7 @@ func TestListInvadableWorlds_OrdenaPorOpenedAtAsc(t *testing.T) {
 
 func TestListInvadableWorlds_NenhumElegivel_ListaVaziaSemErro(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
-	worlds, err := svc.ListInvadableWorlds(context.Background(), "game-1")
+	worlds, err := svc.ListInvadableWorlds(context.Background(), "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds)
 }
@@ -432,4 +432,25 @@ func TestCloseByAdmin_MundoHostWorld_FechaPorSessionID(t *testing.T) {
 	assert.Equal(t, domain.CloseAdmin, sess.CloseReason)
 	assert.Equal(t, float64(0), svc.ActiveSessions(), "sai das ativas")
 	alloc.AssertExpectations(t)
+}
+
+// Spec matchmaking/012: com modo, o diretório só devolve mundos abertos nesse
+// modo; sem modo, todos os modos do jogo (compat).
+func TestListInvadableWorlds_FiltraPorModo(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	ctx := context.Background()
+	_, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "roda-aberta", domain.WorldAttributes{})
+	require.NoError(t, err)
+	batizado, _, err := svc.OpenWorld(ctx, "host-2", "game-1", "batizado", domain.WorldAttributes{})
+	require.NoError(t, err)
+
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "batizado")
+	require.NoError(t, err)
+	require.Len(t, worlds, 1)
+	assert.Equal(t, batizado.ID, worlds[0].SessionID)
+
+	all, err := svc.ListInvadableWorlds(ctx, "game-1", "")
+	require.NoError(t, err)
+	assert.Len(t, all, 2, "sem modo: todos os mundos do jogo")
+
 }

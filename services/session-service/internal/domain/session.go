@@ -358,7 +358,7 @@ type SessionService interface {
 	// com slot de invasor livre, cada um com seus atributos e vagas (spec 012).
 	// Fonte de dados pura: sem filtro de faixa/senha (política é do matchmaking).
 	// Lista vazia (não erro) quando nada é elegível.
-	ListInvadableWorlds(ctx context.Context, gameID string) ([]InvadableWorld, error)
+	ListInvadableWorlds(ctx context.Context, gameID, modeID string) ([]InvadableWorld, error)
 	// LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
 	// se o jogador não estiver no mundo. Se o jogador for o host, encerra o mundo.
 	LeaveWorld(ctx context.Context, sessionID, playerID string) error

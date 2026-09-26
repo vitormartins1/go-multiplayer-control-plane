@@ -60,8 +60,8 @@ func (c *Client) Provision(ctx context.Context, matchID string, teams []domain.T
 // ListInvadableWorlds chama o diretório do session (session/012) e traduz os
 // mundos invadíveis para o domínio. A política de faixa é aplicada no service,
 // não aqui — este adapter é passthrough.
-func (c *Client) ListInvadableWorlds(ctx context.Context, gameID string) ([]domain.InvadableWorld, error) {
-	resp, err := c.session.ListInvadableWorlds(ctx, &sessionv1.ListInvadableWorldsRequest{GameId: gameID})
+func (c *Client) ListInvadableWorlds(ctx context.Context, gameID, modeID string) ([]domain.InvadableWorld, error) {
+	resp, err := c.session.ListInvadableWorlds(ctx, &sessionv1.ListInvadableWorldsRequest{GameId: gameID, ModeId: modeID})
 	if err != nil {
 		return nil, fmt.Errorf("sessionclient: list invadable worlds: %w", err)
 	}

@@ -147,9 +147,11 @@ func (s *Server) JoinWorld(ctx context.Context, req *pb.JoinWorldRequest) (*pb.J
 }
 
 // ListInvadableWorlds devolve o diretório de mundos com vaga de invasor (spec
-// 012). Tradução pura; sem erro de domínio novo (vazio = lista vazia).
+// 012). Tradução pura; sem erro de domínio novo (vazio = lista vazia). O
+// mode_id NÃO é normalizado para "default": vazio significa "todos os modos"
+// (compat com chamadores anteriores à spec matchmaking/012).
 func (s *Server) ListInvadableWorlds(ctx context.Context, req *pb.ListInvadableWorldsRequest) (*pb.ListInvadableWorldsResponse, error) {
-	worlds, err := s.svc.ListInvadableWorlds(ctx, req.GetGameId())
+	worlds, err := s.svc.ListInvadableWorlds(ctx, req.GetGameId(), req.GetModeId())
 	if err != nil {
 		return nil, status.Error(codes.Internal, "list invadable worlds")
 	}

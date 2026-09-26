@@ -138,7 +138,7 @@ type InvasionPolicyProvider interface {
 // WorldDirectory é a Port de saída que lista os mundos invadíveis de um jogo no
 // session-service (session/012). Fotografia dos mundos com vaga de invasor.
 type WorldDirectory interface {
-	ListInvadableWorlds(ctx context.Context, gameID string) ([]InvadableWorld, error)
+	ListInvadableWorlds(ctx context.Context, gameID, modeID string) ([]InvadableWorld, error)
 }
 
 // WorldInjector é a Port de saída que injeta o invasor num mundo via o JoinWorld

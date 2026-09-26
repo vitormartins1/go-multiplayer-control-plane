@@ -113,15 +113,17 @@ func TestProvision_PoolEsgotado_ErrNoServer(t *testing.T) {
 // joinCode != OK faz o JoinWorld falhar com esse código (corrida / mundo fechou).
 type worldFake struct {
 	sessionv1.UnimplementedSessionServer
-	worlds       []*sessionv1.InvadableWorld
-	gotListGame  string
-	gotJoin      *sessionv1.JoinWorldRequest
-	joinCode     codes.Code // OK = sucesso
-	joinAddress  string
+	worlds      []*sessionv1.InvadableWorld
+	gotListGame string
+	gotListMode string
+	gotJoin     *sessionv1.JoinWorldRequest
+	joinCode    codes.Code // OK = sucesso
+	joinAddress string
 }
 
 func (f *worldFake) ListInvadableWorlds(_ context.Context, req *sessionv1.ListInvadableWorldsRequest) (*sessionv1.ListInvadableWorldsResponse, error) {
 	f.gotListGame = req.GetGameId()
+	f.gotListMode = req.GetModeId()
 	return &sessionv1.ListInvadableWorldsResponse{Worlds: f.worlds}, nil
 }
 
@@ -143,9 +145,10 @@ func TestListInvadableWorlds_TraduzMundos(t *testing.T) {
 	}}
 	c := setup(t, fake)
 
-	worlds, err := c.ListInvadableWorlds(context.Background(), "game-1")
+	worlds, err := c.ListInvadableWorlds(context.Background(), "game-1", "roda-aberta")
 	require.NoError(t, err)
 	assert.Equal(t, "game-1", fake.gotListGame)
+	assert.Equal(t, "roda-aberta", fake.gotListMode, "spec 012: o modo vai para o diretório do session")
 	require.Len(t, worlds, 2)
 	assert.Equal(t, domain.InvadableWorld{SessionID: "w1", HostSoulLevel: 100, WeaponTier: 5, FreeInvaderSlots: 1}, worlds[0])
 	assert.Equal(t, 2, worlds[1].FreeInvaderSlots)

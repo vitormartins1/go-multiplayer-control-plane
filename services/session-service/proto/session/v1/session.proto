@@ -116,6 +116,7 @@ message CloseWorldResponse {}
 // jogo; a política de faixa é aplicada lá, não aqui.
 message ListInvadableWorldsRequest {
   string game_id = 1; // jogo (multi-tenant, ADR-0017)
+  string mode_id = 2; // spec matchmaking/012: só mundos deste modo; vazio = todos os modos do jogo (compat)
 }
 
 message ListInvadableWorldsResponse {

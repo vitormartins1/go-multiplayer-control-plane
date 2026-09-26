@@ -110,6 +110,15 @@ session.v1.Session/ReportParticipationEvent(
 
 Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo inexistente/já encerrado — sinal para o server **parar** de reenviar aquele evento), `Internal` (falha transitória — p.ex. publish no fan-out ou devolução do GameServer; **reenviar** a mesma ocorrência).
 
+### Identidade do boss no `BOSS_DEFEATED` (convenção, decisão D3 de 2026-09)
+
+O evento não tem campo de "alvo". Para conquistas/analytics por boss, o server reporta o boss em `stats`, com uma
+chave por boss e valor `1`: `stats: {"boss_boitata": 1}`. As event-rules enxergam isso como o fact
+`stat.boss_boitata` (ex.: regra `event = BOSS_DEFEATED` + `stat.boss_boitata gte 1` → event type
+`boitata_derrotado`), e o analytics guarda os `stats` brutos por jogador. Declare as chaves em `scoringStats` do modo
+para o console não marcá-las como "drift". Um campo próprio (`subject_id`) só entra quando o analytics precisar de
+uma dimensão "boss" — até lá, zero mudança de proto.
+
 ### Efeito de cada evento no mundo (o control plane aplica)
 
 | `event` | Quem reporta (típico) | Efeito no mundo (session) |
@@ -212,4 +221,4 @@ GetSessionConfigResponse{
 
 3. **Validação de forma no `ReportResult`:** o session agora rejeita (`FailedPrecondition`) um outcome cujo *kind* não corresponda ao arquétipo do modo — reportar a forma errada é bug do server, não entra no fan-out.
 
-> No host_world, o `mode_id` também flui no `OpenWorld`/entradas do matchmaking (`Invade`/sinais); o quadro de sinais é segmentado por modo (aliado do modo X não aparece para host do modo Y).
+> No host_world, o `mode_id` também flui no `OpenWorld`/entradas do matchmaking (`Invade`/sinais); o quadro de sinais é segmentado por modo (aliado do modo X não aparece para host do modo Y) e, desde a spec `matchmaking/012` (2026-09-26), a **invasão também**: o `Invade` só encontra mundos abertos no mesmo modo do invasor (vazio = `default`). **Impacto no jogo:** mandar no `Invade` o mesmo `mode_id` com que o host abriu o mundo.
