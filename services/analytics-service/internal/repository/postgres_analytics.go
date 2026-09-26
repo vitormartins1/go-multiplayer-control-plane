@@ -56,10 +56,8 @@ func (r *PostgresRepository) ApplyMatch(ctx context.Context, m domain.MatchResul
 			draws++
 		}
 		scoreSum += p.Score
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO game_player_seen (game_id, mode_id, player_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-			m.GameID, m.ModeID, p.PlayerID); err != nil {
-			return false, fmt.Errorf("analytics repository: apply match: player seen: %w", err)
+		if err := markPlayerSeen(ctx, tx, m.GameID, m.ModeID, p.PlayerID); err != nil {
+			return false, fmt.Errorf("analytics repository: apply match: %w", err)
 		}
 		// stats brutos por jogador (spec 011), com mode_id (spec 012 — o
 		// "" hardcoded era o gap: MatchResult não carregava o modo, mesmo
@@ -135,6 +133,9 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 
 	// stats brutos por jogador (spec 011, destravado por session-service/026):
 	// match_id = session_id — host_world_dropin não tem matchId.
+	if err := markPlayerSeen(ctx, tx, evt.GameID, evt.ModeID, evt.PlayerID); err != nil {
+		return false, fmt.Errorf("analytics repository: player seen: %w", err)
+	}
 	if err := insertPlayerStats(ctx, tx, evt.GameID, evt.ModeID, evt.SessionID, evt.PlayerID, evt.Stats); err != nil {
 		return false, fmt.Errorf("analytics repository: apply participation: stats: %w", err)
 	}
@@ -200,6 +201,9 @@ func (r *PostgresRepository) ApplyPlacement(ctx context.Context, pr domain.Place
 
 	// stats brutos por jogador (spec 011).
 	for _, e := range pr.Entries {
+		if err := markPlayerSeen(ctx, tx, pr.GameID, pr.ModeID, e.PlayerID); err != nil {
+			return false, fmt.Errorf("analytics repository: player seen: %w", err)
+		}
 		if err := insertPlayerStats(ctx, tx, pr.GameID, pr.ModeID, pr.MatchID, e.PlayerID, e.Stats); err != nil {
 			return false, fmt.Errorf("analytics repository: apply placement: stats: %w", err)
 		}
@@ -257,11 +261,26 @@ func (r *PostgresRepository) ApplyCollective(ctx context.Context, cr domain.Coll
 
 	// stats brutos por jogador (spec 011).
 	for _, p := range cr.Players {
+		if err := markPlayerSeen(ctx, tx, cr.GameID, cr.ModeID, p.PlayerID); err != nil {
+			return false, fmt.Errorf("analytics repository: player seen: %w", err)
+		}
 		if err := insertPlayerStats(ctx, tx, cr.GameID, cr.ModeID, cr.MatchID, p.PlayerID, p.Stats); err != nil {
 			return false, fmt.Errorf("analytics repository: apply collective: stats: %w", err)
 		}
 	}
 	return false, tx.Commit(ctx)
+}
+
+// markPlayerSeen registra o jogador como visto no jogo/modo (base de
+// "jogadores únicos"). Todos os arquétipos marcam — até a spec 016 só o
+// queue_arena marcava e os outros jogos apareciam com 0 jogadores.
+func markPlayerSeen(ctx context.Context, tx pgx.Tx, gameID, modeID, playerID string) error {
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO game_player_seen (game_id, mode_id, player_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+		gameID, modeID, playerID); err != nil {
+		return fmt.Errorf("player seen: %w", err)
+	}
+	return nil
 }
 
 // insertPlayerStats grava as linhas de stats brutos de um jogador (spec 011),
@@ -326,17 +345,34 @@ func (r *PostgresRepository) ApplySessionClosed(ctx context.Context, evt domain.
 	return false, tx.Commit(ctx)
 }
 
-// Overview devolve os totais cross-game + os jogos ordenados por matches desc.
-// Sem conceito de modo (sempre "todos os modos" de todos os jogos) — spec
-// 014: GROUP BY game_id é OBRIGATÓRIO desde que game_rollup ganhou mode_id,
-// senão jogos com mais de um modo duplicariam aqui (uma linha por modo).
+// Overview devolve os totais cross-game + um jogo por linha (spec 016). A base
+// é a união dos jogos com sessão fechada (todos os arquétipos) e dos com
+// partida de queue_arena — antes só o game_rollup (queue_arena) entrava, e o
+// Folclore Souls (host_world_dropin) sumia do Analytics global.
 func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT r.game_id, SUM(r.matches_total), SUM(r.participations), SUM(r.wins), SUM(r.losses), SUM(r.draws), SUM(r.score_sum),
-		       (SELECT count(DISTINCT s.player_id) FROM game_player_seen s WHERE s.game_id = r.game_id)
-		FROM game_rollup r
-		GROUP BY r.game_id
-		ORDER BY SUM(r.matches_total) DESC, r.game_id`)
+		WITH games AS (
+			SELECT game_id FROM game_session_rollup
+			UNION
+			SELECT game_id FROM game_rollup
+		), sess AS (
+			SELECT game_id, SUM(count) AS sessions, SUM(duration_sum_ms) AS dur,
+			       COALESCE(SUM(count) FILTER (WHERE close_reason IN ('abandoned', 'ttl')), 0) AS abandoned
+			FROM game_session_rollup GROUP BY game_id
+		), m AS (
+			SELECT game_id, SUM(matches_total) AS matches, SUM(participations) AS parts,
+			       SUM(wins) AS wins, SUM(losses) AS losses, SUM(draws) AS draws, SUM(score_sum) AS score
+			FROM game_rollup GROUP BY game_id
+		)
+		SELECT g.game_id,
+		       COALESCE(sess.sessions, 0), COALESCE(sess.dur, 0), COALESCE(sess.abandoned, 0),
+		       COALESCE(m.matches, 0), COALESCE(m.parts, 0), COALESCE(m.wins, 0), COALESCE(m.losses, 0),
+		       COALESCE(m.draws, 0), COALESCE(m.score, 0),
+		       (SELECT count(DISTINCT s.player_id) FROM game_player_seen s WHERE s.game_id = g.game_id)
+		FROM games g
+		LEFT JOIN sess ON sess.game_id = g.game_id
+		LEFT JOIN m ON m.game_id = g.game_id
+		ORDER BY COALESCE(sess.sessions, 0) DESC, COALESCE(m.matches, 0) DESC, g.game_id`)
 	if err != nil {
 		return domain.Overview{}, fmt.Errorf("analytics repository: overview: %w", err)
 	}
@@ -344,14 +380,18 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 
 	var ov domain.Overview
 	for rows.Next() {
-		var g domain.GameStat
-		var participations, scoreSum int64
-		if err := rows.Scan(&g.GameID, &g.Matches, &participations, &g.Wins, &g.Losses, &g.Draws, &scoreSum, &g.UniquePlayers); err != nil {
+		var g domain.OverviewGame
+		var durSum, scoreSum int64
+		if err := rows.Scan(&g.GameID, &g.Sessions, &durSum, &g.Abandoned,
+			&g.Matches, &g.Participations, &g.Wins, &g.Losses, &g.Draws, &scoreSum, &g.UniquePlayers); err != nil {
 			return domain.Overview{}, fmt.Errorf("analytics repository: scan overview: %w", err)
 		}
-		g.Participations = participations
-		g.AvgScore = avg(scoreSum, participations)
+		g.AvgScore = avg(scoreSum, g.Participations)
+		if g.Sessions > 0 {
+			g.AvgSessionMs = durSum / g.Sessions
+		}
 		ov.Games = append(ov.Games, g)
+		ov.Totals.Sessions += g.Sessions
 		ov.Totals.Matches += g.Matches
 	}
 	if err := rows.Err(); err != nil {
@@ -364,9 +404,10 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 		return domain.Overview{}, fmt.Errorf("analytics repository: overview unique: %w", err)
 	}
 
-	// Série "partidas por dia" somada entre todos os jogos (últimos overviewDailyDays).
+	// Série "sessões fechadas por dia" somada entre todos os jogos (últimos
+	// overviewDailyDays) — a medida que existe para todo arquétipo.
 	drows, err := r.pool.Query(ctx, `
-		SELECT to_char(day, 'YYYY-MM-DD'), SUM(matches) FROM game_daily
+		SELECT to_char(day, 'YYYY-MM-DD'), SUM(count) FROM game_session_daily
 		WHERE day >= (now() AT TIME ZONE 'utc')::date - $1::int
 		GROUP BY day ORDER BY day`, overviewDailyDays)
 	if err != nil {
@@ -374,8 +415,8 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 	}
 	defer drows.Close()
 	for drows.Next() {
-		var d domain.DailyPoint
-		if err := drows.Scan(&d.Day, &d.Matches); err != nil {
+		var d domain.SessionsPoint
+		if err := drows.Scan(&d.Day, &d.Sessions); err != nil {
 			return domain.Overview{}, fmt.Errorf("analytics repository: scan overview daily: %w", err)
 		}
 		ov.Daily = append(ov.Daily, d)

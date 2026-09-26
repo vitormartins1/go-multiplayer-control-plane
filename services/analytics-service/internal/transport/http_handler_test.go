@@ -35,8 +35,12 @@ func newMux(r Reader) *http.ServeMux {
 
 func TestOverview_200_SerializaTotaisEJogos(t *testing.T) {
 	r := &fakeReader{ov: domain.Overview{
-		Totals: domain.Totals{Matches: 3, UniquePlayers: 2, Games: 1},
-		Games:  []domain.GameStat{{GameID: "g1", Matches: 3, UniquePlayers: 2, Wins: 1, AvgScore: 4.5}},
+		Totals: domain.Totals{Sessions: 5, Matches: 3, UniquePlayers: 2, Games: 1},
+		Games: []domain.OverviewGame{{
+			GameStat: domain.GameStat{GameID: "g1", Matches: 3, UniquePlayers: 2, Wins: 1, AvgScore: 4.5},
+			Sessions: 5, AvgSessionMs: 60000, Abandoned: 1,
+		}},
+		Daily: []domain.SessionsPoint{{Day: "2026-09-25", Sessions: 5}},
 	}}
 	rec := httptest.NewRecorder()
 	newMux(r).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/analytics/overview", nil))
@@ -44,19 +48,33 @@ func TestOverview_200_SerializaTotaisEJogos(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	var body struct {
 		Totals struct {
-			Matches int64 `json:"matches"`
-			Games   int64 `json:"games"`
+			Sessions int64 `json:"sessions"`
+			Matches  int64 `json:"matches"`
+			Games    int64 `json:"games"`
 		} `json:"totals"`
 		Games []struct {
-			GameID   string  `json:"gameId"`
-			AvgScore float64 `json:"avgScore"`
+			GameID       string  `json:"gameId"`
+			AvgScore     float64 `json:"avgScore"`
+			Sessions     int64   `json:"sessions"`
+			AvgSessionMs int64   `json:"avgSessionMs"`
+			Abandoned    int64   `json:"abandoned"`
 		} `json:"games"`
+		Daily []struct {
+			Day      string `json:"day"`
+			Sessions int64  `json:"sessions"`
+		} `json:"daily"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, int64(3), body.Totals.Matches)
+	assert.Equal(t, int64(5), body.Totals.Sessions)
 	require.Len(t, body.Games, 1)
 	assert.Equal(t, "g1", body.Games[0].GameID)
 	assert.Equal(t, 4.5, body.Games[0].AvgScore)
+	assert.Equal(t, int64(5), body.Games[0].Sessions)
+	assert.Equal(t, int64(60000), body.Games[0].AvgSessionMs)
+	assert.Equal(t, int64(1), body.Games[0].Abandoned)
+	require.Len(t, body.Daily, 1)
+	assert.Equal(t, int64(5), body.Daily[0].Sessions)
 }
 
 func TestGameAnalytics_200_RepassaDaysEDaily(t *testing.T) {

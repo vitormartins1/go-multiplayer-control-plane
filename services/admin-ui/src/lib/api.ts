@@ -367,10 +367,18 @@ export interface AnalyticsDaily {
   matches: number;
 }
 
+// Overview cross-game (analytics-service/016): a medida comum a todos os
+// arquétipos é a sessão fechada; matches/wins/... são só do queue_arena.
+export interface AnalyticsOverviewGame extends AnalyticsGameStat {
+  sessions: number;
+  avgSessionMs: number;
+  abandoned: number; // fechadas por abandoned (server caiu) ou ttl (ninguém reportou)
+}
+
 export interface AnalyticsOverview {
-  totals: { matches: number; uniquePlayers: number; games: number };
-  games: AnalyticsGameStat[];
-  daily: AnalyticsDaily[];
+  totals: { sessions: number; matches: number; uniquePlayers: number; games: number };
+  games: AnalyticsOverviewGame[];
+  daily: { day: string; sessions: number }[]; // sessões fechadas por dia
 }
 
 // host_world_dropin (spec 004/020): contagem por modo/papel/evento/outcome no

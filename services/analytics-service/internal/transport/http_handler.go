@@ -46,14 +46,29 @@ type gameStatDTO struct {
 	AvgScore       float64 `json:"avgScore"`
 }
 
+// overviewGameDTO: linha de um jogo no overview (spec 016) — sessões fechadas
+// são a medida comum; matches/wins/... seguem vindo do queue_arena.
+type overviewGameDTO struct {
+	gameStatDTO
+	Sessions     int64 `json:"sessions"`
+	AvgSessionMs int64 `json:"avgSessionMs"`
+	Abandoned    int64 `json:"abandoned"`
+}
+
+type sessionsPointDTO struct {
+	Day      string `json:"day"`
+	Sessions int64  `json:"sessions"`
+}
+
 type overviewDTO struct {
 	Totals struct {
+		Sessions      int64 `json:"sessions"`
 		Matches       int64 `json:"matches"`
 		UniquePlayers int64 `json:"uniquePlayers"`
 		Games         int64 `json:"games"`
 	} `json:"totals"`
-	Games []gameStatDTO `json:"games"`
-	Daily []dailyDTO    `json:"daily"`
+	Games []overviewGameDTO  `json:"games"`
+	Daily []sessionsPointDTO `json:"daily"` // sessões fechadas por dia (spec 016)
 }
 
 func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
@@ -63,16 +78,20 @@ func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var dto overviewDTO
+	dto.Totals.Sessions = ov.Totals.Sessions
 	dto.Totals.Matches = ov.Totals.Matches
 	dto.Totals.UniquePlayers = ov.Totals.UniquePlayers
 	dto.Totals.Games = ov.Totals.Games
-	dto.Games = make([]gameStatDTO, 0, len(ov.Games))
+	dto.Games = make([]overviewGameDTO, 0, len(ov.Games))
 	for _, g := range ov.Games {
-		dto.Games = append(dto.Games, toGameStatDTO(g))
+		dto.Games = append(dto.Games, overviewGameDTO{
+			gameStatDTO: toGameStatDTO(g.GameStat),
+			Sessions:    g.Sessions, AvgSessionMs: g.AvgSessionMs, Abandoned: g.Abandoned,
+		})
 	}
-	dto.Daily = make([]dailyDTO, 0, len(ov.Daily))
+	dto.Daily = make([]sessionsPointDTO, 0, len(ov.Daily))
 	for _, d := range ov.Daily {
-		dto.Daily = append(dto.Daily, dailyDTO{Day: d.Day, Matches: d.Matches})
+		dto.Daily = append(dto.Daily, sessionsPointDTO{Day: d.Day, Sessions: d.Sessions})
 	}
 	httpkit.WriteJSON(w, http.StatusOK, dto)
 }

@@ -444,9 +444,41 @@ func TestOverview_OrdenaPorMatchesESomaTotais(t *testing.T) {
 	assert.Equal(t, int64(2), ov.Totals.Games)
 	assert.Equal(t, int64(2), ov.Totals.UniquePlayers, "p1 e p2 distintos globais")
 
-	// série diária cross-game: as 3 partidas caem hoje -> 1 ponto com 3.
+	// spec 016: a série do overview é de SESSÕES fechadas (nenhuma aqui).
+	assert.Empty(t, ov.Daily)
+}
+
+// Spec 016: um jogo só de host_world_dropin (o Folclore Souls) aparece no
+// overview com sessões, duração média, abandono e jogadores únicos — antes
+// sumia (o overview lia só o rollup do queue_arena).
+func TestOverview_JogoSoDeMundo_ApareceComSessoesEJogadores(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	base := recentDay()
+
+	_, err := repo.ApplyParticipation(ctx, domain.ParticipationEvent{
+		GameID: "souls", ModeID: "default", SessionID: "w1", PlayerID: "inv-1",
+		Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS", EventID: "e1",
+	})
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("w1", "souls", "default", "host_world_dropin", "host_killed", base, base.Add(10*time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("w2", "souls", "default", "host_world_dropin", "abandoned", base, base.Add(20*time.Minute)))
+	require.NoError(t, err)
+
+	ov, err := repo.Overview(ctx)
+	require.NoError(t, err)
+	require.Len(t, ov.Games, 1)
+	g := ov.Games[0]
+	assert.Equal(t, "souls", g.GameID)
+	assert.Equal(t, int64(2), g.Sessions)
+	assert.Equal(t, int64(15*60*1000), g.AvgSessionMs)
+	assert.Equal(t, int64(1), g.Abandoned)
+	assert.Equal(t, int64(1), g.UniquePlayers, "participação marca o jogador como visto")
+	assert.Equal(t, int64(0), g.Matches)
+	assert.Equal(t, int64(2), ov.Totals.Sessions)
 	require.Len(t, ov.Daily, 1)
-	assert.Equal(t, int64(3), ov.Daily[0].Matches, "soma partidas/dia entre jogos")
+	assert.Equal(t, int64(2), ov.Daily[0].Sessions)
 }
 
 func mustApply(repo *PostgresRepository, ctx context.Context, m domain.MatchResult) error {

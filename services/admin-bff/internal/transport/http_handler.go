@@ -715,7 +715,7 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 		ov.Games = []domain.AnalyticsGameStat{}
 	}
 	if ov.Daily == nil {
-		ov.Daily = []domain.AnalyticsDaily{}
+		ov.Daily = []domain.AnalyticsSessionsPoint{}
 	}
 	httpkit.WriteJSON(w, http.StatusOK, ov)
 }
