@@ -24,7 +24,8 @@
    nos 12 binários, lint limpo); as dívidas são pontuais (cobertura de analytics 61%, `session_service.go` com
    1.075 linhas, boilerplate de `main.go` copiado).
 9. Para a vitrine falta a **primeira impressão**: README atual não tem diagrama, quickstart verificável nem demo.
-10. Executei na Fase 2 os itens que não dependem de decisão (ver §5 e `PROGRESSO.md`); ficam 6 decisões (§6).
+10. Executei na Fase 2 os itens que não dependem de decisão (ver §5 e `PROGRESSO.md`), com uma demo do fluxo do
+    Folclore Souls validada ponta a ponta; ficam 6 decisões (§6) e uma pendência de aval (§6, "shared/").
 
 ---
 
@@ -167,10 +168,10 @@ hoje, mas são pequenos (2–7 specs cada), têm cobertura ≥ 87% e são exatam
 | G2 | **admin-bff sem autenticação**: `/api/*` repassa com a internal key, então quem alcança a porta 8089 apaga jogo, muda score etc. | `admin-bff/internal/transport/http_handler.go:81-129`. Aceitável em dev; bloqueador para qualquer deploy. *Decisão D6.* |
 | G3 | JWT sem checagem de `iss`/`aud`; o jogo vem do header `X-Game-Id` não autenticado (token de um jogo vale em todos) | `shared/auth/jwks_verifier.go`; `cloud-save/internal/transport/http_handler.go:136` |
 | G4 | `kid` desconhecido dispara fetch de JWKS a cada request (sem singleflight/throttle) — amplificação contra o identity | `shared/auth/jwks_verifier.go:91-104` (mexe em `shared/` → precisa de aval) |
-| G5 | Sem rate limit/lockout no login; sem `ReadHeaderTimeout`/`IdleTimeout`; `MaxBytesReader` só no cloud-save; sem CORS explícito | `identity-service`, todos os `main.go` |
-| G6 | Identity sobe com chave de assinatura **efêmera** no compose (tokens morrem a cada restart) | `identity-service/cmd/server/main.go:168-172`; compose só passa chave ao session |
+| G5 | Sem rate limit/lockout no login; `MaxBytesReader` só no cloud-save (player-data gravava valores sem teto); sem CORS explícito. *(Os timeouts de servidor estão ok: todos os `http.Server` têm `ReadTimeout`, e o `IdleTimeout` herda dele.)* | `identity-service`, `player-data-service`. **Teto de corpo corrigido na Fase 2 (P4).** |
+| G6 | Identity sobe com chave de assinatura **efêmera** no compose (tokens morrem a cada restart) | `identity-service/cmd/server/main.go:168-172`; compose só passa chave ao session. **Corrigido na Fase 2 (P5).** |
 | G7 | `ReportResult` sem outbox: crash entre publish e close deixa sessão aberta já publicada; retry após sucesso dá `NotFound` | `session_service.go:305-352` |
-| G8 | Set de idempotência do leaderboard sem TTL (cresce para sempre) | `redis_store.go:87-131` |
+| G8 | Set de idempotência do leaderboard sem TTL (cresce para sempre) | `redis_store.go:87-131`. **Corrigido na Fase 2 (spec `leaderboard/008`).** |
 | G9 | Nenhum serviço do compose tinha restart policy (lição do incidente de 2026-08-19 não aplicada) | só `localstack` (`docker-compose.yml:421`). **Corrigido na Fase 2 (E4).** |
 | G10 | Deploy real/medição de custo (a tese do ADR-0008) não começou | só Terraform local de mensageria |
 
@@ -180,12 +181,12 @@ hoje, mas são pequenos (2–7 specs cada), têm cobertura ≥ 87% e são exatam
 |---|---|
 | V1 | **`main` vermelha** (teste do admin-bff). Corrigido na Fase 2 (E1). |
 | V2 | README de primeira impressão: sem diagrama, sem quickstart verificável, dados errados (§1.3). Reescrito na Fase 2 (E5). |
-| V3 | admin-ui sem nenhum teste nem lint (14k LOC). Mínimo sério: Vitest nos `lib/` puros (`rulesGraph.ts`, `csv.ts`, `matchCond`) + ESLint no CI. |
-| V4 | Cobertura abaixo da régua da casa: analytics 60,9%, achievements 77,7%. |
-| V5 | Demo reproduzível: não há script que suba o mínimo e exercite o fluxo `login → OpenWorld → Invade → ReportParticipationEvent → conquista`. |
+| V3 | admin-ui sem nenhum teste nem lint (14k LOC). Mínimo sério: Vitest nos `lib/` puros + ESLint no CI. **Vitest + 12 testes no CI na Fase 2 (P2); ESLint e `rulesGraph.ts` ficam para depois.** |
+| V4 | Cobertura abaixo da régua da casa: analytics 60,9%, achievements 77,7%. **Corrigido (E7): 92,8% e 93,4%.** |
+| V5 | Demo reproduzível: não há script que exercite o fluxo `login → OpenWorld → Invade → ReportParticipationEvent → conquista`. **Feito (P1): `scripts/demo-host-world.sh`, validado ponta a ponta.** |
 | V6 | CI sem `govulncheck`, sem build de imagem, sem gate de cobertura; lint só com linters default. |
 | V7 | `session_service.go` com 1.075 linhas (4 arquétipos num tipo só); boilerplate de `main.go` (pgxpool, healthz, metrics) copiado em 7–12 binários; middleware `auth`/`playerID`/`gameHeader` copiado em 4 serviços. Refatorar **só** com teste cobrindo — é o que um revisor de Go notaria primeiro. |
-| V8 | 44 `_ =` em código de produção; os que importam: `json.Unmarshal` ignorado em `game-registry/internal/transport/http_handler.go:193,202,216,225`. |
+| V8 | 44 `_ =` em código de produção; os que importam: `json.Unmarshal` ignorado em `game-registry/internal/transport/http_handler.go:193,202,216,225`. **Os do game-registry corrigidos na Fase 2 (400 em vez de zero-value).** |
 
 ---
 
@@ -202,7 +203,7 @@ hoje, mas são pequenos (2–7 specs cada), têm cobertura ≥ 87% e são exatam
 | R7 | Docs de estado desatualizadas → decisões erradas (o próprio documento de sinais pediu uma feature já feita) | Média | Corrigido (E5) |
 | R8 | admin-ui sem testes: 3,6k LOC de canvas com layout por altura estimada | Média | V3 |
 | R9 | Invasão cruzando modos | Baixa hoje (Folclore tem poucos modos), Média com mais modos | D2 |
-| R10 | Crescimento sem limite do set de idempotência do leaderboard | Baixa | G8 |
+| R10 | Crescimento sem limite do set de idempotência do leaderboard | Baixa | Corrigido (`leaderboard/008`) |
 | R11 | JWKS fetch amplificável | Baixa (dev), Média (prod) | G4 |
 
 ---
@@ -214,19 +215,19 @@ Ordem por valor/esforço. **E** = executo nesta sessão (não depende do dono). 
 
 | # | Item | Lente | Impacto | Esforço | Feito quando | Status |
 |---|---|---|---|---|---|---|
-| E1 | Corrigir o teste do admin-bff (`main` verde) e cobrir o enriquecimento de handle do leaderboard | V | Alto | XS | `go test ./... -race` verde; teste afirma o handle | Fase 2 |
-| E2 | `HOST_KILLED`/evento de mundo recém-fechado: retry publica em vez de `NotFound` (spec `session-service/029`) | F | Alto | S | teste reproduz a perda e passa; contrato e comentários corrigidos | Fase 2 |
-| E3 | `RequireInternalKey` no `/admin` do session e do analytics | G | Alto | XS | teste de transporte/401 sem chave; BFF segue funcionando (já envia a chave) | Fase 2 |
-| E4 | `restart: unless-stopped` nos serviços de longa duração do compose | F/G | Médio | XS | `docker compose config` válido | Fase 2 |
-| E5 | Sincronizar docs de estado: README (reescrito p/ primeira impressão), NEXT-STEPS (reescrito), SINAIS (ADR-0026), contrato HWD (ordem, envelope, erros, idempotência), Capoeira→Folclore nos docs vivos, CLAUDE/AGENTS (Go 1.26, Terraform real), specs com status velho, spec retroativa do slug | V/F | Alto | S | nenhuma divergência da §1.3 restante | Fase 2 |
-| E6 | Remover as 2 rotas mortas do admin-bff + cliente sem uso no admin-ui | V | Baixo | XS | build/testes verdes; `tsc` ok | Fase 2 |
-| E7 | Cobertura do analytics `internal/service` ≥ 80% e achievements ≥ 80% | V | Médio | S | `go test -cover` ≥ 80% | Fase 2 (se houver contexto) |
-| P1 | Demo reproduzível: `scripts/demo-hwd.sh` (compose mínimo + grpcurl do fluxo host_world) | V | Alto | M | roda do zero numa máquina limpa | próximo |
-| P2 | Vitest nos `lib/` puros do admin-ui + ESLint no CI | V | Médio | M | CI roda testes do front | próximo |
-| P3 | TTL no set de idempotência do leaderboard | G | Baixo | S | teste de expiração | próximo |
-| P4 | `ReadHeaderTimeout`/`IdleTimeout` e `MaxBytesReader` nos servidores HTTP | G | Médio | S | por serviço, sem tocar `shared/` | próximo |
-| P5 | Chave de assinatura persistente do identity no compose (secret como o do session) | G | Médio | XS | tokens sobrevivem a restart | próximo |
-| P6 | `govulncheck` no CI | V/G | Médio | XS | job verde | próximo |
+| E1 | Corrigir o teste do admin-bff (`main` verde) e cobrir o enriquecimento de handle do leaderboard | V | Alto | XS | `go test ./... -race` verde; teste afirma o handle | **feito** |
+| E2 | `HOST_KILLED`/evento de mundo recém-fechado: retry publica em vez de `NotFound` (spec `session-service/029`) | F | Alto | S | teste reproduz a perda e passa; contrato e comentários corrigidos | **feito** |
+| E3 | `RequireInternalKey` no `/admin` do session e do analytics | G | Alto | XS | teste de transporte/401 sem chave; BFF segue funcionando (já envia a chave) | **feito** |
+| E4 | `restart: unless-stopped` nos serviços de longa duração do compose | F/G | Médio | XS | `docker compose config` válido | **feito** |
+| E5 | Sincronizar docs de estado: README (reescrito p/ primeira impressão), NEXT-STEPS (reescrito), SINAIS (ADR-0026), contrato HWD (ordem, envelope, erros, idempotência), Capoeira→Folclore nos docs vivos, CLAUDE/AGENTS (Go 1.26, Terraform real), specs com status velho, spec retroativa do slug | V/F | Alto | S | nenhuma divergência da §1.3 restante | **feito** |
+| E6 | Remover as 2 rotas mortas do admin-bff + cliente sem uso no admin-ui | V | Baixo | XS | build/testes verdes; `tsc` ok | **feito** |
+| E7 | Cobertura do analytics `internal/service` ≥ 80% e achievements ≥ 80% | V | Médio | S | `go test -cover` ≥ 80% | **feito** |
+| P1 | Demo reproduzível: `scripts/demo-host-world.sh` (grpcurl + curl do fluxo host_world) | V | Alto | M | passa de ponta a ponta contra a stack | **feito** (`5a6ebbb`) |
+| P2 | Vitest nos `lib/` puros do admin-ui + ESLint no CI | V | Médio | M | CI roda testes do front | **Vitest feito** (`c57abe0`); ESLint próximo |
+| P3 | TTL no set de idempotência do leaderboard | G | Baixo | S | teste de expiração | **feito** (`5e2aaf2`, spec 008) |
+| P4 | Teto de corpo (`MaxBytesReader`) nas rotas de jogador | G | Médio | S | por serviço, sem tocar `shared/` | **feito** (`2690675`, spec `player-data/003`) |
+| P5 | Chave de assinatura persistente do identity no compose (secret como o do session) | G | Médio | XS | tokens sobrevivem a restart | **feito** (`092b1eb`) |
+| P6 | `govulncheck` no CI | V/G | Médio | XS | job verde | próximo — não validável na VM (`vuln.go.dev` bloqueado) |
 | D1 | Auth no gRPC do session (bearer do jogador em `OpenWorld`/`JoinWorld`; credencial do game server nos reports) | F/G | **Alto** | M | contrato v2 + jogo atualizado | decisão |
 | D2 | Filtrar invasão por modo (`mode_id` opcional em `ListInvadableWorlds`) | F | Médio | S | spec + teste | decisão |
 | D3 | Boss no `BOSS_DEFEATED`: convenção de `stats` × campo novo | F | Médio | XS/S | contrato documenta | decisão |
@@ -267,3 +268,12 @@ genérico sem caso real não se paga.
 **D6 — Auth do console.** Antes de qualquer deploy fora da máquina local: (a) login de operador no admin-bff
 (OIDC/senha + sessão) ou (b) console só atrás de rede privada/VPN. **Recomendo decidir junto com o G10 (deploy)**;
 não faz sentido construir antes.
+
+**Aval pendente (regra da casa, não é decisão de produto):** duas correções de segurança moram em `shared/auth`,
+que o `CLAUDE.md` pede para não tocar sem consulta — (a) checar `iss`/`aud` no `JWKSVerifier` e (b) `singleflight` +
+intervalo mínimo no refetch de JWKS por `kid` desconhecido (G3/G4). **Recomendo aprovar as duas**: são pequenas e
+fecham a amplificação contra o identity.
+
+**Achado da bancada (Fase 2):** com o SNS travado, o `ReportParticipationEvent` ficava pendurado até o cliente
+desistir — corrigido com timeout de 5s por publish (`9b58304`, GO-LEARNINGS §38).
+

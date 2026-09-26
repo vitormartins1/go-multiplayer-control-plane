@@ -23,16 +23,24 @@ Commits diretos na branch, um por entrega; features com spec (`session/029`, `pl
 | P1 | `5a6ebbb` | `scripts/demo-host-world.sh` — fluxo do Folclore Souls ponta a ponta | **ao vivo**, passa de ponta a ponta |
 | extra | `9b58304` | timeout de 5s no publish SNS (achado da bancada: report pendurava com o SNS travado) | ao vivo: `Internal` em ~5s |
 | P4 | `2690675` | teto de corpo nas rotas de jogador; player-data 400 KiB → 413 (spec `player-data/003`) | unit |
+| P3 | `5e2aaf2` | guarda de idempotência do leaderboard com TTL de 30 dias (spec `leaderboard/008`) + GO-LEARNINGS §38/§39 | integração com Redis real |
+| P2 | `c57abe0` | Vitest no admin-ui (12 testes nos `lib/` puros) + `npm test` no CI | `npm test`, `npm run build` |
+| V8 | `11a72c4` | game-registry: params do perfil com tipo errado → 400 (antes zero-value silencioso) | unit |
+| verificação final | — | `go build`/`vet`/lint (0 issues)/unit (51 pacotes ok)/integração (57 ok; só o cloud-save falha por imagem MinIO inacessível na VM)/admin-ui; **demo ponta a ponta com todos os binários reconstruídos** | ✅ |
 
 ## Em andamento
 
-- Nada em aberto no código. Próximos candidatos abaixo.
+- Nada. Sessão encerrada com a branch publicada.
 
 ## Próximo (executável sem decisão do dono)
 
-1. P3 — TTL/janela no set de idempotência do leaderboard (precisa de spec curta: a janela é uma decisão técnica).
-2. P2 — Vitest nos `lib/` puros do admin-ui + ESLint no CI.
-3. P6 — `govulncheck` no CI: **não validável nesta VM** (`vuln.go.dev` bloqueado); rodar localmente antes de ligar.
+1. ESLint no admin-ui (no CI só depois de zerar os avisos) e testes do `rulesGraph.ts`.
+2. P6 — `govulncheck` no CI: **não validável nesta VM** (`vuln.go.dev` bloqueado); rodar localmente antes de ligar.
+3. Refatorar `session_service.go` (1,1k linhas) com a cobertura atual (95%) como rede.
+
+## Depende do dono
+
+- Decisões D1–D6 (`REVISAO-2026-09.md` §6) e o aval para mexer em `shared/auth` (G3/G4).
 
 ## Para o dono validar localmente
 

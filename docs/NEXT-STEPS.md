@@ -18,9 +18,12 @@ doc não é changelog. A análise completa que embasa esta versão está em
   (analytics 012–015, session 027/028, admin-bff 025–028), ~27 specs de polimento do admin-ui (063–089), o fix
   "participação não fica refém do publish" (`49e976d`, 2026-08-19) e o endpoint de slug para o rename do Folclore
   Souls (`7f174a4`, spec retroativa `game-registry/014`).
-- **Revisão de produto 2026-09** (esta sessão): `main` voltou a ficar verde, o `HOST_KILLED` não se perde mais no
-  reenvio (`session/029`), `/admin` do session e do analytics sob a internal key, restart policy no compose, docs
-  de estado sincronizadas com o código. Ver `review/PROGRESSO.md` para os commits.
+- **Revisão de produto 2026-09**: `main` voltou a ficar verde, o `HOST_KILLED` não se perde mais no reenvio
+  (`session/029`) e o publish no SNS tem timeout próprio, `/admin` do session e do analytics sob a internal key,
+  restart policy e chave persistente do identity no compose, teto de corpo nas rotas de jogador
+  (`player-data/003`), idempotência do leaderboard com TTL (`leaderboard/008`), cobertura ≥ 92% no analytics e no
+  achievements, primeiros testes do admin-ui, **demo reproduzível** (`scripts/demo-host-world.sh`) e docs de estado
+  sincronizadas com o código. Ver `review/PROGRESSO.md` para os commits.
 
 ## Decisões pendentes do dono (detalhe e recomendação em `review/REVISAO-2026-09.md` §6)
 
@@ -40,8 +43,10 @@ doc não é changelog. A análise completa que embasa esta versão está em
 2. **Integração do cloud-save**: a VM da revisão não conseguiu baixar `minio/minio:latest` (`pull access denied`).
    Rodar `go test -tags=integration ./services/cloud-save-service/...` localmente; se falhar, a imagem saiu do
    Docker Hub e o compose e o teste precisam de outra origem.
-3. **Recriar a stack local** depois de puxar esta branch: o compose ganhou restart policy e a `INTERNAL_API_KEY`
-   do analytics (`docker compose -f infra/docker/docker-compose.yml up -d --build`).
+3. **Recriar a stack local** depois de puxar esta branch: o compose ganhou restart policy, a `INTERNAL_API_KEY` do
+   analytics e o secret do identity — rodar `infra/docker/gen-secrets.sh` e depois
+   `docker compose -f infra/docker/docker-compose.yml up -d --build`; em seguida `scripts/demo-host-world.sh`
+   (a VM da revisão não conseguiu buildar as imagens — validou com os binários no host).
 4. **Validar com o jogo** (quando a fase multiplayer voltar): reenvio do `HOST_KILLED` com o fan-out fora
    (derrubar o localstack, matar o host, subir o localstack — o evento deve chegar ao achievements).
 
@@ -50,13 +55,10 @@ doc não é changelog. A análise completa que embasa esta versão está em
 Executáveis sem decisão (próximas sessões), por valor/esforço — detalhe e critério de "feito" em
 `review/REVISAO-2026-09.md` §5:
 
-1. **Demo reproduzível** do fluxo host_world (`login → OpenWorld → Invade → ReportParticipationEvent → conquista`)
-   num script com o compose mínimo — a primeira coisa que alguém de fora vai querer ver.
-2. **Testes no admin-ui**: Vitest nos `lib/` puros (`rulesGraph.ts`, `csv.ts`, `matchCond`) + ESLint no CI.
-3. **Endurecimento HTTP** sem tocar `shared/`: `ReadHeaderTimeout`/`IdleTimeout`, `MaxBytesReader`.
-4. **Chave de assinatura persistente do identity** no compose (hoje efêmera: tokens morrem a cada restart).
-5. **TTL no set de idempotência do leaderboard** e **`govulncheck` no CI**.
-6. **Refatorar `session_service.go`** (1,1k linhas, 4 arquétipos) só com a cobertura atual (95%) garantindo.
+1. **ESLint no admin-ui** (entrar no CI só com zero avisos) e testes do `rulesGraph.ts` (o layout do canvas).
+2. **`govulncheck` no CI** — rodar localmente antes (a VM da revisão não alcançava o `vuln.go.dev`).
+3. **Refatorar `session_service.go`** (1,1k linhas, 4 arquétipos) só com a cobertura atual (95%) garantindo.
+4. **Outbox/robustez do `ReportResult`** (crash entre publish e close) — pede desenho; abrir spec antes.
 
 Dependem de decisão/evidência (não começar sem):
 
