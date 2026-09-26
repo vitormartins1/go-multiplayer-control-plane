@@ -2,6 +2,7 @@
 # Ver ADR-0006 e docs/OBSERVABILITY.md.
 services:
   identity-service:
+    restart: unless-stopped # gameplay não pode depender de subir serviço à mão (incidente 2026-08-19)
     build:
       context: ../..
       dockerfile: services/identity-service/Dockerfile
@@ -22,6 +23,7 @@ services:
         condition: service_started
 
   achievements-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/achievements-service/Dockerfile
@@ -42,6 +44,7 @@ services:
         condition: service_started
 
   player-data-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/player-data-service/Dockerfile
@@ -62,6 +65,7 @@ services:
         condition: service_started
 
   cloud-save-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/cloud-save-service/Dockerfile
@@ -85,6 +89,7 @@ services:
         condition: service_started
 
   leaderboard-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/leaderboard-service/Dockerfile
@@ -106,6 +111,7 @@ services:
 
   # Primeiro serviço gRPC (ADR-0003). Duas portas: gRPC + HTTP (métricas/health).
   matchmaking-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/matchmaking-service/Dockerfile
@@ -133,6 +139,7 @@ services:
   # session-service: control plane interno (≈ GameLift). gRPC unary
   # (CreateSession, ReportResult) + HTTP para o JWKS do connect token (ADR-0010).
   session-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/session-service/Dockerfile
@@ -175,6 +182,7 @@ services:
   # aplica match_played/match_won (idempotente por matchID). Mesmo image do
   # achievements-service, entrypoint no binário consumer.
   achievements-consumer:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/achievements-service/Dockerfile
@@ -197,6 +205,7 @@ services:
   # Worker do fan-out durável (ADR-0020): consome match-results-leaderboard e
   # submete o score (idempotente via ZADD GT).
   leaderboard-consumer:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/leaderboard-service/Dockerfile
@@ -219,6 +228,7 @@ services:
   # analytics-service (ADR-0021): consome o fan-out match-results por um worker
   # pool e agrega rollups por jogo; expõe a read API do overview p/ o painel.
   analytics-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/analytics-service/Dockerfile
@@ -244,6 +254,7 @@ services:
   # admin-bff: back-end-for-frontend do painel admin (ADR-0016). Agregador
   # read-only — lê o Prometheus e a API admin do achievements. Sem banco.
   admin-bff:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/admin-bff/Dockerfile
@@ -281,6 +292,7 @@ services:
   # admin-ui: front do painel admin (React+Vite). nginx serve o build estático e
   # faz proxy de /api -> admin-bff (mesma origem, sem CORS). Ver ADR-0016.
   admin-ui:
+    restart: unless-stopped
     build:
       context: ../../services/admin-ui
       dockerfile: Dockerfile
@@ -293,6 +305,7 @@ services:
   # game-registry: fonte canônica de jogos (ADR-0017). Fornece o game_id
   # (multi-tenant). REST + Postgres próprio. Control plane interno.
   game-registry:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/game-registry/Dockerfile
@@ -311,6 +324,7 @@ services:
 
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: identity
@@ -329,6 +343,7 @@ services:
 
   # Banco próprio do achievements (database-per-service, ADR-0015).
   achievements-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: achievements
@@ -355,6 +370,7 @@ services:
 
   # Banco próprio do player-data (database-per-service, ADR-0015).
   player-data-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: player_data
@@ -373,6 +389,7 @@ services:
 
   # Banco próprio do game-registry (database-per-service, ADR-0015).
   game-registry-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: game_registry
@@ -399,6 +416,7 @@ services:
   # Object storage do cloud-save (S3-compatible; ADR-0015). Métricas Prometheus
   # nativas em /minio/v2/metrics/cluster (sem exporter separado).
   minio:
+    restart: unless-stopped
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
@@ -447,11 +465,13 @@ services:
 
   # Ranking real-time do leaderboard (Redis sorted sets; ADR-0015).
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
   redis-exporter:
+    restart: unless-stopped
     image: oliver006/redis_exporter:latest
     environment:
       REDIS_ADDR: redis://redis:6379
@@ -461,6 +481,7 @@ services:
       - redis
 
   prometheus:
+    restart: unless-stopped
     image: prom/prometheus:latest
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -475,6 +496,7 @@ services:
       - identity-service
 
   tempo:
+    restart: unless-stopped
     image: grafana/tempo:latest
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
@@ -484,6 +506,7 @@ services:
       - "4317:4317" # OTLP gRPC (ingestão)
 
   grafana:
+    restart: unless-stopped
     image: grafana/grafana:latest
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -499,6 +522,7 @@ services:
 
   # Um exporter por banco — padrão a repetir a cada serviço novo (ver OBSERVABILITY.md).
   identity-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@identity-postgres:5432/identity?sslmode=disable
@@ -508,6 +532,7 @@ services:
       - identity-postgres
 
   achievements-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@achievements-postgres:5432/achievements?sslmode=disable
@@ -517,6 +542,7 @@ services:
       - achievements-postgres
 
   player-data-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@player-data-postgres:5432/player_data?sslmode=disable
@@ -526,6 +552,7 @@ services:
       - player-data-postgres
 
   game-registry-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@game-registry-postgres:5432/game_registry?sslmode=disable
@@ -536,6 +563,7 @@ services:
 
   # Banco próprio do analytics (database-per-service, ADR-0015).
   analytics-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: analytics
@@ -558,6 +586,7 @@ services:
       retries: 10
 
   analytics-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@analytics-postgres:5432/analytics?sslmode=disable
@@ -570,6 +599,7 @@ services:
   # sessões fechadas (spec 025). Único banco novo do session-service; até aqui
   # era o único serviço stateful-por-natureza sem Postgres.
   session-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: session
@@ -587,6 +617,7 @@ services:
       retries: 10
 
   session-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@session-postgres:5432/session?sslmode=disable
