@@ -2,6 +2,10 @@
 
 **Status:** documento vivo · **Início:** 2026-07-06 · **Dono:** control plane (backend Go)
 
+> **Status dos arquétipos (decisão D5, revisão 2026-09):** `host_world_dropin` (Folclore Souls) e `queue_arena`
+> (Packet Arena) têm jogo real. `battle_royale` e `coop_mission` são **experimentais**: contrato e código completos
+> no control plane, nenhum jogo os usa — ficam congelados (verdes, sem evolução) até aparecer um caso real.
+
 ## Por que este documento existe
 
 O backend (matchmaking, session, game-registry, fan-out) precisa dar suporte a **vários tipos de jogo multiplayer** — cooperativo, competitivo, por times, battle royale, turnos, etc. Até a ADR-0023 ele assumia **um único arquétipo** (N jogadores independentes, cada um com placar, alguém vence por booleano — ver "Estado atual do backend"). O jogo-exemplo do data plane (Unity) acabou moldando os contratos, e queremos genericidade **com qualidade**, não por acidente.

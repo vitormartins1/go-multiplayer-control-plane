@@ -18,8 +18,8 @@ Um jogo se cadastra e declara um ou mais **modos nomeados** (ex.: "Ranked", "Cas
 |---|---|---|
 | `queue_arena` | partida simétrica FFA/NvN, fila + resultado terminal (win/loss/draw) | Packet Arena |
 | `host_world_dropin` | mundo persistente de um host; co-op/invasores entram e saem no meio (join-in-progress); resultado por evento, não placar final | Folclore Souls |
-| `battle_royale` | colocação ordinal (1º..Nº) + tempo de sobrevivência | (contrato pronto, sem jogo real ainda) |
-| `coop_mission` | desfecho coletivo da missão (sucesso/fracasso para o time todo) | (contrato pronto, sem jogo real ainda) |
+| `battle_royale` | colocação ordinal (1º..Nº) + tempo de sobrevivência | **experimental** — contrato e código prontos, nenhum jogo real; congelado |
+| `coop_mission` | desfecho coletivo da missão (sucesso/fracasso para o time todo) | **experimental** — contrato e código prontos, nenhum jogo real; congelado |
 
 Trocar de modo, ajustar tamanho de time, ligar/desligar invasão, exigir senha — tudo isso é **configuração no game-registry**, lida em runtime pelo matchmaking/sessão/achievements. Nenhum serviço tem `if game == X` hardcoded.
 

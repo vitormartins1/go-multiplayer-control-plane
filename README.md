@@ -76,7 +76,7 @@ Detalhe e decisões: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) e os [ADRs](
 |---|---|---|
 | `host_world_dropin` | mundo do host; co-op/invasor entram no meio; resultado por evento | **Folclore Souls** |
 | `queue_arena` | partida simétrica por fila; win/loss/draw + stats | Packet Arena (protótipo) |
-| `battle_royale`, `coop_mission` | colocação ordinal / desfecho coletivo | nenhum ainda — contrato pronto, sem jogo |
+| `battle_royale`, `coop_mission` | colocação ordinal / desfecho coletivo | **experimental** — contrato e código prontos, nenhum jogo real; congelados até existir um caso de verdade |
 
 Contratos com o data plane: [`docs/game-models/`](docs/game-models/README.md).
 

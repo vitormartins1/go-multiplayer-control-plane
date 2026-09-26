@@ -11,13 +11,15 @@ import type { MultiplayerProfile } from "./api";
 // precisar caçar mais uma cor livre a cada arquétipo novo.
 export const ARCHETYPE_META: Record<
   MultiplayerProfile["archetype"],
-  { label: string; icon: Icon }
+  { label: string; icon: Icon; experimental?: boolean }
 > = {
   queue_arena: { label: "Queue Arena", icon: IconSwords },
   host_world_dropin: { label: "Host World Drop-in", icon: IconPlanet },
-  battle_royale: { label: "Battle Royale", icon: IconParachute },
+  // experimental (decisão D5 da revisão 2026-09): contrato e código prontos,
+  // nenhum jogo real usa — congelado até existir um caso de verdade.
+  battle_royale: { label: "Battle Royale", icon: IconParachute, experimental: true },
   // mesmo símbolo do banner de missão (CoopPanel, SessionMatchDetail.tsx) — mesmo conceito.
-  coop_mission: { label: "Co-op Mission", icon: IconTargetArrow },
+  coop_mission: { label: "Co-op Mission", icon: IconTargetArrow, experimental: true },
 };
 
 // archetypeMetaOf busca o meta por uma string arbitrária (spec 022: o

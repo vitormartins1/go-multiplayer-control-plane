@@ -838,8 +838,8 @@ export function ModeProfileFields({
             data={[
               { value: "queue_arena", label: "Queue Arena — partida simétrica (FFA / NvN)" },
               { value: "host_world_dropin", label: "Host World Drop-in — mundo persistente (Soulslike)" },
-              { value: "battle_royale", label: "Battle Royale — lobby grande, colocação (PUBG/Fortnite)" },
-              { value: "coop_mission", label: "Co-op Mission — time vs. ambiente, resultado coletivo (L4D/Deep Rock)" },
+              { value: "battle_royale", label: "Battle Royale — lobby grande, colocação (experimental: sem jogo real)" },
+              { value: "coop_mission", label: "Co-op Mission — time vs. ambiente, coletivo (experimental: sem jogo real)" },
             ]}
           />
 
