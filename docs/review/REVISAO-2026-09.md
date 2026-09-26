@@ -239,6 +239,10 @@ Ordem por valor/esforço. **E** = executo nesta sessão (não depende do dono). 
 
 ## 6. Decisões que só o dono pode tomar
 
+> **Decididas em 2026-09-26:** o dono aprovou a revisão e seguiu a recomendação em todas — D1 (b) em duas fatias com
+> compatibilidade, D2 (a), D3 (a), D4 (a), D5 (a), D6 (decidir junto com o deploy) — e liberou mexer em
+> `shared/auth` (G3/G4). Execução acompanhada em [`PROGRESSO.md`](PROGRESSO.md) (Fase 3).
+
 **D1 — Autenticação no session gRPC (contrato com o jogo).**
 Opções: (a) manter como está até a fase multiplayer voltar; (b) **bearer do jogador obrigatório em
 `OpenWorld`/`JoinWorld`** (host/`player_id` derivados do token, como o matchmaking já faz) + **credencial do game

@@ -32,7 +32,7 @@ Trocar de modo, ajustar tamanho de time, ligar/desligar invasão, exigir senha �
 
 Cada sessão/mundo aloca um **Dedicated Server real** via Agones (não um mock) — por jogo, numa **Fleet própria** (não uma Fleet fixa compartilhada). O servidor recebe um **connect token assinado (Ed25519)**, validado offline via JWKS, com o papel do jogador (host/coop/invader/time) — o jogo não confia em nada que o cliente diga sem essa validação. Sessões órfãs (server morreu, ninguém reportou) são reconciliadas contra o cluster automaticamente.
 
-![Aba Fleet — saúde dos game servers e imagem/versão por jogo, dados reais do cluster Agones](images/fleet.png)
+![Aba Fleet — localização e réplicas reais de cada fleet no cluster Agones, mais o cadastro da fleet por jogo](images/fleet.png)
 
 ### 4. Motor de conquistas visual e data-driven
 
@@ -68,7 +68,7 @@ Um estúdio real não quer abrir o console da AWS, um cliente de banco e o Grafa
 
 Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distribuído (Tempo/OpenTelemetry) cobrindo também as chamadas que o Dedicated Server Unity faz ao control plane (o trace *dentro* do servidor Unity ainda é futuro — ver `OBSERVABILITY.md`), dashboards Grafana por domínio (serviço, Postgres, Redis, Agones/Fleet). Não é um adendo: é o instrumento que valida a própria tese do projeto (custo/performance vs. AWS gerenciado).
 
-![Aba Infrastructure — cada serviço com o equivalente AWS correspondente, materializando a tese do ADR-0008](images/infrastructure.png)
+![Aba Infrastructure — saúde real de cada serviço (Prometheus), dependências e atalho para o dashboard no Grafana](images/infrastructure.png)
 
 ## Fluxos ponta a ponta
 

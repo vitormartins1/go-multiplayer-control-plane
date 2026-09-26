@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 // domínio. Guardado no localStorage (por navegador/dispositivo), sincroniza
 // entre abas abertas via evento "storage". Cada preferência usa
 // createStoredEnum (genérico desde a 2ª+3ª preferência — mesmo critério já
-// usado pra extrair ChannelStrip/MockZone nesta sessão: generalizar quando
+// usado pra extrair ChannelStrip: generalizar quando
 // o padrão se repete, não antes).
 
 function createStoredEnum<T extends string | number>(key: string, allowed: readonly T[], fallback: T) {

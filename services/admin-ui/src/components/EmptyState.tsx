@@ -7,7 +7,7 @@ import type { Icon } from "@tabler/icons-react";
 // Mesmo vocabulário do hint já usado no canvas de Event Rules (ícone dimmed
 // 28px + texto centralizado, spec 080) — generalizado aqui pros outros
 // lugares onde uma lista pode ficar vazia. Não é um estado de erro (isso é
-// Alert) nem uma zona ilustrativa (isso é MockZone) — é "nada aqui ainda",
+// Alert) — é "nada aqui ainda",
 // deliberadamente quieto.
 export function EmptyState({ icon: StateIcon, message }: { icon: Icon; message: string }) {
   return (
