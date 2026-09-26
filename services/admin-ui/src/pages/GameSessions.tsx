@@ -19,7 +19,8 @@ import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
+import { closeReasonLabel, formatDuration, shortId, truncate } from "../lib/format";
+import { sessionStateLabel } from "../lib/vocab";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
 import { SessionMatchDetail } from "../components/SessionMatchDetail";
@@ -168,7 +169,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
           <Table striped withTableBorder>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Match</Table.Th>
+                <Table.Th>Sessão</Table.Th>
                 <Table.Th>Modo</Table.Th>
                 <Table.Th>Estado</Table.Th>
                 <Table.Th>Players</Table.Th>
@@ -223,7 +224,7 @@ function SessionRow({
           <Group gap={6} wrap="nowrap">
             <SessionAvatar seed={s.profileHash || s.sessionId} size={32} />
             <Text ff="monospace" size="sm">
-              {truncate(s.matchId)}
+              {shortId(s.matchId || s.sessionId)}
             </Text>
           </Group>
         </Table.Td>
@@ -237,15 +238,9 @@ function SessionRow({
           </Badge>
         </Table.Td>
         <Table.Td>
-          {s.state === "open" ? (
-            <Badge color="nominal" variant="light">
-              ao vivo
-            </Badge>
-          ) : (
-            <Badge color="gray" variant="light">
-              closed · {s.closeReason ?? "?"}
-            </Badge>
-          )}
+          <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
+            {sessionStateLabel(s.state, s.closeReason)}
+          </Badge>
         </Table.Td>
         <Table.Td>
           {/* resumo compacto (034): a lista completa vive no painel expandido.

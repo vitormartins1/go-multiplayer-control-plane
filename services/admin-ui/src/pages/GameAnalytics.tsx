@@ -20,20 +20,14 @@ import { StatCard } from "../components/StatCard";
 import { ChannelStrip } from "../components/ChannelStrip";
 import { formatDuration } from "../lib/format";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
-
-// Widget -> arquétipo (spec 064): tabela fixa, cada widget já é condicionado
-// a um campo do GameAnalyticsDetail que só existe pra um arquétipo. raw-stats
-// fica de fora — cross-arquétipo por natureza (qualquer modo reporta stats).
-const WIDGET_ARCHETYPE: Record<string, MultiplayerProfile["archetype"]> = {
-  summary: "queue_arena",
-  "queue-daily": "queue_arena",
-  "participations-role": "host_world_dropin",
-  "participation-daily": "host_world_dropin",
-  "placement-distribution": "battle_royale",
-  "placement-daily": "battle_royale",
-  "mission-distribution": "coop_mission",
-  "mission-daily": "coop_mission",
-};
+import {
+  CLOSE_CATEGORY_LABELS,
+  ROLE_ORDER,
+  closeReasonMeta,
+  participationEventMeta,
+  participationOutcomeMeta,
+  roleMeta,
+} from "../lib/vocab";
 
 // arquétipos na ordem canônica (mesma de ARCHETYPE_META/badges do header do
 // GameDetail) — define a ordem das seções do layout estático (spec 067).
@@ -50,6 +44,10 @@ interface CardDef {
   id: string;
   title: string;
   span: number; // colunas de 12 (Grid do Mantine) — responsivo via Grid.Col
+  // arquétipo da seção onde o card aparece; ausente = seção "Geral"
+  // (cross-arquétipo: stats, saúde das sessões). Com um modo selecionado, o
+  // backend já devolve vazio para os outros arquétipos — não há filtro aqui.
+  archetype?: MultiplayerProfile["archetype"];
   render: () => React.ReactNode;
 }
 
@@ -65,80 +63,26 @@ function modeLabel(modeId: string, modes: MultiplayerMode[]): string {
   return modes.find((m) => m.modeId === modeId)?.displayName || modeId;
 }
 
-// rótulos amigáveis dos motivos de fechamento (spec 065, session health) —
-// dado cru; a tabela/donut continuam mostrando o motivo original mesmo
-// depois da classificação (spec 069) — o usuário pode querer o detalhe
-// fino além do resumo.
-const CLOSE_REASON_LABELS: Record<string, string> = {
-  result: "Concluída",
-  ttl: "Expirou (TTL)",
-  admin: "Encerrada pelo operador",
-  abandoned: "Abandonada (crash)",
-  host_left: "Host saiu",
-  host_killed: "Host morto",
-};
-
-const CLOSE_REASON_COLORS: Record<string, string> = {
-  result: "green.6",
-  ttl: "gray.5",
-  admin: "blue.5",
-  abandoned: "red.6",
-  host_left: "teal.5",
-  host_killed: "grape.5",
-};
-
-// classificação de closeReason em 3 categorias (spec 069) — decisão de
-// apresentação, não do backend (analytics-service/013 devolve o dado cru
-// deliberadamente sem classificar). host_left/admin são encerramento
-// voluntário/intervenção humana, distintos de abandono espontâneo (ttl,
-// crash) — mesma distinção já documentada no CloseReason original
-// (session-service/domain/session.go).
-const CLOSE_REASON_CATEGORY: Record<string, "concluded" | "manual" | "abandoned"> = {
-  result: "concluded",
-  host_killed: "concluded",
-  host_left: "manual",
-  admin: "manual",
-  ttl: "abandoned",
-  abandoned: "abandoned",
-};
-
-const CLOSE_REASON_CATEGORY_LABELS: Record<"concluded" | "manual" | "abandoned", string> = {
-  concluded: "Concluída",
-  manual: "Encerrada manualmente",
-  abandoned: "Abandonada",
-};
-
-// rótulos amigáveis dos eventos de participação (host_world_dropin).
-const EVENT_LABELS: Record<string, string> = {
-  JOINED: "Entrou",
-  BOSS_DEFEATED: "Boss derrotado",
-  HOST_KILLED: "Host morto",
-  DIED: "Morreu",
-  LEFT: "Saiu",
-};
-
-// paleta fixa por evento (categórica/domínio — não é status do sistema, é
-// vocabulário do jogo, mesmo espírito do TEAM_COLORS em SessionMatchDetail).
-const EVENT_COLORS: Record<string, string> = {
-  JOINED: "blue.4",
-  BOSS_DEFEATED: "teal.4",
-  HOST_KILLED: "grape.4",
-  DIED: "orange.4",
-  LEFT: "gray.4",
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  host: "Host",
-  coop: "Co-op",
-  invader: "Invasor",
-};
-const ROLE_ORDER = ["host", "coop", "invader"];
-
-const OUTCOME_LABELS: Record<string, string> = {
-  SUCCESS: "Sucesso",
-  FAILURE: "Falha",
-  NEUTRAL: "Neutro",
-};
+// hostWorldKPIs traduz a tabela papel × evento × desfecho nos números que um
+// operador de Souls-like acompanha (revisão 2026-09): invasões e co-ops que
+// entraram, o que aconteceu com eles, e bosses derrotados com ajuda.
+function hostWorldKPIs(stats: ParticipationStat[]) {
+  const count = (role: string, event: string, outcome?: string) =>
+    stats
+      .filter((s) => s.role === role && s.event === event && (outcome === undefined || s.outcome === outcome))
+      .reduce((acc, s) => acc + s.count, 0);
+  const invasions = count("invader", "JOINED");
+  const invasionsWon = count("invader", "HOST_KILLED", "SUCCESS");
+  return {
+    invasions,
+    invasionsWon,
+    invadersKilled: count("invader", "DIED"),
+    invasionWinRate: invasions > 0 ? `${Math.round((invasionsWon / invasions) * 100)}%` : "—",
+    coops: count("coop", "JOINED"),
+    bossesHelped: count("coop", "BOSS_DEFEATED", "SUCCESS"),
+    coopsDied: count("coop", "DIED"),
+  };
+}
 
 // participationByRole agrupa por papel (Host/Co-op/Invasor) com um campo por
 // tipo de evento — vira um bar chart empilhado de 3 categorias em vez de uma
@@ -156,11 +100,11 @@ function participationByRole(stats: ParticipationStat[]) {
     (a, b) => (ROLE_ORDER.indexOf(a) === -1 ? 99 : ROLE_ORDER.indexOf(a)) -
       (ROLE_ORDER.indexOf(b) === -1 ? 99 : ROLE_ORDER.indexOf(b)),
   );
-  const data = roles.map((role) => ({ role: ROLE_LABELS[role] ?? role, ...byRole.get(role) }));
+  const data = roles.map((role) => ({ role: roleMeta(role).label, ...byRole.get(role) }));
   const series = events.map((e) => ({
     name: e,
-    label: EVENT_LABELS[e] ?? e,
-    color: EVENT_COLORS[e] ?? "gray.4",
+    label: participationEventMeta(e).label,
+    color: participationEventMeta(e).color,
   }));
   return { data, series };
 }
@@ -209,12 +153,6 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   const hasOutcomes = !!data && data.wins + data.losses + data.draws > 0;
   const roleChart = participations.length > 0 ? participationByRole(participations) : null;
 
-  // arquétipo do modo selecionado (spec 064) — filtra o catálogo pra só
-  // mostrar widgets desse arquétipo (+ raw-stats/session-health, sempre
-  // elegíveis).
-  const selectedArchetype =
-    scope === "by-mode" ? modes.find((m) => m.modeId === selectedMode)?.archetype : undefined;
-
   // leitura mono de cada canal (ChannelStrip) — um total por arquétipo, o
   // dado mais "de assinatura" de cada um (partidas/eventos/participações/
   // missões), não uma soma genérica sem sentido pro domínio.
@@ -248,6 +186,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     if (hasData) {
       out.push({
         id: "summary",
+        archetype: "queue_arena",
         title: "Resumo",
         // span 8 (spec 086): a dupla de cards fundidos (grid de stats + donut,
         // spec 068) precisa de mais respiro horizontal que o par "por dia" ao
@@ -285,6 +224,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     if (data.daily.length > 0) {
       out.push({
         id: "queue-daily",
+        archetype: "queue_arena",
         title: "Partidas por dia",
         span: 4,
         render: () => <DailyLineChart data={data.daily} label="Partidas" />,
@@ -297,8 +237,27 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     // quando "Todos os modos" está selecionado (um modo específico já vem
     // filtrado, então a coluna "Modo" não teria variação pra mostrar).
     if (roleChart) {
+      const k = hostWorldKPIs(participations);
+      out.push({
+        id: "host-world-summary",
+        archetype: "host_world_dropin",
+        title: "Resumo do mundo",
+        span: 12,
+        render: () => (
+          <SimpleGrid cols={{ base: 2, sm: 4, lg: 7 }}>
+            <StatCard size="lg" label="Invasões" value={String(k.invasions)} />
+            <StatCard size="lg" label="Invasões vencidas" value={String(k.invasionsWon)} />
+            <StatCard size="lg" label="Vitória do invasor" value={k.invasionWinRate} />
+            <StatCard size="lg" label="Invasores abatidos" value={String(k.invadersKilled)} />
+            <StatCard size="lg" label="Co-ops invocados" value={String(k.coops)} />
+            <StatCard size="lg" label="Bosses com ajuda" value={String(k.bossesHelped)} />
+            <StatCard size="lg" label="Co-ops mortos" value={String(k.coopsDied)} />
+          </SimpleGrid>
+        ),
+      });
       out.push({
         id: "participations-role",
+        archetype: "host_world_dropin",
         title: "Participações por papel",
         span: 12,
         render: () => (
@@ -329,9 +288,9 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
                 {participations.map((p) => (
                   <Table.Tr key={`${p.modeId}-${p.role}-${p.event}-${p.outcome}`}>
                     {modeIdsInData.length > 1 && <Table.Td c="dimmed">{modeLabel(p.modeId, modes)}</Table.Td>}
-                    <Table.Td>{ROLE_LABELS[p.role] ?? p.role}</Table.Td>
-                    <Table.Td>{EVENT_LABELS[p.event] ?? p.event}</Table.Td>
-                    <Table.Td c="dimmed">{OUTCOME_LABELS[p.outcome] ?? (p.outcome || "—")}</Table.Td>
+                    <Table.Td>{roleMeta(p.role).label}</Table.Td>
+                    <Table.Td>{participationEventMeta(p.event).label}</Table.Td>
+                    <Table.Td c="dimmed">{participationOutcomeMeta(p.outcome).label}</Table.Td>
                     <Table.Td ta="right" ff="monospace">{p.count}</Table.Td>
                   </Table.Tr>
                 ))}
@@ -347,6 +306,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       const placement = data.placement;
       out.push({
         id: "placement-distribution",
+        archetype: "battle_royale",
         title: "Distribuição de colocação",
         span: 8, // spec 086: mesmo tratamento de "summary" — ver comentário lá.
         render: () => (
@@ -378,6 +338,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     if (data.placementDaily.length > 0) {
       out.push({
         id: "placement-daily",
+        archetype: "battle_royale",
         title: "Partidas de battle royale por dia",
         span: 4,
         render: () => <DailyLineChart data={data.placementDaily} label="Partidas" />,
@@ -389,6 +350,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       const mission = data.mission;
       out.push({
         id: "mission-distribution",
+        archetype: "coop_mission",
         title: "Desfecho das missões",
         span: 8, // spec 086: mesmo tratamento de "summary" — ver comentário lá.
         render: () => (
@@ -417,6 +379,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     if (data.missionDaily.length > 0) {
       out.push({
         id: "mission-daily",
+        archetype: "coop_mission",
         title: "Missões por dia",
         span: 4,
         render: () => <DailyLineChart data={data.missionDaily} label="Missões" />,
@@ -428,6 +391,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     if (data.participationDaily.length > 0) {
       out.push({
         id: "participation-daily",
+        archetype: "host_world_dropin",
         title: "Eventos de participação por dia",
         span: 12,
         render: () => <DailyLineChart data={data.participationDaily} label="Eventos" />,
@@ -483,7 +447,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       const categoryTotals = { concluded: 0, manual: 0, abandoned: 0 };
       let healthTotal = 0;
       for (const h of health) {
-        categoryTotals[CLOSE_REASON_CATEGORY[h.closeReason] ?? "abandoned"] += h.count;
+        categoryTotals[closeReasonMeta(h.closeReason).category] += h.count;
         healthTotal += h.count;
       }
       // "72% (5)" — percentual em destaque (é o que importa pra saúde),
@@ -499,13 +463,13 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
               <SimpleGrid cols={3} style={{ flex: "1 1 260px" }}>
                 <StatCard
                   size="lg"
-                  label={CLOSE_REASON_CATEGORY_LABELS.concluded}
+                  label={CLOSE_CATEGORY_LABELS.concluded}
                   value={summary(categoryTotals.concluded)}
                 />
-                <StatCard size="lg" label={CLOSE_REASON_CATEGORY_LABELS.manual} value={summary(categoryTotals.manual)} />
+                <StatCard size="lg" label={CLOSE_CATEGORY_LABELS.manual} value={summary(categoryTotals.manual)} />
                 <StatCard
                   size="lg"
-                  label={CLOSE_REASON_CATEGORY_LABELS.abandoned}
+                  label={CLOSE_CATEGORY_LABELS.abandoned}
                   value={summary(categoryTotals.abandoned)}
                   bad={categoryTotals.abandoned > 0}
                 />
@@ -516,9 +480,9 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
                 withLabelsLine
                 withLabels
                 data={health.map((h) => ({
-                  name: CLOSE_REASON_LABELS[h.closeReason] ?? h.closeReason,
+                  name: closeReasonMeta(h.closeReason).label,
                   value: h.count,
-                  color: CLOSE_REASON_COLORS[h.closeReason] ?? "gray.4",
+                  color: closeReasonMeta(h.closeReason).color,
                 }))}
               />
             </Group>
@@ -537,7 +501,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
                     {healthModeIds.length > 1 && (
                       <Table.Td c="dimmed">{modeLabel(h.modeId ?? "", modes)}</Table.Td>
                     )}
-                    <Table.Td>{CLOSE_REASON_LABELS[h.closeReason] ?? h.closeReason}</Table.Td>
+                    <Table.Td>{closeReasonMeta(h.closeReason).label}</Table.Td>
                     <Table.Td ta="right" ff="monospace">{h.count}</Table.Td>
                     <Table.Td ta="right" ff="monospace">{formatDuration(h.avgDurationMs)}</Table.Td>
                   </Table.Tr>
@@ -560,19 +524,8 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
       });
     }
 
-    // filtra o catálogo pelo arquétipo do modo selecionado (spec 064) — só
-    // widgets desse arquétipo + raw-stats/session-health/session-closed-daily
-    // (sempre elegíveis, cross-arquétipo, spec 064/065/070).
-    if (!selectedArchetype) return out;
-    return out.filter(
-      (w) =>
-        w.id === "raw-stats" ||
-        w.id === "session-health" ||
-        w.id === "session-closed-daily" ||
-        WIDGET_ARCHETYPE[w.id] === selectedArchetype,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, hasData, hasOutcomes, roleChart, participations, modeIdsInData, selectedArchetype, modes]);
+    return out;
+  }, [data, hasData, hasOutcomes, roleChart, participations, modeIdsInData, modes]);
 
   // Agrupa os cards em seções por arquétipo, ordem fixa (spec 067: layout
   // estático — substitui o dashboard editável da spec 062). Cards sem
@@ -581,7 +534,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
     const byArchetype = new Map<MultiplayerProfile["archetype"], CardDef[]>();
     const crossArchetype: CardDef[] = [];
     for (const card of cards) {
-      const archetype = WIDGET_ARCHETYPE[card.id];
+      const archetype = card.archetype;
       if (!archetype) {
         crossArchetype.push(card);
         continue;
@@ -635,7 +588,7 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
 
       {data && cards.length === 0 && (
         <Text c="dimmed">
-          Sem dados ainda — os agregados aparecem conforme as partidas terminam e reportam resultado.
+          Sem dados ainda — os agregados aparecem conforme as sessões fecham e os servidores reportam resultados e eventos.
         </Text>
       )}
 

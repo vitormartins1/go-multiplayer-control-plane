@@ -44,7 +44,7 @@ import {
   type CoopMissionParams,
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
-import { modeScoringStats } from "../lib/pipelineGraph";
+import { modeScoringStats } from "./GamePipeline";
 import { FormSection } from "../components/FormSection";
 import { SessionAvatar } from "../components/SessionAvatar";
 

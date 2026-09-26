@@ -22,7 +22,8 @@ import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Gam
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
+import { closeReasonLabel, formatDuration, shortId, truncate } from "../lib/format";
+import { sessionStateLabel } from "../lib/vocab";
 import { EmptyState } from "../components/EmptyState";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { GameCover } from "../components/GameCover";
@@ -104,9 +105,9 @@ function SortableTh({
       onClick={() => onSort(sortKey)}
     >
       <Group gap={4} wrap="nowrap">
-        <Text size="sm" fw={isActive ? 700 : undefined}>
-          {label}
-        </Text>
+        {/* span (não Text size="sm"): herda a tipografia do cabeçalho da
+            tabela, igual às colunas não ordenáveis */}
+        <span style={{ fontWeight: isActive ? 700 : undefined }}>{label}</span>
         {isActive && (dir === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />)}
       </Group>
     </Table.Th>
@@ -428,7 +429,7 @@ function RoomsTable({
             )}
             <SortableTh label="Arquétipo" sortKey="archetype" active={sortBy} dir={sortDir} onSort={onSort} />
             <SortableTh label="Modo" sortKey="mode" active={sortBy} dir={sortDir} onSort={onSort} />
-            <Table.Th>Match</Table.Th>
+            <Table.Th>Sessão</Table.Th>
             <SortableTh label="Estado" sortKey="state" active={sortBy} dir={sortDir} onSort={onSort} />
             <SortableTh label="Players" sortKey="players" active={sortBy} dir={sortDir} onSort={onSort} />
             <Table.Th>Server</Table.Th>
@@ -540,20 +541,14 @@ function RoomRow({
         <Table.Td>
           <Group gap={6} wrap="nowrap">
             <Text ff="monospace" size="sm">
-              {truncate(s.matchId)}
+              {shortId(s.matchId || s.sessionId)}
             </Text>
           </Group>
         </Table.Td>
         <Table.Td>
-          {s.state === "open" ? (
-            <Badge color="nominal" variant="light">
-              ao vivo
-            </Badge>
-          ) : (
-            <Badge color="gray" variant="light">
-              closed · {s.closeReason ?? "?"}
-            </Badge>
-          )}
+          <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
+            {sessionStateLabel(s.state, s.closeReason)}
+          </Badge>
         </Table.Td>
         <Table.Td>
           {s.origin === "host_world" ? (
