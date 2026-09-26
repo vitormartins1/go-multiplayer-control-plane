@@ -56,19 +56,19 @@ Dados arbitrários por jogador (JSON, sem schema fixo) e um slot de save opaco (
 
 Agregados pré-computados (não é um event store) por jogo: total de partidas, jogadores únicos, série diária, e — por arquétipo — quebra de participação por papel/evento (mundos persistentes), histograma de colocação (battle royale) ou taxa de sucesso de missão (coop). Visão cross-game no overview do console.
 
-![Analytics de um jogo — seções por arquétipo (Queue Arena, Battle Royale), resumo + distribuição lado a lado com o gráfico "por dia"](images/game-analytics.png)
+![Analytics de um jogo host_world_dropin — resumo do mundo (invasões, co-ops, bosses), participações por papel e saúde das sessões](images/game-analytics.png)
 
 ### 8. Console de operação único
 
 Um estúdio real não quer abrir o console da AWS, um cliente de banco e o Grafana separadamente. O `admin-ui` é **games-first**: entra pela lista de jogos, cada jogo abre com sub-abas (conquistas + editor visual de regras, leaderboards, jogadores, sessões, analytics, configurações), mais visões cross-game (Rooms — salas ao vivo de todos os jogos, agrupável/ordenável —, Players, Analytics, Fleet, Infrastructure).
 
-![Analytics cross-game — visão "Geral" do overview do console, todos os jogos agregados](images/analytics-global.png)
+![Analytics cross-game — sessões, jogadores únicos, abandono e sessões por dia de todos os jogos, qualquer arquétipo](images/analytics-global.png)
 
 ### 9. Observabilidade desde o primeiro serviço
 
 Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distribuído (Tempo/OpenTelemetry) cobrindo também as chamadas que o Dedicated Server Unity faz ao control plane (o trace *dentro* do servidor Unity ainda é futuro — ver `OBSERVABILITY.md`), dashboards Grafana por domínio (serviço, Postgres, Redis, Agones/Fleet). Não é um adendo: é o instrumento que valida a própria tese do projeto (custo/performance vs. AWS gerenciado).
 
-![Aba Infrastructure — saúde real de cada serviço (Prometheus), dependências e atalho para o dashboard no Grafana](images/infrastructure.png)
+![Aba Infrastructure — um card por serviço com dependências e atalho para o Grafana (na captura, o Prometheus estava fora: o console mostra "desconhecido" em vez de inventar)](images/infrastructure.png)
 
 ## Fluxos ponta a ponta
 

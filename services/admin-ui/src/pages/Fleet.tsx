@@ -52,7 +52,7 @@ export function Fleet() {
           {fleetGames.length === 0 ? (
             <Text c="dimmed">Nenhum jogo tem fleet cadastrada ainda — cadastre abaixo.</Text>
           ) : (
-            <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="md">
+            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
               {fleetGames.map((g) => (
                 <FleetStatusCard key={g.id} game={g} />
               ))}
