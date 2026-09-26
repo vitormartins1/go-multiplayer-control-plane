@@ -159,18 +159,7 @@ func (f *fakeRegistry) GetMultiplayerProfile(_ context.Context, gameID string) (
 	f.gotGameID = gameID
 	return f.profile, f.err
 }
-func (f *fakeRegistry) SetMultiplayerProfile(_ context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
-	f.gotGameID, f.gotProfile = gameID, profile
-	if f.err != nil {
-		return nil, f.err
-	}
-	return profile, nil
-}
 func (f *fakeRegistry) ListMultiplayerModes(_ context.Context, gameID string) (json.RawMessage, error) {
-	f.gotGameID = gameID
-	return f.profile, f.err
-}
-func (f *fakeRegistry) GetMultiplayerMode(_ context.Context, gameID, _ string) (json.RawMessage, error) {
 	f.gotGameID = gameID
 	return f.profile, f.err
 }
@@ -435,13 +424,6 @@ func TestMultiplayerProfile_DelegaAoRegistry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "g1", reg.gotGameID)
 	assert.JSONEq(t, `{"archetype":"queue_arena"}`, string(got))
-
-	body := json.RawMessage(`{"archetype":"queue_arena","topology":"dedicated"}`)
-	saved, err := svc.SetMultiplayerProfile(context.Background(), "g2", body)
-	require.NoError(t, err)
-	assert.Equal(t, "g2", reg.gotGameID)
-	assert.JSONEq(t, string(body), string(reg.gotProfile))
-	assert.JSONEq(t, string(body), string(saved))
 }
 
 func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {

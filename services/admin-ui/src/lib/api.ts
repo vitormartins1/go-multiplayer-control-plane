@@ -583,11 +583,6 @@ export const api = {
       throw err;
     }
   },
-  setMultiplayerProfile: (gameId: string, profile: MultiplayerProfile) =>
-    putJSON<MultiplayerProfile>(
-      `/api/games/${encodeURIComponent(gameId)}/multiplayer-profile`,
-      profile,
-    ),
   // Modos nomeados (ADR-0024, spec admin-ui/023).
   listMultiplayerModes: (gameId: string, signal?: AbortSignal) =>
     getJSON<MultiplayerMode[]>(

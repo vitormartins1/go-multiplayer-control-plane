@@ -131,19 +131,8 @@ func (f *fakeService) GetMultiplayerProfile(_ context.Context, gameID string) (j
 	f.gotGameID = gameID
 	return f.profile, f.profileErr
 }
-func (f *fakeService) SetMultiplayerProfile(_ context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
-	f.gotGameID, f.gotProfile = gameID, profile
-	if f.profileErr != nil {
-		return nil, f.profileErr
-	}
-	return profile, nil
-}
 func (f *fakeService) ListMultiplayerModes(_ context.Context, gameID string) (json.RawMessage, error) {
 	f.gotGameID = gameID
-	return f.profile, f.profileErr
-}
-func (f *fakeService) GetMultiplayerMode(_ context.Context, gameID, modeID string) (json.RawMessage, error) {
-	f.gotGameID, f.gotModeID = gameID, modeID
 	return f.profile, f.profileErr
 }
 func (f *fakeService) SetMultiplayerMode(_ context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error) {
@@ -1198,37 +1187,6 @@ func TestGetMultiplayerProfile_RegistryFora_502(t *testing.T) {
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 }
 
-func TestSetMultiplayerProfile_200(t *testing.T) {
-	svc := &fakeService{}
-	srv := newServer(svc)
-	defer srv.Close()
-
-	body := `{"archetype":"queue_arena","topology":"dedicated","params":{"structure":"ffa","playerCount":4}}`
-	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/multiplayer-profile", strings.NewReader(body))
-	resp, err := srv.Client().Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "g1", svc.gotGameID)
-	assert.JSONEq(t, body, string(svc.gotProfile))
-	assert.JSONEq(t, body, readBody(t, resp))
-}
-
-func TestSetMultiplayerProfile_400_Propaga(t *testing.T) {
-	svc := &fakeService{profileErr: &domain.UpstreamError{Status: http.StatusBadRequest, Code: "invalid_profile_params"}}
-	srv := newServer(svc)
-	defer srv.Close()
-
-	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/games/g1/multiplayer-profile", strings.NewReader(`{}`))
-	resp, err := srv.Client().Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	assert.Contains(t, readBody(t, resp), "invalid_profile_params")
-}
-
 func readBody(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	b, err := io.ReadAll(resp.Body)
@@ -1373,17 +1331,6 @@ func TestSetMultiplayerMode_200_RepassaCorpoEModeID(t *testing.T) {
 	assert.Equal(t, "g1", svc.gotGameID)
 	assert.Equal(t, "tdm", svc.gotModeID)
 	assert.JSONEq(t, body, string(svc.gotProfile))
-}
-
-func TestGetMultiplayerMode_404_Propaga(t *testing.T) {
-	svc := &fakeService{profileErr: &domain.UpstreamError{Status: http.StatusNotFound, Code: "mode_not_found"}}
-	srv := newServer(svc)
-	defer srv.Close()
-
-	resp := get(t, srv, "/api/games/g1/multiplayer-profiles/nao")
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
-	assert.Contains(t, readBody(t, resp), "mode_not_found")
 }
 
 func TestDeleteMultiplayerMode_204(t *testing.T) {

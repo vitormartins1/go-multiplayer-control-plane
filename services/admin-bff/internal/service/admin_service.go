@@ -176,19 +176,10 @@ func (s *Service) GetMultiplayerProfile(ctx context.Context, gameID string) (jso
 	return s.registry.GetMultiplayerProfile(ctx, gameID)
 }
 
-// SetMultiplayerProfile faz upsert do perfil de multiplayer (passthrough).
-func (s *Service) SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
-	return s.registry.SetMultiplayerProfile(ctx, gameID, profile)
-}
-
 // Modos nomeados (ADR-0024, spec 017): passthrough cru da coleção de modos.
 
 func (s *Service) ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error) {
 	return s.registry.ListMultiplayerModes(ctx, gameID)
-}
-
-func (s *Service) GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error) {
-	return s.registry.GetMultiplayerMode(ctx, gameID, modeID)
 }
 
 func (s *Service) SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error) {
