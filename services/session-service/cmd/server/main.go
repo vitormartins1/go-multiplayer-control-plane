@@ -178,10 +178,15 @@ func run(log *slog.Logger) error {
 		}, svc.SessionClosedPublishFailures),
 	)
 
+	authCfg, err := buildGRPCAuth(cfg, log)
+	if err != nil {
+		return err
+	}
 	grpcSrv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
+		grpc.UnaryInterceptor(transport.UnaryAuthInterceptor(authCfg)), // spec 030 / ADR-0030
 	)
-	pb.RegisterSessionServer(grpcSrv, transport.NewServer(svc))
+	pb.RegisterSessionServer(grpcSrv, transport.NewServer(svc, transport.WithAuth(authCfg)))
 	reflection.Register(grpcSrv) // permite grpcurl sem o .proto
 
 	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
@@ -454,3 +459,49 @@ func buildIssuer(cfg config.Config, log *slog.Logger) (*token.ConnectIssuer, err
 	}
 	return token.New(priv), nil
 }
+
+// buildGRPCAuth monta a autenticação do gRPC (spec 030 / ADR-0030): JWT do
+// jogador via JWKS do identity, internal key do matchmaking (ADR-0018) e a
+// chave do Dedicated Server, no modo SESSION_AUTH_MODE (padrão warn).
+func buildGRPCAuth(cfg config.Config, log *slog.Logger) (transport.AuthConfig, error) {
+	mode := transport.ParseAuthMode(os.Getenv("SESSION_AUTH_MODE"))
+	ac := transport.AuthConfig{
+		Mode:          mode,
+		InternalKey:   os.Getenv("INTERNAL_API_KEY"),
+		GameServerKey: os.Getenv("GAME_SERVER_KEY"),
+		Rejections:    newRejectionCounter(),
+		Log:           log,
+	}
+	if cfg.IdentityJWKSURL != "" {
+		v, err := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
+		if err != nil {
+			return ac, fmt.Errorf("grpc auth: %w", err)
+		}
+		ac.Players = v
+	}
+	switch {
+	case mode == transport.AuthOff:
+		log.Warn("SESSION_AUTH_MODE=off — o gRPC do session aceita qualquer chamador (só para teste local)")
+	case ac.Players == nil || ac.GameServerKey == "":
+		log.Warn("auth do gRPC incompleta: sem IDENTITY_JWKS_URL nenhum jogador autentica; sem GAME_SERVER_KEY nenhum game server autentica",
+			"mode", string(mode))
+	}
+	log.Info("auth do gRPC do session", "mode", string(mode))
+	return ac, nil
+}
+
+// rejectionCounter adapta a CounterVec session_auth_rejections_total à Port
+// do transport.
+type rejectionCounter struct{ vec *prometheus.CounterVec }
+
+func newRejectionCounter() rejectionCounter {
+	vec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "session_auth_rejections_total",
+		Help: "Chamadas gRPC ao session sem credencial válida ou sem permissão (spec 030), por RPC e motivo. Em warn a chamada segue.",
+	}, []string{"method", "reason"})
+	prometheus.MustRegister(vec)
+	return rejectionCounter{vec: vec}
+}
+
+func (r rejectionCounter) Inc(method, reason string) { r.vec.WithLabelValues(method, reason).Inc() }
+

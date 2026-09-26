@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -43,17 +44,18 @@ func (f *fakeSessionServer) CreateSession(_ context.Context, req *sessionv1.Crea
 	return &sessionv1.CreateSessionResponse{SessionId: "s1", ServerAddress: "10.0.0.1:7777", Grants: grants}, nil
 }
 
-func setup(t *testing.T, srvImpl sessionv1.SessionServer) *Client {
+func setup(t *testing.T, srvImpl sessionv1.SessionServer, dialOpts ...grpc.DialOption) *Client {
 	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
 	sessionv1.RegisterSessionServer(srv, srvImpl)
 	go func() { _ = srv.Serve(lis) }()
 
-	conn, err := grpc.NewClient("passthrough://bufnet",
+	opts := append([]grpc.DialOption{
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	}, dialOpts...)
+	conn, err := grpc.NewClient("passthrough://bufnet", opts...)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = conn.Close()
@@ -117,6 +119,7 @@ type worldFake struct {
 	gotListGame string
 	gotListMode string
 	gotJoin     *sessionv1.JoinWorldRequest
+	gotKey      []string
 	joinCode    codes.Code // OK = sucesso
 	joinAddress string
 }
@@ -127,8 +130,11 @@ func (f *worldFake) ListInvadableWorlds(_ context.Context, req *sessionv1.ListIn
 	return &sessionv1.ListInvadableWorldsResponse{Worlds: f.worlds}, nil
 }
 
-func (f *worldFake) JoinWorld(_ context.Context, req *sessionv1.JoinWorldRequest) (*sessionv1.JoinWorldResponse, error) {
+func (f *worldFake) JoinWorld(ctx context.Context, req *sessionv1.JoinWorldRequest) (*sessionv1.JoinWorldResponse, error) {
 	f.gotJoin = req
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		f.gotKey = md.Get("x-internal-key")
+	}
 	if f.joinCode != codes.OK {
 		return nil, status.Error(f.joinCode, "join failed")
 	}
@@ -158,7 +164,7 @@ func TestInject_Sucesso_DevolveServerEToken(t *testing.T) {
 	fake := &worldFake{joinCode: codes.OK, joinAddress: "10.0.0.7:7777"}
 	c := setup(t, fake)
 
-	got, err := c.Inject(context.Background(), "w1", "invader-1", "invader")
+	got, err := c.Inject(context.Background(), "w1", "invader-1", "invader", "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.7:7777", got.ServerAddress)
 	assert.Equal(t, "tok-invader-1", got.ConnectToken)
@@ -167,12 +173,35 @@ func TestInject_Sucesso_DevolveServerEToken(t *testing.T) {
 
 func TestInject_SlotCheio_ErrRoleFull(t *testing.T) {
 	c := setup(t, &worldFake{joinCode: codes.ResourceExhausted})
-	_, err := c.Inject(context.Background(), "w1", "invader-1", "invader")
+	_, err := c.Inject(context.Background(), "w1", "invader-1", "invader", "")
 	assert.ErrorIs(t, err, domain.ErrRoleFull)
 }
 
 func TestInject_MundoFechado_ErrWorldNotFound(t *testing.T) {
 	c := setup(t, &worldFake{joinCode: codes.NotFound})
-	_, err := c.Inject(context.Background(), "w1", "invader-1", "invader")
+	_, err := c.Inject(context.Background(), "w1", "invader-1", "invader", "")
 	assert.ErrorIs(t, err, domain.ErrWorldNotFound)
+}
+
+// session/030: o SummonSign manda quem invocou; PermissionDenied do session
+// (não é o host) vira ErrNotWorldHost.
+func TestInject_Summoner_RepassaEMapeiaPermissionDenied(t *testing.T) {
+	fake := &worldFake{joinCode: codes.OK}
+	c := setup(t, fake)
+	_, err := c.Inject(context.Background(), "w1", "aliado", "coop", "host-1")
+	require.NoError(t, err)
+	assert.Equal(t, "host-1", fake.gotJoin.GetSummonerPlayerId())
+
+	c = setup(t, &worldFake{joinCode: codes.PermissionDenied})
+	_, err = c.Inject(context.Background(), "w1", "aliado", "coop", "intruso")
+	assert.ErrorIs(t, err, domain.ErrNotWorldHost)
+}
+
+// session/030: com as credenciais por RPC, toda chamada leva a internal key.
+func TestInternalKeyCredentials_MandaAChaveNaMetadata(t *testing.T) {
+	fake := &worldFake{joinCode: codes.OK}
+	c := setup(t, fake, grpc.WithPerRPCCredentials(InternalKeyCredentials("k-123")))
+	_, err := c.Inject(context.Background(), "w1", "invasor", "invader", "")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"k-123"}, fake.gotKey)
 }

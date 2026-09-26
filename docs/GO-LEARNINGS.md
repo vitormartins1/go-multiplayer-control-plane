@@ -1400,3 +1400,74 @@ if err != nil {
 em Go o default é **sem limite** — o limite é responsabilidade de cada handler. O `w` pode ser `nil` (útil num
 helper `decode(r, v)` sem acesso ao writer): passar o `w` só serve para o servidor fechar a conexão depois do excesso.
 
+
+---
+
+## 40 — Interceptor gRPC + chamador no `context`: autenticar na borda, autorizar no domínio
+
+**O que é / por que importa:** um `grpc.UnaryServerInterceptor` é o middleware do gRPC — roda antes de todo
+handler unário, recebe o nome completo do método (`info.FullMethod`) e decide se chama o `handler`. É o lugar certo
+para **identificar** quem chama (metadata → `Caller`) e aplicar uma tabela "RPC → tipos de chamador aceitos". O
+chamador identificado viaja no `ctx` com uma **chave de tipo não exportado** (`type callerKey struct{}`), então
+nenhum outro pacote colide com ela. A regra que depende do estado ("é o host deste mundo?") fica no service — o
+interceptor não sabe o que é um mundo.
+
+**Onde no projeto:** `session-service/internal/transport/auth.go` (`UnaryAuthInterceptor`, `callerFrom`),
+`grpc_server.go` (`OpenWorld`/`LeaveWorld`/`CloseWorld` usam o chamador; `hostCheck` chama
+`AuthorizeWorldHost` do service); do lado cliente, `matchmaking-service/internal/sessionclient/credentials.go`
+(`grpc.WithPerRPCCredentials` anexa a internal key em toda chamada). Spec `session/030`, ADR-0030.
+
+```mermaid
+flowchart LR
+    MD["metadata<br/>authorization / x-internal-key / x-game-server-key"] --> I["UnaryAuthInterceptor<br/>identifica + tabela RPC→tipos"]
+    I -->|"ctx com Caller"| H["handler (transport)"]
+    H -->|"regra de mundo"| S["service.AuthorizeWorldHost"]
+    I -. "warn: loga + conta<br/>enforce: Unauthenticated / PermissionDenied" .-> R["session_auth_rejections_total"]
+```
+
+```go
+type callerKey struct{} // tipo não exportado: chave de ctx sem colisão possível
+
+func UnaryAuthInterceptor(cfg AuthConfig) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		caller, reason := identify(ctx, cfg)               // lê metadata.FromIncomingContext
+		ctx = context.WithValue(ctx, callerKey{}, caller)  // o handler lê com callerFrom(ctx)
+		if reason != "" && cfg.Mode == AuthEnforce {
+			return nil, status.Error(codes.Unauthenticated, reason)
+		}
+		return handler(ctx, req) // em warn: segue, mas a falha foi contada
+	}
+}
+```
+
+**Pegadinha (vs C#):** é o par `IAuthenticationHandler` (identifica) + `IAuthorizationHandler`/policy (autoriza) do
+ASP.NET Core, só que sem framework: o "`User`" é um valor no `ctx`, recuperado com type assertion. `ctx.Value` é
+para dado *da requisição* (quem chama, trace id) — nunca para dependência opcional de função. O modo `warn`
+(avaliar e contar sem bloquear) é o truque de rollout: dá para ligar a autenticação no servidor antes de o cliente
+(o jogo) ser atualizado e ver na métrica quando dá para virar para `enforce`.
+
+---
+
+## 41 — `singleflight` + limite de frequência: onde a checagem mora importa
+
+**O que é / por que importa:** `golang.org/x/sync/singleflight` coalesce chamadas concorrentes com a mesma chave:
+enquanto um `Do("jwks", fn)` está em andamento, as outras goroutines esperam e recebem o mesmo resultado. Junto
+com um intervalo mínimo entre fetches, impede que um `kid` inventado vire um GET por request no identity. A lição:
+a checagem "fiz um fetch há pouco?" precisa ficar **dentro** do `fn` do singleflight. Fora dele, quem chega durante
+o fetch em andamento vê o `lastAttempt` recém-gravado, conclui "já tentei" e falha antes de as chaves chegarem — o
+teste de cache frio com 50 goroutines pegou exatamente isso.
+
+**Onde no projeto:** `shared/auth/jwks_verifier.go` — `keyForKid` (revisão 2026-09, G4).
+
+```go
+_, err, _ := v.sf.Do("jwks", func() (any, error) {
+	if v.now().Sub(v.lastAttempt) < minRefetchInterval { // DENTRO: quem espera o fetch em curso
+		return nil, errRefetchThrottled                  // recebe o resultado dele, não este erro
+	}
+	return nil, v.refresh(ctx)
+})
+```
+
+**Pegadinha (vs C#):** não há equivalente direto na BCL — o mais próximo é compartilhar um `Lazy<Task<T>>`/uma
+`Task` em andamento num dicionário. Em Go o pacote resolve o caso comum; o cuidado é o mesmo em qualquer linguagem:
+o estado que decide "vou buscar?" precisa ser lido no mesmo ponto serializado que faz a busca.

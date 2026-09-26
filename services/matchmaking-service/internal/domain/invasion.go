@@ -143,7 +143,9 @@ type WorldDirectory interface {
 
 // WorldInjector é a Port de saída que injeta o invasor num mundo via o JoinWorld
 // do session (spec 006). ErrRoleFull (mundo encheu na corrida → retry no
-// próximo), ErrWorldNotFound (mundo fechou entre listar e injetar).
+// próximo), ErrWorldNotFound (mundo fechou entre listar e injetar),
+// ErrNotWorldHost (summonerID informado e não é o host — session/030).
+// summonerID vazio = invasão (sem invocador).
 type WorldInjector interface {
-	Inject(ctx context.Context, sessionID, playerID, role string) (Injected, error)
+	Inject(ctx context.Context, sessionID, playerID, role, summonerID string) (Injected, error)
 }

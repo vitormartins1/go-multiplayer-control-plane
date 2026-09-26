@@ -33,3 +33,4 @@
 | [0027](0027-generic-event-rules.md) | Regras de mapeamento evento→achievement-event-type genéricas e data-driven | Accepted | 2026-07-09 | achievements-service, admin-bff, admin-ui |
 | [0028](0028-visual-rules-editor-and-rich-engine.md) | Editor visual de regras (canvas low-code) e roadmap do motor de regras rico | Accepted | 2026-07-09 | admin-ui, achievements-service |
 | [0029](0029-centralized-agones-infra.md) | Infra Agones centralizada no control plane (bootstrap + fleets); CI/registry por imagem gated por evidência | Accepted | 2026-07-10 | infra, session-service, game-registry, data plane |
+| [0030](0030-session-grpc-auth.md) | Autenticação no gRPC do session (jogador por JWT, matchmaking por internal key, game server por chave de servidor; rollout warn→enforce) | Accepted | 2026-09-26 | session-service, matchmaking-service, infra, data plane |

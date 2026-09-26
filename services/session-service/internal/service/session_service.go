@@ -855,6 +855,22 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 	return domain.ConnectGrant{PlayerID: playerID, Token: tok}, serverAddr, nil
 }
 
+// AuthorizeWorldHost confere que playerID é o host do mundo aberto sessionID
+// (spec 030 / ADR-0030): só o host invoca sinal no próprio mundo e só ele (ou
+// o Dedicated Server) fecha o mundo ou tira outro jogador.
+func (s *Service) AuthorizeWorldHost(_ context.Context, sessionID, playerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[sessionID]
+	if !ok || sess.Origin != domain.OriginHostWorld {
+		return fmt.Errorf("session service: authorize host: %w", domain.ErrWorldNotFound)
+	}
+	if playerID == "" || sess.HostPlayerID != playerID {
+		return fmt.Errorf("session service: authorize host: %w", domain.ErrNotWorldHost)
+	}
+	return nil
+}
+
 // ListInvadableWorlds devolve os mundos abertos do jogo com slot de invasor livre
 // (spec 012), varrendo o mapa de ativas sob o lock — irmão de SessionsByGame. O
 // mapa só contém sessões OPEN (closeSession as remove), então não checa State.

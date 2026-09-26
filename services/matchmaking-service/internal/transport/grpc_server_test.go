@@ -131,7 +131,7 @@ func (c coopPolicyStub) CoopPolicy(context.Context, string, string) (domain.Coop
 
 type injectorStub struct{ addr string }
 
-func (i injectorStub) Inject(_ context.Context, _, playerID, _ string) (domain.Injected, error) {
+func (i injectorStub) Inject(_ context.Context, _, playerID, _, _ string) (domain.Injected, error) {
 	return domain.Injected{ServerAddress: i.addr, ConnectToken: "tok-" + playerID}, nil
 }
 

@@ -56,7 +56,7 @@ type fakeInjector struct {
 	calls   []string
 }
 
-func (f *fakeInjector) Inject(_ context.Context, sessionID, playerID, role string) (domain.Injected, error) {
+func (f *fakeInjector) Inject(_ context.Context, sessionID, playerID, role, _ string) (domain.Injected, error) {
 	f.calls = append(f.calls, sessionID)
 	if err := f.byWorld[sessionID]; err != nil {
 		return domain.Injected{}, err

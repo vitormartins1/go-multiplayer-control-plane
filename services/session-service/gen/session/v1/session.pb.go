@@ -313,12 +313,13 @@ func (x *OpenWorldResponse) GetHostGrant() *ConnectGrant {
 }
 
 type JoinWorldRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	PlayerId      string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"` // "coop" | "invader"
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	PlayerId         string                 `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Role             string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`                                                   // "coop" | "invader"
+	SummonerPlayerId string                 `protobuf:"bytes,4,opt,name=summoner_player_id,json=summonerPlayerId,proto3" json:"summoner_player_id,omitempty"` // spec 030: quem invocou o sinal (SummonSign); se vier, precisa ser o host do mundo
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *JoinWorldRequest) Reset() {
@@ -368,6 +369,13 @@ func (x *JoinWorldRequest) GetPlayerId() string {
 func (x *JoinWorldRequest) GetRole() string {
 	if x != nil {
 		return x.Role
+	}
+	return ""
+}
+
+func (x *JoinWorldRequest) GetSummonerPlayerId() string {
+	if x != nil {
+		return x.SummonerPlayerId
 	}
 	return ""
 }
@@ -1689,12 +1697,13 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x127\n" +
 	"\n" +
-	"host_grant\x18\x03 \x01(\v2\x18.session.v1.ConnectGrantR\thostGrant\"b\n" +
+	"host_grant\x18\x03 \x01(\v2\x18.session.v1.ConnectGrantR\thostGrant\"\x90\x01\n" +
 	"\x10JoinWorldRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role\"j\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12,\n" +
+	"\x12summoner_player_id\x18\x04 \x01(\tR\x10summonerPlayerId\"j\n" +
 	"\x11JoinWorldResponse\x12.\n" +
 	"\x05grant\x18\x01 \x01(\v2\x18.session.v1.ConnectGrantR\x05grant\x12%\n" +
 	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\"O\n" +

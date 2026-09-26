@@ -16,12 +16,53 @@ import (
 // Server implementa o serviço gRPC Session.
 type Server struct {
 	pb.UnimplementedSessionServer
-	svc domain.SessionService
+	svc  domain.SessionService
+	auth *auth // nil = autenticação desligada (testes antigos, dev pontual)
+}
+
+// ServerOption configura o Server.
+type ServerOption func(*Server)
+
+// WithAuth liga as checagens por mundo dos handlers (spec 030) no mesmo modo
+// do interceptor — o interceptor identifica, os handlers conferem o host.
+func WithAuth(cfg AuthConfig) ServerOption {
+	return func(s *Server) { s.auth = &auth{cfg: cfg} }
 }
 
 // NewServer cria o server a partir do SessionService (Port de entrada).
-func NewServer(svc domain.SessionService) *Server {
-	return &Server{svc: svc}
+func NewServer(svc domain.SessionService, opts ...ServerOption) *Server {
+	s := &Server{svc: svc}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// deny registra uma permissão negada no nível do handler conforme o modo
+// (nil em warn/off ou sem auth configurada).
+func (s *Server) deny(ctx context.Context, method, reason string) error {
+	if s.auth == nil || s.auth.cfg.Mode == AuthOff {
+		return nil
+	}
+	return s.auth.reject(ctx, method, reason, codes.PermissionDenied)
+}
+
+// hostCheck avalia uma ação que só o host pode fazer, conforme o modo: mundo
+// inexistente vira NotFound sempre; "não é o host" vira PermissionDenied em
+// enforce e só é registrado em warn.
+func (s *Server) hostCheck(ctx context.Context, method, sessionID, playerID string) error {
+	if s.auth == nil || s.auth.cfg.Mode == AuthOff {
+		return nil
+	}
+	err := s.svc.AuthorizeWorldHost(ctx, sessionID, playerID)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, domain.ErrNotWorldHost):
+		return s.auth.reject(ctx, method, "not_world_host", codes.PermissionDenied)
+	default:
+		return worldError(err, "authorize")
+	}
 }
 
 // normalizeMode aplica a retrocompat do ADR-0024 na borda: mode_id ausente/
@@ -121,9 +162,23 @@ func (s *Server) GetSessionConfig(ctx context.Context, req *pb.GetSessionConfigR
 }
 
 // OpenWorld abre um mundo persistente para o host (host_world_dropin, spec 011).
+// Com o jogador autenticado (spec 030), o host é o sub do token: o
+// host_player_id pode vir vazio; se vier diferente, é tentativa de abrir mundo
+// em nome de outro.
 func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.OpenWorldResponse, error) {
+	host := req.GetHostPlayerId()
+	if c := callerFrom(ctx); c.Kind == CallerPlayer {
+		switch {
+		case host == "":
+			host = c.PlayerID
+		case host != c.PlayerID:
+			if err := s.deny(ctx, "/session.v1.Session/OpenWorld", "host_mismatch"); err != nil {
+				return nil, err
+			}
+		}
+	}
 	attrs := domain.WorldAttributes{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier()), Password: req.GetPassword()}
-	sess, grant, err := s.svc.OpenWorld(ctx, req.GetHostPlayerId(), req.GetGameId(), normalizeMode(req.GetModeId()), attrs)
+	sess, grant, err := s.svc.OpenWorld(ctx, host, req.GetGameId(), normalizeMode(req.GetModeId()), attrs)
 	if err != nil {
 		return nil, worldError(err, "open world")
 	}
@@ -135,7 +190,15 @@ func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.O
 }
 
 // JoinWorld injeta um phantom no mundo com um papel e devolve o connect token.
+// summoner_player_id (spec 030), quando vem, precisa ser o host do mundo —
+// sempre, em qualquer modo: é o matchmaking (que já autentica o jogador) quem
+// preenche o campo no SummonSign.
 func (s *Server) JoinWorld(ctx context.Context, req *pb.JoinWorldRequest) (*pb.JoinWorldResponse, error) {
+	if summoner := req.GetSummonerPlayerId(); summoner != "" {
+		if err := s.svc.AuthorizeWorldHost(ctx, req.GetSessionId(), summoner); err != nil {
+			return nil, worldError(err, "join world")
+		}
+	}
 	grant, serverAddr, err := s.svc.JoinWorld(ctx, req.GetSessionId(), req.GetPlayerId(), req.GetRole())
 	if err != nil {
 		return nil, worldError(err, "join world")
@@ -169,15 +232,34 @@ func (s *Server) ListInvadableWorlds(ctx context.Context, req *pb.ListInvadableW
 }
 
 // LeaveWorld libera o slot do jogador (no-op idempotente; host encerra o mundo).
+// Jogador autenticado sai a si mesmo (player_id vazio = ele); tirar outro
+// jogador exige ser o host (spec 030). O Dedicated Server pode tirar qualquer um.
 func (s *Server) LeaveWorld(ctx context.Context, req *pb.LeaveWorldRequest) (*pb.LeaveWorldResponse, error) {
-	if err := s.svc.LeaveWorld(ctx, req.GetSessionId(), req.GetPlayerId()); err != nil {
+	player := req.GetPlayerId()
+	if c := callerFrom(ctx); c.Kind == CallerPlayer {
+		if player == "" {
+			player = c.PlayerID
+		}
+		if player != c.PlayerID {
+			if err := s.hostCheck(ctx, "/session.v1.Session/LeaveWorld", req.GetSessionId(), c.PlayerID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := s.svc.LeaveWorld(ctx, req.GetSessionId(), player); err != nil {
 		return nil, worldError(err, "leave world")
 	}
 	return &pb.LeaveWorldResponse{}, nil
 }
 
 // CloseWorld encerra o mundo (host saiu) e libera o server.
+// Jogador só fecha o próprio mundo (spec 030); o Dedicated Server fecha qualquer um.
 func (s *Server) CloseWorld(ctx context.Context, req *pb.CloseWorldRequest) (*pb.CloseWorldResponse, error) {
+	if c := callerFrom(ctx); c.Kind == CallerPlayer {
+		if err := s.hostCheck(ctx, "/session.v1.Session/CloseWorld", req.GetSessionId(), c.PlayerID); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.svc.CloseWorld(ctx, req.GetSessionId()); err != nil {
 		return nil, worldError(err, "close world")
 	}
@@ -195,6 +277,8 @@ func worldError(err error, op string) error {
 		return status.Error(codes.ResourceExhausted, "no capacity")
 	case errors.Is(err, domain.ErrWorldNotFound):
 		return status.Error(codes.NotFound, "world not found")
+	case errors.Is(err, domain.ErrNotWorldHost):
+		return status.Error(codes.PermissionDenied, "not the world host")
 	case errors.Is(err, domain.ErrAlreadyJoined):
 		return status.Error(codes.FailedPrecondition, "player already joined")
 	case errors.Is(err, domain.ErrInvalidParticipation):

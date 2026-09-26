@@ -92,6 +92,7 @@ message JoinWorldRequest {
   string session_id = 1;
   string player_id = 2;
   string role = 3; // "coop" | "invader"
+  string summoner_player_id = 4; // spec 030: quem invocou o sinal (SummonSign); se vier, precisa ser o host do mundo
 }
 
 message JoinWorldResponse {

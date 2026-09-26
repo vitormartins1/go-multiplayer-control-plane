@@ -82,11 +82,12 @@ func (c *Client) ListInvadableWorlds(ctx context.Context, gameID, modeID string)
 // endereço do server (JoinWorldResponse.server_address, spec 012) + o token.
 // codes.ResourceExhausted (slot cheio na corrida) → ErrRoleFull (dirige o retry);
 // codes.NotFound (mundo fechou) → ErrWorldNotFound.
-func (c *Client) Inject(ctx context.Context, sessionID, playerID, role string) (domain.Injected, error) {
+func (c *Client) Inject(ctx context.Context, sessionID, playerID, role, summonerID string) (domain.Injected, error) {
 	resp, err := c.session.JoinWorld(ctx, &sessionv1.JoinWorldRequest{
-		SessionId: sessionID,
-		PlayerId:  playerID,
-		Role:      role,
+		SessionId:        sessionID,
+		PlayerId:         playerID,
+		Role:             role,
+		SummonerPlayerId: summonerID,
 	})
 	if err != nil {
 		switch status.Code(err) {
@@ -94,6 +95,8 @@ func (c *Client) Inject(ctx context.Context, sessionID, playerID, role string) (
 			return domain.Injected{}, domain.ErrRoleFull
 		case codes.NotFound:
 			return domain.Injected{}, domain.ErrWorldNotFound
+		case codes.PermissionDenied:
+			return domain.Injected{}, domain.ErrNotWorldHost
 		default:
 			return domain.Injected{}, fmt.Errorf("sessionclient: inject: %w", err)
 		}

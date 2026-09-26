@@ -38,7 +38,7 @@ sequenceDiagram
   participant Inv as Invasor (Client Unity)
   participant MM as matchmaking
 
-  Host->>SS: OpenWorld(host_player_id, game_id, soul_level, weapon_tier) [JWT]
+  Host->>SS: OpenWorld(game_id, soul_level, weapon_tier) [JWT do host → host = sub]
   SS->>SS: lê perfil, aloca server, deriva slots por papel
   SS-->>Host: session_id + server_address + host_grant(connect_token, role=host)
   Host->>World: conecta com o token (role=host)
@@ -75,6 +75,24 @@ sequenceDiagram
 ```
 
 > **O que o server do mundo precisa saber destes fluxos:** nada sobre invasão/sinais/faixa — isso é control plane. O server só recebe **conexões novas** (via connect token com `role`) a qualquer momento e as trata como **join-in-progress**. A capacidade por papel já foi garantida pelo `JoinWorld` (o control plane recusa com `ErrRoleFull`); o server confia no token.
+
+## Autenticação no session (spec `session/030`, ADR-0030 — contrato 1.2.0)
+
+Toda chamada ao gRPC do session leva uma credencial na **metadata**:
+
+| Quem chama | Metadata | RPCs |
+|---|---|---|
+| Cliente do jogo | `authorization: Bearer <JWT do identity>` | `OpenWorld` (o host é o `sub` do token — `host_player_id` pode ir vazio), `LeaveWorld` (a si mesmo; o host pode tirar outro), `CloseWorld` (só o host) |
+| Dedicated Server | `x-game-server-key: <GAME_SERVER_KEY>` | `ReportResult`, `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld` |
+
+A chave do Dedicated Server chega ao pod pela env `GAME_SERVER_KEY` (Secret `game-server-key` nas fleets de
+`infra/agones/fleets/`; `dev-game-server-key` no compose). O session roda em **`warn`** enquanto o jogo não manda as
+credenciais: a chamada sem credencial funciona como antes, mas aparece em `session_auth_rejections_total`. Quando o
+jogo for atualizado, o operador vira `SESSION_AUTH_MODE=enforce` (aí a falta de credencial vira `Unauthenticated` e
+a falta de permissão, `PermissionDenied`). O `SummonSign` só funciona para o host do mundo em qualquer modo.
+
+**O que muda no jogo:** (1) o `SessionRpcClient` do cliente anexa o bearer que já tem do login e pode parar de
+extrair o `sub` do JWT; (2) o server lê `GAME_SERVER_KEY` do ambiente e anexa `x-game-server-key` nos reports.
 
 ## Connect token (session → data plane)
 

@@ -160,7 +160,13 @@ services:
       # Snapshot do perfil do modo no CreateSession (ADR-0024) — obrigatório
       # para QUALQUER sessão; sem isso o Create falha com profile unavailable.
       GAME_REGISTRY_URL: http://game-registry:8080
-      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018)
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018); o matchmaking a manda no gRPC
+      # Auth do gRPC (spec 030 / ADR-0030): JWT do jogador via JWKS do identity e
+      # chave do Dedicated Server. warn = conta e loga, não bloqueia; virar para
+      # enforce quando o jogo mandar as credenciais.
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json
+      GAME_SERVER_KEY: dev-game-server-key
+      SESSION_AUTH_MODE: warn
       # Pool mock maior que o default (3): permite várias salas abertas ao
       # mesmo tempo no console em dev (cada sessão aberta segura um slot).
       SERVER_POOL: 10.0.0.1:7777,10.0.0.2:7777,10.0.0.3:7777,10.0.0.4:7777,10.0.0.5:7777,10.0.0.6:7777,10.0.0.7:7777,10.0.0.8:7777

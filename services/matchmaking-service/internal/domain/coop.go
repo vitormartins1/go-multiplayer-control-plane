@@ -117,7 +117,8 @@ type Summoner interface {
 	// (no máximo uma vez) e entrega o Summoned ao aliado pelo canal. Devolve o
 	// playerID do aliado invocado. ErrSignNotFound, ErrSignConsumed, ErrRoleFull,
 	// ErrWorldNotFound.
-	Summon(ctx context.Context, sessionID, signID string) (allyID string, err error)
+	// summonerID é o jogador (JWT) que invocou: precisa ser o host do mundo (ErrNotWorldHost, session/030).
+	Summon(ctx context.Context, sessionID, signID, summonerID string) (allyID string, err error)
 	// CancelSign remove um sinal do quadro (o aliado fechou o stream). Idempotente.
 	CancelSign(signID string)
 }

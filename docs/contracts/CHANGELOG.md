@@ -17,6 +17,21 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+## [1.2.0] — 2026-09-26
+
+### Added
+- Autenticação no gRPC do session (spec `session/030`, ADR-0030): metadata `authorization: Bearer <JWT>` do
+  jogador (`OpenWorld`, `LeaveWorld`, `CloseWorld`) e `x-game-server-key` do Dedicated Server (`ReportResult`,
+  `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld`). Padrão `warn`: sem credencial
+  continua funcionando (só é contado). **Virar para `enforce` será MAJOR (2.0.0)** e só acontece depois que o jogo
+  mandar as credenciais.
+- `OpenWorld` aceita `host_player_id` vazio quando o bearer vem: o host é o `sub` do token.
+- `session.v1.JoinWorldRequest.summoner_player_id` (campo 4, interno ao control plane).
+
+### Changed
+- `SummonSign` só invoca sinal no mundo de quem é o host (`PermissionDenied` para qualquer outro) — antes qualquer
+  jogador autenticado invocava sinais no mundo de outro.
+
 ## [1.1.0] — 2026-09-26
 
 ### Added

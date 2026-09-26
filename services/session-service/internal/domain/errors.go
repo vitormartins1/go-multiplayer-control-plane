@@ -29,6 +29,10 @@ var (
 	ErrRoleFull = errors.New("session: role slots full")
 	// ErrWorldNotFound indica que não há mundo (sessão host_world) aberto com o id.
 	ErrWorldNotFound = errors.New("session: world not found")
+	// ErrNotWorldHost indica que o jogador não é o host do mundo numa ação que só
+	// o host pode fazer (invocar sinal, fechar o mundo, tirar outro jogador) —
+	// spec 030 / ADR-0030.
+	ErrNotWorldHost = errors.New("session: player is not the world host")
 	// ErrAlreadyJoined indica que o jogador já ocupa um slot no mundo.
 	ErrAlreadyJoined = errors.New("session: player already joined world")
 	// ErrProfileUnavailable indica que o perfil de multiplayer do jogo não pôde ser

@@ -6,9 +6,11 @@
 #   2. cadastra a conquista "Invasor Vitorioso" (achievements; a regra global
 #      invader + HOST_KILLED + SUCCESS -> invasion_won já vem no seed)
 #   3. cria host e invasor e loga os dois (identity, JWT EdDSA)
-#   4. o host abre o mundo (session.OpenWorld -> aloca server + connect token)
+#   4. o host abre o mundo (session.OpenWorld com o bearer do host -> aloca
+#      server + connect token)
 #   5. o invasor invade (matchmaking.Invade, autenticado pelo bearer)
-#   6. o "servidor do mundo" reporta HOST_KILLED (session.ReportParticipationEvent)
+#   6. o "servidor do mundo" reporta HOST_KILLED (session.ReportParticipationEvent,
+#      com a chave do Dedicated Server — session/030)
 #   7. o fan-out SNS -> SQS entrega ao achievements-consumer e a conquista
 #      aparece desbloqueada para o invasor
 #
@@ -23,6 +25,7 @@ ACHIEVEMENTS="${ACHIEVEMENTS:-http://localhost:8082}"
 SESSION_GRPC="${SESSION_GRPC:-localhost:50052}"
 MM_GRPC="${MM_GRPC:-localhost:50051}"
 KEY="${INTERNAL_API_KEY:-dev-internal-key}"
+SERVER_KEY="${GAME_SERVER_KEY:-dev-game-server-key}" # chave do Dedicated Server (session/030)
 
 for bin in curl jq grpcurl; do
   command -v "$bin" >/dev/null || { echo "falta: $bin" >&2; exit 1; }
@@ -69,7 +72,8 @@ invader_token="$(login "invasor_$run")"; invader_id="$(sub "$invader_token")"
 echo "host=$host_id invasor=$invader_id"
 
 step "4. host abre o mundo (session.OpenWorld)"
-world="$(grpcurl -plaintext -d "{\"host_player_id\":\"$host_id\",\"game_id\":\"$game_id\"}" "$SESSION_GRPC" session.v1.Session/OpenWorld)"
+# o host é o sub do JWT (session/030): o cliente não precisa mandar host_player_id
+world="$(grpcurl -plaintext -H "authorization: Bearer $host_token" -d "{\"game_id\":\"$game_id\"}" "$SESSION_GRPC" session.v1.Session/OpenWorld)"
 session_id="$(jq -r .sessionId <<<"$world")"
 echo "mundo=$session_id server=$(jq -r .serverAddress <<<"$world")"
 
@@ -79,7 +83,8 @@ invaded="$(grpcurl -plaintext -H "authorization: Bearer $invader_token" -d "{\"g
 echo "entrou no mundo $session_id com connect token role=invader"
 
 step "6. servidor do mundo reporta HOST_KILLED"
-grpcurl -plaintext -d "{\"session_id\":\"$session_id\",\"player_id\":\"$invader_id\",\"role\":\"invader\",\"event\":\"HOST_KILLED\",\"outcome\":\"SUCCESS\",\"event_id\":\"demo-$run\"}" \
+grpcurl -plaintext -H "x-game-server-key: $SERVER_KEY" \
+  -d "{\"session_id\":\"$session_id\",\"player_id\":\"$invader_id\",\"role\":\"invader\",\"event\":\"HOST_KILLED\",\"outcome\":\"SUCCESS\",\"event_id\":\"demo-$run\"}" \
   "$SESSION_GRPC" session.v1.Session/ReportParticipationEvent >/dev/null
 echo "mundo encerrado (host_killed); evento publicado no fan-out"
 

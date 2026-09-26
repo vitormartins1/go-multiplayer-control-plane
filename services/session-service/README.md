@@ -70,7 +70,7 @@ Rotas sem auth no serviço — internal key na borda (ADR-0018), mesmo padrão d
 
 ## Observabilidade
 
-Métricas: `session_active_sessions` (gauge), `sessions_closed_total{reason}` (counter), `session_history_persist_failures_total` (counter — falha ao persistir o histórico, spec 025; fechamento nunca depende disso). `/metrics` na porta do serviço (**Service Overview**, `$job=session-service`). Tracing no Tempo. Status real de Fleet (réplicas, allocated) exposto via `/admin/fleet-status/{fleetName}` no modo `agones` (spec 023).
+Métricas: `session_active_sessions` (gauge), `sessions_closed_total{reason}` (counter), `session_history_persist_failures_total` (counter — falha ao persistir o histórico, spec 025; fechamento nunca depende disso). `session_auth_rejections_total{method,reason}` (counter — chamadas gRPC sem credencial válida ou sem permissão, spec 030; em `warn` a chamada segue). `/metrics` na porta do serviço (**Service Overview**, `$job=session-service`). Tracing no Tempo. Status real de Fleet (réplicas, allocated) exposto via `/admin/fleet-status/{fleetName}` no modo `agones` (spec 023).
 
 ## Testar / Specs
 
@@ -82,3 +82,15 @@ Uso real em homelab (k3d local + Raspberry Pi 5) via Agones, validado ponta a po
 - **host_world_dropin (ADR-0023):** `011-host-world-session` · `012-invadable-world-directory` · `013-participation-events` · `014-host-world-board-fields` · `020-password-world-matching` · `021-participation-event-id` · `024-close-room-host-world-fix`
 - **Allocator / Fleet:** `004-agones-allocator` · `022-fleet-aware-allocation` · `023-fleet-status`
 - **Manifest / admin console:** `017-mode-snapshot-manifest` · `018-admin-session-detail` · `019-admin-session-archetype-layout`
+
+## Autenticação do gRPC (spec 030, ADR-0030)
+
+| Env | Uso |
+|---|---|
+| `SESSION_AUTH_MODE` | `warn` (padrão: avalia, loga e conta, não bloqueia) · `enforce` · `off` |
+| `IDENTITY_JWKS_URL` | JWKS do identity para validar o bearer do jogador |
+| `INTERNAL_API_KEY` | chave do matchmaking (metadata `x-internal-key`) e do `/admin` HTTP |
+| `GAME_SERVER_KEY` | chave do Dedicated Server (metadata `x-game-server-key`) |
+
+Quem pode chamar cada RPC: `specs/030-grpc-auth/spec.md`.
+

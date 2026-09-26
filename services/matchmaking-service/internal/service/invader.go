@@ -142,7 +142,7 @@ func (in *Invader) listWorlds(ctx context.Context, gameID, modeID string) ([]dom
 func (in *Invader) inject(ctx context.Context, sessionID, playerID string) (domain.Injected, error) {
 	ctx, cancel := context.WithTimeout(ctx, invadeTimeout)
 	defer cancel()
-	return in.injector.Inject(ctx, sessionID, playerID, roleInvader)
+	return in.injector.Inject(ctx, sessionID, playerID, roleInvader, "")
 }
 
 // count incrementa o contador do resultado (métrica invasions_total{result}).

@@ -108,6 +108,8 @@ func run(log *slog.Logger) error {
 	sessionConn, err := grpc.NewClient(sessionAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		// o session reconhece o matchmaking pela internal key (session/030, ADR-0030)
+		grpc.WithPerRPCCredentials(sessionclient.InternalKeyCredentials(os.Getenv("INTERNAL_API_KEY"))),
 	)
 	if err != nil {
 		return fmt.Errorf("session grpc client: %w", err)

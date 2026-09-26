@@ -365,11 +365,17 @@ type SessionService interface {
 	// CloseWorld encerra o mundo (CloseHostLeft), libera o server e encerra a
 	// participação de todos. ErrWorldNotFound se não houver mundo aberto.
 	CloseWorld(ctx context.Context, sessionID string) error
+	// AuthorizeWorldHost confere que playerID é o host do mundo aberto
+	// sessionID (spec 030): ErrNotWorldHost se não for, ErrWorldNotFound se o
+	// mundo não existir. Usado para invocar sinal e para fechar o mundo / tirar
+	// outro jogador a pedido de um jogador.
+	AuthorizeWorldHost(ctx context.Context, sessionID, playerID string) error
 
 	// ReportParticipationEvent recebe um evento por participante do server do
 	// mundo (spec 013): publica no fan-out (kind=participation_event) e aplica o
 	// efeito no slot (DIED/LEFT liberam; HOST_KILLED encerra o mundo). Publica
-	// ANTES de mutar (ADR-0020). ErrInvalidParticipation (vocabulário),
+	// DEPOIS de mutar (fix 49e976d; reenvio do HOST_KILLED na spec 029).
+	// ErrInvalidParticipation (vocabulário),
 	// ErrWorldNotFound (mundo inexistente/fechado).
 	ReportParticipationEvent(ctx context.Context, sessionID string, evt ParticipationEvent) error
 }

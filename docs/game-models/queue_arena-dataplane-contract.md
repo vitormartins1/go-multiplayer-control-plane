@@ -67,6 +67,11 @@ O Dedicated Server lê o `team_id` no *connection approval* do NGO (mesmo ponto 
 
 ## ReportResult (data plane → session)
 
+> **Autenticação (spec `session/030`, contrato 1.2.0):** o Dedicated Server manda `x-game-server-key:
+> <GAME_SERVER_KEY>` na metadata do `ReportResult` e do `GetSessionConfig` (env `GAME_SERVER_KEY`, Secret
+> `game-server-key` na fleet). Em `warn` (padrão atual) a chamada sem a chave funciona e é contada; em `enforce`,
+> `Unauthenticated`. Detalhes no contrato do `host_world_dropin`, seção "Autenticação no session".
+
 O `session.v1.Session/ReportResult` mudou na spec `009` (resultado polimórfico) — o formato antigo `PlayerResult{player_id, score, won}` **saiu**. O data plane reporta agora:
 
 ```

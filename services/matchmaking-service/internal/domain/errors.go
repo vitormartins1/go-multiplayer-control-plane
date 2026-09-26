@@ -28,6 +28,9 @@ var ErrNoEligibleWorld = errors.New("matchmaking: no eligible world")
 var (
 	ErrRoleFull     = errors.New("matchmaking: invader slot full")
 	ErrWorldNotFound = errors.New("matchmaking: world not found")
+	// ErrNotWorldHost: quem invocou o sinal não é o host do mundo (spec 012 do
+	// session/030 — o session recusa com PermissionDenied).
+	ErrNotWorldHost = errors.New("matchmaking: summoner is not the world host")
 )
 
 // ErrCoopNotSupported indica que o jogo não aceita co-op (host_world_dropin,

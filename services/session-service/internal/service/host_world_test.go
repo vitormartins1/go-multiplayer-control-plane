@@ -454,3 +454,16 @@ func TestListInvadableWorlds_FiltraPorModo(t *testing.T) {
 	assert.Len(t, all, 2, "sem modo: todos os mundos do jogo")
 
 }
+
+// Spec 030: só o host do mundo passa na autorização de host.
+func TestAuthorizeWorldHost_SoOHost(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	ctx := context.Background()
+	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
+	require.NoError(t, err)
+
+	assert.NoError(t, svc.AuthorizeWorldHost(ctx, w.ID, "host-1"))
+	assert.ErrorIs(t, svc.AuthorizeWorldHost(ctx, w.ID, "intruso"), domain.ErrNotWorldHost)
+	assert.ErrorIs(t, svc.AuthorizeWorldHost(ctx, w.ID, ""), domain.ErrNotWorldHost)
+	assert.ErrorIs(t, svc.AuthorizeWorldHost(ctx, "nao-existe", "host-1"), domain.ErrWorldNotFound)
+}
