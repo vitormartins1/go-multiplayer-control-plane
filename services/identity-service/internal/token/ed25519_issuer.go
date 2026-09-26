@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
 )
 
 // DefaultTTL é a validade padrão do session token.
@@ -41,13 +43,16 @@ func Generate() (*Issuer, error) {
 	return New(priv), nil
 }
 
-// Sign emite um JWT EdDSA com sub/iat/exp/kid e os claims extras informados.
+// Sign emite um JWT EdDSA com sub/iat/exp/iss/aud/kid e os claims extras informados.
 func (i *Issuer) Sign(_ context.Context, subject string, claims map[string]any) (string, error) {
 	now := time.Now()
 	mc := jwt.MapClaims{
 		"sub": subject,
 		"iat": now.Unix(),
 		"exp": now.Add(i.ttl).Unix(),
+		// exigidos pelo shared/auth.Verifier (revisão 2026-09, G3)
+		"iss": auth.PlayerTokenIssuer,
+		"aud": auth.PlayerTokenAudience,
 	}
 	for k, v := range claims {
 		mc[k] = v
