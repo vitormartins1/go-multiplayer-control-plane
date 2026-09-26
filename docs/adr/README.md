@@ -34,3 +34,4 @@
 | [0028](0028-visual-rules-editor-and-rich-engine.md) | Editor visual de regras (canvas low-code) e roadmap do motor de regras rico | Accepted | 2026-07-09 | admin-ui, achievements-service |
 | [0029](0029-centralized-agones-infra.md) | Infra Agones centralizada no control plane (bootstrap + fleets); CI/registry por imagem gated por evidência | Accepted | 2026-07-10 | infra, session-service, game-registry, data plane |
 | [0030](0030-session-grpc-auth.md) | Autenticação no gRPC do session (jogador por JWT, matchmaking por internal key, game server por chave de servidor; rollout warn→enforce) | Accepted | 2026-09-26 | session-service, matchmaking-service, infra, data plane |
+| [0031](0031-federated-identity.md) | Identidade federada no identity — ticket da loja vira conta + o JWT de sempre (Steam primeiro) | Accepted | 2026-09-26 | identity-service, data plane |

@@ -62,8 +62,8 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Depende do dono
 
-- Rascunho B da estratégia (topologia P2P host-autoritativa) — depende da decisão de netcode no repo do jogo.
-- Aprovar os rascunhos de ADR da estratégia (A — identidade federada, já implementada como spec; B — P2P).
+- Aprovar a spec `session/031-p2p-topology` (rascunho B, topologia P2P host-autoritativa); a implementação depende
+  da decisão de netcode no repo do jogo. O rascunho A já virou a ADR-0031.
 - Virar `SESSION_AUTH_MODE=enforce` quando o jogo mandar bearer e chave de servidor.
 - Publisher key e app id da Steam para validar o login contra a Steam real.
 

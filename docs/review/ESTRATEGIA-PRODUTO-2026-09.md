@@ -122,7 +122,11 @@ então medir se há demanda (estrelas, issues, estúdios pedindo) para um kit pa
 | 5 | SDK UPM extraído do Folclore | fase multiplayer do jogo | reuso real |
 | 6 | Abrir o repo (Apache-2.0) + post técnico | 1–2 idealmente | vitrine e reconhecimento |
 
-## Rascunhos de ADR (para aprovação — não gravados em `docs/adr/`)
+## Rascunhos de ADR
+
+> Atualização 2026-09-26: o dono aprovou as recomendações. **A** virou a
+> [ADR-0031](../adr/0031-federated-identity.md). **B** virou a spec em rascunho
+> `services/session-service/specs/031-p2p-topology/spec.md` (aguarda aprovação e a decisão de netcode no jogo).
 
 **A — Identidade federada (Steam primeiro).** O identity aceita um ticket de loja (`POST /sessions/{provider}`),
 valida com a Web API do provedor, vincula o ID externo a uma conta (tabela `external_identities(provider,
