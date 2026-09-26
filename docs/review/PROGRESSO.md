@@ -28,6 +28,20 @@ Commits diretos na branch, um por entrega; features com spec (`session/029`, `pl
 | V8 | `11a72c4` | game-registry: params do perfil com tipo errado → 400 (antes zero-value silencioso) | unit |
 | verificação final | — | `go build`/`vet`/lint (0 issues)/unit (51 pacotes ok)/integração (57 ok; só o cloud-save falha por imagem MinIO inacessível na VM)/admin-ui; **demo ponta a ponta com todos os binários reconstruídos** | ✅ |
 
+## Fase 3 — decisões aprovadas (2026-09-26)
+
+O dono aprovou a revisão, seguiu todas as recomendações (D1–D6 + aval para `shared/auth`) e pediu para seguir com
+autonomia no que não depende de gameplay, inclusive mudança de escopo.
+
+| Item | Commit | O que mudou | Validação |
+|---|---|---|---|
+| D4 | `2d6624d` | console sem dados fabricados: Fleet 522 → 207 linhas (só localização/réplicas reais + cadastro); Infrastructure sem a aba de custos inventados, com atalho para o Grafana | tsc, vitest, build |
+| D5 | `6d18f2b` | `battle_royale`/`coop_mission` rotulados experimentais (docs + seletor do console) | tsc |
+| G3/G4 | `213112c` | `shared/auth`: `iss`/`aud`/`exp` obrigatórios; refetch de JWKS por `kid` desconhecido 1×/30s e coalescido (singleflight); `kid` revogado não cai na chave antiga | 6 testes novos, `-race` |
+| D2/D3 | `2b555b8` | invasão respeita o modo (spec `matchmaking/012`); convenção de boss em `stats`; `docs/contracts/CHANGELOG.md` (1.0.0 → 1.1.0) | unit + transport |
+| — | `d90512d` | CI: `buf breaking` dos protos contra a `main` | local: passa e detecta quebra |
+| D1 | `ad89442` | autenticação no gRPC do session (spec `session/030`, ADR-0030), `warn` → `enforce`; `SummonSign` só pelo host | unit + **demo ao vivo em `enforce`** |
+
 ## Em andamento
 
 - Nada. Sessão encerrada com a branch publicada.
