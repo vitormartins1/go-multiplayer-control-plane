@@ -3,6 +3,7 @@
 Sobe todos os serviços + bancos/storage + observabilidade num comando. É o ambiente onde se desenvolve e valida tudo (estratégia local-first; deploy AWS fica para o fim).
 
 ```bash
+infra/docker/gen-secrets.sh   # uma vez: chaves de dev do identity e do session (o compose falha sem elas)
 docker compose -f infra/docker/docker-compose.yml up --build
 # subir um subconjunto:
 docker compose -f infra/docker/docker-compose.yml up -d identity-service identity-postgres

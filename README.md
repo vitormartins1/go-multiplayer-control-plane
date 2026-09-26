@@ -86,6 +86,9 @@ Requisitos: Go 1.26 (o `go.mod` pede 1.26; com Go mais antigo use `GOTOOLCHAIN=a
 o admin-ui fora do compose).
 
 ```bash
+# uma vez: chaves Ed25519 de dev (JWT do jogador e connect token), gitignored
+infra/docker/gen-secrets.sh
+
 # stack completa: serviços + Postgres/Redis/MinIO/LocalStack + Prometheus/Grafana/Tempo
 docker compose -f infra/docker/docker-compose.yml up --build
 

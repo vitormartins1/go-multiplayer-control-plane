@@ -14,6 +14,12 @@ services:
       INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018)
       GAME_REGISTRY_URL: http://game-registry:8080 # presença no login-into-game (ADR-0019)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+      # Chave Ed25519 persistente do JWT do jogador (PEM PKCS8). Sem ela o
+      # identity gera uma efêmera a cada boot e todo token emitido antes do
+      # restart deixa de validar. Gerar uma vez: infra/docker/gen-secrets.sh
+      JWT_PRIVATE_KEY_FILE: /run/secrets/identity-jwt-key
+    secrets:
+      - identity-jwt-key
     depends_on:
       identity-postgres:
         condition: service_healthy
@@ -630,3 +636,5 @@ services:
 secrets:
   session-jwt-key:
     file: ./secrets/session-jwt-ed25519.pem
+  identity-jwt-key:
+    file: ./secrets/identity-jwt-ed25519.pem
