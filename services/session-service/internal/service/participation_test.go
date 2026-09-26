@@ -312,3 +312,84 @@ func TestReportParticipation_SemPublisher_Erro(t *testing.T) {
 	err = svc.ReportParticipationEvent(context.Background(), sess.ID, evt("p", domain.RoleCoop, domain.EventJoined, domain.OutcomeNeutral))
 	assert.Error(t, err)
 }
+
+// hostKilledSetup abre um mundo com um publisher de participação controlável
+// pelo teste (spec 029): cada chamada consome o próximo erro programado.
+func hostKilledSetup(t *testing.T, releaseErr error) (*Service, *mockParticipation, string) {
+	t.Helper()
+	alloc := &mockAllocator{}
+	iss := &mockIssuer{}
+	prof := &mockProfile{}
+	part := &mockParticipation{}
+	alloc.On("Allocate", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Server{ID: "server-0", Address: "10.0.0.1:7777"}, nil)
+	alloc.On("Release", mock.Anything, "server-0").Return(releaseErr)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
+	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
+
+	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part))
+	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	require.NoError(t, err)
+	return svc, part, sess.ID
+}
+
+func hostKilled(eventID string) domain.ParticipationEvent {
+	e := evt("inv-1", domain.RoleInvader, domain.EventHostKilled, domain.OutcomeSuccess)
+	e.EventID = eventID
+	return e
+}
+
+// Spec 029, critério 1: o publish do HOST_KILLED falha depois de o mundo já ter
+// fechado; o reenvio da MESMA ocorrência precisa publicar (antes recebia
+// NotFound e o evento se perdia para sempre).
+func TestReportParticipation_HostKilled_PublishFalha_ReenvioPublica(t *testing.T) {
+	svc, part, sid := hostKilledSetup(t, nil)
+	part.On("PublishParticipation", mock.Anything, "game-1", sid, "default", hostKilled("ev-1")).Return(assert.AnError).Once()
+	part.On("PublishParticipation", mock.Anything, "game-1", sid, "default", hostKilled("ev-1")).Return(nil).Once()
+
+	err := svc.ReportParticipationEvent(context.Background(), sid, hostKilled("ev-1"))
+	require.Error(t, err, "falha no publish propaga para o server reenviar")
+	assert.Equal(t, float64(0), svc.ActiveSessions(), "o mundo fecha mesmo com o fan-out fora")
+
+	err = svc.ReportParticipationEvent(context.Background(), sid, hostKilled("ev-1"))
+	require.NoError(t, err, "reenvio da mesma ocorrência republica")
+	part.AssertNumberOfCalls(t, "PublishParticipation", 2)
+	assert.Equal(t, float64(1), svc.ClosedTotal(domain.CloseHostKilled), "reenvio não fecha de novo")
+}
+
+// Spec 029, critério 2: o Release do GameServer falha dentro do fechamento — o
+// erro volta antes do publish; o reenvio publica.
+func TestReportParticipation_HostKilled_ReleaseFalha_ReenvioPublica(t *testing.T) {
+	svc, part, sid := hostKilledSetup(t, assert.AnError)
+	part.On("PublishParticipation", mock.Anything, "game-1", sid, "default", hostKilled("ev-1")).Return(nil).Once()
+
+	err := svc.ReportParticipationEvent(context.Background(), sid, hostKilled("ev-1"))
+	require.Error(t, err)
+	part.AssertNotCalled(t, "PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	require.NoError(t, svc.ReportParticipationEvent(context.Background(), sid, hostKilled("ev-1")))
+	part.AssertNumberOfCalls(t, "PublishParticipation", 1)
+}
+
+// Spec 029: data plane antigo (sem event_id) — a ocorrência é reconhecida por
+// player_id + event.
+func TestReportParticipation_HostKilled_SemEventID_ReenvioPublica(t *testing.T) {
+	svc, part, sid := hostKilledSetup(t, nil)
+	part.On("PublishParticipation", mock.Anything, "game-1", sid, "default", hostKilled("")).Return(assert.AnError).Once()
+	part.On("PublishParticipation", mock.Anything, "game-1", sid, "default", hostKilled("")).Return(nil).Once()
+
+	require.Error(t, svc.ReportParticipationEvent(context.Background(), sid, hostKilled("")))
+	require.NoError(t, svc.ReportParticipationEvent(context.Background(), sid, hostKilled("")))
+}
+
+// Spec 029, critérios 3 e 4: só a ocorrência que fechou o mundo é aceita depois
+// do fechamento; qualquer outro evento segue recebendo NotFound.
+func TestReportParticipation_MundoFechado_OutroEvento_ErrWorldNotFound(t *testing.T) {
+	svc, part, sid := hostKilledSetup(t, nil)
+	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	require.NoError(t, svc.ReportParticipationEvent(context.Background(), sid, hostKilled("ev-1")))
+
+	left := evt("coop-1", domain.RoleCoop, domain.EventLeft, domain.OutcomeNeutral)
+	assert.ErrorIs(t, svc.ReportParticipationEvent(context.Background(), sid, left), domain.ErrWorldNotFound)
+	assert.ErrorIs(t, svc.ReportParticipationEvent(context.Background(), sid, hostKilled("ev-2")), domain.ErrWorldNotFound)
+	part.AssertNumberOfCalls(t, "PublishParticipation", 1)
+}

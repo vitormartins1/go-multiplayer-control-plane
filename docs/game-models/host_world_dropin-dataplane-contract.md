@@ -108,7 +108,7 @@ session.v1.Session/ReportParticipationEvent(
   (kills, revives, ...), mesmo padrão de `ReportResult`. Ausente/vazio = ok
   (compat total); o session não valida conteúdo, é autoritativo o server.
 
-Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo inexistente/já encerrado — sinal para o server **parar** de reenviar aquele evento).
+Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo inexistente/já encerrado — sinal para o server **parar** de reenviar aquele evento), `Internal` (falha transitória — p.ex. publish no fan-out ou devolução do GameServer; **reenviar** a mesma ocorrência).
 
 ### Efeito de cada evento no mundo (o control plane aplica)
 
@@ -120,7 +120,9 @@ Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo
 | `LEFT` | phantom que sai voluntariamente | **libera o slot** do `player_id` |
 | `HOST_KILLED` | o invasor que matou o host | **encerra o mundo** (`CloseReason=host_killed`), libera o server, encerra a participação de todos |
 
-**Ordem no control plane:** o session **publica** o evento no fan-out **antes** de mutar o slot (ADR-0020) — se a publicação falha, o estado não muda e o server **refaz** o report (retry). Logo, o server deve tratar `ReportParticipationEvent` como **idempotente/retriável**: em erro de rede, reenviar; ao receber `NotFound`, parar (o mundo já fechou).
+**Ordem no control plane (desde 2026-08-19, fix `49e976d`):** o session **aplica o efeito primeiro** (libera o slot, encerra o mundo) e **depois publica** no fan-out — o gameplay nunca fica refém da infra de analytics. Se o publish falha, o efeito já valeu e o erro volta ao server, que **reenvia a mesma ocorrência (mesmo `event_id`)**; toda mutação é idempotente e os sinks deduplicam por `event_id`. Logo, o server deve tratar `ReportParticipationEvent` como **idempotente/retriável**: em erro, reenviar; ao receber `NotFound`, parar (o mundo já fechou).
+
+**Reenvio do `HOST_KILLED` (spec `session-service/029`, 2026-09-26):** o `HOST_KILLED` fecha o mundo antes do publish; se o publish (ou a devolução do GameServer) falhar, o reenvio **da mesma ocorrência** (mesmo `event_id`; sem `event_id`, mesmo `player_id`) é aceito e só republica — antes recebia `NotFound` e o evento se perdia. Qualquer outro evento para o mundo já fechado continua recebendo `NotFound`. **Impacto no jogo: nenhum** — o comportamento esperado (reenviar em erro, parar em `NotFound`) é o mesmo; só deixa de perder o evento.
 
 > **Semântica de papel:** o session **não** valida se o `role` combina com o `event` (ex.: "invasor não pode reportar BOSS_DEFEATED") — o server do mundo é **autoritativo**. Ver follow-up #12 se essa validação virar necessária.
 
@@ -138,11 +140,13 @@ O session publica cada evento no **mesmo** tópico `match-results` do `queue_are
   "role": "host | coop | invader",
   "event": "JOINED | BOSS_DEFEATED | HOST_KILLED | DIED | LEFT",
   "outcome": "SUCCESS | FAIL | NEUTRAL",
+  "modeId": "<modo>",
+  "eventId": "<ocorrência, gerado pelo data plane>",
   "stats": {"kills": 2}
 }
 ```
 
-Sinks (control plane, já implementados): **achievements** reage por papel (`invader`+`HOST_KILLED`+`SUCCESS` → `invasion_won`; `coop`+`BOSS_DEFEATED`+`SUCCESS` → `coop_boss_helped`; `JOINED` → `world_joined`), idempotente por `(sessionId, playerId, event)`. **analytics** agrega `(gameId, role, event)`.
+Sinks (control plane, já implementados): **achievements** reage por papel (`invader`+`HOST_KILLED`+`SUCCESS` → `invasion_won`; `coop`+`BOSS_DEFEATED`+`SUCCESS` → `coop_boss_helped`; `JOINED` → `world_joined`), idempotente por `eventId` (fallback `(sessionId, playerId, event)` para data plane sem `eventId`). **analytics** agrega `(gameId, modeId, role, event, outcome)` e guarda os `stats` brutos.
 
 ## Ciclo de vida do mundo e dos slots (referência)
 

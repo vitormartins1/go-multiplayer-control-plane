@@ -64,9 +64,11 @@ type SessionClient interface {
 	// (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
 	ListInvadableWorlds(ctx context.Context, in *ListInvadableWorldsRequest, opts ...grpc.CallOption) (*ListInvadableWorldsResponse, error)
 	// ReportParticipationEvent recebe um evento por participante do server do mundo
-	// (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
-	// slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
-	// NotFound (mundo inexistente/fechado).
+	// (spec 013): aplica o efeito no mundo (DIED/LEFT liberam o slot, HOST_KILLED
+	// encerra) e depois publica no fan-out (kind=participation_event). Erro no
+	// publish = reenviar a mesma ocorrência (mesmo event_id); o reenvio do
+	// HOST_KILLED que já encerrou o mundo é aceito (spec 029). InvalidArgument
+	// (vocabulário), NotFound (mundo inexistente/fechado).
 	ReportParticipationEvent(ctx context.Context, in *ReportParticipationEventRequest, opts ...grpc.CallOption) (*ReportParticipationEventResponse, error)
 	// GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot
 	// do perfil do modo congelado na criação da sessão. Chamado pelo game server no
@@ -208,9 +210,11 @@ type SessionServer interface {
 	// (006) descobrir alvos; sem filtro de faixa/senha. Lista vazia se nada casar.
 	ListInvadableWorlds(context.Context, *ListInvadableWorldsRequest) (*ListInvadableWorldsResponse, error)
 	// ReportParticipationEvent recebe um evento por participante do server do mundo
-	// (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
-	// slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
-	// NotFound (mundo inexistente/fechado).
+	// (spec 013): aplica o efeito no mundo (DIED/LEFT liberam o slot, HOST_KILLED
+	// encerra) e depois publica no fan-out (kind=participation_event). Erro no
+	// publish = reenviar a mesma ocorrência (mesmo event_id); o reenvio do
+	// HOST_KILLED que já encerrou o mundo é aceito (spec 029). InvalidArgument
+	// (vocabulário), NotFound (mundo inexistente/fechado).
 	ReportParticipationEvent(context.Context, *ReportParticipationEventRequest) (*ReportParticipationEventResponse, error)
 	// GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot
 	// do perfil do modo congelado na criação da sessão. Chamado pelo game server no

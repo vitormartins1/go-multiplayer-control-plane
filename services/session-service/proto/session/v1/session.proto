@@ -40,9 +40,11 @@ service Session {
   rpc ListInvadableWorlds(ListInvadableWorldsRequest) returns (ListInvadableWorldsResponse);
 
   // ReportParticipationEvent recebe um evento por participante do server do mundo
-  // (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
-  // slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
-  // NotFound (mundo inexistente/fechado).
+  // (spec 013): aplica o efeito no mundo (DIED/LEFT liberam o slot, HOST_KILLED
+  // encerra) e depois publica no fan-out (kind=participation_event). Erro no
+  // publish = reenviar a mesma ocorrência (mesmo event_id); o reenvio do
+  // HOST_KILLED que já encerrou o mundo é aceito (spec 029). InvalidArgument
+  // (vocabulário), NotFound (mundo inexistente/fechado).
   rpc ReportParticipationEvent(ReportParticipationEventRequest) returns (ReportParticipationEventResponse);
 
   // GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot

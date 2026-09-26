@@ -929,9 +929,11 @@ func (s *Service) CloseWorld(ctx context.Context, sessionID string) error {
 }
 
 // ReportParticipationEvent recebe um evento por participante do server do mundo
-// (spec 013): valida o vocabulário, publica no fan-out (participation_event) e,
-// só após o publish, aplica o efeito no slot. Publica ANTES de mutar (ADR-0020):
-// se a publicação falha, o estado não muda e o server refaz o report.
+// (spec 013): valida o vocabulário, aplica o efeito no mundo (slot/fechamento)
+// e DEPOIS publica no fan-out (participation_event) — ver o comentário do fix
+// 2026-08-19 abaixo. Falha no publish volta como erro para o server reenviar a
+// mesma ocorrência; o reenvio do HOST_KILLED que já fechou o mundo só
+// republica (spec 029).
 func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string, evt domain.ParticipationEvent) error {
 	if err := validateParticipation(evt); err != nil {
 		return fmt.Errorf("session service: participation event: %w", err)
@@ -943,8 +945,18 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 	s.mu.Lock()
 	sess, ok := s.sessions[sessionID]
 	if !ok || sess.Origin != domain.OriginHostWorld {
+		closed, retry := s.closingRetryLocked(sessionID, evt)
 		s.mu.Unlock()
-		return fmt.Errorf("session service: participation event: %w", domain.ErrWorldNotFound)
+		if !retry {
+			return fmt.Errorf("session service: participation event: %w", domain.ErrWorldNotFound)
+		}
+		// reenvio da ocorrência que fechou o mundo (spec 029): nada a mutar,
+		// só garantir que ela chegue ao fan-out.
+		if err := s.participation.PublishParticipation(ctx, closed.GameID, sessionID, closed.ModeID, evt); err != nil {
+			return fmt.Errorf("session service: participation event: publish: %w", err)
+		}
+		s.countParticipation(evt.Event)
+		return nil
 	}
 	gameID, modeID := sess.GameID, sess.ModeID
 	s.mu.Unlock()
@@ -973,7 +985,16 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 		}
 		s.mu.Unlock()
 	case domain.EventHostKilled:
-		// o host morreu -> encerra o mundo. ErrSessionNotFound = já fechado (ok).
+		// o host morreu -> encerra o mundo. Guarda a ocorrência na sessão para
+		// que o reenvio (publish ou release falho) seja reconhecido depois que
+		// o mundo sair do mapa de ativos (spec 029). ErrSessionNotFound = já
+		// fechado (ok).
+		s.mu.Lock()
+		if cur, ok := s.sessions[sessionID]; ok {
+			closing := evt
+			cur.ClosingEvent = &closing
+		}
+		s.mu.Unlock()
 		if _, err := s.closeSession(ctx, sessionID, domain.CloseHostKilled); err != nil &&
 			!errors.Is(err, domain.ErrSessionNotFound) {
 			return fmt.Errorf("session service: participation event: close: %w", err)
@@ -985,6 +1006,27 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 	}
 	s.countParticipation(evt.Event)
 	return nil
+}
+
+// closingRetryLocked procura no histórico em memória o mundo fechado por esta
+// mesma ocorrência (spec 029): mesmo event_id ou, com event_id vazio (data
+// plane antigo), mesmo player_id + event. Exige s.mu travado.
+func (s *Service) closingRetryLocked(sessionID string, evt domain.ParticipationEvent) (*domain.Session, bool) {
+	for i := len(s.history) - 1; i >= 0; i-- {
+		h := s.history[i]
+		if h.ID != sessionID {
+			continue
+		}
+		c := h.ClosingEvent
+		if c == nil || c.Event != evt.Event {
+			return nil, false
+		}
+		if c.EventID != "" || evt.EventID != "" {
+			return h, c.EventID == evt.EventID
+		}
+		return h, c.PlayerID == evt.PlayerID
+	}
+	return nil, false
 }
 
 // validateParticipation valida o vocabulário do evento (spec 013). Não valida o

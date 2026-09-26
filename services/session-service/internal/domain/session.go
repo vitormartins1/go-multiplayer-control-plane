@@ -164,6 +164,12 @@ type Session struct {
 	// Nil em sessões abertas e nos fechamentos sem resultado (ttl/admin/
 	// abandoned/host_left/host_killed).
 	Result *MatchOutcome
+
+	// ClosingEvent é o evento de participação que encerrou o mundo
+	// (HOST_KILLED, spec 029). Só vive no histórico em memória: permite que o
+	// reenvio dessa mesma ocorrência, depois de um publish falho, seja
+	// republicado em vez de receber NotFound. Nil nos demais fechamentos.
+	ClosingEvent *ParticipationEvent
 }
 
 // Participant é um jogador que participou da sessão, com o papel ocupado e o
