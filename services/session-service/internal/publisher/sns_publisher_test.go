@@ -305,3 +305,25 @@ func TestSNSPublish_WinLossDraw_IntactoAposDispatch(t *testing.T) {
 	require.Len(t, got.Results, 1)
 	assert.True(t, got.Results[0].Won)
 }
+
+// blockingSNS simula o SNS travado: só responde quando o ctx da chamada acaba.
+type blockingSNS struct{}
+
+func (blockingSNS) Publish(ctx context.Context, _ *sns.PublishInput, _ ...func(*sns.Options)) (*sns.PublishOutput, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// Com o SNS travado e um ctx sem deadline (Dedicated Server sem timeout), o
+// publish devolve erro no timeout próprio em vez de pendurar — o server recebe
+// o erro e reenvia (spec 029 / contrato host_world_dropin).
+func TestSNSPublishParticipation_SNSTravado_ErroNoTimeout(t *testing.T) {
+	p := &SNS{client: blockingSNS{}, topicARN: "arn", log: logger.New("test"), timeout: 50 * time.Millisecond}
+
+	start := time.Now()
+	err := p.PublishParticipation(context.Background(), "game-1", "world-1", "default",
+		domain.ParticipationEvent{PlayerID: "p1", Role: domain.RoleInvader, Event: domain.EventHostKilled, Outcome: domain.OutcomeSuccess})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), 2*time.Second)
+}
