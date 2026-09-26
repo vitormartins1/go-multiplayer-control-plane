@@ -5,6 +5,7 @@ package transport
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -185,12 +186,16 @@ func toModeDTO(m *domain.MultiplayerMode, fleet string) modeDTO {
 	return modeDTO{ModeID: m.ModeID, DisplayName: m.DisplayName, Fleet: fleet, profileDTO: *profileToDTO(&m.Profile)}
 }
 
-func profileToDomain(d profileDTO) domain.MultiplayerProfile {
+// profileToDomain traduz o DTO; params com o tipo errado (ex.: "coopSlots":
+// "dois") viram ErrInvalidProfileParams (400) em vez de zero-values silenciosos.
+func profileToDomain(d profileDTO) (domain.MultiplayerProfile, error) {
 	p := domain.MultiplayerProfile{Archetype: d.Archetype, Topology: d.Topology}
 	switch d.Archetype {
 	case domain.ArchetypeQueueArena:
 		var qa queueArenaParamsDTO
-		_ = json.Unmarshal(d.Params, &qa)
+		if err := unmarshalParams(d.Params, &qa); err != nil {
+			return p, err
+		}
 		p.QueueArena = &domain.QueueArenaParams{
 			Structure: qa.Structure, PlayerCount: qa.PlayerCount, TeamCount: qa.TeamCount,
 			TeamSize: qa.TeamSize, WinCondition: qa.WinCondition, ScoreTarget: qa.ScoreTarget,
@@ -199,7 +204,9 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 		}
 	case domain.ArchetypeHostWorldDropIn:
 		var hw hostWorldDropInParamsDTO
-		_ = json.Unmarshal(d.Params, &hw)
+		if err := unmarshalParams(d.Params, &hw); err != nil {
+			return p, err
+		}
 		p.HostWorldDropIn = &domain.HostWorldDropInParams{
 			EnabledRoles:      nonNil(hw.EnabledRoles),
 			CoopSlots:         hw.CoopSlots,
@@ -213,7 +220,9 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 		p.ExtraParams = jsonparams.Extract(d.Params, hostWorldDropInKnownKeys)
 	case domain.ArchetypeBattleRoyale:
 		var br battleRoyaleParamsDTO
-		_ = json.Unmarshal(d.Params, &br)
+		if err := unmarshalParams(d.Params, &br); err != nil {
+			return p, err
+		}
 		p.BattleRoyale = &domain.BattleRoyaleParams{
 			LobbySize:    br.LobbySize,
 			TeamSize:     br.TeamSize,
@@ -222,7 +231,9 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 		}
 	case domain.ArchetypeCoopMission:
 		var cm coopMissionParamsDTO
-		_ = json.Unmarshal(d.Params, &cm)
+		if err := unmarshalParams(d.Params, &cm); err != nil {
+			return p, err
+		}
 		p.CoopMission = &domain.CoopMissionParams{
 			TeamSize:       cm.TeamSize,
 			Missions:       cm.Missions,
@@ -231,7 +242,19 @@ func profileToDomain(d profileDTO) domain.MultiplayerProfile {
 			ScoringStats:   cm.ScoringStats,
 		}
 	}
-	return p
+	return p, nil
+}
+
+// unmarshalParams decodifica os params do arquétipo; ausente/null = sem params
+// (a validação do service decide o que é obrigatório).
+func unmarshalParams(raw json.RawMessage, v any) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(raw, v); err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrInvalidProfileParams, err)
+	}
+	return nil
 }
 
 // nonNil garante slice não-nil na serialização: o contrato do console declara
@@ -374,7 +397,11 @@ func (h *Handler) setMode(w http.ResponseWriter, r *http.Request) {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	p := profileToDomain(profileDTO{Archetype: req.Archetype, Topology: req.Topology, Params: req.Params})
+	p, err := profileToDomain(profileDTO{Archetype: req.Archetype, Topology: req.Topology, Params: req.Params})
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
 	m, err := h.games.SetMode(r.Context(), r.PathValue("id"), r.PathValue("modeId"), req.DisplayName, p)
 	if err != nil {
 		writeDomainError(w, err)
@@ -410,7 +437,12 @@ func (h *Handler) setProfile(w http.ResponseWriter, r *http.Request) {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	p, err := h.games.SetMultiplayerProfile(r.Context(), r.PathValue("id"), profileToDomain(req))
+	prof, err := profileToDomain(req)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	p, err := h.games.SetMultiplayerProfile(r.Context(), r.PathValue("id"), prof)
 	if err != nil {
 		writeDomainError(w, err)
 		return
