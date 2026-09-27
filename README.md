@@ -62,7 +62,7 @@ uma feature de cada vez, passo a passo.
 <td width="33%" valign="top">
 <a href="docs/media/video-01-cadastro.mp4"><img src="docs/media/thumb-01-cadastro.jpg" alt="Vídeo 1: do zero ao jogo online"/></a>
 <br/><b>Do zero ao jogo online</b><br/>
-<sub>Registrar um jogo, escolher o arquétipo e se ele roda em servidor dedicado ou P2P, e ver o primeiro mundo abrir e ser invadido. Sem deploy.</sub>
+<sub>Registrar um jogo, ver o que o backend configurou sozinho, e acompanhar o primeiro mundo abrir, ser invadido e terminar no analytics. Sem deploy.</sub>
 </td>
 <td width="33%" valign="top">
 <a href="docs/media/video-02-conquistas.mp4"><img src="docs/media/thumb-02-conquistas.jpg" alt="Vídeo 2: conquistas sem deploy"/></a>

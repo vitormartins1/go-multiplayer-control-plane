@@ -63,7 +63,7 @@ and walk through one feature at a time (narration in Portuguese).
 <td width="33%" valign="top">
 <a href="docs/media/video-01-cadastro.mp4"><img src="docs/media/thumb-01-cadastro.jpg" alt="Video 1: from zero to online"/></a>
 <br/><b>From zero to online</b><br/>
-<sub>Register a game, pick its archetype and whether it runs on a dedicated server or P2P, and watch the first world open and get invaded. No deploy.</sub>
+<sub>Register a game, see what the backend configured on its own, and follow the first world as it opens, gets invaded and lands in analytics. No deploy.</sub>
 </td>
 <td width="33%" valign="top">
 <a href="docs/media/video-02-conquistas.mp4"><img src="docs/media/thumb-02-conquistas.jpg" alt="Video 2: achievements without redeploys"/></a>

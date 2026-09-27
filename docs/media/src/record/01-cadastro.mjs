@@ -1,6 +1,7 @@
 // Vídeo 1 — "Do zero ao jogo online": registrar um jogo com um modo P2P, entender
-// cada parte do formulário, ver o que o console mostra do jogo novo e o primeiro
-// mundo abrir e ser invadido, sem deploy.
+// cada parte do formulário, ver o que o backend configurou sozinho (pipeline de
+// dados e regras do arquétipo), o primeiro mundo abrir e ser invadido, e a partida
+// terminar no histórico e no analytics, sem deploy.
 //
 //   node docs/media/src/record/01-cadastro.mjs
 //
@@ -89,6 +90,21 @@ await rec.spot(page.getByRole("heading", { name: GAME_NAME }).locator("xpath=.."
 await rec.spot(page.getByRole("tablist").first(), "O jogo",
   "Cada jogo tem suas abas: conquistas, regras, rankings, jogadores, sessões e analytics.");
 
+// --- 5b. o que o backend configurou sozinho ------------------------------------------
+await rec.click(tab("Configurações"));
+await rec.wait(1400);
+await rec.say("Sem código", "O que o backend fez com esse formulário? A aba Configurações mostra.");
+await rec.spot(page.getByRole("row").filter({ hasText: MODE_ID }).first(), "Modo",
+  "O modo que acabamos de criar: mundo do host, P2P, duas vagas de co-op, uma de invasor e as stats declaradas.");
+await rec.spot(page.getByRole("row").filter({ hasText: "participation_event" }).first(), "Pipeline",
+  "Cada evento da partida vira um envelope e segue para as conquistas e o analytics. Ninguém ligou isso à mão.", { force: true });
+await rec.spot(page.getByRole("row").filter({ hasText: /regras/ }).first(), "Regras prontas",
+  "E o jogo já nasceu com as regras do arquétipo: três regras, três eventos prontos para virar conquista.", { force: true });
+await rec.click(tab("Event Rules"));
+await rec.wait(1400);
+await rec.spot(page.getByText("INVASION_WON").first().locator("xpath=ancestor::tbody[1]"), "Event Rules",
+  "Aqui estão elas: entrar num mundo, vencer uma invasão, ajudar a derrotar um chefe. O vídeo 2 mostra como funcionam.");
+
 // --- 6. frota: P2P não precisa ------------------------------------------------------
 await rec.click(page.getByRole("link", { name: "Fleet" }));
 await rec.wait(1500);
@@ -122,10 +138,31 @@ await rec.spot(page.getByText(/^matinta_/).first().locator("xpath=ancestor::div[
   "O mundo por dentro: o host, as vagas de co-op livres e o invasor que acabou de entrar.", { force: true });
 await rec.spot(page.getByText(/Mundo P2P:/).first(), "Confiança",
   "No P2P o jogo do host reporta os eventos. O console deixa isso explícito para quem opera.", { force: true });
+await staged;
+
+// --- 8. o fim da partida --------------------------------------------------------------
+await rec.caption("Fim da luta", "Agora o invasor derrota o host. O jogo do host reporta a morte…");
+await promisify(execFile)(path.join(here, "stage.sh"), ["kill"]);
+// o polling tira o mundo das abertas
+await page.getByRole("row").filter({ hasText: /steam:/ }).first().waitFor({ state: "detached", timeout: 30000 });
+await rec.wait(800);
+await rec.say("Fechou", "O mundo saiu da lista de abertas: ele fecha sozinho quando o host morre.");
+await rec.click(tab("Analytics"));
+await rec.wait(2500);
+await rec.spot(page.getByText("Resumo do mundo").locator("xpath=ancestor::div[contains(@class,'mantine-Paper-root') or contains(@class,'mantine-Card-root')][1]"),
+  "Analytics", "O analytics do jogo já contou a partida: uma invasão, vencida pelo invasor.", { force: true });
+await rec.spot(page.getByText("Saúde das sessões").locator("xpath=ancestor::div[contains(@class,'mantine-Paper-root') or contains(@class,'mantine-Card-root')][1]"),
+  "Sessões", "E a saúde das sessões: como cada uma terminou e quanto durou.", { force: true });
+await rec.click(tab("Sessions"));
+await rec.wait(1500);
+await rec.click(page.getByText("Fechadas", { exact: true }).first());
+await rec.wait(1200);
+const closed = page.getByRole("row").filter({ hasText: /Host morto/ }).first();
+await closed.waitFor({ timeout: 20000 });
+await rec.spot(closed, "Histórico", "E no histórico de sessões do jogo: fechada como Host morto, com a duração e quem estava dentro.");
 
 await rec.caption(null);
 await rec.wait(600);
-await staged;
 
 const frames = await rec.end();
 const body = path.join(tmp, "01-body.mp4");
