@@ -2,6 +2,8 @@
 
 # go-multiplayer-control-plane
 
+**Português** · [English](README.en.md)
+
 **Backend multiplayer self-hosted, em Go, para jogos cujo realtime roda no Unity.**<br/>
 Login, matchmaking, servidores dedicados no Agones ou P2P via Steam, conquistas sem deploy, leaderboard,
 analytics e um console de operação. O que GameLift e PlayFab vendem por jogador, rodando na sua infra.
@@ -10,7 +12,7 @@ analytics e um console de operação. O que GameLift e PlayFab vendem por jogado
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![gRPC](https://img.shields.io/badge/contrato%20gRPC-1.5.0-244c5a?logo=grpc)
 ![Agones](https://img.shields.io/badge/Agones-k3s%20%C2%B7%20EKS-326CE5?logo=kubernetes&logoColor=white)
-![Licença](https://img.shields.io/badge/licen%C3%A7a-a%20definir-lightgrey)
+[![Licença](https://img.shields.io/badge/licen%C3%A7a-Apache--2.0-blue)](LICENSE)
 
 [**Assista ao vídeo (3 min)**](docs/media/go-multiplayer-control-plane.mp4) ·
 [Começando](#começando) ·
@@ -136,8 +138,11 @@ em [`CONTRIBUTING.md`](CONTRIBUTING.md).
 ## Contribuindo
 
 Issues e PRs são bem-vindos. Cada feature nasce de uma spec curta com critérios de aceite e cada decisão de
-arquitetura tem um ADR; o [`CONTRIBUTING.md`](CONTRIBUTING.md) explica o fluxo e os comandos.
+arquitetura tem um ADR; o [`CONTRIBUTING.md`](CONTRIBUTING.md) explica o fluxo e os comandos. Quem participa segue
+o [código de conduta](CODE_OF_CONDUCT.md); vulnerabilidades são reportadas em privado, como descreve o
+[`SECURITY.md`](SECURITY.md).
 
 ## Licença
 
-Ainda não definida. Até a abertura do código, todos os direitos são reservados ao autor.
+[Apache License 2.0](LICENSE). Pode usar, modificar e distribuir, inclusive comercialmente, mantendo o aviso de
+licença e o [`NOTICE`](NOTICE).

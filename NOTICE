@@ -1,0 +1,8 @@
+go-multiplayer-control-plane
+Copyright 2026 Vitor Martins
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The media pipeline (docs/media/src/fonts) bundles the Space Grotesk, IBM Plex Sans
+and IBM Plex Mono fonts, licensed under the SIL Open Font License 1.1 (license
+texts alongside the font files).

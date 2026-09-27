@@ -93,11 +93,11 @@ dependências em dia quando ele reprovar um PR futuro.
 | Deploy real e medição de custo (G10, a tese do projeto — ADR-0008) | o próximo grande marco depois do lançamento; P2P já cortou o maior custo | `review/REVISAO-2026-09.md` |
 | Resultado de partida sem outbox (G7) | **reenvio corrigido** (spec `session/033`); outbox de verdade só se o session deixar de ser em memória | `review/REVISAO-2026-09.md` |
 | S3 local do cloud-save | **LocalStack** desde 2026-09-27 (o MinIO saiu do Docker Hub). Os saves locais somem quando o LocalStack reinicia; se isso incomodar, trocar por um S3 com persistência (SeaweedFS ou Garage) — só muda o endpoint | `infra/docker/docker-compose.yml` |
-| Licença antes de abrir o código | escolher na hora de abrir: **Apache-2.0** (permissiva, com cláusula de patente) é a recomendação para atrair uso; AGPL-3.0 se o medo for alguém vender o backend como SaaS fechado. O README hoje diz "a definir" | `README.md`, `review/ESTRATEGIA-PRODUTO-2026-09.md` |
+| Licença | **decidida: Apache-2.0** (2026-09-27). `LICENSE`, `NOTICE`, badge e seção do README feitos | `LICENSE`, `NOTICE` |
 | Limite de tentativas no login (G5) | **feito em memória** (spec `identity/007`); com várias réplicas, trocar por um limite distribuído (Redis) no deploy real | idem |
 | Mais de um app Steam por deploy | quando um segundo jogo for para a Steam: `STEAM_APP_ID` por jogo no game-registry | `achievements-service/specs/019-steam-mirror` |
 | SDK UPM | extrair do Folclore quando a camada C# (guia, seção 4) estabilizar | guia Unity, seção 8 |
-| Abrir o repositório (Apache-2.0) + post técnico | no fim, como você pediu | `review/ESTRATEGIA-PRODUTO-2026-09.md` §4 |
+| Abrir o repositório + post técnico | no fim, como você pediu; o checklist está na seção 8 | seção 8 |
 
 ## 7. Validar na sua máquina (a VM não conseguiu)
 
@@ -111,3 +111,30 @@ dependências em dia quando ele reprovar um PR futuro.
 - **Túnel do Pi 5:** `infra/agones/pi5/pi5-tunnels.sh install`.
 - **Com o jogo:** `HOST_KILLED` com o LocalStack parado → o server recebe `Internal`, reenvia com o mesmo
   `event_id` e, com o LocalStack de volta, o invasor ganha a conquista.
+
+## 8. Antes de abrir o repositório
+
+O que já está pronto para a abertura: `LICENSE` (Apache-2.0) e `NOTICE`, README em português e em inglês,
+`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SECURITY.md` e templates de issue e de PR.
+O que falta, numa passada só, na hora de abrir:
+
+1. **Contato do código de conduta:** trocar `[CONTATO A DEFINIR ...]` no `CODE_OF_CONDUCT.md` por um e-mail ou
+   formulário que você queira expor publicamente.
+2. **Reporte privado de vulnerabilidades:** no GitHub, Settings → Code security → ligar *Private vulnerability
+   reporting* (o `SECURITY.md` e o template de issue apontam para ele).
+3. **Arquivos internos:** decidir o destino de cada um (a recomendação está ao lado).
+
+   | Arquivo | Recomendação |
+   |---|---|
+   | `docs/prompts/` | remover: é o prompt da revisão, não serve a quem chega |
+   | `docs/review/` (revisão, progresso, estratégia, rascunho de ADR) | remover ou mover para um repo privado; as decisões que importam já viraram ADR, spec ou este arquivo |
+   | `docs/PENDENCIAS-DO-DONO.md` (este) | remover depois de resolvido; o que sobrar vira issue pública |
+   | `CLAUDE.md` e `AGENTS.md` | manter: guias para agentes de código são comuns em projetos abertos e documentam as regras do repo |
+   | `docs/GO-LEARNINGS.md` | manter: 40+ padrões de Go com o código real é material raro e atrai quem estuda Go |
+4. **Segredos no histórico:** rodar um scanner no histórico inteiro antes de tornar público (por exemplo
+   `gitleaks detect --log-opts="--all"`). Uma varredura simples em 2026-09-27 (chaves privadas PEM, chaves AWS
+   e tokens do GitHub em todo o histórico) não achou nada, mas um scanner dedicado cobre mais padrões.
+5. **Vídeo tocando no README:** arrastar o MP4 principal para um comentário ou o editor do GitHub, copiar o link
+   `user-attachments` gerado e colocá-lo no topo do README (o GitHub toca esse link embutido; um MP4 do repositório,
+   não).
+6. **Tornar público** (Settings → General → Danger Zone → Change visibility) e publicar o post técnico.

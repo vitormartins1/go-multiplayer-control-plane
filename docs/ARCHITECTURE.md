@@ -4,11 +4,14 @@
 
 ---
 
-## 1. Tese do projeto
+## 1. Objetivo
 
-Reimplementar em Go, sobre infraestrutura própria e barata, os serviços de backend que a AWS (e a Unity) vendem prontos para jogos — e comparar **custo, performance e eficiência** entre a nossa versão e a oferta gerenciada. Dois objetivos: **aprender Go de forma séria** e **construir infra reutilizável** para jogos próprios. (ADR-0008)
+Oferecer, como software aberto e self-hosted, os serviços de backend que a AWS (GameKit, GameLift) e a Unity vendem
+prontos para jogos multiplayer, rodando em infraestrutura própria e barata, e **medir custo, performance e
+eficiência** contra a oferta gerenciada. Cada serviço deste repositório tem um equivalente gerenciado e forma um par
+de comparação (seção 3). (ADR-0008)
 
-A observabilidade não é enfeite — é o **instrumento de medição** dessa comparação. (ADR-0006)
+A observabilidade é o **instrumento de medição** dessa comparação, não um acessório. (ADR-0006)
 
 ---
 
