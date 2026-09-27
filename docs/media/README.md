@@ -85,4 +85,15 @@ As capas do README (`thumb-0N-*.jpg`) saem dos próprios vídeos: depois de regr
 node docs/media/src/record/thumbs.mjs    # o quadro de cada capa e o título ficam na lista THUMBS
 ```
 
+### Até 10 MB por vídeo
+
+O GitHub só toca vídeo embutido a partir de um anexo (`github.com/user-attachments/...`), e anexo tem teto de 10 MB.
+Todo MP4 daqui fica abaixo disso: depois de renderizar ou regravar, rode
+
+```bash
+node docs/media/src/shrink.mjs docs/media/<arquivo>.mp4    # duas passadas até caber em 9,5 MB; se já cabe, não mexe
+```
+
+Como os vídeos são quase só tela parada e texto, a taxa baixa não aparece: o x264 gasta os bits onde a imagem muda.
+
 Fontes: Space Grotesk, IBM Plex Sans e IBM Plex Mono (SIL Open Font License), em `src/fonts/`.
