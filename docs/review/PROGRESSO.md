@@ -51,7 +51,7 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Heartbeat | `2ffa569` | heartbeat do mundo (spec `session/032`, contrato 1.5.0): mundo que avisa não fecha mais aos 30 min; host caído fecha em ~90 s como `abandoned` | unit + **demo ao vivo nos dois modos** |
 | Guia Unity | `019a8c0` | `docs/integration/UNITY-GUIA-INTEGRACAO.md`: plano 1.0.0 → 1.5.0 para o projeto Unity, esboço C#, checklist e prompt pronto para o agente de lá | — |
 | Histórico | `59cb73e` | topologia e conexão do host no histórico (migration `session/004`); **compose monta migrations por diretório** (num clone limpo faltavam 6: session 003 e analytics 008–012) | integração (Postgres real) |
-| Steam | ver `git log` | conquistas espelhadas na Steam (spec `achievements/019` + `identity/006`): campo `steamApiName`, worker no consumer com backoff, backfill | unit + integração + **ao vivo com Steam falsa** (synced, skipped, backfill) |
+| Steam | `cccd132` | conquistas espelhadas na Steam (spec `achievements/019` + `identity/006`): campo `steamApiName`, worker no consumer com backoff, backfill | unit + integração + **ao vivo com Steam falsa** (synced, skipped, backfill) |
 | Console P2P | `be48674` | hospedagem e sinal de vida no console (spec `admin-ui/091`): filtro e coluna Hospedagem, badge de heartbeat, detalhe p2p com aviso de confiança, Fleet "P2P — sem frota", selo P2P no jogo | vitest (27), build, **Playwright com mundos p2p/dedicado reais** |
 
 
