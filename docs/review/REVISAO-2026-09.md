@@ -223,11 +223,11 @@ Ordem por valor/esforço. **E** = executo nesta sessão (não depende do dono). 
 | E6 | Remover as 2 rotas mortas do admin-bff + cliente sem uso no admin-ui | V | Baixo | XS | build/testes verdes; `tsc` ok | **feito** |
 | E7 | Cobertura do analytics `internal/service` ≥ 80% e achievements ≥ 80% | V | Médio | S | `go test -cover` ≥ 80% | **feito** |
 | P1 | Demo reproduzível: `scripts/demo-host-world.sh` (grpcurl + curl do fluxo host_world) | V | Alto | M | passa de ponta a ponta contra a stack | **feito** (`5a6ebbb`) |
-| P2 | Vitest nos `lib/` puros do admin-ui + ESLint no CI | V | Médio | M | CI roda testes do front | **Vitest feito** (`c57abe0`); ESLint próximo |
+| P2 | Vitest nos `lib/` puros do admin-ui + ESLint no CI | V | Médio | M | CI roda testes do front | **feito** (Vitest `c57abe0`; ESLint na rodada de 2026-09-27) |
 | P3 | TTL no set de idempotência do leaderboard | G | Baixo | S | teste de expiração | **feito** (`5e2aaf2`, spec 008) |
 | P4 | Teto de corpo (`MaxBytesReader`) nas rotas de jogador | G | Médio | S | por serviço, sem tocar `shared/` | **feito** (`2690675`, spec `player-data/003`) |
 | P5 | Chave de assinatura persistente do identity no compose (secret como o do session) | G | Médio | XS | tokens sobrevivem a restart | **feito** (`092b1eb`) |
-| P6 | `govulncheck` no CI | V/G | Médio | XS | job verde | próximo — não validável na VM (`vuln.go.dev` bloqueado) |
+| P6 | `govulncheck` no CI | V/G | Médio | XS | job verde | **job no CI, report-only** — virar bloqueante depois do 1º resultado (a VM não alcança o `vuln.go.dev`) |
 | D1 | Auth no gRPC do session (bearer do jogador em `OpenWorld`/`JoinWorld`; credencial do game server nos reports) | F/G | **Alto** | M | contrato v2 + jogo atualizado | decisão |
 | D2 | Filtrar invasão por modo (`mode_id` opcional em `ListInvadableWorlds`) | F | Médio | S | spec + teste | decisão |
 | D3 | Boss no `BOSS_DEFEATED`: convenção de `stats` × campo novo | F | Médio | XS/S | contrato documenta | decisão |

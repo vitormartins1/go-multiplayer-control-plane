@@ -144,7 +144,8 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   );
 
   const hasData = data && data.matches > 0;
-  const participations = data?.roleParticipations ?? [];
+  // memo: o `?? []` criaria um array novo a cada render e invalidaria os useMemo abaixo
+  const participations = useMemo(() => data?.roleParticipations ?? [], [data]);
   // modos distintos NOS DADOS RECEBIDOS (spec 009) — só tem >1 quando
   // "Todos os modos" está selecionado (um modo específico já vem filtrado
   // pelo backend, spec 064); decide se a coluna "Modo" da tabela aparece.

@@ -408,7 +408,6 @@ export function GameEventRulesCanvas({
     if (!autoEditRuleId) return;
     const rule = rules.find((r) => r.id === autoEditRuleId && r.scope === "game");
     if (rule) startEdit(rule);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoEditRuleId, rules]);
 
   async function saveDraft() {
