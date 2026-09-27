@@ -59,7 +59,7 @@ Em vez de 4 funções Go hardcoded traduzindo cada arquétipo pra um vocabulári
 
 ![Canvas visual de Event Rules — fact → regra → event type → achievement, com o detalhe da regra selecionada](images/event-rules-canvas.png)
 
-▶ **Vídeo (~1 min):** [conquistas sem deploy](media/video-02-conquistas.mp4): cadastrar uma conquista com nome na Steam, ver a regra que a alimenta e o desbloqueio chegando pelo fan-out.
+▶ **Vídeo (~2 min):** [o motor de conquistas](media/video-02-conquistas.mp4): os dois critérios (evento com meta e métrica acumulada ou por partida), as regras globais do arquétipo e a supressão por jogo, uma regra nova com comparador (`stat.kills ≥ 10`), a conquista criada a partir do evento órfão e tudo desbloqueando ao vivo.
 
 Ver [`EVENT-RULES-GUIDE.md`](EVENT-RULES-GUIDE.md) para o guia completo de modelagem.
 
@@ -105,7 +105,7 @@ Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distri
 4. Modela as conquistas: catálogo + regras (globais do arquétipo já vêm prontas; specíficas do jogo são criadas no canvas).
 5. Jogo está pronto — nenhum serviço precisou de deploy novo.
 
-▶ **Vídeo (~1 min):** [do zero ao jogo online](media/video-01-cadastro.mp4): o registro no console e o primeiro mundo P2P abrindo e sendo invadido.
+▶ **Vídeo:** [do zero ao jogo online](media/video-01-cadastro.mp4): cada parte do formulário de registro explicada (identidade, modo, arquétipo, topologia, papéis, matchmaking, métricas), o jogo novo no console e o primeiro mundo P2P abrindo e sendo invadido.
 
 ### B. Jornada do jogador
 
@@ -115,7 +115,7 @@ Login (anônimo, conta ou Steam, com presença marcada no jogo) → entra na fil
 
 Abre o console → vê as salas ao vivo (todas ou agrupadas por jogo, ordenáveis por estado/arquétipo/players) → força o encerramento de uma sala travada, se precisar → edita uma regra de conquista no canvas visual sem esperar deploy → acompanha a saúde da Fleet do jogo (réplicas, ready/allocated) → confere o analytics do jogo (participação, colocação, missão) no dashboard dedicado → atende um chamado abrindo o jogador: conquistas, histórico de mundos, dados e save na nuvem na mesma tela.
 
-▶ **Vídeo (~1 min):** [visão 360 do jogador](media/video-03-jogador.mp4).
+▶ **Vídeo:** [visão 360 do jogador](media/video-03-jogador.mp4): quem está online, conquistas com progresso, histórico com o desfecho de cada mundo, dados, save e a sessão ao vivo.
 
 ## O que é genuinamente diferenciado (não é só "clone da AWS")
 

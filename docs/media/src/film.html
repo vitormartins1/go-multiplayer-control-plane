@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<title>Go Multiplayer Control Plane — filme do produto</title>
+<title>Go Multiplayer Control Plane: filme do produto</title>
 <!--
   Filme do produto (docs/media). Uma única página 1920×1080 cuja imagem é função
   pura do tempo: window.__seek(t) desenha o quadro do instante t (segundos).
@@ -95,48 +95,78 @@ body { font-family: "IBM Plex Sans", sans-serif; color: var(--text); -webkit-fon
 </style>
 </head>
 <body>
+<style>
+/* cenas novas do filme de produto (2026-09-27) */
+.lead { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 76px; line-height: 1.08; letter-spacing: -0.02em; }
+.lead-sm { font-family: "Space Grotesk", sans-serif; font-weight: 600; font-size: 54px; line-height: 1.15; letter-spacing: -0.01em; }
+.need { position: absolute; width: 490px; padding: 26px 30px; border-radius: 20px; background: linear-gradient(180deg, #151b24, #10141b); border: 1.5px solid var(--line); font-family: "Space Grotesk"; font-weight: 600; font-size: 34px; display: flex; align-items: center; gap: 20px; }
+.need i { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+.arch { position: absolute; width: 390px; height: 370px; border-radius: 24px; background: linear-gradient(180deg, #161c25, #10141b); border: 1.5px solid var(--line); padding: 30px 30px 26px; }
+.arch .ico { width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center; }
+.arch h3 { font-family: "Space Grotesk"; font-weight: 700; font-size: 40px; margin-top: 22px; }
+.arch p { font-size: 23px; line-height: 1.35; color: var(--text2); margin-top: 12px; }
+.arch .ex { position: absolute; left: 30px; bottom: 26px; right: 30px; font-family: "IBM Plex Mono"; font-size: 18px; color: var(--muted); }
+.arch .tag { position: absolute; right: 22px; top: 26px; font-family: "IBM Plex Mono"; font-size: 16px; padding: 4px 12px; border-radius: 999px; }
+.eng { position: absolute; border-radius: 22px; background: linear-gradient(180deg, #161c25, #10141b); border: 1.5px solid var(--line); padding: 22px 26px; }
+.eng .k { font-family: "IBM Plex Mono"; font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }
+.eng .line { font-family: "IBM Plex Mono"; font-size: 24px; margin-top: 12px; color: var(--text); white-space: nowrap; }
+.pbar { height: 14px; border-radius: 99px; background: #0d1117; border: 1px solid var(--line); margin-top: 16px; overflow: hidden; }
+.pbar > div { height: 100%; background: linear-gradient(90deg, var(--signal), var(--nominal)); }
+.badge { display: inline-block; font-family: "IBM Plex Mono"; font-size: 16px; padding: 3px 10px; border-radius: 999px; margin-left: 10px; vertical-align: middle; }
+</style>
 <div id="stage">
   <div id="grid"></div>
   <div class="glow" id="g1" style="background:#1d4f86"></div>
   <div class="glow" id="g2" style="background:#0f5a3e"></div>
   <div id="vignette"></div>
 
-  <!-- 1. Título -->
+  <!-- 1. Abertura -->
   <section class="scene" id="s1">
-    <div class="abs" id="s1logo" style="left:894px;top:250px">
+    <div class="abs" id="s1logo" style="left:894px;top:230px">
       <svg class="logo" viewBox="0 0 132 132" fill="none">
         <path id="hex" d="M66 6 L118 36 L118 96 L66 126 L14 96 L14 36 Z" stroke="#5eb8ff" stroke-width="5" stroke-linejoin="round"/>
         <circle cx="66" cy="66" r="14" fill="#4ade9a"/>
         <g stroke="#5eb8ff" stroke-width="4" stroke-linecap="round">
-          <line id="sp1" x1="66" y1="52" x2="66" y2="26"/><line id="sp2" x1="78" y1="73" x2="100" y2="86"/><line id="sp3" x1="54" y1="73" x2="32" y2="86"/>
+          <line x1="66" y1="52" x2="66" y2="26"/><line x1="78" y1="73" x2="100" y2="86"/><line x1="54" y1="73" x2="32" y2="86"/>
         </g>
         <circle cx="66" cy="24" r="7" fill="#5eb8ff"/><circle cx="102" cy="87" r="7" fill="#5eb8ff"/><circle cx="30" cy="87" r="7" fill="#5eb8ff"/>
       </svg>
     </div>
-    <div class="abs display title" id="s1title" style="left:0;right:0;top:430px;text-align:center">Go Multiplayer <span style="color:var(--signal)">Control Plane</span></div>
-    <div class="abs subtitle" id="s1sub" style="left:0;right:0;top:570px;text-align:center">O backend de um Souls-like online — escrito em Go.</div>
-    <div class="abs mono" id="s1meta" style="left:0;right:0;top:660px;text-align:center;font-size:22px;color:var(--muted);letter-spacing:.14em">IDENTIDADE · MATCHMAKING · SESSÕES · CONQUISTAS · ANALYTICS · CONSOLE</div>
+    <div class="abs display title" id="s1title" style="left:0;right:0;top:410px;text-align:center">Go Multiplayer <span style="color:var(--signal)">Control Plane</span></div>
+    <div class="abs subtitle" id="s1sub" style="left:0;right:0;top:550px;text-align:center">O backend do seu jogo online. No seu servidor, sem cobrança por jogador.</div>
+    <div class="abs mono" id="s1meta" style="left:0;right:0;top:650px;text-align:center;font-size:22px;color:var(--muted);letter-spacing:.14em">CONTAS · MATCHMAKING · SERVIDORES · CONQUISTAS · RANKINGS · ANALYTICS · CONSOLE</div>
   </section>
 
   <!-- 2. O problema -->
   <section class="scene" id="s2">
-    <div class="abs display kin" id="k1" style="left:0;right:0;top:330px;text-align:center">Invasões.</div>
-    <div class="abs display kin" id="k2" style="left:0;right:0;top:330px;text-align:center">Sinais de co-op.</div>
-    <div class="abs display kin" id="k3" style="left:0;right:0;top:330px;text-align:center">Conquistas.</div>
-    <div class="abs display kin" id="k4" style="left:0;right:0;top:330px;text-align:center">Analytics.</div>
-    <div class="abs kin-small" id="k5" style="left:0;right:0;top:520px;text-align:center">Tudo que um jogo online precisa por trás do gameplay —<br/><span style="color:var(--nominal)">sem pagar servidor por hora de mundo aberto.</span></div>
+    <div class="abs lead" id="p1" style="left:0;right:0;top:170px;text-align:center">Todo jogo online precisa de<br/>muito mais que netcode.</div>
+    <div id="needs"></div>
+    <div class="abs lead-sm" id="p2" style="left:160px;right:160px;top:380px;text-align:center">As plataformas prontas <span style="color:var(--critical)">cobram por jogador</span><br/>e prendem o seu jogo ao fornecedor.</div>
+    <div class="abs lead-sm" id="p3" style="left:160px;right:160px;top:380px;text-align:center">Aqui está tudo isso <span style="color:var(--nominal)">pronto</span>, em Go,<br/>rodando onde você quiser.</div>
+    <div class="abs mono" id="p3b" style="left:0;right:0;top:560px;text-align:center;font-size:26px;color:var(--muted)">de um Raspberry Pi a um cluster Kubernetes na nuvem</div>
   </section>
 
-  <!-- 3. Arquitetura -->
+  <!-- 3. Como funciona -->
   <section class="scene" id="s3">
     <svg class="abs" id="edges" width="1920" height="1080" style="left:0;top:0"></svg>
     <div id="nodes"></div>
     <div class="cap" id="cap3"></div>
   </section>
 
-  <!-- 4. Invasão P2P -->
+  <!-- 4. Qualquer tipo de jogo -->
   <section class="scene" id="s4">
-    <svg class="abs" id="s4svg" width="1920" height="1080" style="left:0;top:0"></svg>
+    <div class="abs lead-sm" id="a0" style="left:0;right:0;top:160px;text-align:center">Você descreve a forma do multiplayer.<br/><span style="color:var(--signal)">O backend se configura.</span></div>
+    <div id="archs"></div>
+    <div class="abs" id="a9" style="left:0;right:0;top:760px;text-align:center;font-size:32px;color:var(--text2)">Um formulário no console. Matchmaking, sessões e conquistas leem o modo em tempo real, <b style="color:var(--nominal)">sem deploy</b>.</div>
+    <div class="abs mono" id="a9b" style="left:0;right:0;top:830px;text-align:center;font-size:24px;color:var(--muted)">e cada modo escolhe: servidor dedicado ou P2P</div>
+  </section>
+
+  <!-- 5. Dedicado ou P2P -->
+  <section class="scene" id="s5">
+    <div class="abs lead-sm" id="h5" style="left:0;right:0;top:360px;text-align:center">Servidor dedicado quando o jogo precisa.<br/><span style="color:var(--grape)">P2P quando não precisa pagar por ele.</span></div>
+    <div class="abs mono" id="h5b" style="left:0;right:0;top:540px;text-align:center;font-size:26px;color:var(--muted)">exemplo: uma invasão num mundo P2P do Folclore Souls</div>
+    <div class="abs mono" id="ex5" style="left:130px;top:118px;font-size:20px;color:var(--muted);letter-spacing:.08em">EXEMPLO · FOLCLORE SOULS</div>
+    <svg class="abs" id="s5svg" width="1920" height="1080" style="left:0;top:0"></svg>
     <div class="player" id="pHost" style="left:150px;top:230px">
       <div class="head"><div class="avatar" style="background:#1d3a2c;color:var(--nominal)">S</div><div><div class="role" style="color:var(--nominal)">Host · hospeda o mundo</div><div class="pname">Saci</div></div></div>
       <div class="world"><div><svg width="410" height="380" viewBox="0 0 410 380" style="position:absolute;inset:0"><defs><linearGradient id="sk4ade9a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#123027"/><stop offset="1" stop-color="#0b1013"/></linearGradient></defs><rect width="410" height="380" fill="url(#sk4ade9a)"/><circle cx="300" cy="90" r="34" fill="#4ade9a" opacity=".25"/><circle cx="300" cy="90" r="20" fill="#4ade9a" opacity=".55"/><path d="M0 260 L70 190 L130 235 L205 150 L285 230 L350 180 L410 225 L410 380 L0 380Z" fill="#15302a"/><path d="M0 300 L90 250 L170 290 L260 240 L340 285 L410 260 L410 380 L0 380Z" fill="#0f211d"/></svg></div><div id="wHost" style="position:absolute;inset:0"></div></div>
@@ -148,19 +178,53 @@ body { font-family: "IBM Plex Sans", sans-serif; color: var(--text); -webkit-fon
     <div class="cp" id="cpBox">
       <div class="role" style="color:var(--signal)">Control plane</div>
       <div class="display" style="font-size:36px;font-weight:600;margin-top:6px">matchmaking · session</div>
-      <div class="mono" id="cpLine1" style="font-size:20px;color:var(--muted);margin-top:26px">diretório de mundos</div>
+      <div class="mono" style="font-size:20px;color:var(--muted);margin-top:26px">diretório de mundos</div>
       <div id="cpWorlds" style="margin-top:12px"></div>
     </div>
     <div class="msg" id="m1"></div><div class="msg" id="m2"></div><div class="msg" id="m3"></div><div class="msg" id="m4"></div><div class="msg" id="m5"></div>
-    <div class="toast" id="toast" style="left:640px;top:860px">
+    <div class="toast" id="toast" style="left:600px;top:860px">
       <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#4ade9a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
-      <div><div class="display" style="font-size:32px;font-weight:600">Invasor Vitorioso — desbloqueada</div><div class="mono" style="font-size:19px;color:var(--nominal)">regras do console → conquista → espelhada na Steam</div></div>
+      <div><div class="display" style="font-size:32px;font-weight:600">Conquista desbloqueada: Invasor Vitorioso</div><div class="mono" style="font-size:19px;color:var(--nominal)">evento do host · regra · conquista · espelhada na Steam</div></div>
     </div>
-    <div class="abs" id="s4sum" style="left:0;right:0;top:900px;text-align:center;font-size:34px;color:var(--text2)">Servidor de jogo: <b style="color:var(--nominal)">zero</b>. O host hospeda — o control plane cuida do resto.</div>
+    <div class="abs" id="s5sum" style="left:0;right:0;top:900px;text-align:center;font-size:36px;color:var(--text2)">Servidor de jogo: <b style="color:var(--nominal)">zero</b>. O host hospeda, o control plane cuida do resto.</div>
   </section>
 
-  <!-- 5. Console -->
-  <section class="scene" id="s5">
+  <!-- 6. Conquistas e regras -->
+  <section class="scene" id="s6">
+    <svg class="abs" id="s6svg" width="1920" height="1080" style="left:0;top:0"></svg>
+    <div class="eng" id="e1" style="left:110px;top:300px;width:420px">
+      <div class="k" style="color:var(--muted)">Fatos da partida</div>
+      <div class="line" id="f1">event = BOSS_DEFEATED</div>
+      <div class="line" id="f2">role = host</div>
+      <div class="line" id="f3">stat.kills = <b style="color:var(--amber)">14</b></div>
+      <div class="line" id="f4">stat.boss_boitata = 1</div>
+    </div>
+    <div class="eng" id="e2" style="left:640px;top:360px;width:430px;border-color:#2b5a45">
+      <div class="k" style="color:var(--nominal)">Regra do jogo · editável</div>
+      <div class="line">event = BOSS_DEFEATED</div>
+      <div class="line">stat.kills <b style="color:var(--amber)">≥ 10</b></div>
+    </div>
+    <div class="eng" id="e3" style="left:1180px;top:390px;width:330px;border-color:#3b3470">
+      <div class="k" style="color:#b9a7ff">Evento</div>
+      <div class="line">chefe_implacavel</div>
+    </div>
+    <div class="eng" id="e4" style="left:1580px;top:250px;width:290px">
+      <div class="k" style="color:var(--muted)">Por evento · meta 1</div>
+      <div class="line" style="font-family:'Space Grotesk';font-weight:600;font-size:30px">Implacável <span id="ok4" style="color:var(--nominal)">✓</span></div>
+      <div id="st4"><span class="badge" style="margin-left:0;margin-top:10px;background:rgba(94,184,255,.15);color:var(--signal)">STEAM</span></div>
+    </div>
+    <div class="eng" id="e5" style="left:1580px;top:560px;width:290px">
+      <div class="k" style="color:var(--muted)">Por métrica · kills</div>
+      <div class="line" style="font-family:'Space Grotesk';font-weight:600;font-size:30px">Mão Pesada</div>
+      <div class="pbar"><div id="bar5" style="width:0"></div></div>
+      <div class="mono" id="n5" style="font-size:20px;color:var(--text2);margin-top:8px">0 / 50 · acumulado</div>
+    </div>
+    <div class="abs mono" id="l6" style="left:560px;top:760px;font-size:20px;color:var(--amber)">métrica: direto do fato, sem regra no meio</div>
+    <div class="cap" id="cap6"></div>
+  </section>
+
+  <!-- 7. Console -->
+  <section class="scene" id="s7">
     <div class="browser" id="browser">
       <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><div class="url" id="url">localhost:5173/rooms</div></div>
       <div class="viewport" id="vp"></div>
@@ -168,15 +232,16 @@ body { font-family: "IBM Plex Sans", sans-serif; color: var(--text); -webkit-fon
     <div class="callout" id="call"></div>
   </section>
 
-  <!-- 6. Stack -->
-  <section class="scene" id="s6"></section>
+  <!-- 8. Engenharia -->
+  <section class="scene" id="s8"></section>
 
-  <!-- 7. Fim -->
-  <section class="scene" id="s7">
-    <div class="abs" id="s7logo" style="left:894px;top:250px"></div>
-    <div class="abs display" id="s7title" style="left:0;right:0;top:430px;text-align:center;font-size:84px;font-weight:700">Go Multiplayer <span style="color:var(--signal)">Control Plane</span></div>
-    <div class="abs mono" id="s7url" style="left:0;right:0;top:560px;text-align:center;font-size:30px;color:var(--text2)">github.com/vitormartins1/go-multiplayer-control-plane</div>
-    <div class="abs" id="s7note" style="left:0;right:0;top:640px;text-align:center;font-size:28px;color:var(--muted)">Specs, ADRs e contrato versionado no repositório — para ler, rodar e evoluir.</div>
+  <!-- 9. Fechamento -->
+  <section class="scene" id="s9">
+    <div class="abs" id="s9logo" style="left:894px;top:230px"></div>
+    <div class="abs display" id="s9title" style="left:0;right:0;top:410px;text-align:center;font-size:84px;font-weight:700">Go Multiplayer <span style="color:var(--signal)">Control Plane</span></div>
+    <div class="abs" id="s9pitch" style="left:0;right:0;top:530px;text-align:center;font-size:36px;color:var(--text2)">Seu jogo online, sem aluguel por jogador.</div>
+    <div class="abs mono" id="s9url" style="left:0;right:0;top:620px;text-align:center;font-size:30px;color:var(--signal)">github.com/vitormartins1/go-multiplayer-control-plane</div>
+    <div class="abs" id="s9note" style="left:0;right:0;top:690px;text-align:center;font-size:26px;color:var(--muted)">Sobe local com um docker compose. Documentação, decisões e contrato com o jogo no repositório.</div>
   </section>
 
   <div id="chapter"><div class="dot"></div><span id="chapterTxt"></span></div>
@@ -195,31 +260,61 @@ const lerp = (a, b, x) => a + (b - a) * x;
 const win = (t, a, b, d = 0.5) => Math.min(easeOut(seg(t, a, a + d)), 1 - easeInOut(seg(t, b - d, b)));
 const $ = (id) => document.getElementById(id);
 const css = (el, o) => { for (const k in o) el.style[k] = o[k]; };
+// entra subindo e some no fim da janela
+const rise = (el, t, a, b, dy = 26, d = 0.6) => { const p = easeOut(seg(t, a, a + d)); css(el, { opacity: win(t, a, b, d), transform: `translateY(${(1 - p) * dy}px)` }); };
 
 // ---------- roteiro (segundos) ----------
-const T = { s1: [0, 5.2], s2: [5, 12.2], s3: [12, 28.5], s4: [28.3, 46.5], s5: [46.3, 73.5], s6: [73.3, 81], s7: [80.8, 87] };
-const DURATION = 87;
-const CHAPTERS = [[12, 28.5, "01 · arquitetura"], [28.3, 46.5, "02 · invasão p2p"], [46.3, 73.5, "03 · console de operação"], [73.3, 81, "04 · stack"]];
+// Ritmo de leitura: cada frase fica na tela pelo menos o tempo de ler duas vezes
+// (~14 caracteres por segundo, mínimo de 3,5 s).
+const T = {
+  s1: [0, 7.4], s2: [7, 25.4], s3: [25, 49.6], s4: [49.2, 68.6], s5: [68.2, 97.4],
+  s6: [97, 116.6], s7: [116.2, 170], s8: [169.6, 180.2], s9: [179.8, 187.8],
+};
+const DURATION = 187.8;
+const CHAPTERS = [
+  [T.s3[0], T.s3[1], "01 · como funciona"], [T.s4[0], T.s4[1], "02 · qualquer tipo de jogo"],
+  [T.s5[0] + 4, T.s5[1], "03 · dedicado ou P2P"], [T.s6[0], T.s6[1], "04 · conquistas e regras"],
+  [T.s7[0], T.s7[1], "05 · console de operação"], [T.s8[0], T.s8[1], "06 · engenharia"],
+];
 
-// ---------- cena 3: grafo ----------
+// ---------- cena 2: o problema ----------
+const NEEDS = [["Contas e login", "var(--signal)"], ["Matchmaking", "var(--grape)"], ["Um servidor por partida", "var(--amber)"],
+  ["Conquistas e rankings", "var(--nominal)"], ["Métricas do jogo", "var(--signal)"], ["Um painel para operar", "var(--critical)"]];
+function buildS2() {
+  $("needs").innerHTML = NEEDS.map((n, i) => `<div class="need" id="need${i}"><i style="background:${n[1]};box-shadow:0 0 14px ${n[1]}"></i>${n[0]}</div>`).join("");
+}
+function renderS2(t) {
+  const [a] = T.s2;
+  rise($("p1"), t, a + 0.3, a + 10.8, 30);
+  NEEDS.forEach((_, i) => {
+    const row = Math.floor(i / 3), col = i % 3; const t0 = a + 3.4 + i * 0.55;
+    const p = easeBack(seg(t, t0, t0 + 0.7));
+    css($("need" + i), { left: 170 + col * 540 + "px", top: 470 + row * 150 + "px", opacity: win(t, t0, a + 10.8, 0.5), transform: `translateY(${(1 - p) * 30}px)` });
+  });
+  rise($("p2"), t, a + 11, a + 14.8);
+  rise($("p3"), t, a + 14.8, a + 18.4);
+  rise($("p3b"), t, a + 15.6, a + 18.4, 16);
+}
+
+// ---------- cena 3: como funciona ----------
 const N = {
-  steam:  { x: 110, y: 170, w: 330, t: "Steam", s: "login · conquistas · SDR", c: "var(--text2)" },
-  game:   { x: 110, y: 470, w: 330, t: "Jogo (Unity)", s: "cliente · host p2p · DS", c: "var(--nominal)" },
-  identity:{ x: 640, y: 170, w: 330, t: "identity", s: "JWT EdDSA · login Steam" },
-  mm:     { x: 640, y: 360, w: 330, t: "matchmaking", s: "gRPC · invasão · sinais" },
-  session:{ x: 640, y: 550, w: 330, t: "session", s: "mundos · p2p · heartbeat" },
-  registry:{ x: 640, y: 740, w: 330, t: "game-registry", s: "jogos · modos · perfis" },
-  fanout: { x: 1080, y: 550, w: 290, t: "fan-out", s: "SNS → SQS", c: "var(--amber)" },
-  ach:    { x: 1480, y: 250, w: 330, t: "achievements", s: "regras · espelho Steam" },
-  lb:     { x: 1480, y: 440, w: 330, t: "leaderboard", s: "Redis · rankings" },
-  an:     { x: 1480, y: 630, w: 330, t: "analytics", s: "rollups · sessões" },
-  console:{ x: 1480, y: 820, w: 330, t: "console", s: "admin-bff + React", c: "var(--signal)" },
+  steam:   { x: 110, y: 170, w: 330, t: "Steam", s: "login · conquistas · rede", c: "var(--text2)" },
+  game:    { x: 110, y: 470, w: 330, t: "Seu jogo", s: "cliente · servidor · host", c: "var(--nominal)" },
+  identity:{ x: 640, y: 170, w: 330, t: "Contas", s: "próprio · anônimo · Steam" },
+  mm:      { x: 640, y: 360, w: 330, t: "Matchmaking", s: "fila · invasão · convites" },
+  session: { x: 640, y: 550, w: 330, t: "Sessões", s: "partidas · mundos" },
+  registry:{ x: 640, y: 740, w: 330, t: "Catálogo de jogos", s: "jogos · modos · regras" },
+  fanout:  { x: 1080, y: 550, w: 290, t: "Eventos", s: "entrega garantida", c: "var(--amber)" },
+  ach:     { x: 1480, y: 250, w: 330, t: "Conquistas", s: "regras · espelho na Steam" },
+  lb:      { x: 1480, y: 440, w: 330, t: "Rankings", s: "por métrica e período" },
+  an:      { x: 1480, y: 630, w: 330, t: "Analytics", s: "por jogo e por modo" },
+  console: { x: 1480, y: 820, w: 330, t: "Console", s: "operação ao vivo", c: "var(--signal)" },
 };
 const NODE_H = 104;
 const E = [
-  ["game", "identity", "login"], ["identity", "steam", "valida ticket"], ["game", "mm", "Invade"], ["game", "session", "OpenWorld · eventos"],
-  ["mm", "session", "JoinWorld"], ["session", "registry", "perfil"], ["session", "fanout", "resultado"],
-  ["fanout", "ach", ""], ["fanout", "lb", ""], ["fanout", "an", ""], ["ach", "steam", "SetAchievement"], ["console", "an", ""], ["game", "steam", "P2P · SDR"],
+  ["game", "identity"], ["identity", "steam"], ["game", "mm"], ["game", "session"],
+  ["mm", "session"], ["session", "registry"], ["session", "fanout"],
+  ["fanout", "ach"], ["fanout", "lb"], ["fanout", "an"], ["ach", "steam"], ["console", "an"], ["game", "steam"],
 ];
 const edgeEls = [];
 function buildGraph() {
@@ -232,13 +327,12 @@ function buildGraph() {
   }
   const svg = $("edges");
   const anchor = (n, side) => side === "r" ? [n.x + n.w, n.y + NODE_H / 2] : side === "l" ? [n.x, n.y + NODE_H / 2] : side === "t" ? [n.x + n.w / 2, n.y] : [n.x + n.w / 2, n.y + NODE_H];
-  E.forEach(([a, b, label], i) => {
+  E.forEach(([a, b], i) => {
     const A = N[a], B = N[b]; let p0, p1, d;
     if (a === "game" && b === "steam") { p0 = anchor(A, "t"); p1 = anchor(B, "b"); d = `M${p0} L${p1}`; }
     else if (a === "ach" && b === "steam") { p0 = anchor(A, "t"); p1 = anchor(B, "t"); d = `M${p0} C${p0[0]},60 ${p1[0]},60 ${p1}`; }
     else if (a === "identity" && b === "steam") { p0 = anchor(A, "l"); p1 = anchor(B, "r"); d = `M${p0} L${p1}`; }
-    else if (a === "mm" && b === "session") { p0 = anchor(A, "b"); p1 = anchor(B, "t"); d = `M${p0} L${p1}`; }
-    else if (a === "session" && b === "registry") { p0 = anchor(A, "b"); p1 = anchor(B, "t"); d = `M${p0} L${p1}`; }
+    else if ((a === "mm" && b === "session") || (a === "session" && b === "registry")) { p0 = anchor(A, "b"); p1 = anchor(B, "t"); d = `M${p0} L${p1}`; }
     else if (a === "console") { p0 = anchor(A, "t"); p1 = anchor(B, "b"); d = `M${p0} L${p1}`; }
     else { p0 = anchor(A, "r"); p1 = anchor(B, "l"); const mx = (p0[0] + p1[0]) / 2; d = `M${p0} C${mx},${p0[1]} ${mx},${p1[1]} ${p1}`; }
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -250,196 +344,258 @@ function buildGraph() {
     edgeEls.push({ a, b, path, len, dot, i });
   });
 }
-// trilhas destacadas na cena 3
+// três passos, 6 s cada
 const TRACKS = [
-  { t0: 17.5, t1: 20.8, edges: ["game>identity", "identity>steam"], nodes: ["game", "identity", "steam"], cap: "<b>1.</b> Login com a Steam → o identity valida o ticket e emite o JWT" },
-  { t0: 20.8, t1: 24.1, edges: ["game>mm", "mm>session", "session>registry"], nodes: ["game", "mm", "session"], cap: "<b>2.</b> Invasão: o matchmaking acha um mundo na faixa e injeta o invasor" },
-  { t0: 24.1, t1: 28.2, edges: ["session>fanout", "fanout>ach", "fanout>an", "fanout>lb", "ach>steam"], nodes: ["session", "fanout", "ach", "an", "lb"], cap: "<b>3.</b> Cada evento vira fan-out: conquistas, ranking e analytics — e a Steam" },
+  { d: [5.4, 11.6], edges: ["game>identity", "identity>steam"], nodes: ["game", "identity", "steam"], cap: "<b>1.</b> O jogador entra com conta própria, anônimo ou pela Steam." },
+  { d: [11.6, 17.8], edges: ["game>mm", "mm>session", "session>registry"], nodes: ["game", "mm", "session", "registry"], cap: "<b>2.</b> O matchmaking acha a partida ou o mundo, e as sessões cuidam do servidor." },
+  { d: [17.8, 24.2], edges: ["session>fanout", "fanout>ach", "fanout>an", "fanout>lb", "ach>steam"], nodes: ["session", "fanout", "ach", "an", "lb"], cap: "<b>3.</b> Cada resultado vira evento: conquistas, rankings e métricas se atualizam sozinhos." },
 ];
 function renderS3(t) {
   const [a] = T.s3;
   for (const k in N) {
-    const i = Object.keys(N).indexOf(k); const p = easeBack(seg(t, a + 0.8 + i * 0.12, a + 1.5 + i * 0.12));
-    const el = $("n-" + k); el.style.opacity = clamp(seg(t, a + 0.8 + i * 0.12, a + 1.3 + i * 0.12));
+    const i = Object.keys(N).indexOf(k); const p = easeBack(seg(t, a + 0.8 + i * 0.14, a + 1.6 + i * 0.14));
+    const el = $("n-" + k); el.style.opacity = clamp(seg(t, a + 0.8 + i * 0.14, a + 1.3 + i * 0.14));
     el.style.transform = `translateY(${(1 - p) * 26}px) scale(${0.94 + 0.06 * p})`;
   }
-  const track = TRACKS.find((r) => t >= r.t0 && t < r.t1);
+  const track = TRACKS.find((r) => t >= a + r.d[0] && t < a + r.d[1]);
   edgeEls.forEach((e) => {
-    const draw = easeInOut(seg(t, a + 2.4 + e.i * 0.16, a + 3.4 + e.i * 0.16));
+    const draw = easeInOut(seg(t, a + 2.6 + e.i * 0.16, a + 3.6 + e.i * 0.16));
     e.path.style.strokeDashoffset = e.len * (1 - draw);
     const key = e.a + ">" + e.b; const on = track && track.edges.includes(key);
     e.path.setAttribute("stroke", on ? "#5eb8ff" : "#2e3d50"); e.path.setAttribute("stroke-width", on ? "4" : "3");
-    // pacotes: correm em loop; mais rápidos e brilhantes na trilha ativa
-    const period = on ? 1.1 : 2.4; const phase = ((t - a - e.i * 0.37) / period) % 1;
-    if (draw >= 1 && t > a + 5) {
+    const period = on ? 1.4 : 2.8; const phase = (((t - a - e.i * 0.37) / period) % 1 + 1) % 1;
+    if (draw >= 1 && t > a + 4.8) {
       const pt = e.path.getPointAtLength(e.len * phase);
       e.dot.setAttribute("cx", pt.x); e.dot.setAttribute("cy", pt.y);
-      e.dot.style.opacity = on ? 1 : 0.35; e.dot.setAttribute("fill", e.a === "fanout" || e.b === "fanout" ? "#ffb454" : on ? "#9fd3ff" : "#5eb8ff");
+      e.dot.style.opacity = on ? 1 : 0.3; e.dot.setAttribute("fill", e.a === "fanout" || e.b === "fanout" ? "#ffb454" : on ? "#9fd3ff" : "#5eb8ff");
     } else e.dot.style.opacity = 0;
   });
   for (const k in N) $("n-" + k).classList.toggle("hot", !!(track && track.nodes.includes(k)));
   const cap = $("cap3");
-  if (track) { cap.innerHTML = track.cap; cap.style.opacity = win(t, track.t0, track.t1, 0.35); }
+  if (track) { cap.innerHTML = track.cap; cap.style.opacity = win(t, a + track.d[0], a + track.d[1], 0.4); }
   else cap.style.opacity = 0;
 }
 
-// ---------- cena 4: invasão p2p ----------
-function msg(id, t, t0, t1, text, x0, y0, x1, y1, color) {
-  const el = $(id); const p = easeInOut(seg(t, t0, t0 + 0.9));
-  el.innerHTML = text; el.style.borderColor = color; el.style.color = color;
-  css(el, { left: lerp(x0, x1, p) + "px", top: lerp(y0, y1, p) + "px", opacity: win(t, t0, t1, 0.3) });
+// ---------- cena 4: arquétipos ----------
+const ARCHS = [
+  { h: "Arena por fila", p: "Partidas simétricas com times, placar, vitória e derrota.", ex: "shooters · MOBAs · esportes", tag: ["protótipo", "var(--signal)"], c: "var(--signal)", icon: "⚔" },
+  { h: "Mundo do host", p: "Co-op e invasões entrando no meio da jornada de outro jogador.", ex: "Souls-likes, como o Folclore Souls", tag: ["jogo real", "var(--nominal)"], c: "var(--nominal)", icon: "⛰" },
+  { h: "Battle royale", p: "Lobby grande, eliminação progressiva e colocação final.", ex: "last one standing", tag: ["experimental", "var(--muted)"], c: "var(--amber)", icon: "◎" },
+  { h: "Missão co-op", p: "O time contra o ambiente, com desfecho coletivo.", ex: "raids · PvE cooperativo", tag: ["experimental", "var(--muted)"], c: "var(--grape)", icon: "✦" },
+];
+function buildS4() {
+  $("archs").innerHTML = ARCHS.map((x, i) => `<div class="arch" id="arch${i}">
+    <div class="ico" style="background:${x.c}22;color:${x.c};font-size:30px">${x.icon}</div>
+    <span class="tag" style="color:${x.tag[1]};border:1px solid ${x.tag[1]}">${x.tag[0]}</span>
+    <h3>${x.h}</h3><p>${x.p}</p><div class="ex">${x.ex}</div></div>`).join("");
 }
 function renderS4(t) {
-  const [a] = T.s4; const L = (x) => a + x;
+  const [a] = T.s4;
+  rise($("a0"), t, a + 0.3, T.s4[1], 30);
+  ARCHS.forEach((_, i) => {
+    const t0 = a + 2.2 + i * 0.7; const p = easeBack(seg(t, t0, t0 + 0.8));
+    css($("arch" + i), { left: 140 + i * 420 + "px", top: 340 + "px", opacity: clamp(seg(t, t0, t0 + 0.5)), transform: `translateY(${(1 - p) * 34}px)` });
+    $("arch" + i).style.borderColor = t > a + 5.5 && t < a + 10 && i === 1 ? "var(--nominal)" : "";
+  });
+  rise($("a9"), t, a + 8.2, T.s4[1], 20);
+  rise($("a9b"), t, a + 9.4, T.s4[1], 14);
+}
+
+// ---------- cena 5: dedicado ou P2P (exemplo: invasão no Folclore Souls) ----------
+function msg(id, t, t0, t1, text, x0, y0, x1, y1, color) {
+  const el = $(id); const p = easeInOut(seg(t, t0, t0 + 1.1));
+  el.innerHTML = text; el.style.borderColor = color; el.style.color = color;
+  css(el, { left: lerp(x0, x1, p) + "px", top: lerp(y0, y1, p) + "px", opacity: win(t, t0, t1, 0.35) });
+}
+function renderS5(t) {
+  const [a] = T.s5; const L = (x) => a + 4.6 + x * 1.35; // o exemplo começa depois da frase de abertura
+  rise($("h5"), t, a + 0.3, a + 4.4, 26);
+  rise($("h5b"), t, a + 1.2, a + 4.4, 14);
+  $("ex5").style.opacity = win(t, L(0.3), T.s5[1], 0.5);
   const hostIn = easeBack(seg(t, L(0.3), L(1.1))), invIn = easeBack(seg(t, L(0.6), L(1.4))), cpIn = easeBack(seg(t, L(0.9), L(1.7)));
   css($("pHost"), { opacity: clamp(seg(t, L(0.3), L(0.8))), transform: `translateX(${(1 - hostIn) * -60}px)` });
   css($("pInv"), { opacity: clamp(seg(t, L(0.6), L(1.1))), transform: `translateX(${(1 - invIn) * 60}px)` });
   css($("cpBox"), { opacity: clamp(seg(t, L(0.9), L(1.4))), transform: `scale(${0.95 + 0.05 * cpIn})` });
-  // mundo do host: pulso do heartbeat
-  const hb = ((t - L(2)) % 2.2) / 2.2;
+  const hb = (((t - L(2)) % 2.6) + 2.6) % 2.6 / 2.6;
   $("wHost").style.boxShadow = t > L(3.5) ? `inset 0 0 0 ${2 + 6 * (1 - hb)}px rgba(74,222,154,${0.5 * (1 - hb)})` : "none";
-  $("wHost").innerHTML = t > L(3.5) ? `<div class="mono" style="position:absolute;left:20px;bottom:18px;font-size:18px;color:var(--nominal)">♥ heartbeat · a cada 30 s</div>` : "";
-  // diretório do control plane
+  $("wHost").innerHTML = t > L(3.5) ? `<div class="mono" style="position:absolute;left:20px;bottom:18px;font-size:18px;color:var(--nominal)">♥ sinal de vida a cada 30 s</div>` : "";
   const worlds = [["Saci", "nível 88", t > L(3)], ["Iara", "nível 41", t > L(1.6)], ["Cuca", "nível 120", t > L(1.6)]];
   const pick = t > L(6.3) && t < L(15);
-  $("cpWorlds").innerHTML = worlds.filter((w) => w[2]).map((w, i) => `<div class="mono" style="font-size:21px;padding:8px 12px;border-radius:9px;margin-top:8px;background:${pick && w[0] === "Saci" ? "rgba(94,184,255,0.18)" : "#0e131a"};border:1.5px solid ${pick && w[0] === "Saci" ? "#5eb8ff" : "#232d3a"}">mundo de ${w[0]} · ${w[1]}${pick && w[0] === "Saci" ? "  ✓" : ""}</div>`).join("");
-  msg("m1", t, L(1.9), L(4.4), "OpenWorld · host_connection = SteamID →", 600, 330, 650, 330, "#4ade9a");
-  msg("m2", t, L(3.0), L(5.2), "← world_token (só deste mundo)", 700, 400, 650, 400, "#4ade9a");
-  msg("m3", t, L(5.0), L(7.6), "← Invade · faixa de nível", 1040, 330, 980, 330, "#ff7a7a");
-  msg("m4", t, L(6.8), L(9.5), "connect token + SteamID do host →", 850, 400, 900, 400, "#ff7a7a");
-  msg("m5", t, L(12.2), L(14.8), "HOST_KILLED → fan-out → conquistas", 640, 450, 700, 450, "#ffb454");
-  // conexão direta p2p (Steam Networking) entre os dois jogos
-  const svg = $("s4svg"); const link = seg(t, L(9.3), L(10.4));
-  if (!svg.firstChild) svg.innerHTML = `<path id="p2p" d="M620,200 C 900,110 1020,110 1300,200" fill="none" stroke="#cc5de8" stroke-width="5" stroke-dasharray="14 12"/><text id="p2pTxt" x="960" y="118" text-anchor="middle" font-family="IBM Plex Mono" font-size="22" fill="#e2a8f5">conexão direta · Steam Networking (SDR)</text>`;
-  $("p2p").style.opacity = link > 0 && t < L(17.6) ? 1 : 0; $("p2p").style.strokeDashoffset = -((t * 60) % 26);
+  $("cpWorlds").innerHTML = worlds.filter((w) => w[2]).map((w) => `<div class="mono" style="font-size:21px;padding:8px 12px;border-radius:9px;margin-top:8px;background:${pick && w[0] === "Saci" ? "rgba(94,184,255,0.18)" : "#0e131a"};border:1.5px solid ${pick && w[0] === "Saci" ? "#5eb8ff" : "#232d3a"}">mundo de ${w[0]} · ${w[1]}${pick && w[0] === "Saci" ? "  ✓" : ""}</div>`).join("");
+  msg("m1", t, L(1.9), L(4.6), "abre o mundo · SteamID do host →", 600, 330, 650, 330, "#4ade9a");
+  msg("m2", t, L(3.0), L(5.4), "← chave que só vale neste mundo", 700, 400, 650, 400, "#4ade9a");
+  msg("m3", t, L(5.0), L(7.8), "← quero invadir · nível 85", 1040, 330, 980, 330, "#ff7a7a");
+  msg("m4", t, L(6.8), L(9.7), "ingresso + SteamID do host →", 900, 400, 950, 400, "#ff7a7a");
+  msg("m5", t, L(12.2), L(15), "host derrotado → evento → conquista", 620, 428, 680, 428, "#ffb454");
+  const svg = $("s5svg"); const link = seg(t, L(9.3), L(10.4));
+  if (!svg.firstChild) svg.innerHTML = `<path id="p2p" d="M620,200 C 900,110 1020,110 1300,200" fill="none" stroke="#cc5de8" stroke-width="5" stroke-dasharray="14 12"/><text id="p2pTxt" x="960" y="118" text-anchor="middle" font-family="IBM Plex Mono" font-size="22" fill="#e2a8f5">conexão direta pela rede da Steam</text>`;
+  $("p2p").style.opacity = link > 0 && t < L(17.8) ? 1 : 0; $("p2p").style.strokeDashoffset = -((t * 60) % 26);
   $("p2p").setAttribute("d", `M620,${lerp(230, 200, link)} C 900,${lerp(230, 110, link)} 1020,${lerp(230, 110, link)} 1300,${lerp(230, 200, link)}`);
-  $("p2pTxt").style.opacity = win(t, L(9.8), L(17.6), 0.4);
-  $("wInv").innerHTML = t > L(10.4) ? `<div class="mono" style="position:absolute;left:20px;top:18px;font-size:18px;color:#e2a8f5">no mundo do host · token validado</div>` : "";
-  // conquista
+  $("p2pTxt").style.opacity = win(t, L(9.8), L(17.8), 0.4);
+  $("wInv").innerHTML = t > L(10.4) ? `<div class="mono" style="position:absolute;left:20px;top:18px;font-size:18px;color:#e2a8f5">no mundo do host · ingresso validado</div>` : "";
   const toastIn = easeBack(seg(t, L(13.3), L(14.1)));
-  css($("toast"), { opacity: win(t, L(13.3), L(16.4), 0.4), transform: `translateY(${(1 - toastIn) * 40}px)` });
-  $("s4sum").style.opacity = win(t, L(16.5), L(18.2), 0.4);
+  css($("toast"), { opacity: win(t, L(13.3), L(16.6), 0.4), transform: `translateY(${(1 - toastIn) * 40}px)` });
+  $("s5sum").style.opacity = win(t, L(16.7), T.s5[1], 0.5);
 }
 
-// ---------- cena 5: console real ----------
+// ---------- cena 6: conquistas e regras ----------
+const S6CAPS = [
+  [1.2, 6.8, "Os fatos da partida chegam do jogo: o evento, o papel e as stats de cada jogador."],
+  [6.8, 12.6, "Regras editáveis no console transformam fatos em eventos, com comparadores como <b>≥</b>."],
+  [12.6, 19.2, "Conquistas contam eventos ou acumulam métricas. Com nome na Steam, aparecem lá também."],
+];
+function renderS6(t) {
+  const [a] = T.s6;
+  const svg = $("s6svg");
+  if (!svg.firstChild) svg.innerHTML = [
+    ["q1", "M530,420 C585,420 585,440 640,440"], ["q2", "M1070,440 C1125,440 1125,440 1180,440"], ["q3", "M1510,440 C1545,440 1545,320 1580,320"],
+    ["q4", "M320,600 C320,720 1300,760 1580,640"],
+  ].map(([id, d]) => `<path id="${id}" d="${d}" fill="none" stroke="#2e3d50" stroke-width="4"/><circle id="${id}d" r="7" fill="#5eb8ff" opacity="0"/>`).join("");
+  const show = (id, t0) => { const p = easeBack(seg(t, t0, t0 + 0.7)); css($(id), { opacity: clamp(seg(t, t0, t0 + 0.4)), transform: `translateY(${(1 - p) * 26}px)` }); };
+  show("e1", a + 0.4); ["f1", "f2", "f3", "f4"].forEach((f, i) => { $(f).style.opacity = clamp(seg(t, a + 1.2 + i * 0.5, a + 1.6 + i * 0.5)); });
+  show("e2", a + 6.8); show("e3", a + 9.2); show("e4", a + 12.6); show("e5", a + 13.4);
+  const flow = (id, t0, t1, color) => {
+    const p = $(id), d = $(id + "d"); const len = p.getTotalLength();
+    p.style.strokeDasharray = len; p.style.strokeDashoffset = len * (1 - easeInOut(seg(t, t0, t0 + 0.9)));
+    p.setAttribute("stroke", t > t0 && t < t1 ? color : "#2e3d50");
+    const k = ((t - t0) / 1.3) % 1;
+    if (t > t0 + 0.9 && t < t1) { const pt = p.getPointAtLength(len * k); d.setAttribute("cx", pt.x); d.setAttribute("cy", pt.y); d.setAttribute("fill", color); d.style.opacity = 1; } else d.style.opacity = 0;
+  };
+  flow("q1", a + 7.4, T.s6[1], "#4ade9a"); flow("q2", a + 9.6, T.s6[1], "#b9a7ff"); flow("q3", a + 12.8, T.s6[1], "#5eb8ff"); flow("q4", a + 13.6, T.s6[1], "#ffb454");
+  $("ok4").style.opacity = clamp(seg(t, a + 14.2, a + 14.6));
+  $("st4").style.opacity = clamp(seg(t, a + 15.2, a + 15.6));
+  const fill = easeInOut(seg(t, a + 14.4, a + 15.8));
+  $("bar5").style.width = fill * 28 + "%"; $("n5").textContent = `${Math.round(fill * 14)} / 50 · acumulado`;
+  $("l6").style.opacity = win(t, a + 14.2, T.s6[1], 0.5);
+  const c = S6CAPS.find((x) => t >= a + x[0] && t < a + x[1]);
+  if (c) { $("cap6").innerHTML = c[2]; $("cap6").style.opacity = win(t, a + c[0], a + c[1], 0.4); } else $("cap6").style.opacity = 0;
+}
+
+// ---------- cena 7: console real ----------
 const SHOTS = {
+  games: { src: "shots/games.jpg", w: 2880, h: 1800, url: "localhost:5173/games" },
   rooms: { src: "shots/rooms.jpg", w: 2880, h: 1800, url: "localhost:5173/rooms" },
   detail: { src: "shots/rooms-detail.jpg", w: 2880, h: 2250, url: "localhost:5173/rooms" },
+  lb: { src: "shots/leaderboard.jpg", w: 2880, h: 1800, url: "localhost:5173/games/folclore-souls · leaderboards" },
   ach: { src: "shots/game-achievements.jpg", w: 2880, h: 1800, url: "localhost:5173/games/folclore-souls" },
+  player: { src: "shots/player.jpg", w: 2880, h: 1800, url: "localhost:5173/players/matinta_95" },
+  anAll: { src: "shots/analytics-global.jpg", w: 2880, h: 1800, url: "localhost:5173/analytics" },
   an: { src: "shots/game-analytics.jpg", w: 2880, h: 3968, url: "localhost:5173/games/folclore-souls · analytics" },
+  fleet: { src: "shots/fleet.jpg", w: 2880, h: 1800, url: "localhost:5173/fleet" },
   infra: { src: "shots/infrastructure.jpg", w: 2880, h: 2448, url: "localhost:5173/infrastructure" },
 };
 let BOX = null;
 const VPW = 1600, VPH = 808;
-// câmera: (cx, cy) = centro no espaço da imagem; z = zoom sobre o "caber na largura"
 function camFit(shot) { return VPW / SHOTS[shot].w; }
-// cada plano: shot, [t0,t1], câmeras de/para, destaque (caixa) e texto
+// segundos de cada plano do tour (mais tempo onde há mais para ler)
+const P7 = [5, 4.6, 4.6, 4.8, 4.6, 4.4, 4.6, 5, 4.8, 6.4, 5];
 function plans(a) {
   const B = BOX;
   const pad = (b, p = 18) => ({ x: b.x - p, y: b.y - p, w: b.w + 2 * p, h: b.h + 2 * p });
   const center = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+  const at = (i) => { const t0 = a + 0.3 + P7.slice(0, i).reduce((x, y) => x + y, 0); return [t0, t0 + P7[i]]; };
   return [
-    { shot: "rooms", t: [a + 0.3, a + 5.4], from: [1440, 900, 1], to: [1440, 780, 1.05], hl: null,
-      tag: "Rooms", text: "Todo mundo aberto, de todos os jogos — <b>ao vivo</b>.", cx: 1100, cy: 960 },
-    { shot: "rooms", t: [a + 5.4, a + 9.8], from: [1440, 780, 1.05], to: [...center(B.rooms.hosting), 2.2], hl: pad(B.rooms.hosting),
-      tag: "Hospedagem", text: "P2P: o jogo do host hospeda. O backend guarda o SteamID — não um servidor.", cx: 150, cy: 880 },
-    { shot: "rooms", t: [a + 9.8, a + 13.6], from: [...center(B.rooms.hosting), 2.2], to: [...center(B.rooms.heartbeat), 2.4], hl: pad(B.rooms.heartbeat, 14),
-      tag: "Sinal de vida", text: "Heartbeat a cada 30 s. Host caiu? O mundo sai da lista em ~90 s.", cx: 1110, cy: 880 },
-    { shot: "detail", t: [a + 13.6, a + 17.8], from: [1440, 1300, 1.2], to: [...center(B.roomsDetail.trust), 1.25], hl: pad(B.roomsDetail.trust, 12),
-      tag: "Detalhe do mundo", text: "Quem hospeda, último heartbeat, papéis — e o aviso de confiança do P2P.", cx: 150, cy: 120 },
-    { shot: "ach", t: [a + 17.8, a + 21.6], from: [1440, 820, 1.05], to: [...center(B.achievements.steam), 1.9], hl: pad(B.achievements.steam, 14),
-      tag: "Conquistas", text: "Regras visuais no console. Com nome na Steam, o desbloqueio aparece lá também.", cx: 1100, cy: 880 },
-    { shot: "an", t: [a + 21.6, a + 24.8], from: [1440, 780, 1.0], to: [...center(B.analytics.resumo), 1.15], hl: pad(B.analytics.resumo, 10),
-      tag: "Analytics", text: "Invasões, vitórias do invasor, bosses com ajuda — por modo.", cx: 150, cy: 880 },
-    { shot: "infra", t: [a + 24.8, a + 27.2], from: [1440, 900, 1.0], to: [1440, 1000, 1.05], hl: pad(B.infra.header, 12),
-      tag: "Infraestrutura", text: "10 serviços Go, observados com Prometheus e OpenTelemetry.", cx: 1100, cy: 120 },
+    { shot: "games", t: at(0), from: [1440, 900, 1], to: [...center(B.games.grid), 1.3], hl: pad(B.games.grid),
+      tag: "Jogos", text: "Vários jogos no mesmo backend, cada um com seus modos de multiplayer.", cx: 1030, cy: 900 },
+    { shot: "rooms", t: at(1), from: [1440, 900, 1], to: [1440, 800, 1.05], hl: null,
+      tag: "Salas ao vivo", text: "Todos os mundos e partidas abertos, de todos os jogos, atualizando sozinhos.", cx: 1030, cy: 900 },
+    { shot: "rooms", t: at(2), from: [1440, 800, 1.05], to: [...center(B.rooms.hosting), 2.0], hl: pad(B.rooms.hosting),
+      tag: "Hospedagem", text: "Dedicado ou P2P lado a lado, com o sinal de vida de cada host.", cx: 150, cy: 900 },
+    { shot: "detail", t: at(3), from: [1440, 1300, 1.15], to: [...center(B.roomsDetail.world), 1.2], hl: pad(B.roomsDetail.world, 12),
+      tag: "Dentro do mundo", text: "Quem hospeda, os papéis, as vagas e as regras do modo.", cx: 150, cy: 120 },
+    { shot: "lb", t: at(4), from: [1440, 900, 1.0], to: [...center(B.leaderboard.table), 1.2], hl: pad(B.leaderboard.table, 12),
+      tag: "Rankings", text: "Por métrica e por período: geral, dia, semana e mês.", cx: 1030, cy: 120 },
+    { shot: "ach", t: at(5), from: [1440, 820, 1.05], to: [...center(B.achievements.steam), 1.8], hl: pad(B.achievements.steam, 14),
+      tag: "Conquistas", text: "Catálogo por jogo, com regras editáveis e espelho na Steam.", cx: 1030, cy: 900 },
+    { shot: "player", t: at(6), from: [1440, 900, 1.0], to: [...center(B.player.data), 1.25], hl: pad(B.player.data, 14),
+      tag: "Jogador", text: "Conquistas, histórico, inventário e save de cada jogador numa tela.", cx: 1030, cy: 120 },
+    { shot: "anAll", t: at(7), from: [1440, 900, 1.0], to: [...center(B.analyticsGlobal.table), 1.3], hl: pad(B.analyticsGlobal.table, 12),
+      tag: "Analytics", text: "Todos os jogos numa visão: sessões, jogadores, duração e abandono.", cx: 150, cy: 120 },
+    { shot: "an", t: at(8), from: [1440, 780, 1.0], to: [...center(B.analytics.resumo), 1.15], hl: pad(B.analytics.resumo, 10),
+      tag: "Por jogo", text: "E o detalhe de cada jogo e modo: invasões, vitórias, chefes derrotados.", cx: 150, cy: 900 },
+    { shot: "fleet", t: at(9), from: [1440, 900, 1.0], to: [...center(B.fleet.table), 1.2], hl: pad(B.fleet.table, 12),
+      tag: "Frotas", text: "Servidores dedicados no Agones, uma frota por jogo. Sem cluster ligado, o console mostra offline em vez de inventar.", cx: 1030, cy: 120 },
+    { shot: "infra", t: at(10), from: [1440, 900, 1.0], to: [1440, 1000, 1.05], hl: pad(B.infra.header, 12),
+      tag: "Infraestrutura", text: "Cada serviço, suas dependências e a saúde, com atalho para o Grafana.", cx: 1030, cy: 900 },
   ];
 }
 const imgs = {};
-function buildS5() {
+function buildS7() {
   const vp = $("vp");
   for (const k in SHOTS) { const im = document.createElement("img"); im.className = "shot"; im.src = SHOTS[k].src; im.style.width = SHOTS[k].w + "px"; im.style.opacity = 0; vp.appendChild(im); imgs[k] = im; }
   const hl = document.createElement("div"); hl.className = "hl"; hl.id = "hl"; vp.appendChild(hl);
 }
-function renderS5(t) {
-  const [a] = T.s5; const P = plans(a);
+function renderS7(t) {
+  const [a] = T.s7; const P = plans(a);
   const browserIn = easeOut(seg(t, a, a + 0.8));
   css($("browser"), { transform: `translateY(${(1 - browserIn) * 40}px) scale(${0.97 + 0.03 * browserIn})` });
   const i = Math.max(0, P.findIndex((p) => t >= p.t[0] && t < p.t[1]));
   const p = P[i] || P[P.length - 1];
-  const k = easeInOut(seg(t, p.t[0], p.t[0] + 1.3));
+  const k = easeInOut(seg(t, p.t[0], p.t[0] + 1.5));
   const [cx, cy, z] = [0, 1, 2].map((j) => lerp(p.from[j], p.to[j], k));
   const s = camFit(p.shot) * z;
   for (const n in imgs) {
     const on = n === p.shot; const prev = i > 0 && P[i - 1].shot === n && P[i - 1].shot !== p.shot;
-    imgs[n].style.opacity = on ? clamp(seg(t, p.t[0], p.t[0] + 0.35) + (i > 0 && P[i - 1].shot === n ? 1 : 0)) : prev ? 1 - clamp(seg(t, p.t[0], p.t[0] + 0.35)) : 0;
+    imgs[n].style.opacity = on ? clamp(seg(t, p.t[0], p.t[0] + 0.4) + (i > 0 && P[i - 1].shot === n ? 1 : 0)) : prev ? 1 - clamp(seg(t, p.t[0], p.t[0] + 0.4)) : 0;
     if (on) imgs[n].style.transform = `translate(${VPW / 2 - cx * s}px, ${VPH / 2 - cy * s}px) scale(${s})`;
   }
   $("url").textContent = SHOTS[p.shot].url;
   const hl = $("hl");
   if (p.hl) {
-    const o = win(t, p.t[0] + 1.0, p.t[1], 0.35);
+    const o = win(t, p.t[0] + 1.2, p.t[1], 0.35);
     css(hl, { opacity: o, left: VPW / 2 + (p.hl.x - cx) * s + "px", top: VPH / 2 + (p.hl.y - cy) * s + "px", width: p.hl.w * s + "px", height: p.hl.h * s + "px" });
   } else hl.style.opacity = 0;
   const call = $("call"); call.innerHTML = `<small>${p.tag}</small>${p.text}`;
-  const ci = easeOut(seg(t, p.t[0] + 0.9, p.t[0] + 1.4));
-  css(call, { left: p.cx + "px", top: p.cy + "px", opacity: win(t, p.t[0] + 0.9, p.t[1], 0.3), transform: `translateY(${(1 - ci) * 16}px)` });
+  const ci = easeOut(seg(t, p.t[0] + 0.8, p.t[0] + 1.3));
+  css(call, { left: p.cx + "px", top: p.cy + "px", opacity: win(t, p.t[0] + 0.8, p.t[1], 0.3), transform: `translateY(${(1 - ci) * 16}px)` });
 }
 
-// ---------- cena 6: stack ----------
-const CHIPS = [["Go 1.26", "10 serviços"], ["gRPC", "session · matchmaking"], ["REST", "net/http"], ["PostgreSQL", "pgx"], ["Redis", "rankings"], ["SNS → SQS", "fan-out durável"], ["Agones", "servidores dedicados"], ["Prometheus", "RED por serviço"], ["OpenTelemetry", "traces"], ["React + Mantine", "console"], ["buf", "contrato versionado"], ["Terraform", "LocalStack"]];
-function buildS6() {
-  const s6 = $("s6");
-  s6.innerHTML = `<div class="abs display" id="s6h" style="left:0;right:0;top:170px;text-align:center;font-size:64px;font-weight:700">Feito para ser lido — e rodado.</div>` +
+// ---------- cena 8: engenharia ----------
+const CHIPS = [["Go 1.26", "10 serviços"], ["gRPC", "tempo real"], ["PostgreSQL", "por serviço"], ["Redis", "rankings"],
+  ["SNS → SQS", "eventos"], ["Agones", "Kubernetes"], ["Prometheus", "métricas"], ["OpenTelemetry", "tracing"],
+  ["React", "console"], ["buf", "contrato"], ["Terraform", "infra"], ["Steam", "login"]];
+function buildS8() {
+  $("s8").innerHTML = `<div class="abs display" id="s8h" style="left:0;right:0;top:150px;text-align:center;font-size:62px;font-weight:700">Engenharia aberta, pronta para evoluir.</div>` +
     CHIPS.map((c, i) => `<div class="chip" id="chip${i}"><b>${c[0]}</b><span>${c[1]}</span></div>`).join("") +
-    [["10", "serviços Go + console"], ["32", "ADRs de arquitetura"], ["230+", "specs (SDD)"], ["1.5.0", "contrato com o jogo"]].map((s, i) => `<div class="stat" id="st${i}" style="left:${230 + i * 390}px;top:760px"><div class="n" style="color:${["var(--signal)", "var(--nominal)", "var(--amber)", "var(--grape)"][i]}">${s[0]}</div><div class="l">${s[1]}</div></div>`).join("");
+    [["10", "serviços em Go"], ["32", "decisões documentadas"], ["230+", "specs de features"], ["1.5.0", "contrato com o jogo"]].map((s, i) => `<div class="stat" id="st${i}" style="left:${230 + i * 390}px;top:720px"><div class="n" style="color:${["var(--signal)", "var(--nominal)", "var(--amber)", "var(--grape)"][i]}">${s[0]}</div><div class="l">${s[1]}</div></div>`).join("") +
+    `<div class="abs" id="s8n" style="left:0;right:0;top:920px;text-align:center;font-size:28px;color:var(--muted)">Cada decisão num ADR, cada feature numa spec, testes com race detector e CI em cada mudança.</div>`;
 }
-function renderS6(t) {
-  const [a] = T.s6;
-  $("s6h").style.opacity = clamp(seg(t, a + 0.2, a + 0.8));
+function renderS8(t) {
+  const [a] = T.s8;
+  rise($("s8h"), t, a + 0.2, T.s8[1], 20);
   CHIPS.forEach((_, i) => {
-    const row = Math.floor(i / 4), col = i % 4; const el = $("chip" + i); const p = easeBack(seg(t, a + 0.5 + i * 0.09, a + 1.2 + i * 0.09));
-    css(el, { left: 230 + col * 390 + "px", top: 330 + row * 110 + "px", opacity: clamp(seg(t, a + 0.5 + i * 0.09, a + 0.9 + i * 0.09)), transform: `translateY(${(1 - p) * 24}px)` });
+    const row = Math.floor(i / 4), col = i % 4; const p = easeBack(seg(t, a + 0.6 + i * 0.1, a + 1.3 + i * 0.1));
+    css($("chip" + i), { left: 230 + col * 390 + "px", top: 290 + row * 105 + "px", opacity: clamp(seg(t, a + 0.6 + i * 0.1, a + 1 + i * 0.1)), transform: `translateY(${(1 - p) * 24}px)` });
   });
-  for (let i = 0; i < 4; i++) { const p = easeOut(seg(t, a + 2 + i * 0.2, a + 2.8 + i * 0.2)); css($("st" + i), { opacity: p, transform: `translateY(${(1 - p) * 20}px)` }); }
+  for (let i = 0; i < 4; i++) { const p = easeOut(seg(t, a + 2.6 + i * 0.25, a + 3.4 + i * 0.25)); css($("st" + i), { opacity: p, transform: `translateY(${(1 - p) * 20}px)` }); }
+  rise($("s8n"), t, a + 4.4, T.s8[1], 14);
 }
 
-// ---------- cenas 1, 2, 7 ----------
+// ---------- cenas 1 e 9 ----------
 function renderS1(t) {
   const lp = easeBack(seg(t, 0.2, 1.2));
   css($("s1logo"), { opacity: clamp(seg(t, 0.2, 0.7)), transform: `scale(${0.6 + 0.4 * lp}) rotate(${(1 - lp) * -30}deg)` });
   const hex = document.getElementById("hex"); const L = 330; hex.style.strokeDasharray = L; hex.style.strokeDashoffset = L * (1 - easeInOut(seg(t, 0.2, 1.4)));
   const tp = easeOut(seg(t, 0.9, 1.8)); css($("s1title"), { opacity: tp, transform: `translateY(${(1 - tp) * 30}px)`, letterSpacing: `${-0.02 + (1 - tp) * 0.04}em` });
-  const sp = easeOut(seg(t, 1.5, 2.3)); css($("s1sub"), { opacity: sp, transform: `translateY(${(1 - sp) * 20}px)` });
-  $("s1meta").style.opacity = easeOut(seg(t, 2.2, 3));
+  const sp = easeOut(seg(t, 1.6, 2.4)); css($("s1sub"), { opacity: sp, transform: `translateY(${(1 - sp) * 20}px)` });
+  $("s1meta").style.opacity = easeOut(seg(t, 2.6, 3.4));
 }
-function renderS2(t) {
-  const [a] = T.s2; const words = ["k1", "k2", "k3", "k4"];
-  words.forEach((w, i) => {
-    const t0 = a + 0.4 + i * 1.05, t1 = t0 + 1.05; const p = seg(t, t0, t1);
-    const inn = easeOut(seg(t, t0, t0 + 0.35)), out = easeInOut(seg(t, t1 - 0.3, t1));
-    css($(w), { opacity: Math.min(inn, 1 - out), transform: `translateY(${(1 - inn) * 40 - out * 40}px) scale(${1 + p * 0.04})`, color: ["var(--critical)", "var(--nominal)", "var(--amber)", "var(--signal)"][i] });
-  });
-  const f = easeOut(seg(t, a + 4.6, a + 5.4)); css($("k5"), { opacity: f, transform: `translateY(${(1 - f) * 24}px)` });
-  const big = easeOut(seg(t, a + 4.6, a + 5.4)); css($("k4"), {});
-  if (t > a + 4.6) css($("k4"), { opacity: 0 });
-}
-function renderS7(t) {
-  const [a] = T.s7;
-  if (!$("s7logo").innerHTML) $("s7logo").innerHTML = $("s1logo").innerHTML.replace('id="hex"', "");
-  const lp = easeBack(seg(t, a + 0.2, a + 1)); css($("s7logo"), { opacity: clamp(seg(t, a + 0.2, a + 0.6)), transform: `scale(${0.7 + 0.3 * lp})` });
-  const tp = easeOut(seg(t, a + 0.6, a + 1.4)); css($("s7title"), { opacity: tp, transform: `translateY(${(1 - tp) * 24}px)` });
-  $("s7url").style.opacity = easeOut(seg(t, a + 1.2, a + 2));
-  $("s7note").style.opacity = easeOut(seg(t, a + 1.8, a + 2.6));
+function renderS9(t) {
+  const [a] = T.s9;
+  if (!$("s9logo").innerHTML) $("s9logo").innerHTML = $("s1logo").innerHTML.replace('id="hex"', "");
+  const lp = easeBack(seg(t, a + 0.2, a + 1)); css($("s9logo"), { opacity: clamp(seg(t, a + 0.2, a + 0.6)), transform: `scale(${0.7 + 0.3 * lp})` });
+  const tp = easeOut(seg(t, a + 0.6, a + 1.4)); css($("s9title"), { opacity: tp, transform: `translateY(${(1 - tp) * 24}px)` });
+  $("s9pitch").style.opacity = easeOut(seg(t, a + 1.3, a + 2.1));
+  $("s9url").style.opacity = easeOut(seg(t, a + 2, a + 2.8));
+  $("s9note").style.opacity = easeOut(seg(t, a + 2.8, a + 3.6));
 }
 
 // ---------- quadro ----------
 function frame(t) {
-  // fundo vivo: a grade desliza e os brilhos derivam
   $("grid").style.transform = `translate(${(t * 6) % 64}px, ${(t * 3) % 64}px)`;
   css($("g1"), { left: 200 + Math.sin(t * 0.25) * 160 + "px", top: -300 + Math.cos(t * 0.2) * 80 + "px" });
   css($("g2"), { left: 1100 + Math.cos(t * 0.22) * 180 + "px", top: 500 + Math.sin(t * 0.18) * 90 + "px" });
-  const scenes = { s1: renderS1, s2: renderS2, s3: renderS3, s4: renderS4, s5: renderS5, s6: renderS6, s7: renderS7 };
+  const scenes = { s1: renderS1, s2: renderS2, s3: renderS3, s4: renderS4, s5: renderS5, s6: renderS6, s7: renderS7, s8: renderS8, s9: renderS9 };
   for (const k in scenes) {
     const [a, b] = T[k]; const o = win(t, a, b, 0.45); $(k).style.opacity = o;
     if (o > 0 || (t >= a && t <= b)) scenes[k](t);
@@ -452,7 +608,7 @@ function frame(t) {
 window.__DURATION = DURATION;
 window.__ready = (async () => {
   BOX = await (await fetch("shots/boxes.json")).json();
-  buildGraph(); buildS5(); buildS6();
+  buildS2(); buildGraph(); buildS4(); buildS7(); buildS8();
   await document.fonts.ready;
   await Promise.all(Object.values(imgs).map((im) => im.decode().catch(() => {})));
   frame(0);

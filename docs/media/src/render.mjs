@@ -23,8 +23,8 @@ const FPS = 30;
 // GIF foi descartado: a paleta de 256 cores estraga o degradê escuro e cada
 // recorte passava de 10 MB. Onde precisa de movimento, o link vai para o MP4.
 const STILLS = [
-  ["hero", 27.5, true],        // arquitetura com o fan-out aceso; capa do README
-  ["invasao-p2p", 43.5, false], // invasão p2p com a conquista desbloqueada
+  ["hero", 46, true],           // "como funciona" com o passo 3 (eventos) aceso; capa do README
+  ["invasao-p2p", 92.4, false], // exemplo P2P com a conquista desbloqueada
 ];
 
 // servidor estático: o film.html busca shots/boxes.json (fetch não funciona em file://)
@@ -48,6 +48,7 @@ const duration = await page.evaluate(() => window.__DURATION);
 // selo "assista ao vídeo" desenhado na própria página, com a fonte do filme
 async function stills() {
   const secs = Math.round(duration);
+  const len = secs >= 60 ? `${Math.floor(secs / 60)}min${String(secs % 60).padStart(2, "0")}` : `${secs} s`;
   for (const [name, t, badge] of STILLS) {
     await page.evaluate(([x, on, s]) => {
       window.__seek(x);
@@ -55,14 +56,14 @@ async function stills() {
       if (!on) return;
       const b = document.createElement("div");
       b.id = "__badge";
-      b.innerHTML = `<span class="i">▶</span>Assista ao vídeo · ${s} s`;
+      b.innerHTML = `<span class="i">▶</span>Assista ao vídeo · ${s}`;
       b.style.cssText = "position:absolute;top:44px;right:60px;z-index:99;display:flex;align-items:center;gap:16px;" +
         "padding:14px 28px 14px 16px;border:3px solid #5eb8ff;border-radius:40px;background:rgba(10,18,30,.9);" +
         "color:#e8f0fa;font:600 30px 'Space Grotesk',sans-serif;";
       b.querySelector(".i").style.cssText = "display:grid;place-items:center;width:38px;height:38px;border-radius:50%;" +
         "background:#5eb8ff;color:#0a121e;font-size:16px;padding-left:3px;box-sizing:border-box;";
       document.body.appendChild(b);
-    }, [t, badge, secs]);
+    }, [t, badge, len]);
     // 1600 px de largura em JPEG: nítido no README e ~100 KB
     const png = await page.screenshot({ type: "png" });
     await run(["-y", "-loglevel", "error", "-f", "image2pipe", "-i", "-", "-vf", "scale=1600:-1:flags=lanczos", "-q:v", "3",

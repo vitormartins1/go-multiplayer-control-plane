@@ -1,10 +1,12 @@
-// Vídeo 1 — "Do zero ao jogo online": registrar um jogo com um modo P2P e ver o
-// primeiro mundo abrir no console, sem deploy.
+// Vídeo 1 — "Do zero ao jogo online": registrar um jogo com um modo P2P, entender
+// cada parte do formulário, ver o que o console mostra do jogo novo e o primeiro
+// mundo abrir e ser invadido, sem deploy.
 //
 //   node docs/media/src/record/01-cadastro.mjs
 //
 // Pré-requisitos: a stack da demo no ar (console em CONSOLE_URL, serviços e
-// grpcurl para o stage.sh) e nenhum jogo com o slug de GAME_NAME.
+// grpcurl para o stage.sh) e nenhum jogo com o slug de GAME_NAME (o slug de um
+// jogo apagado continua reservado).
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -18,70 +20,109 @@ const tmp = path.join(mediaDir, "frames");
 const rec = await startRecording("01-cadastro");
 const { page } = rec;
 const drawer = page.locator(".mantine-Drawer-content");
-const select = async (label, option) => {
+const section = (label) => drawer.locator(".mantine-Card-root").filter({ hasText: label }).first();
+const side = { left: true }; // o drawer ocupa a metade direita
+const select = async (label, option, kicker, text) => {
   await rec.click(drawer.getByRole("textbox", { name: label }));
-  await rec.wait(500);
+  await rec.wait(600);
+  await rec.say(kicker, text, side); // as opções ficam abertas enquanto a legenda explica
   await rec.click(page.getByRole("option", { name: option }));
 };
+const tab = (name) => page.getByRole("tab", { name: new RegExp("^" + name) });
 
 await page.goto(CONSOLE + "/games");
 await page.getByText("Folclore Souls").first().waitFor();
 await rec.begin();
 
-await rec.caption("Vídeo 1", "Um estúdio registra um jogo novo no console.");
-await rec.wait(1800);
+// --- 1. a lista de jogos ---------------------------------------------------------
+await rec.say("Vídeo 1", "Do zero ao jogo online: registrar um jogo, definir como ele joga online e ver o primeiro mundo abrir.");
+await rec.spot(page.locator(".game-card").first().locator("xpath=.."), "Jogos",
+  "Cada jogo registrado vira um card. O mesmo backend atende vários jogos ao mesmo tempo.");
 await rec.click(page.getByRole("button", { name: "Registrar jogo" }));
-await rec.wait(700);
+await rec.wait(800);
+await rec.say("Registro", "Um formulário só: a identidade do jogo e o primeiro modo de multiplayer.", side);
 
-await rec.caption("Identidade", "O slug sai do nome, e a capa é gerada na hora a partir dele.", { left: true });
-await rec.type(drawer.getByRole("textbox", { name: "Nome", exact: true }), GAME_NAME, { delay: 90 });
-await rec.wait(1400);
+// --- 2. identidade ---------------------------------------------------------------
+await rec.type(drawer.getByRole("textbox", { name: "Nome", exact: true }), GAME_NAME, { delay: 110 });
+await rec.wait(500);
+await rec.spot(drawer.locator(".mantine-Card-root").first().locator("xpath=preceding-sibling::*[1]"), "Capa",
+  "A capa é gerada na hora a partir do slug. Não precisa de arte para começar.", side);
+await rec.spot(drawer.getByRole("textbox", { name: /^Slug/ }), "Slug",
+  "O slug é a chave estável do jogo, criado a partir do nome. Não muda depois do registro.", side);
 
-await rec.caption("Modo", "Cada jogo declara modos. O modo diz a forma do multiplayer.", { left: true });
-await rec.type(drawer.getByRole("textbox", { name: "ID do modo" }), MODE_ID);
-await rec.type(drawer.getByRole("textbox", { name: "Nome de exibição" }), "Mundo aberto");
-await select("Arquétipo", /Host World Drop-in/);
-await rec.wait(600);
-await rec.caption("Topologia", "Mundo do host com invasões, hospedado pelo próprio jogador via Steam: nenhum servidor para pagar.", { left: true });
-await select("Topologia", /P2P/);
-await rec.wait(2200);
+// --- 3. o modo -------------------------------------------------------------------
+await rec.type(drawer.getByRole("textbox", { name: "ID do modo" }), MODE_ID, { delay: 70 });
+await rec.type(drawer.getByRole("textbox", { name: "Nome de exibição" }), "Mundo aberto", { delay: 70 });
+await rec.spot(section("Identidade do modo"), "Modo",
+  "Um jogo pode ter vários modos. Cada um tem o id que o jogo usa e um nome para exibir.", side);
+await select("Arquétipo", /Host World Drop-in/, "Arquétipo",
+  "O arquétipo é a forma do multiplayer: arena por fila, mundo do host, battle royale ou missão co-op.");
+await rec.wait(800);
+await rec.say("Mundo do host", "Escolhemos mundo do host: outros jogadores entram no mundo de alguém, como aliados ou invasores. O formulário se adapta.", side);
+await select("Topologia", /P2P/, "Topologia",
+  "Quem hospeda o mundo: um servidor dedicado no Agones, ou o próprio jogo do host, via Steam (P2P).");
+await rec.wait(800);
 
-await rec.caption("Parâmetros", "Papéis, vagas e regras de invasão são parâmetros do modo, não código.", { left: true });
-await rec.moveTo(drawer.getByText("Slots de invasor"));
-await rec.wait(1200);
-await rec.moveTo(drawer.getByText("Invasão automática"));
-await rec.wait(1800);
+// --- 4. parâmetros do arquétipo ----------------------------------------------------
+await rec.spot(section("Papéis e capacidade"), "Papéis",
+  "Quem pode entrar no mundo de outro jogador, e quantos de cada ao mesmo tempo: 2 aliados e 1 invasor.", side);
+await rec.spot(section("Critérios de matchmaking"), "Matchmaking",
+  "Como o invasor encontra um mundo: pela faixa de nível, pelo tier de equipamento e, se quiser, com senha.", side);
+await rec.spot(section("Comportamento"), "Invasão",
+  "Com invasão automática, o matchmaking coloca invasores sem o host precisar chamar.", side);
+const stats = section("Métricas").getByRole("textbox").first();
+await rec.type(stats, "kills", { delay: 90 });
+await page.keyboard.press("Enter");
+await rec.type(stats, "boss_boitata", { delay: 70 });
+await page.keyboard.press("Enter");
+await rec.spot(section("Métricas"), "Métricas",
+  "As stats que o jogo vai reportar. Elas alimentam conquistas e rankings.", side);
 
+// --- 5. registrado ----------------------------------------------------------------
 await rec.click(drawer.getByRole("button", { name: "Registrar jogo" }));
 await page.waitForURL(/\/games\/[0-9a-f-]{36}/);
 const gameId = page.url().match(/games\/([0-9a-f-]{36})/)[1];
-await page.getByRole("tab", { name: /Sessions/ }).waitFor();
-await rec.caption("Pronto", "Registrado. Matchmaking, sessões e conquistas já leem este modo, sem deploy.");
-await rec.wait(2600);
-
-// os atores entram: um host abre o mundo e, segundos depois, um invasor entra
-const stage = spawn(path.join(here, "stage.sh"), ["world", gameId, MODE_ID], {
-  env: { ...process.env, INVADE_AFTER: "6" }, stdio: "inherit" });
-const staged = new Promise((r) => stage.on("close", r)); // pode fechar antes do fim da gravação
-await rec.click(page.getByRole("tab", { name: /Sessions/ }));
-await rec.caption("Ao vivo", "Um jogador abre o primeiro mundo…");
-const row = page.getByRole("row").filter({ hasText: /steam:/ }).first();
-await row.waitFor({ timeout: 20000 });
-await rec.wait(900);
-await rec.caption("Ao vivo", "…e outro invade. Hospedado pelo host (P2P), com sinal de vida em tempo real.");
-await row.getByText(/INVASOR 1\/1/i).waitFor({ timeout: 25000 });
+await tab("Sessions").waitFor();
 await rec.wait(1200);
+await rec.spot(page.getByRole("heading", { name: GAME_NAME }).locator("xpath=.."), "Pronto",
+  "Registrado. O selo mostra o modo e a topologia. Nenhum serviço foi reiniciado.");
+await rec.spot(page.getByRole("tablist").first(), "O jogo",
+  "Cada jogo tem suas abas: conquistas, regras, rankings, jogadores, sessões e analytics.");
+
+// --- 6. frota: P2P não precisa ------------------------------------------------------
+await rec.click(page.getByRole("link", { name: "Fleet" }));
+await rec.wait(1500);
+await rec.spot(page.getByRole("row").filter({ hasText: GAME_NAME }).first(), "Frota",
+  "Na tela de frotas, o jogo novo aparece como P2P, sem frota: ele não precisa de servidor dedicado.");
+await rec.click(page.getByRole("link", { name: "Games" }));
+await rec.wait(1000);
+await rec.click(page.locator(".game-card").filter({ hasText: GAME_NAME }));
+await tab("Sessions").waitFor();
+
+// --- 7. ao vivo -------------------------------------------------------------------
+// os atores: um jogador abre um mundo e, segundos depois, outro invade
+const stage = spawn(path.join(here, "stage.sh"), ["world", gameId, MODE_ID], {
+  env: { ...process.env, INVADE_AFTER: "12" }, stdio: "inherit" });
+const staged = new Promise((r) => stage.on("close", r)); // pode fechar antes do fim da gravação
+await rec.click(tab("Sessions"));
+await rec.caption("Ao vivo", "Agora um jogador abre o jogo e cria um mundo. Veja a lista de sessões…");
+const row = page.getByRole("row").filter({ hasText: /steam:/ }).first();
+await row.waitFor({ timeout: 30000 });
+await rec.wait(700);
+await rec.spot(row, "Mundo aberto", "Este é o mundo que ele acabou de abrir, com o modo, o estado e as vagas.", { keep: true });
+await rec.spot(row.getByText(/steam:/), "Hospedagem", "P2P: quem hospeda é o jogo dele. O backend guarda só o SteamID para os outros conectarem.");
+await rec.spot(row.getByText(/vivo ·/i), "Sinal de vida", "O jogo do host avisa a cada poucos segundos que o mundo continua vivo.");
+await rec.caption("Invasão", "Agora outro jogador pede para invadir. Observe a vaga de invasor…");
+await row.getByText(/invasor 1\/1/i).waitFor({ timeout: 30000 });
+await rec.wait(600);
+await rec.spot(row.getByText(/invasor 1\/1/i), "Invasão", "Entrou: o matchmaking achou este mundo na faixa de nível dele e ocupou a vaga de invasor.");
 await rec.click(row, { dx: -200 });
-await rec.wait(900);
-await rec.caption("Ao vivo", "O mundo por dentro: o host, as vagas de co-op e o invasor que acabou de entrar.");
-await rec.reveal(page.getByText(/^matinta_/).first(), "center", true);
-await rec.wait(2600);
-await rec.caption("Confiança", "No P2P o jogo do host reporta os eventos, e o console deixa isso explícito.");
-const note = page.getByText(/Mundo P2P:/).first();
-await rec.reveal(note, "center", true);
-await rec.highlight(note);
-await rec.wait(3200);
-await rec.highlight(null);
+await rec.wait(1000);
+await rec.spot(page.getByText(/^matinta_/).first().locator("xpath=ancestor::div[contains(@class,'mantine-SimpleGrid-root')][1]"), "Dentro do mundo",
+  "O mundo por dentro: o host, as vagas de co-op livres e o invasor que acabou de entrar.", { force: true });
+await rec.spot(page.getByText(/Mundo P2P:/).first(), "Confiança",
+  "No P2P o jogo do host reporta os eventos. O console deixa isso explícito para quem opera.", { force: true });
+
 await rec.caption(null);
 await rec.wait(600);
 await staged;
@@ -89,10 +130,11 @@ await staged;
 const frames = await rec.end();
 const body = path.join(tmp, "01-body.mp4");
 await encodeFrames(frames, body);
-await renderCard({ kicker: "Vídeo 1 · Cadastro de jogo", title: "Do zero ao jogo online",
-  sub: "Registrar um jogo, declarar o modo multiplayer e ver o primeiro mundo abrir, em menos de um minuto." }, 4, path.join(tmp, "01-intro.mp4"));
-await renderCard({ kicker: "Sem deploy", title: "Nenhuma linha de código<br/>por jogo.",
-  sub: "Um formulário configurou matchmaking, sessões, P2P e conquistas. O resto do backend leu o modo sozinho." }, 4.5, path.join(tmp, "01-outro.mp4"));
-await concat([path.join(tmp, "01-intro.mp4"), body, path.join(tmp, "01-outro.mp4")], path.join(mediaDir, "video-01-cadastro.mp4"));
 await promisify(execFile)(path.join(here, "stage.sh"), ["stop"]);
+if (process.env.ONLY_BODY) process.exit(0); // ensaio: só a gravação, sem cartelas
+await renderCard({ kicker: "Vídeo 1 · Cadastro de jogo", title: "Do zero ao jogo online",
+  sub: "Registrar um jogo, escolher como ele joga online e ver o primeiro mundo abrir e ser invadido." }, 4.5, path.join(tmp, "01-intro.mp4"));
+await renderCard({ kicker: "Sem deploy", title: "Nenhuma linha de código<br/>por jogo.",
+  sub: "Um formulário configurou matchmaking, sessões, P2P e métricas. O resto do backend leu o modo sozinho." }, 5, path.join(tmp, "01-outro.mp4"));
+await concat([path.join(tmp, "01-intro.mp4"), body, path.join(tmp, "01-outro.mp4")], path.join(mediaDir, "video-01-cadastro.mp4"));
 console.log("pronto: docs/media/video-01-cadastro.mp4 (jogo " + gameId + ")");

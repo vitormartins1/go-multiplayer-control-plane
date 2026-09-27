@@ -13,7 +13,7 @@ leaderboard, analytics e um console de operação: o que a AWS vende como GameKi
 ![ADRs](https://img.shields.io/badge/ADRs-32-8a63d2)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-a%20definir-lightgrey)
 
-[**Vídeo de 90 s**](docs/media/go-multiplayer-control-plane.mp4) ·
+[**Vídeo de 3 min**](docs/media/go-multiplayer-control-plane.mp4) ·
 [Arquitetura](docs/ARCHITECTURE.md) ·
 [Produto](docs/PRODUCT-OVERVIEW.md) ·
 [Decisões (ADRs)](docs/adr/README.md) ·
@@ -261,7 +261,7 @@ O que depende de decisão ou de trabalho fora deste repo (chaves Steam, Unity, `
 | Para… | Leia |
 |---|---|
 | entender o produto em 5 minutos | [PRODUCT-OVERVIEW](docs/PRODUCT-OVERVIEW.md) · [vídeo](docs/media/go-multiplayer-control-plane.mp4) |
-| ver o console funcionando | vídeos de ~1 min: [cadastrar um jogo](docs/media/video-01-cadastro.mp4) · [conquistas sem deploy](docs/media/video-02-conquistas.mp4) · [visão 360 do jogador](docs/media/video-03-jogador.mp4) |
+| ver o console funcionando | vídeos curtos: [cadastrar um jogo](docs/media/video-01-cadastro.mp4) · [o motor de conquistas](docs/media/video-02-conquistas.mp4) · [visão 360 do jogador](docs/media/video-03-jogador.mp4) |
 | entender a arquitetura | [ARCHITECTURE](docs/ARCHITECTURE.md) · [ADRs](docs/adr/README.md) · [topologia de repos](docs/REPO-TOPOLOGY.md) |
 | integrar um jogo Unity | [guia de integração](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [contratos por arquétipo](docs/game-models/README.md) · [changelog do contrato](docs/contracts/CHANGELOG.md) |
 | operar e observar | [OBSERVABILITY](docs/OBSERVABILITY.md) · [infra local](infra/docker/README.md) · [regras de eventos](docs/EVENT-RULES-GUIDE.md) |

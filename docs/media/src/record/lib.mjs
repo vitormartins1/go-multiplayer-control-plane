@@ -105,7 +105,18 @@ export async function startRecording(name) {
       });
       if (inView) return;
       await loc.evaluate((el, block) => el.scrollIntoView({ behavior: "smooth", block }), block);
-      await rec.wait(900);
+      await rec.settle(loc);
+    },
+    // espera o elemento parar de se mexer (scroll suave, drawer abrindo) antes
+    // de medir: senão o destaque sai deslocado
+    async settle(loc) {
+      let last = null;
+      for (let i = 0; i < 25; i++) {
+        await rec.wait(120);
+        const b = await loc.boundingBox();
+        if (b && last && Math.abs(b.y - last.y) < 0.5 && Math.abs(b.x - last.x) < 0.5) return;
+        last = b;
+      }
     },
     // move o cursor até o centro do elemento, com duração proporcional à distância
     async moveTo(loc, { dx = 0, dy = 0 } = {}) {
@@ -134,10 +145,38 @@ export async function startRecording(name) {
       await rec.wait(250);
     },
     // legenda embaixo; left=true quando um drawer ocupa a direita da tela
+    // arrasta a partir de (x, y) com o cursor visível (pan do canvas)
+    async drag(x, y, dx, dy) {
+      await page.evaluate(([x, y]) => window.__rec.move(x, y, 450), [x, y]);
+      await page.mouse.move(x, y);
+      cur = { x, y };
+      await rec.wait(550);
+      await page.mouse.down();
+      await page.evaluate(([x, y]) => window.__rec.move(x, y, 700), [x + dx, y + dy]);
+      await page.mouse.move(x + dx, y + dy, { steps: 20 });
+      await page.mouse.up();
+      cur = { x: x + dx, y: y + dy };
+      await rec.wait(750);
+    },
     async caption(kicker, text, { left = false, width = 0 } = {}) {
       await page.evaluate(([k, t, l, w]) => window.__rec.caption(k, t, l, w), [kicker, text, left, width]);
     },
+    // say mostra a legenda e espera o tempo de leitura (~14 caracteres por
+    // segundo, entre 3,2 s e 8 s): quem não conhece o sistema precisa ler.
+    async say(kicker, text, opts) {
+      await rec.caption(kicker, text, opts);
+      await rec.wait(readMs(text));
+    },
+    // spot destaca um elemento (escurece o resto), explica e segura; o destaque
+    // sai no fim, a legenda fica até a próxima
+    async spot(loc, kicker, text, opts = {}) {
+      await rec.reveal(loc, "center", !!opts.force);
+      await rec.highlight(loc);
+      await rec.say(kicker, text, opts);
+      if (!opts.keep) await rec.highlight(null);
+    },
     async highlight(loc) {
+      if (loc) await rec.settle(loc);
       const b = loc ? await loc.boundingBox() : null;
       await page.evaluate((r) => window.__rec.highlight(r), b);
     },
@@ -151,6 +190,8 @@ export async function startRecording(name) {
   };
   return rec;
 }
+
+export const readMs = (text) => Math.min(8000, Math.max(3200, (text || "").replace(/<[^>]+>/g, "").length * 70));
 
 const run = (a) => new Promise((ok, ko) => spawn(FFMPEG, a, { stdio: ["ignore", "inherit", "inherit"] }).on("close", (c) => (c ? ko(new Error("ffmpeg " + c)) : ok())));
 

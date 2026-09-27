@@ -8,8 +8,8 @@ Painel de operação do control plane — **games-first**: você entra pela list
 
 <p align="center"><img src="../../docs/images/rooms-p2p.jpg" alt="Rooms: salas ao vivo com hospedagem, heartbeat e o detalhe de um mundo P2P" width="720"/></p>
 
-▶ **Vídeos do console (~1 min cada):** [cadastrar um jogo](../../docs/media/video-01-cadastro.mp4) ·
-[conquistas sem deploy](../../docs/media/video-02-conquistas.mp4) · [visão 360 do jogador](../../docs/media/video-03-jogador.mp4).
+▶ **Vídeos do console:** [cadastrar um jogo](../../docs/media/video-01-cadastro.mp4) ·
+[o motor de conquistas](../../docs/media/video-02-conquistas.mp4) · [visão 360 do jogador](../../docs/media/video-03-jogador.mp4).
 Como regravar: [`docs/media/README.md`](../../docs/media/README.md).
 
 > App de apresentação — fora do hexagonal Go. Segue um **SDD adaptado** (spec = telas/UX), ver seção "Testar / Specs".

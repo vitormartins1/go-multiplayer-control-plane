@@ -2,7 +2,7 @@
 
 | Arquivo | O que mostra | Onde aparece |
 |---|---|---|
-| [`go-multiplayer-control-plane.mp4`](go-multiplayer-control-plane.mp4) | o filme completo (87 s, 1080p, ~7 MB): o problema, a arquitetura, uma invasão P2P, um tour pelo console e a stack | links no README, PRODUCT-OVERVIEW e contrato do `host_world_dropin` |
+| [`go-multiplayer-control-plane.mp4`](go-multiplayer-control-plane.mp4) | o filme do produto (~3 min, 1080p): o problema, como funciona, qualquer tipo de jogo, dedicado ou P2P, conquistas e regras, um tour pelo console e a engenharia. Os exemplos usam o Folclore Souls, mas o foco é o produto | links no README, PRODUCT-OVERVIEW e contrato do `host_world_dropin` |
 | `hero.jpg` | quadro da arquitetura com o fan-out aceso e o selo "Assista ao vídeo" | capa do README |
 | `invasao-p2p.jpg` | quadro da invasão P2P com a conquista desbloqueada | README, PRODUCT-OVERVIEW, contrato do `host_world_dropin` |
 
@@ -10,12 +10,13 @@
 
 | Arquivo | O que mostra |
 |---|---|
-| [`video-01-cadastro.mp4`](video-01-cadastro.mp4) | **Do zero ao jogo online**: registrar um jogo com um modo P2P e ver o primeiro mundo abrir e ser invadido, sem deploy |
-| [`video-02-conquistas.mp4`](video-02-conquistas.mp4) | **Conquistas sem deploy**: cadastrar uma conquista com nome na Steam, ver a regra que a alimenta e o desbloqueio pelo fan-out |
-| [`video-03-jogador.mp4`](video-03-jogador.mp4) | **Visão 360 do jogador**: conquistas, histórico de mundos, dados (inventário, stats) e save na nuvem, numa tela |
+| [`video-01-cadastro.mp4`](video-01-cadastro.mp4) | **Do zero ao jogo online**: cada parte do registro explicada (identidade, modo, arquétipo, topologia, papéis, matchmaking, métricas), a frota que o P2P dispensa e o primeiro mundo abrindo e sendo invadido |
+| [`video-02-conquistas.mp4`](video-02-conquistas.mp4) | **O motor de conquistas** (~2 min): critério por evento (um evento, duas metas) e por métrica (acumulada ou por partida), regras globais do arquétipo e supressão por jogo, uma regra nova com comparador, a conquista criada a partir do evento órfão e o desbloqueio ao vivo (14 de 50 numa, desbloqueada na outra) |
+| [`video-03-jogador.mp4`](video-03-jogador.mp4) | **Visão 360 do jogador**: quem está online no jogo, conquistas com progresso e agrupamento, histórico com o desfecho de cada mundo (inclusive a queda do host), dados, save e a sessão ao vivo |
 
-Os três formam uma história só: o jogo "Mata Adentro" nasce no vídeo 1, ganha a conquista no 2, e o invasor que a
-desbloqueou é o jogador aberto no 3.
+Os vídeos de feature são didáticos de propósito: cada momento importante ganha um destaque (o resto da tela escurece),
+uma legenda que fica na tela o tempo de ler, e uma pausa. O 1 cria o jogo "Mata Adentro"; o 2 e o 3 usam o Folclore
+Souls da demo, que declara stats nos modos e tem catálogo, ranking e histórico para explorar.
 
 As telas do console usadas nos docs (`docs/images/rooms-p2p.jpg`, `docs/images/achievements-steam.jpg`) são as
 mesmas capturas reais que o filme usa, reduzidas para 1600 px.
@@ -70,8 +71,8 @@ Para regravar (precisa da stack no ar, do console em `localhost:5173` e de `grpc
 
 ```bash
 GAME_NAME="Mata Adentro" node docs/media/src/record/01-cadastro.mjs    # cria o jogo; o slug não pode existir
-GAME_NAME="Mata Adentro" node docs/media/src/record/02-conquistas.mjs  # usa o jogo do vídeo 1
-node docs/media/src/record/03-jogador.mjs                              # usa o invasor do vídeo 2
+node docs/media/src/record/02-conquistas.mjs                           # usa o Folclore Souls da demo
+node docs/media/src/record/03-jogador.mjs                              # usa o jogador "saci" do Folclore Souls
 ```
 
 O slug de um jogo apagado continua reservado (soft delete, ADR-0025): para regravar o vídeo 1, use outro nome ou

@@ -6,8 +6,10 @@
 #   stage.sh kill                      o jogo do host reporta HOST_KILLED do último mundo aberto
 #   stage.sh stop                      para o heartbeat do último mundo
 #   stage.sh seed                      dá inventário, stats e um save na nuvem ao invasor do último mundo
+#   stage.sh boss [KILLS]              o jogo do host reporta BOSS_DEFEATED (boitatá) do próprio host, com KILLS abates
 #
-# O estado do último mundo fica em $STATE (padrão /tmp/stage-world.env).
+# O estado do último mundo fica em $STATE (padrão /tmp/stage-world.env). HOST e INVADER
+# escolhem os handles (padrão: caipora_NN e matinta_NN, contas criadas na hora).
 set -euo pipefail
 
 IDENTITY="${IDENTITY:-http://localhost:8081}"
@@ -26,9 +28,9 @@ sub() { local p; p="$(cut -d. -f2 <<<"$1" | tr '_-' '/+')"; while (( ${#p} % 4 )
 case "${1:-}" in
 world)
   game_id="$2"; mode="${3:-}"
-  n=$((RANDOM % 90 + 10))
-  host_token="$(login "caipora_$n" "$game_id")"
-  invader_token="$(login "matinta_$n" "$game_id")"; invader_id="$(sub "$invader_token")"
+  n=$((RANDOM % 90 + 10)); host_handle="${HOST:-caipora_$n}"; invader_handle="${INVADER:-matinta_$n}"
+  host_token="$(login "$host_handle" "$game_id")"; host_id="$(sub "$host_token")"
+  invader_token="$(login "$invader_handle" "$game_id")"; invader_id="$(sub "$invader_token")"
   conn="steam:7656119800$((RANDOM % 9000000 + 1000000))"
   # nível do host e do invasor: o modo pode exigir faixa de nível (matchmaking/012)
   req="{\"game_id\":\"$game_id\",\"host_connection\":\"$conn\",\"host_soul_level\":40${mode:+,\"mode_id\":\"$mode\"}}"
@@ -38,11 +40,11 @@ world)
   hb
   # heartbeat a cada 10 s enquanto o vídeo roda (o TTL é 90 s)
   ( while sleep 10; do hb || exit 0; done ) >/dev/null 2>&1 &
-  echo "session_id=$session_id world_token=$world_token invader_id=$invader_id invader_handle=matinta_$n hb_pid=$! game_id=$game_id" > "$STATE"
+  echo "session_id=$session_id world_token=$world_token invader_id=$invader_id invader_handle=$invader_handle host_id=$host_id host_handle=$host_handle hb_pid=$! game_id=$game_id" > "$STATE"
   sleep "${INVADE_AFTER:-4}"
   grpcurl -plaintext -H "authorization: Bearer $invader_token" -d "{\"game_id\":\"$game_id\",\"soul_level\":38${mode:+,\"mode_id\":\"$mode\"}}" \
     "$MM_GRPC" matchmaking.v1.Matchmaking/Invade >/dev/null
-  echo "mundo $session_id aberto por caipora_$n; matinta_$n invadiu"
+  echo "mundo $session_id aberto por $host_handle; $invader_handle invadiu"
   ;;
 kill)
   # shellcheck disable=SC1090
@@ -51,6 +53,13 @@ kill)
     -d "{\"session_id\":\"$session_id\",\"player_id\":\"$invader_id\",\"role\":\"invader\",\"event\":\"HOST_KILLED\",\"outcome\":\"SUCCESS\",\"event_id\":\"stage-$session_id\"}" \
     "$SESSION_GRPC" session.v1.Session/ReportParticipationEvent >/dev/null
   echo "HOST_KILLED reportado em $session_id"
+  ;;
+boss)
+  source <(tr ' ' '\n' < "$STATE")
+  grpcurl -plaintext -H "x-world-token: $world_token" \
+    -d "{\"session_id\":\"$session_id\",\"player_id\":\"$host_id\",\"role\":\"host\",\"event\":\"BOSS_DEFEATED\",\"outcome\":\"SUCCESS\",\"event_id\":\"boss-$session_id\",\"stats\":{\"kills\":\"${2:-14}\",\"boss_boitata\":\"1\"}}" \
+    "$SESSION_GRPC" session.v1.Session/ReportParticipationEvent >/dev/null
+  echo "BOSS_DEFEATED de $host_handle com ${2:-14} abates"
   ;;
 seed)
   source <(tr ' ' '\n' < "$STATE")

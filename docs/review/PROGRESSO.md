@@ -71,7 +71,7 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Infra | `2ba1bcb` | S3 local do cloud-save no LocalStack: a imagem `minio/minio` saiu do Docker Hub e derrubava o job de integração e o `compose up` | integração (S3 real no LocalStack), `compose config` |
 | CI | (este) | `govulncheck` passa a bloquear | CI |
 | Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, vídeo de 87 s (~7 MB) e imagens paradas em `docs/media/` (GIF descartado: pesado e com paleta ruim) | diagramas validados no parser do Mermaid |
-| Vídeos de feature | (este) | três vídeos de ~1 min gravados do console real (cadastro de jogo P2P, conquistas sem deploy, visão 360 do jogador), com cursor, legendas e cartelas; roteiros regraváveis em `docs/media/src/record/` | revisados quadro a quadro |
+| Vídeos de feature | (este) | três vídeos de ~1 min gravados do console real (cadastro de jogo P2P, o motor de conquistas, visão 360 do jogador), com cursor, legendas e cartelas; roteiros regraváveis em `docs/media/src/record/` | revisados quadro a quadro |
 
 ## Em andamento
 

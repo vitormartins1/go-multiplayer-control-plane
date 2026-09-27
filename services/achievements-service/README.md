@@ -9,7 +9,7 @@ a validar o JWT do identity (via `shared/auth`).
 
 <p align="center"><img src="../../docs/images/achievements-steam.jpg" alt="Catálogo de conquistas com o selo Steam nas que são espelhadas" width="720"/></p>
 
-▶ **Vídeo (~1 min):** [conquistas sem deploy](../../docs/media/video-02-conquistas.mp4), do cadastro no console ao desbloqueio pelo fan-out.
+▶ **Vídeo (~2 min):** [o motor de conquistas](../../docs/media/video-02-conquistas.mp4): critérios por evento e por métrica, regras globais e do jogo com comparadores, e o desbloqueio ao vivo pelo fan-out.
 
 - **Protocolo:** REST · **Porta host:** 8082
 - **Storage:** PostgreSQL (`achievements-postgres`, DB `achievements`)
