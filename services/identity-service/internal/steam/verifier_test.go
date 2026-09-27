@@ -75,3 +75,16 @@ func TestVerify_TicketMalformado_NaoVaiARede(t *testing.T) {
 	}
 	assert.Nil(t, q, "nenhuma chamada à Steam")
 }
+
+// Revisão: erro de rede não carrega a URL (com a publisher key e o ticket).
+func TestVerify_ErroDeRede_NaoVazaAChave(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	url := srv.URL
+	srv.Close() // conexão recusada
+	v := New(Config{BaseURL: url, APIKey: "segredo-da-publisher", AppID: "480"}, nil)
+
+	_, err := v.Verify(context.Background(), "abcd")
+	require.ErrorIs(t, err, domain.ErrProviderUnavailable)
+	assert.NotContains(t, err.Error(), "segredo-da-publisher")
+	assert.NotContains(t, err.Error(), "abcd")
+}

@@ -13,8 +13,11 @@ import (
 
 // Parâmetros do espelhamento na Steam (spec 019).
 const (
-	steamBatch        = 50
-	steamLease        = 2 * time.Minute // tempo que um item fica "alugado" por este worker
+	// lote × pior caso por item (identity 5 s + Steam 10 s) = 300 s < lease:
+	// o lote termina antes de outra réplica poder pegar o mesmo item. Mesmo
+	// assim as marcações conferem o lease (ErrSteamLeaseLost).
+	steamBatch        = 20
+	steamLease        = 6 * time.Minute // tempo que um item fica "alugado" por este worker
 	steamMaxAttempts  = 10
 	steamBaseBackoff  = time.Minute
 	steamMaxBackoff   = time.Hour
@@ -110,7 +113,7 @@ func (m *SteamMirror) retryOrFail(ctx context.Context, it domain.SteamSyncItem, 
 		return
 	}
 	if err := m.repo.MarkSteamRetry(ctx, it, m.now().Add(steamBackoff(attempt)), cause.Error()); err != nil {
-		m.log.Warn("steam mirror: falha ao reagendar", slog.String("player_id", it.PlayerID), slog.String("err", err.Error()))
+		m.markFailed(it, err)
 		return
 	}
 	m.count(SteamResultRetry)
@@ -120,10 +123,20 @@ func (m *SteamMirror) done(ctx context.Context, it domain.SteamSyncItem, state, 
 	if err := m.repo.MarkSteamDone(ctx, it, state, reason, m.now()); err != nil {
 		// o lease vence e o item volta: no pior caso a Steam recebe o mesmo
 		// desbloqueio de novo, o que é idempotente do lado dela.
-		m.log.Warn("steam mirror: falha ao gravar estado", slog.String("player_id", it.PlayerID), slog.String("err", err.Error()))
+		m.markFailed(it, err)
 		return
 	}
 	m.count(result)
+}
+
+// markFailed registra a falha ao gravar o estado. Lease perdido é esperado
+// (outra réplica pegou o item depois do aluguel vencer) e não é erro.
+func (m *SteamMirror) markFailed(it domain.SteamSyncItem, err error) {
+	if errors.Is(err, domain.ErrSteamLeaseLost) {
+		m.log.Debug("steam mirror: lease perdido, outra réplica cuida do item", slog.String("player_id", it.PlayerID))
+		return
+	}
+	m.log.Warn("steam mirror: falha ao gravar estado", slog.String("player_id", it.PlayerID), slog.String("err", err.Error()))
 }
 
 func (m *SteamMirror) count(result string) {
@@ -141,9 +154,8 @@ func (m *SteamMirror) SyncTotal(result string) float64 {
 
 // steamBackoff é 1 min × 2^(tentativa-1), com teto de 1 h.
 func steamBackoff(attempt int) time.Duration {
-	d := steamBaseBackoff
-	for i := 1; i < attempt && d < steamMaxBackoff; i++ {
-		d *= 2
+	if attempt > 7 { // 2^6 min já passa do teto; evita estourar o shift
+		return steamMaxBackoff
 	}
-	return min(d, steamMaxBackoff)
+	return min(steamBaseBackoff<<(attempt-1), steamMaxBackoff)
 }

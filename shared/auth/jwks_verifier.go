@@ -134,7 +134,10 @@ func (v *Verifier) keyForKid(ctx context.Context, kid string) (ed25519.PublicKey
 		if recent {
 			return nil, errRefetchThrottled
 		}
-		return nil, v.refresh(ctx)
+		// sem o cancelamento de quem chegou primeiro: se aquele cliente
+		// desistir, todos os que esperam no singleflight falhariam junto e o
+		// intervalo de 30 s já estaria contado. O http.Client tem timeout.
+		return nil, v.refresh(context.WithoutCancel(ctx))
 	})
 	if err != nil && !errors.Is(err, errRefetchThrottled) {
 		if ok {

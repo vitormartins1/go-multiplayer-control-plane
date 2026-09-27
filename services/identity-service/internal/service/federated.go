@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,10 +23,21 @@ func (s *service) AuthenticateExternal(ctx context.Context, provider, ticket, ga
 	}
 	ext, err := v.Verify(ctx, ticket)
 	if err != nil {
+		if errors.Is(err, domain.ErrProviderUnavailable) && s.log != nil {
+			// sem isto a Steam fora do ar era invisível para o operador (o
+			// transport só devolve 503). O erro do verificador não traz a URL.
+			s.log.Warn("login externo: provedor indisponível",
+				slog.String("provider", provider), slog.String("err", err.Error()))
+		}
 		return "", fmt.Errorf("identity service: external login: %w", err)
 	}
 
 	acc, err := s.accountFor(ctx, ext)
+	if errors.Is(err, domain.ErrHandleTaken) {
+		// os dois handles tentados colidiram: é falha nossa, não do jogador —
+		// não pode sair como 409 handle_taken num login.
+		return "", fmt.Errorf("identity service: external login: handle: %v", err)
+	}
 	if err != nil {
 		return "", fmt.Errorf("identity service: external login: %w", err)
 	}

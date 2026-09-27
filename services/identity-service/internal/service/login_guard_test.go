@@ -89,3 +89,14 @@ func TestLoginGuard_PruneDescartaJanelasVencidas(t *testing.T) {
 	assert.Equal(t, 1, n, "só a janela de c continua valendo")
 	assert.False(t, g.blocked("a"))
 }
+
+// Revisão: conta sem senha (criada pela Steam) recusa a senha e paga o bcrypt
+// do dummyHash — mesma resposta e mesmo custo de um handle inexistente.
+func TestAuthenticate_ContaSemSenha_InvalidCredentials(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByHandle", mock.Anything, "steam_98000000042").Return(&domain.Account{ID: "a", Handle: "steam_98000000042"}, nil)
+	svc := New(repo, new(mockTokens), nil, nil)
+
+	_, err := svc.Authenticate(context.Background(), "steam_98000000042", "qualquer", "")
+	assert.ErrorIs(t, err, domain.ErrInvalidCredentials)
+}

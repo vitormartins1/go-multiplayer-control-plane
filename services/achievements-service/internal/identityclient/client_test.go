@@ -28,6 +28,9 @@ func fakeIdentity(t *testing.T) *httptest.Server {
 		case "/admin/players/p-quebra/external-identities":
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		case "/admin/players/p-sumiu/external-identities":
+			w.WriteHeader(http.StatusNotFound)
+			body = `{"error":"player_not_found"}`
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -52,6 +55,10 @@ func TestSteamID(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrNoSteamAccount, "sem vínculo Steam")
 	_, err = c.SteamID(ctx, "p-sumiu")
 	assert.ErrorIs(t, err, domain.ErrNoSteamAccount, "conta inexistente: nada a espelhar")
+
+	_, err = c.SteamID(ctx, "rota-que-nao-existe")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, domain.ErrNoSteamAccount, "404 de rota é transitório: não pula o desbloqueio")
 
 	_, err = c.SteamID(ctx, "p-quebra")
 	require.Error(t, err)

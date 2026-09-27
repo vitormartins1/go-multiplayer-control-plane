@@ -124,3 +124,15 @@ func TestAuthenticateExternal_ProvedorDesconhecidoOuSemConfig_ErrProviderNotSupp
 	_, err = plain.AuthenticateExternal(context.Background(), "steam", "abcd", "")
 	assert.ErrorIs(t, err, domain.ErrProviderNotSupported)
 }
+
+// Revisão: os dois handles colidindo é falha nossa — não sai como handle_taken.
+func TestAuthenticateExternal_DoisHandlesOcupados_NaoViraHandleTaken(t *testing.T) {
+	svc, ext, ver, _ := federatedSetup(t)
+	ver.On("Verify", mock.Anything, "abcd").Return(steamIdentity(), nil)
+	ext.On("FindByExternal", mock.Anything, "steam", steamID).Return(nil, domain.ErrAccountNotFound)
+	ext.On("CreateWithExternal", mock.Anything, mock.Anything, "steam", steamID).Return(domain.ErrHandleTaken)
+
+	_, err := svc.AuthenticateExternal(context.Background(), "steam", "abcd", "")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, domain.ErrHandleTaken)
+}

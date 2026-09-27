@@ -48,7 +48,7 @@ func (r *PostgresSteamSyncRepository) ClaimSteamPending(ctx context.Context, gam
 		  FROM picked p, achievements a
 		 WHERE pa.game_id = p.game_id AND pa.player_id = p.player_id AND pa.achievement_id = p.achievement_id
 		   AND a.game_id = pa.game_id AND a.id = pa.achievement_id
-		RETURNING pa.game_id, pa.player_id, pa.achievement_id, a.steam_api_name, pa.steam_sync_attempts`
+		RETURNING pa.game_id, pa.player_id, pa.achievement_id, a.steam_api_name, pa.steam_sync_attempts, pa.steam_next_attempt_at`
 	rows, err := r.pool.Query(ctx, q, gameID, now, limit, leaseUntil)
 	if err != nil {
 		return nil, fmt.Errorf("steam sync repository: claim: %w", err)
@@ -57,7 +57,9 @@ func (r *PostgresSteamSyncRepository) ClaimSteamPending(ctx context.Context, gam
 	var out []domain.SteamSyncItem
 	for rows.Next() {
 		var it domain.SteamSyncItem
-		if err := rows.Scan(&it.GameID, &it.PlayerID, &it.AchievementID, &it.SteamAPIName, &it.Attempts); err != nil {
+		// LeaseUntil volta do banco (precisão de microssegundo do Postgres) para
+		// servir de guarda nas marcações abaixo.
+		if err := rows.Scan(&it.GameID, &it.PlayerID, &it.AchievementID, &it.SteamAPIName, &it.Attempts, &it.LeaseUntil); err != nil {
 			return nil, fmt.Errorf("steam sync repository: claim: scan: %w", err)
 		}
 		out = append(out, it)
@@ -78,9 +80,14 @@ func (r *PostgresSteamSyncRepository) MarkSteamDone(ctx context.Context, it doma
 		       steam_sync_attempts = steam_sync_attempts + 1,
 		       steam_synced_at = CASE WHEN $4 = 'synced' THEN $6::timestamptz ELSE NULL END,
 		       steam_next_attempt_at = NULL
-		 WHERE game_id = $1 AND player_id = $2 AND achievement_id = $3`
-	if _, err := r.pool.Exec(ctx, q, it.GameID, it.PlayerID, it.AchievementID, state, reason, at); err != nil {
+		 WHERE game_id = $1 AND player_id = $2 AND achievement_id = $3
+		   AND steam_sync_state = '' AND steam_next_attempt_at = $7`
+	tag, err := r.pool.Exec(ctx, q, it.GameID, it.PlayerID, it.AchievementID, state, reason, at, it.LeaseUntil)
+	if err != nil {
 		return fmt.Errorf("steam sync repository: mark done: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrSteamLeaseLost
 	}
 	return nil
 }
@@ -92,9 +99,14 @@ func (r *PostgresSteamSyncRepository) MarkSteamRetry(ctx context.Context, it dom
 		   SET steam_sync_attempts = steam_sync_attempts + 1,
 		       steam_sync_error = $4,
 		       steam_next_attempt_at = $5
-		 WHERE game_id = $1 AND player_id = $2 AND achievement_id = $3`
-	if _, err := r.pool.Exec(ctx, q, it.GameID, it.PlayerID, it.AchievementID, reason, nextAt); err != nil {
+		 WHERE game_id = $1 AND player_id = $2 AND achievement_id = $3
+		   AND steam_sync_state = '' AND steam_next_attempt_at = $6`
+	tag, err := r.pool.Exec(ctx, q, it.GameID, it.PlayerID, it.AchievementID, reason, nextAt, it.LeaseUntil)
+	if err != nil {
 		return fmt.Errorf("steam sync repository: mark retry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrSteamLeaseLost
 	}
 	return nil
 }

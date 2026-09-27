@@ -324,3 +324,19 @@ func TestVerify_KidRevogado_NaoUsaChaveStale(t *testing.T) {
 		t.Fatalf("kid revogado deve falhar; err = %v", err)
 	}
 }
+
+// Revisão: o primeiro chamador com o contexto já cancelado não derruba o
+// fetch do JWKS para todo mundo (nem gasta o intervalo de 30 s à toa).
+func TestVerify_ContextoCanceladoDoPrimeiro_FetchSegue(t *testing.T) {
+	priv, kid := testKey(t)
+	srv := jwksServer(jwksJSON(map[string]ed25519.PublicKey{kid: priv.Public().(ed25519.PublicKey)}), nil)
+	defer srv.Close()
+	v := mustVerifier(t, srv.URL, time.Hour)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	token := signToken(t, priv, kid, "p1", time.Now().Add(time.Minute))
+	if _, err := v.Verify(ctx, token); err != nil {
+		t.Fatalf("verify com ctx cancelado: %v (o fetch deveria ignorar o cancelamento)", err)
+	}
+}

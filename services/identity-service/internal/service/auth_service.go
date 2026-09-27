@@ -129,7 +129,14 @@ func (s *service) Authenticate(ctx context.Context, handle, password, gameID str
 	if err != nil {
 		return "", fmt.Errorf("identity service: authenticate: %w", err)
 	}
-	if bcrypt.CompareHashAndPassword([]byte(acc.PasswordHash), []byte(password)) != nil {
+	hash := acc.PasswordHash
+	if hash == "" {
+		// conta criada pelo login Steam (sem senha): gasta o mesmo bcrypt que
+		// um handle inexistente, senão o tempo de resposta revelaria que
+		// aquele SteamID tem conta (revisão de código 2026-09-27).
+		hash = string(dummyHash)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		s.guard.fail(handle)
 		return "", domain.ErrInvalidCredentials
 	}

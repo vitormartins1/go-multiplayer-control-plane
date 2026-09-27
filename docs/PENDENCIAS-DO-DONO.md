@@ -12,6 +12,10 @@ Toda a revisão (2026-09-26 e 27) está na branch `claude/revisao-produto-l2k7hr
 (ADR-0013): revisar e fazer `merge --no-ff` na `main`, ou pedir para abrir o PR. O CI roda na primeira vez nesse
 push — veja o item 5 (govulncheck).
 
+**Ordem de deploy desta branch:** suba o **identity primeiro** e espere 15 min (a validade do JWT) antes dos
+outros serviços. Os consumidores de token passaram a exigir `iss`/`aud`, que só o identity novo emite — um token
+antigo ainda válido tomaria 401. No compose local isso não importa (tudo sobe junto e o login é refeito).
+
 ## 1. Steam — chaves e cadastro (burocracia)
 
 O backend já faz **login Steam** (identity) e **espelha conquistas** na Steam (achievements); os dois estão

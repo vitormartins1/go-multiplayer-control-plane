@@ -48,7 +48,16 @@ func (c *Client) SteamID(ctx context.Context, playerID string) (string, error) {
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return "", domain.ErrNoSteamAccount
+		// só o "jogador não existe" do identity é definitivo; um 404 de rota
+		// (identity antigo sem a spec 006, gateway) é transitório — senão todo
+		// desbloqueio pendente viraria skipped para sempre.
+		var body struct {
+			Error string `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&body) == nil && body.Error == "player_not_found" {
+			return "", domain.ErrNoSteamAccount
+		}
+		return "", fmt.Errorf("identityclient: steam id: http 404 (rota?)")
 	default:
 		return "", fmt.Errorf("identityclient: steam id: http %d", resp.StatusCode)
 	}

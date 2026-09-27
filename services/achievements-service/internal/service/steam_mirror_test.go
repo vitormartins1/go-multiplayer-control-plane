@@ -142,6 +142,19 @@ func TestSteamBackoff(t *testing.T) {
 	assert.Equal(t, 32*time.Minute, steamBackoff(6))
 	assert.Equal(t, time.Hour, steamBackoff(7))
 	assert.Equal(t, time.Hour, steamBackoff(20))
+	assert.Equal(t, time.Hour, steamBackoff(100), "sem estouro do shift")
+}
+
+// Revisão: lease perdido (outra réplica pegou o item) não é contado nem é erro.
+func TestSteamMirror_LeasePerdido_NaoConta(t *testing.T) {
+	m, repo, ids, setter := newTestMirror(item(0))
+	ids.On("SteamID", mock.Anything, "p1").Return("7656", nil)
+	setter.On("SetAchievement", mock.Anything, "7656", "ACH_BOSS").Return(nil)
+	repo.On("MarkSteamDone", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.ErrSteamLeaseLost)
+
+	_, err := m.SyncOnce(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, float64(0), m.SyncTotal(SteamResultSynced))
 }
 
 func TestSteamMirror_Run_ParaComContexto(t *testing.T) {

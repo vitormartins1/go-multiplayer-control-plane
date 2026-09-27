@@ -10,6 +10,7 @@ package steam
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -100,6 +101,12 @@ func (v *Verifier) Verify(ctx context.Context, ticket string) (domain.ExternalId
 	}
 	resp, err := v.client.Do(req)
 	if err != nil {
+		// o *url.Error carrega a URL inteira — com a publisher key e o ticket
+		// na query. Só a causa sobe (revisão de código 2026-09-27).
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
 		return domain.ExternalIdentity{}, fmt.Errorf("steam: %w: %v", domain.ErrProviderUnavailable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()

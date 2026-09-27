@@ -36,6 +36,8 @@ func TestSteamSync_ClaimPegaSoPendenteElegivel(t *testing.T) {
 	items, err := sync.ClaimSteamPending(ctx, "g1", 10, now, now.Add(2*time.Minute))
 	require.NoError(t, err)
 	require.Len(t, items, 1, "só o desbloqueio com nome Steam do jogo g1 (dois ainda está 1/2)")
+	assert.True(t, items[0].LeaseUntil.Equal(now.Add(2*time.Minute)), "o aluguel volta do banco")
+	items[0].LeaseUntil = time.Time{}
 	assert.Equal(t, domain.SteamSyncItem{GameID: "g1", PlayerID: "p1", AchievementID: "boss", SteamAPIName: "ACH_BOSS"}, items[0])
 
 	again, err := sync.ClaimSteamPending(ctx, "g1", 10, now, now.Add(2*time.Minute))
@@ -106,4 +108,33 @@ func TestSteamSync_NomeSteamDepoisFazBackfill(t *testing.T) {
 	got, err = sync.ClaimSteamPending(ctx, "g1", 10, now, now)
 	require.NoError(t, err)
 	assert.Len(t, got, 1)
+}
+
+// Revisão: o worker cujo aluguel venceu (outra réplica reclamou o item) não
+// grava por cima — nem synced, nem failed, nem retry.
+func TestSteamSync_LeasePerdido_NaoSobrescreve(t *testing.T) {
+	pool := newTestPool(t)
+	ach := NewPostgresAchievementRepository(pool)
+	sync := NewPostgresSteamSyncRepository(pool)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, ach.CreateAchievement(ctx, &domain.Achievement{GameID: "g1", ID: "boss", Name: "Boss", EventType: "boss_killed", Target: 1, SteamAPIName: "ACH_BOSS"}))
+	_, err := ach.RecordProgress(ctx, "g1", "p1", "boss", 1, now)
+	require.NoError(t, err)
+
+	lento, err := sync.ClaimSteamPending(ctx, "g1", 10, now, now.Add(time.Minute))
+	require.NoError(t, err)
+	require.Len(t, lento, 1)
+	rapido, err := sync.ClaimSteamPending(ctx, "g1", 10, now.Add(2*time.Minute), now.Add(3*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, rapido, 1, "o aluguel do lento venceu: outra réplica pega")
+
+	require.NoError(t, sync.MarkSteamDone(ctx, rapido[0], domain.SteamSyncSynced, "", now))
+	assert.ErrorIs(t, sync.MarkSteamDone(ctx, lento[0], domain.SteamSyncFailed, "timeout", now), domain.ErrSteamLeaseLost)
+	assert.ErrorIs(t, sync.MarkSteamRetry(ctx, lento[0], now.Add(time.Hour), "timeout"), domain.ErrSteamLeaseLost)
+
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT steam_sync_state FROM player_achievements WHERE player_id='p1'`).Scan(&state))
+	assert.Equal(t, "synced", state, "o synced da réplica rápida ficou")
 }
