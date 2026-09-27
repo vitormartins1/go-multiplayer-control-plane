@@ -36,9 +36,8 @@ docker compose -f infra/docker/docker-compose.yml up -d identity-service identit
 | game-registry-postgres | 5435 | dev / dev (DB `game_registry`) |
 | analytics-postgres | 5436 | dev / dev (DB `analytics`) |
 | session-postgres | 5437 | dev / dev (DB `session`, histórico de sessões) |
-| localstack (SNS/SQS) | 4566 | — (recursos criados pelo `messaging-provisioner`) |
+| localstack (SNS/SQS + S3) | 4566 | `test` / `test` — SNS/SQS criados pelo `messaging-provisioner`; bucket `cloud-save` criado pelo serviço (não persiste entre restarts) |
 | redis | 6379 | — |
-| minio | 9000 (API), 9001 (console) | minioadmin / minioadmin |
 
 ### Observabilidade
 | Ferramenta | Porta | Notas |
@@ -48,7 +47,6 @@ docker compose -f infra/docker/docker-compose.yml up -d identity-service identit
 | Tempo | 3200 (query), 4317 (OTLP gRPC) | traces |
 | postgres-exporters | 9187 / 9188 / 9189 / 9190 / 9191 / 9192 | identity / achievements / player-data / game-registry / analytics / session |
 | redis-exporter | 9121 | leaderboard |
-| (MinIO métricas) | 9000 `/minio/v2/metrics/cluster` | nativo, sem exporter |
 
 ## Convenção (por serviço novo)
 
@@ -58,7 +56,7 @@ docker compose -f infra/docker/docker-compose.yml up -d identity-service identit
 
 No **Grafana** (http://localhost:3000), pasta `game-backend`:
 - **Service Overview (RED)** — RPS/erros/latência por serviço (`$job`), goroutines/heap/GC.
-- **PostgreSQL** / **Redis** / **MinIO** — saúde de cada storage.
+- **PostgreSQL** / **Redis** — saúde de cada storage (o S3 do cloud-save é o LocalStack, sem métricas próprias).
 - **Tracing (APM)** — service graph (mapa de dependências) + RED derivado dos traces.
 
 Ver um trace em waterfall: **Explore → Tempo** → TraceQL, ex. `{ resource.service.name = "identity-service" }`.

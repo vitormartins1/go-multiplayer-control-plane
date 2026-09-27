@@ -30,7 +30,7 @@ Endpoints de observabilidade (mapa **completo** de portas — serviços, bancos,
 | Prometheus | http://localhost:9090 | ver alvos em Status → Targets |
 | Tempo | http://localhost:3200 | backend de traces (API de query); OTLP gRPC em `:4317` |
 
-Cada serviço expõe `/metrics` (RED + runtime); cada storage tem seu exporter (Postgres/Redis) ou métricas nativas (MinIO).
+Cada serviço expõe `/metrics` (RED + runtime); cada storage tem seu exporter (Postgres/Redis); o S3 local do cloud-save é o LocalStack, sem métricas.
 
 Gerar tráfego para ver as métricas RED:
 
@@ -45,11 +45,10 @@ O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de for
 
 ## Dashboards
 
-**Provisionados** (10 dashboards, sobem automático na pasta `game-backend`):
+**Provisionados** (9 dashboards, sobem automático na pasta `game-backend`):
 - **Service Overview (RED)** — parametrizado por `$job` (um serviço, ou "All" para a frota): RPS / erros 5xx / latência p95 por rota + goroutines / heap / GC. Como o `shared/middleware` padroniza as métricas, este dashboard serve **qualquer serviço Go** sem refazer.
 - **PostgreSQL** — parametrizado por `$job` (um banco, ex. `identity-postgres`/`achievements-postgres`, ou "All"): conexões, commits/rollbacks, cache hit, tuplas/s, tamanho do banco, deadlocks. Serve **qualquer `<svc>-postgres-exporter`** sem refazer.
 - **Tracing (APM)** — **service graph** (mapa de dependências `user → serviço → banco`, derivado dos traces) + RED por serviço e latência p95 a partir dos spans. Alimentado pelo **metrics-generator do Tempo** (gera `traces_*` e faz `remote_write` ao Prometheus). É o "APM visual"; para inspecionar um trace específico em waterfall, use **Explore → Tempo** (ou a aba **Service Graph** lá).
-- **MinIO (cloud-save)** — uso de armazenamento, objetos/buckets, requests/erros/tráfego S3 e saúde, a partir das métricas Prometheus nativas do MinIO (`/minio/v2/metrics/cluster`).
 - **Redis (leaderboard)** — comandos/s, clientes conectados, memória, cache hit ratio, chaves e disponibilidade, via `redis-exporter`.
 - **Game Lifecycle** — funil matchmaking → sessões → consumidores do fan-out (achievements/leaderboard/analytics), ponta a ponta.
 - **Analytics Worker Pool** — saúde do worker pool do `analytics-service` (goroutines/channels/context, ADR-0021): throughput, backpressure, erros de agregação.

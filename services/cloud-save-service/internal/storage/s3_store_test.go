@@ -1,6 +1,6 @@
 //go:build integration
 
-// Testes de integração com MinIO real (testcontainers). Rodar com:
+// Testes de integração contra um S3 real (LocalStack via testcontainers). Rodar com:
 //
 //	go test -tags=integration ./services/cloud-save-service/internal/storage/
 //
@@ -9,12 +9,15 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/cloud-save-service/internal/domain"
 )
@@ -22,15 +25,36 @@ import (
 func newTestStore(t *testing.T) *S3Store {
 	t.Helper()
 	ctx := context.Background()
-	ctr, err := tcminio.Run(ctx, "minio/minio:latest")
+	// LocalStack e não MinIO: a imagem minio/minio saiu do Docker Hub (2026-09) e o
+	// LocalStack já é a imagem do SNS/SQS do projeto. O store só enxerga "um S3".
+	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "localstack/localstack:3",
+			Env:          map[string]string{"SERVICES": "s3"},
+			ExposedPorts: []string{"4566/tcp"},
+			WaitingFor:   wait.ForHTTP("/_localstack/health").WithPort("4566/tcp").WithResponseMatcher(readyS3),
+		},
+		Started: true,
+	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ctr.Terminate(ctx) })
 
-	endpoint, err := ctr.ConnectionString(ctx)
+	endpoint, err := ctr.PortEndpoint(ctx, "4566/tcp", "http")
 	require.NoError(t, err)
-	store, err := NewS3Store(ctx, "http://"+endpoint, ctr.Username, ctr.Password, "cloud-save")
+	store, err := NewS3Store(ctx, endpoint, "test", "test", "cloud-save")
 	require.NoError(t, err)
 	return store
+}
+
+// readyS3: o /_localstack/health responde antes do S3 estar de pé.
+func readyS3(body io.Reader) bool {
+	var h struct {
+		Services map[string]string `json:"services"`
+	}
+	if err := json.NewDecoder(body).Decode(&h); err != nil {
+		return false
+	}
+	return h.Services["s3"] == "available" || h.Services["s3"] == "running"
 }
 
 const gA = "game-a"

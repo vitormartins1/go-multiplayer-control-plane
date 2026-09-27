@@ -85,15 +85,15 @@ services:
       - "8084:8080"
     environment:
       PORT: "8080"
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
+      S3_ENDPOINT: http://localstack:4566 # S3 do LocalStack (a imagem do MinIO saiu do Docker Hub)
+      S3_ACCESS_KEY: test
+      S3_SECRET_KEY: test
       S3_BUCKET: cloud-save
       IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
       INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço nos /admin (ADR-0018)
     depends_on:
-      minio:
+      localstack:
         condition: service_started
       identity-service:
         condition: service_started
@@ -178,7 +178,7 @@ services:
       SERVER_POOL: 10.0.0.1:7777,10.0.0.2:7777,10.0.0.3:7777,10.0.0.4:7777,10.0.0.5:7777,10.0.0.6:7777,10.0.0.7:7777,10.0.0.8:7777
       # Fan-out durável (ADR-0020): publica o resultado no tópico SNS match-results.
       MATCH_RESULTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:match-results
-      AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão MinIO/S3)
+      AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão do S3)
       AWS_REGION: us-east-1
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
       # Chave Ed25519 persistente do connect token (PEM PKCS8). Sem ela o
@@ -424,22 +424,10 @@ services:
       timeout: 3s
       retries: 10
 
-  # Object storage do cloud-save (S3-compatible; ADR-0015). Métricas Prometheus
-  # nativas em /minio/v2/metrics/cluster (sem exporter separado).
-  minio:
-    restart: unless-stopped
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_PROMETHEUS_AUTH_TYPE: public # métricas sem auth
-    ports:
-      - "9000:9000" # API S3
-      - "9001:9001" # console web
-
-  # LocalStack: SNS/SQS locais do fan-out durável (ADR-0020), mesmo padrão do
-  # MinIO p/ S3 — o código só troca o endpoint (AWS_ENDPOINT_URL) na prod.
+  # LocalStack: SNS/SQS do fan-out durável (ADR-0020) e o S3 do cloud-save
+  # (ADR-0015) — o código só troca o endpoint na prod. Até 2026-09 o S3 era um
+  # MinIO; a imagem minio/minio saiu do Docker Hub. Os saves NÃO persistem entre
+  # restarts do localstack (ok para dev; o bucket é recriado no boot do cloud-save).
   localstack:
     image: localstack/localstack:3
     # 2026-08-19: SIGKILL do Docker Desktop derrubou o localstack e ele ficou
@@ -450,7 +438,7 @@ services:
     # terraform) pra recriar tópico+filas.
     restart: unless-stopped
     environment:
-      SERVICES: sns,sqs
+      SERVICES: sns,sqs,s3
       DEBUG: "0"
     ports:
       - "4566:4566"
