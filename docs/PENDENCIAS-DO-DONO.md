@@ -149,6 +149,6 @@ Com eles, o plano é:
   página pesada; a página própria mantém o README leve e dá a cada vídeo um link direto (`docs/VIDEOS.md#…`).
 - Os MP4 continuam em `docs/media/` como fonte (e para quem clona o repositório).
 
-**Andamento:** a página [`VIDEOS.md`](VIDEOS.md) existe e as capas do "Veja em ação" já levam para ela. O vídeo 3
-está embutido (link recebido em 2026-09-27); faltam os links do vídeo principal e dos vídeos 1 e 2, que agora têm
-menos de 10 MB. Enquanto o repositório for privado, o anexo só toca para quem tem acesso a ele.
+**Feito (2026-09-27):** o vídeo principal toca no topo dos dois READMEs e os quatro tocam em
+[`VIDEOS.md`](VIDEOS.md), pelos anexos publicados no PR #1. Enquanto o repositório for privado, só tocam para
+quem tem acesso a ele; ao abrir, passam a tocar para todos.

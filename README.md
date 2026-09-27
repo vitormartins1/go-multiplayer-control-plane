@@ -14,15 +14,15 @@ analytics e um console de operação. O que GameLift e PlayFab vendem por jogado
 ![Agones](https://img.shields.io/badge/Agones-k3s%20%C2%B7%20EKS-326CE5?logo=kubernetes&logoColor=white)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-Apache--2.0-blue)](LICENSE)
 
-[**Assista ao vídeo (3 min)**](docs/media/go-multiplayer-control-plane.mp4) ·
+[**Vídeos**](docs/VIDEOS.md) ·
 [Começando](#começando) ·
 [Documentação](#documentação) ·
 [Integrar um jogo](docs/integration/UNITY-GUIA-INTEGRACAO.md) ·
 [Contribuir](CONTRIBUTING.md)
 
-<a href="docs/media/go-multiplayer-control-plane.mp4"><img src="docs/media/hero.jpg" alt="Vídeo do produto: como um evento da partida vira ranking, conquistas e analytics; clique para assistir" width="820"/></a>
-
 </div>
+
+https://github.com/user-attachments/assets/46f7e132-0781-479f-b8b1-ee3df2266f0f
 
 ---
 

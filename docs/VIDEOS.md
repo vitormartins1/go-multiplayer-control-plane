@@ -12,7 +12,7 @@ outros três explicam uma feature de cada vez, passo a passo. Os arquivos origin
 O problema, como o backend funciona, qualquer tipo de jogo, servidor dedicado ou P2P, o motor de conquistas e um
 tour pelo console.
 
-[![Vídeo do produto](media/hero.jpg)](media/go-multiplayer-control-plane.mp4)
+https://github.com/user-attachments/assets/46f7e132-0781-479f-b8b1-ee3df2266f0f
 
 <a id="video-1"></a>
 ## Vídeo 1 · Do zero ao jogo online
@@ -21,7 +21,7 @@ Registrar um jogo e entender cada parte do formulário (modo, arquétipo, topolo
 ver o que o backend configurou sozinho (pipeline de dados e as regras do arquétipo) e acompanhar o primeiro mundo
 abrir, ser invadido e terminar no analytics e no histórico. Sem deploy.
 
-[![Vídeo 1: do zero ao jogo online](media/thumb-01-cadastro.jpg)](media/video-01-cadastro.mp4)
+https://github.com/user-attachments/assets/0a4c813f-11f1-4651-b2d2-73c01fb2e582
 
 <a id="video-2"></a>
 ## Vídeo 2 · Conquistas sem deploy
@@ -30,7 +30,7 @@ Conquistas por evento e por métrica (acumulada ou por partida), o grafo de uma 
 globais do arquétipo e a supressão por jogo, uma regra nova com comparador, a conquista criada a partir do evento
 novo e o desbloqueio ao vivo.
 
-[![Vídeo 2: conquistas sem deploy](media/thumb-02-conquistas.jpg)](media/video-02-conquistas.mp4)
+https://github.com/user-attachments/assets/ad9772d3-023d-4b8a-836d-9239b357ca32
 
 <a id="video-3"></a>
 ## Vídeo 3 · Visão 360 do jogador

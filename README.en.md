@@ -14,14 +14,14 @@ analytics and an operations console. What GameLift and PlayFab sell per player, 
 ![Agones](https://img.shields.io/badge/Agones-k3s%20%C2%B7%20EKS-326CE5?logo=kubernetes&logoColor=white)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-[**Watch the video (3 min)**](docs/media/go-multiplayer-control-plane.mp4) ·
+[**Videos**](docs/VIDEOS.md) ·
 [Getting started](#getting-started) ·
 [Documentation](#documentation) ·
 [Contributing](CONTRIBUTING.md)
 
-<a href="docs/media/go-multiplayer-control-plane.mp4"><img src="docs/media/hero.jpg" alt="Product video: how a match event becomes rankings, achievements and analytics; click to watch" width="820"/></a>
-
 </div>
+
+https://github.com/user-attachments/assets/46f7e132-0781-479f-b8b1-ee3df2266f0f
 
 > The videos, the console and the detailed documentation are in Brazilian Portuguese. This page is the English
 > overview.
