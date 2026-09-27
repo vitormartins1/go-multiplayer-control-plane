@@ -32,3 +32,4 @@ infra/docker/secrets/
 docs/media/frames/
 docs/media/hq/
 docs/media/narration/
+__pycache__/
