@@ -70,6 +70,7 @@ const (
 	ArchetypeBattleRoyale    = "battle_royale"
 	ArchetypeCoopMission     = "coop_mission"
 	TopologyDedicated        = "dedicated"
+	TopologyP2P              = "p2p" // só host_world_dropin (session/031, ADR-0032)
 
 	// DefaultModeID é o modo servido pelo alias legado /multiplayer-profile e o
 	// fallback dos consumidores até o M1 (ADR-0024). Não pode ser removido.
@@ -93,7 +94,7 @@ const (
 // adicionam um campo-ponteiro próprio sem alterar os existentes.
 type MultiplayerProfile struct {
 	Archetype       string // "queue_arena" | "host_world_dropin" | "battle_royale" | "coop_mission"
-	Topology        string // "dedicated" (único suportado; "p2p" = slot futuro)
+	Topology        string // "dedicated" | "p2p" (p2p só no host_world_dropin — session/031)
 	QueueArena      *QueueArenaParams
 	HostWorldDropIn *HostWorldDropInParams
 	BattleRoyale    *BattleRoyaleParams

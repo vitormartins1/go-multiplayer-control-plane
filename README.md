@@ -1,88 +1,152 @@
+<div align="center">
+
 # go-multiplayer-control-plane
 
-Monorepo de microsserviços em **Go** para o **control plane** de jogos multiplayer.
+**Português** · [English](README.en.md)
 
-> Nome de repo decidido (rename ainda não executado): **`go-multiplayer-control-plane`**. Ver [`docs/REPO-TOPOLOGY.md`](docs/REPO-TOPOLOGY.md).
+**Backend multiplayer self-hosted, em Go, para jogos de qualquer engine.**<br/>
+Login, matchmaking, servidores dedicados no Agones ou P2P via Steam, conquistas sem deploy, leaderboard,
+analytics e um console de operação. O que GameLift e PlayFab vendem por jogador, rodando na sua infra.
 
-## Tese
+[![CI](https://github.com/vitormartins1/go-multiplayer-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/vitormartins1/go-multiplayer-control-plane/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![gRPC](https://img.shields.io/badge/contrato%20gRPC-1.5.0-244c5a?logo=grpc)
+![Agones](https://img.shields.io/badge/Agones-k3s%20%C2%B7%20EKS-326CE5?logo=kubernetes&logoColor=white)
+[![Licença](https://img.shields.io/badge/licen%C3%A7a-Apache--2.0-blue)](LICENSE)
 
-Reimplementar em Go, sobre infraestrutura própria e barata, os serviços de backend que a **AWS** (GameKit, GameLift) e a **Unity** vendem prontos — e comparar **custo, performance e eficiência** com a oferta gerenciada. Dois objetivos: aprender Go de forma séria e construir infra reutilizável para jogos próprios. (ADR-0008)
+[**Vídeos**](docs/VIDEOS.md) ·
+[Começando](#começando) ·
+[Documentação](#documentação) ·
+[Integrar um jogo](docs/integration/UNITY-GUIA-INTEGRACAO.md) ·
+[Contribuir](CONTRIBUTING.md)
 
-O realtime de gameplay **não** é Go: roda no **Unity Dedicated Server** (data plane, repos separados por arquétipo — ver topologia). O Go cuida do **control plane** — auth, matchmaking, sessão, persistência, leaderboard, achievements, analytics — como o GameLift: orquestra, não simula. (ADR-0010)
+</div>
 
-## Multiplayer por arquétipo (ADR-0023)
+https://github.com/user-attachments/assets/46f7e132-0781-479f-b8b1-ee3df2266f0f
 
-O control plane é **agnóstico de tipo de jogo**: cada jogo declara no game-registry um **perfil de multiplayer** (arquétipo + parâmetros), e matchmaking/session/fan-out se pré-configuram a partir dele. A generalização é dirigida por **engenharia reversa de jogos reais** em [`docs/game-models/`](docs/game-models/README.md).
+---
 
-| Arquétipo | Forma | Estado (control plane) | Data plane Unity |
-|---|---|---|---|
-| `queue_arena` | partida simétrica FFA/NvN, resultado win/loss/draw + stats | ✅ completo | ✅ rodando de verdade (`unity-queue-arena-data-plane`) |
-| `host_world_dropin` | Souls-like: mundo persistente de um host, phantoms co-op/invasor por papel, resultado por evento | ✅ completo | ✅ rodando de verdade (`unity-host-world-dropin-data-plane`, Fases 0–5 done, e2e k3d→Pi 5 + carga) |
-| `battle_royale`, `coop_mission` | colocação ordinal / resultado coletivo | ✅ completo | ⬜ repo Unity ainda não criado |
+## O que é
 
-Estado por fatia: [`docs/game-models/README.md`](docs/game-models/README.md) → "Estado da implementação".
+Um jogo multiplayer precisa de muito mais que o netcode: contas, fila, alguém que suba o servidor da partida e
+entregue um ingresso para entrar nele, conquistas, ranking, métricas e uma tela para operar tudo isso. As opções
+prontas (GameLift, PlayFab, Photon, Unity Gaming Services) cobram por jogador e prendem o jogo ao fornecedor.
 
-## Serviços (control plane)
+Este projeto é esse backend, pronto e aberto. Roda em qualquer coisa que rode containers, **de um Raspberry Pi 5
+a um EKS**, e atende vários jogos ao mesmo tempo: cada jogo se cadastra no console, declara como joga online, e o
+backend se configura sozinho, sem código novo por jogo. O realtime continua na engine do jogo (Unity é a
+integração de referência); o Go cuida de tudo em volta da partida.
 
-Cada um reimplementa um equivalente AWS e forma um par de comparação. Detalhes: README de cada serviço e [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (mapa canônico).
+O primeiro jogo em produção é o **Folclore Souls**, um Souls-like com mundo do host, co-op e invasões.
 
-| Serviço | Equivalente AWS | Protocolo | Storage | Status |
-|---|---|---|---|---|
-| [identity](services/identity-service) | GameKit Identity (Cognito) | REST | Postgres | ✅ |
-| [game-registry](services/game-registry) | (sem equivalente 1:1 — fonte de jogos multi-tenant, ADR-0017) | REST | Postgres | ✅ |
-| [achievements](services/achievements-service) | GameKit Achievements | REST + consumer SQS | Postgres | ✅ |
-| [player-data](services/player-data-service) | GameKit User Gameplay Data | REST | Postgres (JSONB) | ✅ |
-| [cloud-save](services/cloud-save-service) | GameKit Game State Saving | REST | MinIO / S3 | ✅ |
-| [leaderboard](services/leaderboard-service) | ref. DynamoDB/Redis | REST + consumer SQS | Redis (sorted set) | ✅ |
-| [matchmaking](services/matchmaking-service) | GameLift FlexMatch | gRPC | memória | ✅ |
-| [session](services/session-service) | GameLift (orquestração) | gRPC | memória | ✅ |
-| [analytics](services/analytics-service) | Game Analytics Pipeline | consumer SQS | Postgres | ✅ |
-| [admin-bff](services/admin-bff) + [admin-ui](services/admin-ui) | painel de operação | REST + React | — | ✅ |
+## Recursos
 
-Fan-out durável do resultado via **SNS→SQS** (ADR-0020): o session publica no tópico `match-results`; achievements/leaderboard/analytics são consumidores idempotentes. **Polyglot persistence** proposital (ADR-0015): cada domínio usa o storage que seu padrão pede.
+| | |
+|---|---|
+| 🎮 **Qualquer tipo de jogo** | O jogo declara modos por arquétipo (arena por fila, mundo do host, battle royale, missão co-op) e matchmaking, sessão e conquistas se ajustam sozinhos. |
+| 🖥️ **Servidor dedicado ou P2P** | Um servidor dedicado do jogo por partida numa fleet Agones, **ou** o jogo do host hospeda via Steam, sem custo de servidor. Troca-se num campo do modo. |
+| 🎟️ **Ingresso criptográfico** | Cada jogador recebe um connect token Ed25519 com o seu papel, validado **offline** pelo servidor do jogo. |
+| 🏆 **Conquistas sem deploy** | Regras editadas num canvas visual, critério por evento ou por métrica, e espelho automático na **Steam**. |
+| 📊 **Rankings e analytics** | Leaderboards por janela (diária, semanal, mensal, geral) e analytics por jogo, modo e papel. |
+| 💾 **Dados do jogador** | Dados em JSON e save na nuvem por jogador, com login anônimo, por senha, pela Steam ou pela Epic. |
+| 🧭 **Console de operação** | Jogos, salas ao vivo, frota, jogadores, regras, conquistas e analytics, numa tela só. |
+| 🔭 **Observável de fábrica** | Métricas RED, tracing OpenTelemetry até o banco e dashboards Grafana prontos. |
 
-## Stack
+## Veja em ação
 
-Go 1.22+ · Hexagonal · REST (`net/http`) + gRPC · PostgreSQL (`pgx/v5`) · Redis · Terraform + LocalStack · AWS (compute por serviço) · Prometheus + Grafana + OpenTelemetry (Tempo) · GitHub Actions
+O vídeo do topo mostra o produto inteiro em 3 minutos. Os três abaixo são gravados do console real e explicam
+uma feature de cada vez, passo a passo.
 
-## Metodologia
+<table>
+<tr>
+<td width="33%" valign="top">
+<a href="docs/VIDEOS.md#video-1"><img src="docs/media/thumb-01-cadastro.jpg" alt="Vídeo 1: do zero ao jogo online"/></a>
+<br/><b>Do zero ao jogo online</b><br/>
+<sub>Registrar um jogo, ver o que o backend configurou sozinho, e acompanhar o primeiro mundo abrir, ser invadido e terminar no analytics. Sem deploy.</sub>
+</td>
+<td width="33%" valign="top">
+<a href="docs/VIDEOS.md#video-2"><img src="docs/media/thumb-02-conquistas.jpg" alt="Vídeo 2: conquistas sem deploy"/></a>
+<br/><b>Conquistas sem deploy</b><br/>
+<sub>Critério por evento ou por métrica, regras visuais com comparadores, regras globais por arquétipo e o desbloqueio ao vivo.</sub>
+</td>
+<td width="33%" valign="top">
+<a href="docs/VIDEOS.md#video-3"><img src="docs/media/thumb-03-jogador.jpg" alt="Vídeo 3: visão 360 do jogador"/></a>
+<br/><b>Visão 360 do jogador</b><br/>
+<sub>Tudo o que o backend sabe de um jogador: conquistas, histórico de partidas, dados, save e a sessão em que ele está agora.</sub>
+</td>
+</tr>
+</table>
 
-**Spec-Driven Development (SDD)** em dois níveis por tamanho da fatia — completo (`spec → plan → tasks → código`) para fatias substanciais, enxuto (spec curta) para aditivas. A spec é a fonte de verdade. Ver [`docs/sdd/SDD-GUIDE.md`](docs/sdd/SDD-GUIDE.md).
+## Como funciona
+
+O jogo roda a simulação (o *data plane*), na engine que for; este repositório é o *control plane*, que cuida do
+que acontece antes, em volta e depois da partida. É o mesmo corte que o GameLift faz.
+
+1. O jogador faz login e pede para jogar; o **matchmaking** forma a partida ou escolhe o mundo em que ele entra.
+2. A **sessão** aloca um servidor dedicado no Agones, ou aponta para o jogo do host no P2P, e entrega a cada
+   jogador um ingresso assinado.
+3. Durante a partida, o servidor (ou o host) reporta eventos, resultado e sinal de vida.
+4. Cada resultado é publicado uma vez e distribuído com garantia de entrega para **leaderboard**, **conquistas**
+   e **analytics**.
+
+Os serviços, os diagramas, as topologias e o porquê de cada decisão estão em
+[**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) e nos [registros de decisão (ADRs)](docs/adr/README.md).
+
+## Começando
+
+**Requisitos:** Docker e Go 1.26. Para a demo, também `curl`, `jq` e `grpcurl`.
+
+```bash
+# 1. chaves de desenvolvimento (JWT e connect token); ficam fora do git
+infra/docker/gen-secrets.sh
+
+# 2. a stack inteira: serviços, Postgres, Redis, LocalStack, Prometheus, Grafana e Tempo
+docker compose -f infra/docker/docker-compose.yml up --build -d
+
+# 3. uma partida de ponta a ponta, sem Unity: cadastra o jogo, o host abre um mundo,
+#    um invasor entra, o servidor reporta a vitória e a conquista desbloqueia
+scripts/demo-host-world.sh
+TOPOLOGY=p2p scripts/demo-host-world.sh   # o mesmo mundo, hospedado pelo jogador
+```
+
+Depois abra o **console** em http://localhost:8089 e o **Grafana** em http://localhost:3000. As demais portas
+estão em [`infra/docker/README.md`](infra/docker/README.md); testes, lint e o console em modo de desenvolvimento,
+em [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Estado do projeto
+
+- **Pronto:** o control plane para os quatro arquétipos. O mundo do host roda de ponta a ponta com o Folclore
+  Souls em servidor dedicado (k3s num Raspberry Pi 5); o P2P pela Steam está pronto no backend e validado pela
+  demo, aguardando o lado Unity. Battle royale e missão co-op estão implementados, mas ainda sem um jogo real.
+- **Contrato com o jogo 1.5.0**, versionado e só com mudanças aditivas
+  ([changelog](docs/contracts/CHANGELOG.md)).
+- **Engines e lojas** ([ADR-0033](docs/adr/0033-engine-and-store-agnostic.md)): o contrato é gRPC e REST, e o
+  ingresso é validado por chave pública, então nada depende de engine. Unity é a integração de referência; Godot e
+  Unreal integram direto pelo contrato, e a web (Three.js) está no roadmap. Na loja, a Steam está completa (login,
+  conquistas, P2P), a Epic tem login (EOS Connect) e o espelho de conquistas dela fica para depois; GOG, sob demanda.
+- **Ainda não exponha na internet:** o console não tem login e a autenticação do gRPC da sessão sobe em modo
+  de observação (`warn`).
+- **Próximos passos:** deploy de referência na AWS, login no console e um SDK Unity empacotado
+  ([roadmap](docs/NEXT-STEPS.md)).
 
 ## Documentação
 
-| Documento | Conteúdo |
+| Para… | Leia |
 |---|---|
-| [docs/PRODUCT-OVERVIEW.md](docs/PRODUCT-OVERVIEW.md) | **O que o sistema FAZ** — capacidades e fluxos, visão de produto (não de arquitetura) |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **Panorama canônico** da arquitetura (control/data plane, serviços, hexagonal, infra) |
-| [docs/game-models/README.md](docs/game-models/README.md) | Taxonomia de arquétipos + estado de implementação por fatia |
-| [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md) | Control plane + data planes por arquétipo (nomenclatura de repos) |
-| [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | Aprendizados de Go (exemplos comentados) |
-| [docs/NEXT-STEPS.md](docs/NEXT-STEPS.md) | Handoff — estado atual e backlog priorizado |
-| [docs/adr/README.md](docs/adr/README.md) | Índice de ADRs (0001–0029) |
-| [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) · [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Metodologia SDD · branches/commits |
-| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) · [infra/docker/README.md](infra/docker/README.md) | Observabilidade local · stack local (portas, dashboards) |
-| [docs/ROADMAP.md](docs/ROADMAP.md) · [docs/FEATURE-MAP.md](docs/FEATURE-MAP.md) | Fases de estudo/FinOps · índice de features por serviço |
+| entender o produto | [Visão de produto](docs/PRODUCT-OVERVIEW.md) · [vídeos](docs/VIDEOS.md) |
+| entender a arquitetura | [Arquitetura](docs/ARCHITECTURE.md) · [ADRs](docs/adr/README.md) · [topologia de repositórios](docs/REPO-TOPOLOGY.md) |
+| integrar um jogo | [Guia de integração (Unity, a referência)](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [contratos por arquétipo](docs/game-models/README.md) · [changelog do contrato](docs/contracts/CHANGELOG.md) |
+| operar | [Infra local](infra/docker/README.md) · [observabilidade](docs/OBSERVABILITY.md) · [regras de eventos](docs/EVENT-RULES-GUIDE.md) |
+| contribuir | [CONTRIBUTING](CONTRIBUTING.md) · [como as features são especificadas](docs/sdd/SDD-GUIDE.md) · [fluxo de Git](docs/GIT-WORKFLOW.md) |
 
-## Status
+## Contribuindo
 
-**Trilha de serviços 100% construída** (10 serviços Go + painel admin), rodando localmente via Docker Compose com observabilidade completa (Prometheus + Grafana + Tempo). **4 arquétipos de multiplayer completos** no control plane (`queue_arena`, `host_world_dropin`, `battle_royale`, `coop_mission`) — cross-repo, `queue_arena` e `host_world_dropin` já têm data plane Unity rodando de verdade, `battle_royale`/`coop_mission` ainda sem repo Unity. Decisões em **ADRs 0001–0029**. Deploy em AWS (Terraform) fica para o fim — a prioridade é validar o máximo localmente.
+Issues e PRs são bem-vindos. Cada feature nasce de uma spec curta com critérios de aceite e cada decisão de
+arquitetura tem um ADR; o [`CONTRIBUTING.md`](CONTRIBUTING.md) explica o fluxo e os comandos. Quem participa segue
+o [código de conduta](CODE_OF_CONDUCT.md); vulnerabilidades são reportadas em privado, como descreve o
+[`SECURITY.md`](SECURITY.md).
 
-## Comandos
+## Licença
 
-```bash
-# Ambiente local completo (todos os serviços + observabilidade)
-docker compose -f infra/docker/docker-compose.yml up --build
-#   ver infra/docker/README.md para o mapa de portas e dashboards
-
-# Um serviço isolado (ex: identity)
-cd services/identity-service && go run ./cmd/server/
-
-# Testes unitários (com race detector)
-go test ./... -race -cover
-
-# Testes de integração (testcontainers; requer Docker)
-go test ./... -tags=integration
-
-# Teste manual: coleção .http por serviço; matchmaking/session são gRPC (grpcurl / cliente de teste)
-```
+[Apache License 2.0](LICENSE). Pode usar, modificar e distribuir, inclusive comercialmente, mantendo o aviso de
+licença e o [`NOTICE`](NOTICE).

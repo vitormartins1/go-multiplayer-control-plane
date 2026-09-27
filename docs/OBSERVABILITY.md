@@ -30,7 +30,7 @@ Endpoints de observabilidade (mapa **completo** de portas — serviços, bancos,
 | Prometheus | http://localhost:9090 | ver alvos em Status → Targets |
 | Tempo | http://localhost:3200 | backend de traces (API de query); OTLP gRPC em `:4317` |
 
-Cada serviço expõe `/metrics` (RED + runtime); cada storage tem seu exporter (Postgres/Redis) ou métricas nativas (MinIO).
+Cada serviço expõe `/metrics` (RED + runtime); cada storage tem seu exporter (Postgres/Redis); o S3 local do cloud-save é o LocalStack, sem métricas.
 
 Gerar tráfego para ver as métricas RED:
 
@@ -49,12 +49,12 @@ O `POST /accounts` acima já gera um trace (`/healthz` e `/metrics` ficam de for
 - **Service Overview (RED)** — parametrizado por `$job` (um serviço, ou "All" para a frota): RPS / erros 5xx / latência p95 por rota + goroutines / heap / GC. Como o `shared/middleware` padroniza as métricas, este dashboard serve **qualquer serviço Go** sem refazer.
 - **PostgreSQL** — parametrizado por `$job` (um banco, ex. `identity-postgres`/`achievements-postgres`, ou "All"): conexões, commits/rollbacks, cache hit, tuplas/s, tamanho do banco, deadlocks. Serve **qualquer `<svc>-postgres-exporter`** sem refazer.
 - **Tracing (APM)** — **service graph** (mapa de dependências `user → serviço → banco`, derivado dos traces) + RED por serviço e latência p95 a partir dos spans. Alimentado pelo **metrics-generator do Tempo** (gera `traces_*` e faz `remote_write` ao Prometheus). É o "APM visual"; para inspecionar um trace específico em waterfall, use **Explore → Tempo** (ou a aba **Service Graph** lá).
-- **MinIO (cloud-save)** — uso de armazenamento, objetos/buckets, requests/erros/tráfego S3 e saúde, a partir das métricas Prometheus nativas do MinIO (`/minio/v2/metrics/cluster`).
 - **Redis (leaderboard)** — comandos/s, clientes conectados, memória, cache hit ratio, chaves e disponibilidade, via `redis-exporter`.
 - **Game Lifecycle** — funil matchmaking → sessões → consumidores do fan-out (achievements/leaderboard/analytics), ponta a ponta.
 - **Analytics Worker Pool** — saúde do worker pool do `analytics-service` (goroutines/channels/context, ADR-0021): throughput, backpressure, erros de agregação.
 - **Pi 5 — Agones Fleet** — GameServers por estado (Ready/Allocated), réplicas do Fleet, latência de alocação, no homelab Raspberry Pi 5. Já implementado (não é mais "visão de futuro" — ver seção abaixo).
 - **Pi 5 — Hardware** — CPU/mem/temperatura/disco do nó físico do homelab.
+- **Local — Agones Fleet** — o mesmo painel de Fleet apontado para o cluster k3d local.
 
 **Complementar** (importar via Grafana UI → Import by ID; selecionar a datasource Prometheus):
 
@@ -88,10 +88,10 @@ Cada serviço Go nasce instrumentado (ADR-0006). Ao adicionar um serviço, siga 
 
 ### Workers de fila (consumidores do fan-out durável — ADR-0020)
 
-Os `*-consumer` (achievements/leaderboard/analytics) não são HTTP services: são workers que fazem long-poll de uma fila SQS. Ainda assim entram na stack:
+Os `*-consumer` (achievements/leaderboard) e o consumer embutido no `analytics-service` não são HTTP services: são workers que fazem long-poll de uma fila SQS. Ainda assim entram na stack:
 
-- **Métricas próprias:** `fanout_consume_total{result="ok|dup|error"}` e `fanout_consume_duration_seconds` (pacote `internal/consumer`). Expõem `/metrics` + `/healthz` num HTTP mínimo só para o scrape. O `analytics-consumer` roda um worker pool próprio por cima disso (goroutines/channels/context, ADR-0021) — métricas dedicadas no dashboard **Analytics Worker Pool**.
-- **Scrape:** jobs `achievements-consumer` / `leaderboard-consumer` / `analytics-consumer` no `prometheus.yml`.
+- **Métricas próprias:** `fanout_consume_total{result="ok|dup|error"}` e `fanout_consume_duration_seconds` (pacote `internal/consumer`). Expõem `/metrics` + `/healthz` num HTTP mínimo só para o scrape. O consumer do `analytics-service` (mesmo binário da read API) roda um worker pool próprio por cima disso (goroutines/channels/context, ADR-0021) — métricas dedicadas no dashboard **Analytics Worker Pool**.
+- **Scrape:** jobs `achievements-consumer` / `leaderboard-consumer` / `analytics-service` no `prometheus.yml`.
 - **Sinais a vigiar:** `result="error"` sustentado (mensagens indo p/ DLQ) e a **profundidade da DLQ** (`ApproximateNumberOfMessages`) — alerta de perda potencial. O produtor (session) tem `fanout_publish_total{result}`.
 
 ## Fleet/cluster de game servers (Agones no k8s) — ✅ implementado

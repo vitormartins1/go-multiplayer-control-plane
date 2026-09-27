@@ -53,18 +53,21 @@ func (p InvasionPolicy) SupportsInvasion() bool {
 }
 
 // Injected é o que o WorldInjector devolve ao injetar o invasor num mundo (spec
-// 006): o endereço do server e o connect token (claim role=invader).
+// 006): o endereço do server e o connect token (claim role=invader). Em mundo
+// p2p (session/031) ServerAddress vem vazio e HostConnection diz como achar o host.
 type Injected struct {
-	ServerAddress string
-	ConnectToken  string
+	ServerAddress  string
+	HostConnection string
+	ConnectToken   string
 }
 
 // Invaded é o resultado da operação Invade para o cliente: o mundo em que o
 // invasor entrou e como conectar (server + token).
 type Invaded struct {
-	SessionID     string
-	ServerAddress string
-	ConnectToken  string
+	SessionID      string
+	ServerAddress  string
+	HostConnection string // mundo p2p (session/031)
+	ConnectToken   string
 }
 
 // Constantes tunáveis da banda de elegibilidade (spec 006, D5). Números
@@ -138,12 +141,14 @@ type InvasionPolicyProvider interface {
 // WorldDirectory é a Port de saída que lista os mundos invadíveis de um jogo no
 // session-service (session/012). Fotografia dos mundos com vaga de invasor.
 type WorldDirectory interface {
-	ListInvadableWorlds(ctx context.Context, gameID string) ([]InvadableWorld, error)
+	ListInvadableWorlds(ctx context.Context, gameID, modeID string) ([]InvadableWorld, error)
 }
 
 // WorldInjector é a Port de saída que injeta o invasor num mundo via o JoinWorld
 // do session (spec 006). ErrRoleFull (mundo encheu na corrida → retry no
-// próximo), ErrWorldNotFound (mundo fechou entre listar e injetar).
+// próximo), ErrWorldNotFound (mundo fechou entre listar e injetar),
+// ErrNotWorldHost (summonerID informado e não é o host — session/030).
+// summonerID vazio = invasão (sem invocador).
 type WorldInjector interface {
-	Inject(ctx context.Context, sessionID, playerID, role string) (Injected, error)
+	Inject(ctx context.Context, sessionID, playerID, role, summonerID string) (Injected, error)
 }

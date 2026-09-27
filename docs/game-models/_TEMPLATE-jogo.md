@@ -55,7 +55,7 @@ O ponto mais importante para o backend. Seja concreto.
 
 ## 6. Impacto no backend (o elo com o control plane)
 
-Confronte com o [Estado atual do backend](./README.md#estado-atual-do-backend-baseline).
+Confronte com o [Baseline histórico do backend](./README.md#baseline-histórico-do-backend-ponto-de-partida-pré-adr-0023).
 
 - **Cabe no modelo atual?** ✅ / ⚠️ / ❌ — justifique.
 - **game-registry:** <precisa de novo metadado de jogo/modo?>

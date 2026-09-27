@@ -872,6 +872,11 @@ return 0
 res, err := applyCumulativeScript.Run(ctx, s.client, []string{s.processedKey(gameID)}, argv...).Int()
 ```
 
+> **Evolução (spec `leaderboard/008`, 2026-09):** o SET único crescia para sempre — membro de SET não expira. A
+> guarda virou **uma key por partida** com `SET key 1 NX EX <30 dias>` dentro do mesmo script (`NX` devolve nil,
+> que o Lua vê como `false`, quando a key já existe = dup). A janela só precisa cobrir a reentrega possível (retenção
+> da fila + DLQ); o SET antigo segue consultado por `SISMEMBER` até expirar a janela.
+
 **Pegadinha / nuance:** é o **mesmo problema de idempotência, três respostas conforme o storage** — vale internalizar o eixo: (1) `ZADD GT` do highscore é idempotente **por natureza** (só sobe se maior → reaplicar não muda nada, fatia 003); (2) o achievements ([[24]]) resolve com uma **transação Postgres** que marca `processed_matches` e incrementa juntos; (3) aqui, sem transação multi-key trivial no Redis, o **script Lua** é o análogo — a atomicidade vem do engine, não de locks meus. Detalhe cross-storage: passei as keys de board no **ARGV** (não como `KEYS`), o que quebra em Redis Cluster (keys de um script devem casar o mesmo slot, via hash-tag); num nó único (o setup local) é seguro. E `redis.NewScript` usa `EVALSHA` com fallback para `EVAL` sozinho — não preciso gerenciar o cache do script à mão, diferente de chamar `EVAL` cru.
 
 ---
@@ -1194,10 +1199,10 @@ store.now = func() time.Time { return fixedNow.Add(24 * time.Hour) } // "amanhã
 
 ```mermaid
 flowchart LR
-    A["FindByID(ctx, \"nao-e-uuid\")"] --> B["Postgres: 22P02<br/>invalid input syntax for uuid"]
+    A["FindByID(ctx, #quot;nao-e-uuid#quot;)"] --> B["Postgres: 22P02<br/>invalid input syntax for uuid"]
     B --> C{"errors.As(err, &pgErr)?"}
     C -->|"Code == 22P02"| D["domain.ErrAccountNotFound"]
-    C -->|outro código| E["fmt.Errorf(\"...: %w\", err)<br/>(erro interno de verdade)"]
+    C -->|outro código| E["fmt.Errorf(#quot;...: %w#quot;, err)<br/>(erro interno de verdade)"]
     D --> F["transport admin: 404<br/>transport login: 401 (não revela handle)"]
 ```
 
@@ -1321,3 +1326,396 @@ type PlayerAchievement struct {
 ```
 
 **Pegadinha (vs C#):** em C#, `System.Text.Json` tem o mesmo problema com `DateTime` (não é nullable por padrão) — a solução é a mesma: usar `DateTime?` (nullable) em vez de `DateTime`. A diferença é que em Go isso não é opcional/configurável por atributo (não existe um `[JsonIgnoreDefaultValue]` equivalente que funcione pra struct) — o **tipo** é que precisa ser ponteiro. Regra prática: qualquer campo `omitempty` que não seja `string`/número/`bool`/ponteiro/slice/map **não faz o que parece fazer** — vale desconfiar toda vez que `omitempty` aparecer num campo de tipo struct.
+
+---
+
+## 38 — Orçamento de timeout por dependência: `context.WithTimeout` na borda de saída
+
+**O que é / por que importa:** um `ctx` que chega de um handler carrega o deadline **do cliente** — e cliente pode
+não ter deadline nenhum. Se o adapter de saída só repassa esse `ctx`, uma dependência travada (SNS, banco, HTTP)
+pendura a chamada inteira pelo tempo que o cliente aguentar. O idiomático é cada adapter declarar o **seu**
+orçamento: `context.WithTimeout(ctx, x)` deriva um filho que expira no que vier primeiro — o deadline do cliente ou
+o do adapter — e o `defer cancel()` libera o timer.
+
+**Onde no projeto:** `session-service/internal/publisher/sns_publisher.go` — `(*SNS).send`. Achado na bancada da
+revisão 2026-09: com o LocalStack pausado, `ReportParticipationEvent` ficava pendurado; agora devolve `Internal` em
+~5s e o Dedicated Server reenvia (spec `session/029`).
+
+```mermaid
+sequenceDiagram
+    participant GS as Dedicated Server (sem deadline)
+    participant SE as session (handler)
+    participant PUB as publisher.send
+    participant SNS as SNS travado
+    GS->>SE: ReportParticipationEvent(ctx sem deadline)
+    SE->>PUB: Publish(ctx)
+    PUB->>PUB: ctx, cancel := WithTimeout(ctx, 5s)
+    PUB->>SNS: Publish(ctx 5s)
+    Note over SNS: não responde
+    PUB-->>SE: context.DeadlineExceeded (5s)
+    SE-->>GS: codes.Internal → reenviar
+```
+
+```go
+func (s *SNS) send(ctx context.Context, body []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout) // o menor entre o do cliente e o meu
+	defer cancel()                                     // sem isso o timer vaza até expirar
+	_, err := s.client.Publish(ctx, &sns.PublishInput{ /* ... */ })
+	return err
+}
+```
+
+**Pegadinha (vs C#):** é o equivalente a `CancellationTokenSource.CreateLinkedTokenSource(ct)` + `CancelAfter(5s)` —
+só que em Go é uma linha e o "linked" é automático (o filho herda o cancelamento do pai). O `http.Client.Timeout`
+existe para HTTP, mas SDKs (AWS, pgx, gRPC) dependem do `ctx`: sem deadline no `ctx`, o SDK pode tentar de novo
+indefinidamente. Para testar, um fake que só responde `<-ctx.Done()` prova o timeout sem `sleep`.
+
+---
+
+## 39 — `http.MaxBytesReader` + `errors.As(*http.MaxBytesError)`: limite de corpo com o erro certo
+
+**O que é / por que importa:** o `net/http` não limita o tamanho do corpo. `io.ReadAll(r.Body)` ou um
+`json.Decoder` bufferizam o que vier — um corpo de 1 GB vira 1 GB de heap. `http.MaxBytesReader(w, r.Body, n)`
+embrulha o corpo e falha depois de `n` bytes com um `*http.MaxBytesError` (Go 1.19+), que dá para distinguir de um
+JSON inválido com `errors.As` e responder **413** em vez de 400.
+
+**Onde no projeto:** `player-data-service/internal/transport/http_handler.go` — `put` (spec `player-data/003`, 400 KiB,
+o teto de item do DynamoDB); `identity-service` (`decode`, rotas sem auth) e as rotas de jogador do achievements e do
+leaderboard (64 KiB).
+
+```go
+body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxValueBytes))
+if err != nil {
+	var tooLarge *http.MaxBytesError // ponteiro: é assim que o net/http devolve
+	if errors.As(err, &tooLarge) {
+		httpkit.WriteError(w, http.StatusRequestEntityTooLarge, "value_too_large")
+		return
+	}
+	httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+	return
+}
+```
+
+**Pegadinha (vs C#):** no ASP.NET Core o Kestrel já vem com `MaxRequestBodySize` de ~28,6 MB e devolve 413 sozinho;
+em Go o default é **sem limite** — o limite é responsabilidade de cada handler. O `w` pode ser `nil` (útil num
+helper `decode(r, v)` sem acesso ao writer): passar o `w` só serve para o servidor fechar a conexão depois do excesso.
+
+
+---
+
+## 40 — Interceptor gRPC + chamador no `context`: autenticar na borda, autorizar no domínio
+
+**O que é / por que importa:** um `grpc.UnaryServerInterceptor` é o middleware do gRPC — roda antes de todo
+handler unário, recebe o nome completo do método (`info.FullMethod`) e decide se chama o `handler`. É o lugar certo
+para **identificar** quem chama (metadata → `Caller`) e aplicar uma tabela "RPC → tipos de chamador aceitos". O
+chamador identificado viaja no `ctx` com uma **chave de tipo não exportado** (`type callerKey struct{}`), então
+nenhum outro pacote colide com ela. A regra que depende do estado ("é o host deste mundo?") fica no service — o
+interceptor não sabe o que é um mundo.
+
+**Onde no projeto:** `session-service/internal/transport/auth.go` (`UnaryAuthInterceptor`, `callerFrom`),
+`grpc_server.go` (`OpenWorld`/`LeaveWorld`/`CloseWorld` usam o chamador; `hostCheck` chama
+`AuthorizeWorldHost` do service); do lado cliente, `matchmaking-service/internal/sessionclient/credentials.go`
+(`grpc.WithPerRPCCredentials` anexa a internal key em toda chamada). Spec `session/030`, ADR-0030.
+
+```mermaid
+flowchart LR
+    MD["metadata<br/>authorization / x-internal-key / x-game-server-key"] --> I["UnaryAuthInterceptor<br/>identifica + tabela RPC→tipos"]
+    I -->|"ctx com Caller"| H["handler (transport)"]
+    H -->|"regra de mundo"| S["service.AuthorizeWorldHost"]
+    I -. "warn: loga + conta<br/>enforce: Unauthenticated / PermissionDenied" .-> R["session_auth_rejections_total"]
+```
+
+```go
+type callerKey struct{} // tipo não exportado: chave de ctx sem colisão possível
+
+func UnaryAuthInterceptor(cfg AuthConfig) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		caller, reason := identify(ctx, cfg)               // lê metadata.FromIncomingContext
+		ctx = context.WithValue(ctx, callerKey{}, caller)  // o handler lê com callerFrom(ctx)
+		if reason != "" && cfg.Mode == AuthEnforce {
+			return nil, status.Error(codes.Unauthenticated, reason)
+		}
+		return handler(ctx, req) // em warn: segue, mas a falha foi contada
+	}
+}
+```
+
+**Pegadinha (vs C#):** é o par `IAuthenticationHandler` (identifica) + `IAuthorizationHandler`/policy (autoriza) do
+ASP.NET Core, só que sem framework: o "`User`" é um valor no `ctx`, recuperado com type assertion. `ctx.Value` é
+para dado *da requisição* (quem chama, trace id) — nunca para dependência opcional de função. O modo `warn`
+(avaliar e contar sem bloquear) é o truque de rollout: dá para ligar a autenticação no servidor antes de o cliente
+(o jogo) ser atualizado e ver na métrica quando dá para virar para `enforce`.
+
+---
+
+## 41 — `singleflight` + limite de frequência: onde a checagem mora importa
+
+**O que é / por que importa:** `golang.org/x/sync/singleflight` coalesce chamadas concorrentes com a mesma chave:
+enquanto um `Do("jwks", fn)` está em andamento, as outras goroutines esperam e recebem o mesmo resultado. Junto
+com um intervalo mínimo entre fetches, impede que um `kid` inventado vire um GET por request no identity. A lição:
+a checagem "fiz um fetch há pouco?" precisa ficar **dentro** do `fn` do singleflight. Fora dele, quem chega durante
+o fetch em andamento vê o `lastAttempt` recém-gravado, conclui "já tentei" e falha antes de as chaves chegarem — o
+teste de cache frio com 50 goroutines pegou exatamente isso.
+
+**Onde no projeto:** `shared/auth/jwks_verifier.go` — `keyForKid` (revisão 2026-09, G4).
+
+```go
+_, err, _ := v.sf.Do("jwks", func() (any, error) {
+	if v.now().Sub(v.lastAttempt) < minRefetchInterval { // DENTRO: quem espera o fetch em curso
+		return nil, errRefetchThrottled                  // recebe o resultado dele, não este erro
+	}
+	return nil, v.refresh(ctx)
+})
+```
+
+**Pegadinha (vs C#):** não há equivalente direto na BCL — o mais próximo é compartilhar um `Lazy<Task<T>>`/uma
+`Task` em andamento num dicionário. Em Go o pacote resolve o caso comum; o cuidado é o mesmo em qualquer linguagem:
+o estado que decide "vou buscar?" precisa ser lido no mesmo ponto serializado que faz a busca.
+
+---
+
+## 42 — `ServeMux` do Go 1.22: rota literal vence o curinga, e o método entra no padrão
+
+**O que é / por que importa:** desde o Go 1.22 o `http.ServeMux` da biblioteca padrão aceita método e curinga no
+padrão (`"POST /sessions/{provider}"`) e resolve conflito pela **especificidade**: `"POST /sessions/anonymous"`
+(literal) ganha de `"POST /sessions/{provider}"` (curinga) para o caminho `/sessions/anonymous`, sem depender da
+ordem de registro. O valor do curinga sai com `r.PathValue("provider")`. Isso dispensou roteador de terceiros no
+projeto inteiro — e padrões que se sobrepõem **sem** um ser mais específico que o outro fazem o `Handle` entrar em
+pânico no boot (erro de configuração aparece cedo, não em produção).
+
+**Onde no projeto:** `identity-service/internal/transport/http_handler.go` — `POST /sessions/anonymous` e
+`POST /sessions/{provider}` (spec 005-steam-login); teste
+`TestLoginExternal_AnonymousContinuaNaRotaLiteral`.
+
+```go
+mux.HandleFunc("POST /sessions/anonymous", h.loginAnonymous) // literal: mais específico
+mux.HandleFunc("POST /sessions/{provider}", h.loginExternal)  // curinga: o resto
+// ...
+provider := r.PathValue("provider") // "steam"
+```
+
+**Pegadinha (vs C#):** é o equivalente ao roteamento por template do ASP.NET Core (`[HttpPost("sessions/{provider}")]`
+convivendo com `sessions/anonymous`, onde o literal também tem precedência) — só que sem atributos nem reflexão: o
+padrão é uma string e a precedência é regra da biblioteca padrão. Antes do 1.22, em Go, isso exigia gorilla/mux ou
+chi.
+
+---
+
+## 43 — Ler de map `nil` devolve o zero value: tabela de regras aninhada sem `if ok`
+
+**O que é / por que importa:** em Go, ler uma chave ausente de um map devolve o **zero value** do tipo do valor — e
+isso vale até para um map `nil`. Então `m[a][b]` num `map[string]map[string]bool` é seguro mesmo quando `a` não
+existe: `m[a]` devolve um map `nil`, e ler `[b]` dele devolve `false`. Uma tabela "o que é permitido em cada caso"
+vira uma linha, sem checar existência em cada nível. (Só **escrever** num map `nil` entra em pânico.)
+
+**Onde no projeto:** `game-registry/internal/service/profile_service.go` — `supportedTopologies`: p2p só vale no
+`host_world_dropin` (spec `session/031`); testes `TestSetMultiplayerProfile_P2P*`.
+
+```mermaid
+flowchart LR
+    A["supportedTopologies[archetype]"] -->|arquétipo conhecido| B["map de topologias"]
+    A -->|arquétipo desconhecido| N["map nil"]
+    B --> C["[topology] → true/false"]
+    N --> D["[topology] → false (zero value, sem pânico)"]
+```
+
+```go
+var supportedTopologies = map[string]map[string]bool{
+	domain.ArchetypeQueueArena:      {domain.TopologyDedicated: true},
+	domain.ArchetypeHostWorldDropIn: {domain.TopologyDedicated: true, domain.TopologyP2P: true},
+}
+
+// arquétipo ou topologia fora da tabela → false nos dois níveis
+if !supportedTopologies[p.Archetype][p.Topology] {
+	return domain.ErrUnsupportedTopology
+}
+```
+
+**Pegadinha (vs C#):** `Dictionary<TKey,TValue>` lança `KeyNotFoundException` no indexador — em C# a mesma linha
+pediria `TryGetValue` em cada nível (ou `GetValueOrDefault`). Em Go a leitura nunca falha; quando precisar
+distinguir "ausente" de "presente com zero", use a forma de dois valores: `v, ok := m[k]`. E cuidado com a escrita:
+`var m map[string]bool; m["x"] = true` entra em pânico — o map precisa de `make` ou de um literal antes.
+
+---
+
+## 44 — Sufixo `Locked`: o nome da função diz que o mutex já está com você
+
+**O que é / por que importa:** `sync.Mutex` do Go **não é reentrante**: se uma função trava o mutex e chama outra
+que tenta travar de novo, a goroutine trava para sempre (deadlock). A convenção da biblioteca padrão para helpers
+que leem estado protegido é o sufixo **`Locked`** — "chame só com o lock na mão; eu não travo". O nome vira a
+documentação do contrato e evita tanto o deadlock quanto a corrida de ler sem lock.
+
+**Onde no projeto:** `session-service/internal/service/heartbeat.go` — `expiredLocked` decide se um mundo venceu
+(heartbeat ou idade) e é chamado de dentro do `Sweep`, que já segura `s.mu`; também `closingRetryLocked`
+(spec 029).
+
+```mermaid
+sequenceDiagram
+    participant Sweep
+    participant mu as s.mu
+    participant exp as expiredLocked
+    Sweep->>mu: Lock()
+    loop cada sessão
+        Sweep->>exp: expiredLocked(sess)  (não trava de novo)
+        exp-->>Sweep: motivo, venceu?
+    end
+    Sweep->>mu: Unlock()
+    Sweep->>Sweep: closeSession(...) fora do lock (faz I/O)
+```
+
+```go
+s.mu.Lock()
+for id, sess := range s.sessions {
+	if reason, ok := s.expiredLocked(sess, cutoff); ok { // já temos o lock
+		expired[id] = reason
+	}
+}
+s.mu.Unlock()
+for id, reason := range expired {
+	s.closeSession(ctx, id, reason) // trava de novo lá dentro — por isso fora do loop travado
+}
+```
+
+**Pegadinha (vs C#):** o `lock` do C# (`Monitor`) **é** reentrante — a mesma thread pode entrar duas vezes, então
+esse bug nem existe lá e ninguém precisa da convenção. Em Go, "junte o que precisa sob o lock, solte, e só então faça
+I/O" é o padrão; o sufixo `Locked` marca as funções do lado de dentro. (Bônus visto no teste do heartbeat: desde o Go
+1.22 dá para escrever `for range 240 { ... }` — range sobre inteiro, sem a variável de índice.)
+
+---
+
+## 45 — `context.WithoutCancel`: trabalho compartilhado não morre com quem o começou
+
+**O que é / por que importa:** desde o Go 1.21, `context.WithoutCancel(ctx)` devolve um contexto que **herda os
+valores** do pai (trace, logger, caller) mas **não o cancelamento nem o prazo**. Serve para o trabalho que a
+goroutine atual *começa*, mas que não é *só dela*. O caso clássico é o `singleflight` (§41): a primeira request
+dispara o fetch do JWKS e as outras 49 esperam o mesmo resultado. Se a primeira usar o próprio `ctx` e o cliente
+dela desistir, o fetch é cancelado e **todas** as 49 falham junto. Pior: o intervalo mínimo entre fetches já foi
+contado, então ninguém tenta de novo por 30 s.
+
+**Onde no projeto:** `shared/auth/jwks_verifier.go` — `keyForKid` (achado do code review de 2026-09-27).
+
+```mermaid
+sequenceDiagram
+  participant A as request A (desiste)
+  participant B as requests B..N
+  participant SF as singleflight "jwks"
+  participant ID as identity /jwks
+  A->>SF: Do(fn) — é o primeiro, roda o fetch
+  B->>SF: Do(fn) — espera o resultado de A
+  SF->>ID: GET (ctx de A)
+  A--xA: cliente de A cancela
+  Note over SF,ID: com ctx de A: fetch cancelado, B..N recebem o erro<br/>com WithoutCancel: o fetch termina e B..N recebem as chaves
+```
+
+```go
+_, err, _ := v.sf.Do("jwks", func() (any, error) {
+	// sem o cancelamento de quem chegou primeiro; o limite de tempo vem do
+	// Timeout do http.Client, que continua valendo para todos
+	return nil, v.refresh(context.WithoutCancel(ctx))
+})
+```
+
+**Pegadinha:** tirar o cancelamento tira também o prazo, então o trabalho precisa de um limite próprio (aqui, o
+timeout do `http.Client`; em outros casos, um `context.WithTimeout` em cima do `WithoutCancel`). **Vs C#:** é como
+chamar o método compartilhado com `CancellationToken.None` em vez do token da request, mas mantendo o
+`Activity`/`AsyncLocal` do chamador; em Go os dois viajam no mesmo `ctx` e o `WithoutCancel` separa um do outro.
+
+---
+
+## 46 — Lease com guarda no `UPDATE`: `RowsAffected()` como detector de "perdi a vez"
+
+**O que é / por que importa:** um worker que pega itens de uma fila no Postgres (`FOR UPDATE SKIP LOCKED`) marca
+cada item com um **lease** ("é meu até T"). Se o worker travar além de T, outro pega o mesmo item. O problema é o
+primeiro acordar depois e gravar por cima do resultado do segundo. A saída é fazer toda escrita posterior **provar
+que ainda é dona**: o `WHERE` inclui o valor do lease que ela recebeu, e `RowsAffected() == 0` vira um erro de
+domínio (`ErrSteamLeaseLost`), não um sucesso silencioso.
+
+**Onde no projeto:** `achievements-service/internal/repository/postgres_steam_sync.go` (`ClaimSteamPending`,
+`MarkSteamDone`, `MarkSteamRetry`) e `service/steam_mirror.go`.
+
+```mermaid
+sequenceDiagram
+  participant W1 as worker 1 (travou)
+  participant DB as player_achievements
+  participant W2 as worker 2
+  W1->>DB: claim → next_attempt_at = T1
+  Note over W1: passa de T1 sem responder
+  W2->>DB: claim (T1 venceu) → next_attempt_at = T2
+  W2->>DB: UPDATE ... WHERE next_attempt_at = T2 → 1 linha ✔
+  W1->>DB: UPDATE ... WHERE next_attempt_at = T1 → 0 linhas
+  Note over W1: ErrSteamLeaseLost: descarta, não sobrescreve
+```
+
+```go
+const q = `UPDATE player_achievements SET steam_sync_state = $4, ...
+            WHERE game_id = $1 AND player_id = $2 AND achievement_id = $3
+              AND steam_sync_state = '' AND steam_next_attempt_at = $7` // $7 = o lease que ESTE worker recebeu
+tag, err := r.pool.Exec(ctx, q, ..., it.LeaseUntil)
+if err != nil {
+	return fmt.Errorf("steam sync repository: mark done: %w", err)
+}
+if tag.RowsAffected() == 0 {
+	return domain.ErrSteamLeaseLost // outro worker assumiu (ou o item já terminou)
+}
+```
+
+**Pegadinha:** o valor da guarda precisa ser **o que o banco gravou**, não o que o Go calculou. O Postgres guarda
+`timestamptz` em microssegundos e o `time.Time` do Go tem nanossegundos: comparar com o valor calculado nunca
+bateria. Por isso o `claim` faz `RETURNING steam_next_attempt_at` e o worker guarda esse valor (o teste de
+integração pegou a diferença). **Vs C#:** é a mesma ideia do *optimistic concurrency* do EF Core (`[ConcurrencyCheck]`
+/ `rowversion` e a `DbUpdateConcurrencyException`), feita à mão: em Go não há ORM detectando o conflito, então o
+`RowsAffected()` é quem dá o sinal.
+
+---
+
+## 47 — Variável capturada pela closure: resgatar a causa que a biblioteca embrulhou
+
+**O que é / por que importa:** quando você passa uma função sua para uma biblioteca (um *callback*), o erro que ela
+devolve às vezes chega do outro lado **reembrulhado ou achatado**, e a causa original fica difícil de distinguir. No
+login pela Epic, o `jwt.ParseWithClaims` chama o nosso `keyFunc` para buscar a chave pública; se a busca falhou
+porque **a Epic está fora**, o login deve responder 503 (tente depois), não 401 (token ruim). Mas o `jwt` devolve
+tudo como "token inválido". A saída idiomática: uma variável local que a closure **captura por referência** e
+preenche quando vê a causa que interessa. Depois do `Parse`, o código olha a variável antes de olhar o erro.
+
+**Onde no projeto:** `identity-service/internal/epic/verifier.go` (`Verify`), spec `identity/008`.
+
+```mermaid
+sequenceDiagram
+  participant V as Verify
+  participant J as jwt.ParseWithClaims
+  participant K as keyFunc (closure)
+  V->>J: Parse(token, keyFunc)
+  J->>K: chave do kid?
+  K->>K: busca o JWKS: Epic fora
+  K-->>V: unavailable = ErrProviderUnavailable (variável capturada)
+  K-->>J: erro
+  J-->>V: "token inválido" (causa achatada)
+  V->>V: unavailable != nil → 503, senão → 401
+```
+
+```go
+var unavailable error // a closure abaixo enxerga e escreve nesta variável
+_, err := jwt.ParseWithClaims(ticket, claims, func(t *jwt.Token) (any, error) {
+    key, err := v.keyForKid(ctx, kid)
+    if errors.Is(err, domain.ErrProviderUnavailable) {
+        unavailable = err // guarda a causa antes de a biblioteca embrulhar
+    }
+    return key, err
+}, jwt.WithValidMethods(validMethods)) // lista branca: "none" e HMAC nunca passam
+if unavailable != nil {
+    return domain.ExternalIdentity{}, fmt.Errorf("epic: %w", unavailable) // 503
+}
+if err != nil {
+    return domain.ExternalIdentity{}, domain.ErrInvalidTicket // 401
+}
+```
+
+**Contraste com C#:** em C# o equivalente seria uma lambda que captura uma variável local (o compilador gera uma
+classe de *closure* por trás), ou uma exceção específica que atravessa a biblioteca. Em Go não há exceção para
+atravessar camadas: o erro é valor e quem está no meio decide como embrulhar. A variável capturada é o jeito de
+passar a informação "por fora" do canal de erro, sem depender do formato que a biblioteca escolheu.
+
+**Pegadinha / nuance:** a closure roda **dentro** da chamada (síncrona), então não há concorrência na variável. Se a
+biblioteca chamasse o callback em outra goroutine, a variável precisaria de mutex ou de um canal. E o
+`WithValidMethods` no mesmo trecho é a outra metade da segurança: sem a lista branca, um token com `alg: none` ou
+HMAC (usando a chave pública como segredo) poderia passar.

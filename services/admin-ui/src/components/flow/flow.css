@@ -11,6 +11,18 @@
   background: #0a0d12;
 }
 
+/* tela cheia (spec 094): cobre a janela, por cima do AppShell (z-index 100)
+   e abaixo de modais/drawers (200) e dropdowns (300) do Mantine, que
+   continuam abrindo por cima do canvas. */
+.flow-wrap--full {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
 /* --- cards --- */
 .flow-card {
   min-width: 170px;
@@ -108,33 +120,6 @@
   font-size: 9px;
   line-height: 1.25;
 }
-/* consumers da vista de pipeline (spec 046). Largura FIXA (achado do Vitor,
-   spec 046 follow-up): sem isso o card tem só min/max-width e o navegador
-   encolhe pra caber o conteúdo — a lista de scoringStats do leaderboard (uma
-   linha só, pode ter 15+ stats) então quebra num ponto imprevisível (a
-   largura real varia por jogo), e o cálculo de altura do layout (pipelineGraph.ts)
-   não tem como estimar quantas linhas vai dar. Largura fixa = ponto de quebra
-   previsível = altura calculável. */
-.flow-card--consumer-ach,
-.flow-card--consumer-lb,
-.flow-card--consumer-an {
-  width: 260px;
-  min-width: 260px;
-  max-width: 260px;
-}
-.flow-card--consumer-ach .flow-card__header {
-  color: #fab005;
-  background: rgba(250, 176, 5, 0.08);
-}
-.flow-card--consumer-lb .flow-card__header {
-  color: #51cf66;
-  background: rgba(81, 207, 102, 0.08);
-}
-.flow-card--consumer-an .flow-card__header {
-  color: #74c0fc;
-  background: rgba(116, 192, 252, 0.08);
-}
-
 /* --- seleção / caminho destacado --- */
 .react-flow__node {
   transition: opacity 0.15s ease;

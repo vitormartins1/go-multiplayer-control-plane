@@ -140,6 +140,7 @@ export interface ModeSummary {
   modeId: string;
   displayName?: string;
   archetype: MultiplayerProfile["archetype"];
+  topology?: "dedicated" | "p2p"; // admin-ui/091
 }
 
 // Regras do modeId (spec game-registry/009): slug estável, imutável na prática.
@@ -158,6 +159,7 @@ export interface CatalogAchievement {
   statKey?: string;
   statMode?: StatMode;
   target: number;
+  steamApiName?: string; // "API Name" no Steamworks (achievements/019); vazio = não espelha
 }
 
 export interface NewAchievement {
@@ -168,6 +170,7 @@ export interface NewAchievement {
   statKey?: string;
   statMode?: StatMode;
   target: number;
+  steamApiName?: string; // "API Name" no Steamworks (achievements/019); vazio = não espelha
 }
 
 export interface ImportResult {
@@ -197,6 +200,7 @@ export interface AchievementProgressEntry {
   progress: number;
   unlocked: boolean;
   unlockedAt?: string;
+  handle?: string; // admin-bff/029: resolvido no identity, best-effort
 }
 
 // EventRule é uma regra de mapeamento evento->achievement-event-type
@@ -278,6 +282,9 @@ export interface GameSession {
   // Detalhe rico (session spec 018): snapshot do modo (params crus do
   // arquétipo), formação por time e resultado persistido (fechadas por result).
   archetype?: string;
+  topology?: "dedicated" | "p2p"; // session/031; ausente em sessões fechadas antes da migration 004
+  hostConnection?: string; // p2p: id de conexão do host (ex.: SteamID) — admin-ui/091
+  lastHeartbeatAt?: string; // último heartbeat do mundo (session/032); ausente = o jogo não manda
   profileHash?: string;
   modeParams?: Record<string, unknown>;
   teams?: SessionTeam[];
@@ -367,10 +374,18 @@ export interface AnalyticsDaily {
   matches: number;
 }
 
+// Overview cross-game (analytics-service/016): a medida comum a todos os
+// arquétipos é a sessão fechada; matches/wins/... são só do queue_arena.
+export interface AnalyticsOverviewGame extends AnalyticsGameStat {
+  sessions: number;
+  avgSessionMs: number;
+  abandoned: number; // fechadas por abandoned (server caiu) ou ttl (ninguém reportou)
+}
+
 export interface AnalyticsOverview {
-  totals: { matches: number; uniquePlayers: number; games: number };
-  games: AnalyticsGameStat[];
-  daily: AnalyticsDaily[];
+  totals: { sessions: number; matches: number; uniquePlayers: number; games: number };
+  games: AnalyticsOverviewGame[];
+  daily: { day: string; sessions: number }[]; // sessões fechadas por dia
 }
 
 // host_world_dropin (spec 004/020): contagem por modo/papel/evento/outcome no
@@ -583,11 +598,6 @@ export const api = {
       throw err;
     }
   },
-  setMultiplayerProfile: (gameId: string, profile: MultiplayerProfile) =>
-    putJSON<MultiplayerProfile>(
-      `/api/games/${encodeURIComponent(gameId)}/multiplayer-profile`,
-      profile,
-    ),
   // Modos nomeados (ADR-0024, spec admin-ui/023).
   listMultiplayerModes: (gameId: string, signal?: AbortSignal) =>
     getJSON<MultiplayerMode[]>(

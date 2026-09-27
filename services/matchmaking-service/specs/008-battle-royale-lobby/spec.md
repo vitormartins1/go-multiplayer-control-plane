@@ -1,7 +1,7 @@
 # Spec: 008-battle-royale-lobby
 
 **Serviço:** matchmaking-service
-**Status:** Rascunho (aguardando aprovação)
+**Status:** Done (implementada e mergeada; status corrigido na revisão 2026-09)
 **Data:** 2026-07-07
 **ADR:** 0023 (perfil de multiplayer por jogo) — arquétipo `battle_royale`
 **Roadmap:** `docs/game-models/battle_royale-roadmap.md` — fatia **BR1**

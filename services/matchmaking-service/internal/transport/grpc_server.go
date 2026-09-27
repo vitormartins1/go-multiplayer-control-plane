@@ -106,9 +106,10 @@ func (s *Server) Invade(ctx context.Context, req *pb.InvadeRequest) (*pb.InvadeR
 		}
 	}
 	return &pb.InvadeResponse{
-		SessionId:     invaded.SessionID,
-		ServerAddress: invaded.ServerAddress,
-		ConnectToken:  invaded.ConnectToken,
+		SessionId:      invaded.SessionID,
+		ServerAddress:  invaded.ServerAddress,
+		ConnectToken:   invaded.ConnectToken,
+		HostConnection: invaded.HostConnection,
 	}, nil
 }
 
@@ -143,10 +144,11 @@ func (s *Server) PostSummonSign(req *pb.PostSummonSignRequest, stream pb.Matchma
 			return stream.Send(&pb.SummonUpdate{Status: pb.SummonStatus_SUMMON_STATUS_EXPIRED})
 		}
 		return stream.Send(&pb.SummonUpdate{
-			Status:        pb.SummonStatus_SUMMON_STATUS_SUMMONED,
-			SessionId:     summoned.SessionID,
-			ServerAddress: summoned.ServerAddress,
-			ConnectToken:  summoned.ConnectToken,
+			Status:         pb.SummonStatus_SUMMON_STATUS_SUMMONED,
+			SessionId:      summoned.SessionID,
+			ServerAddress:  summoned.ServerAddress,
+			ConnectToken:   summoned.ConnectToken,
+			HostConnection: summoned.HostConnection,
 		})
 	}
 }
@@ -181,7 +183,7 @@ func (s *Server) SummonSign(ctx context.Context, req *pb.SummonSignRequest) (*pb
 	if req.GetSessionId() == "" || req.GetSignId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id e sign_id são obrigatórios")
 	}
-	allyID, err := s.sum.Summon(ctx, req.GetSessionId(), req.GetSignId())
+	allyID, err := s.sum.Summon(ctx, req.GetSessionId(), req.GetSignId(), playerIDFromContext(ctx))
 	if err != nil {
 		return nil, coopError(err, "summon sign")
 	}
@@ -199,6 +201,8 @@ func coopError(err error, op string) error {
 		return status.Error(codes.NotFound, "sinal ou mundo não encontrado")
 	case errors.Is(err, domain.ErrRoleFull):
 		return status.Error(codes.ResourceExhausted, "sem vaga de co-op")
+	case errors.Is(err, domain.ErrNotWorldHost):
+		return status.Error(codes.PermissionDenied, "só o host do mundo invoca sinais nele")
 	default:
 		return status.Error(codes.Internal, op)
 	}

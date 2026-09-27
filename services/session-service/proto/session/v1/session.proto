@@ -40,9 +40,11 @@ service Session {
   rpc ListInvadableWorlds(ListInvadableWorldsRequest) returns (ListInvadableWorldsResponse);
 
   // ReportParticipationEvent recebe um evento por participante do server do mundo
-  // (spec 013): publica no fan-out (kind=participation_event) e aplica o efeito no
-  // slot (DIED/LEFT liberam, HOST_KILLED encerra). InvalidArgument (vocabulário),
-  // NotFound (mundo inexistente/fechado).
+  // (spec 013): aplica o efeito no mundo (DIED/LEFT liberam o slot, HOST_KILLED
+  // encerra) e depois publica no fan-out (kind=participation_event). Erro no
+  // publish = reenviar a mesma ocorrência (mesmo event_id); o reenvio do
+  // HOST_KILLED que já encerrou o mundo é aceito (spec 029). InvalidArgument
+  // (vocabulário), NotFound (mundo inexistente/fechado).
   rpc ReportParticipationEvent(ReportParticipationEventRequest) returns (ReportParticipationEventResponse);
 
   // GetSessionConfig devolve o session manifest (ADR-0024, spec 017): o snapshot
@@ -51,6 +53,21 @@ service Session {
   // ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
   // sessão não existir ou já estiver fechada.
   rpc GetSessionConfig(GetSessionConfigRequest) returns (GetSessionConfigResponse);
+
+  // Heartbeat (spec 032) mantém o mundo vivo: depois do primeiro heartbeat, o
+  // mundo só fecha se ficar WORLD_HEARTBEAT_TTL sem outro (motivo abandoned), não
+  // mais pela idade. Mandado pelo jogo do host (p2p) ou pelo Dedicated Server a
+  // cada interval_seconds. NotFound se o mundo não estiver aberto.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// spec 032 — heartbeat do mundo.
+message HeartbeatRequest {
+  string session_id = 1;
+}
+
+message HeartbeatResponse {
+  int32 interval_seconds = 1; // de quanto em quanto tempo mandar o próximo
 }
 
 // spec 017 (ADR-0024) — session manifest.
@@ -78,23 +95,28 @@ message OpenWorldRequest {
   int32 weapon_tier = 4;      // tier de arma do host (spec 012); 0 = sem faixa
   string mode_id = 5;         // modo do jogo (ADR-0024, spec 017); vazio = "default"
   string password = 6;        // senha do mundo (follow-up #1, spec 020); vazio = sem senha
+  string host_connection = 7; // spec 031: id de conexão do host (ex.: SteamID64); obrigatório se o modo for p2p
 }
 
 message OpenWorldResponse {
   string session_id = 1;       // identidade do mundo (não há match)
   string server_address = 2;   // endereço do game server alocado
   ConnectGrant host_grant = 3; // connect token do host (claim role=host)
+  string host_connection = 4;  // spec 031: eco do id de conexão do host (p2p); vazio em dedicado
+  string world_token = 5;      // spec 031: credencial do host p2p (metadata x-world-token), só deste mundo; vazio em dedicado
 }
 
 message JoinWorldRequest {
   string session_id = 1;
   string player_id = 2;
   string role = 3; // "coop" | "invader"
+  string summoner_player_id = 4; // spec 030: quem invocou o sinal (SummonSign); se vier, precisa ser o host do mundo
 }
 
 message JoinWorldResponse {
   ConnectGrant grant = 1;    // connect token do phantom (claim role)
-  string server_address = 2; // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar
+  string server_address = 2; // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar; vazio em p2p
+  string host_connection = 3; // spec 031: id de conexão do host quando o mundo é p2p
 }
 
 message LeaveWorldRequest {
@@ -114,6 +136,7 @@ message CloseWorldResponse {}
 // jogo; a política de faixa é aplicada lá, não aqui.
 message ListInvadableWorldsRequest {
   string game_id = 1; // jogo (multi-tenant, ADR-0017)
+  string mode_id = 2; // spec matchmaking/012: só mundos deste modo; vazio = todos os modos do jogo (compat)
 }
 
 message ListInvadableWorldsResponse {

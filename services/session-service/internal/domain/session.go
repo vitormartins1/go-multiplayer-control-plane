@@ -142,6 +142,18 @@ type Session struct {
 	HostPlayerID string
 	RoleSlots    map[string]*RoleSlot
 
+	// Mundo p2p (spec 031): HostConnection é como os phantoms alcançam o host
+	// (ServerID/ServerAddress ficam vazios — não há GameServer);
+	// WorldTokenHash é o SHA-256 (hex) do world token do host — o token em si
+	// só existe na resposta do OpenWorld.
+	HostConnection string
+	WorldTokenHash string
+
+	// LastHeartbeatAt é o último heartbeat do mundo (spec 032). Zero = o jogo
+	// nunca mandou: o sweeper segue a regra de idade (SESSION_TTL). Não zero: o
+	// mundo só fecha se o heartbeat vencer (WORLD_HEARTBEAT_TTL).
+	LastHeartbeatAt time.Time
+
 	// Atributos de matchmaking do host (spec 012): a faixa do mundo para o
 	// matchmaking casar um invasor (soul level / weapon tier). Zero em
 	// queue_arena e em mundos abertos sem atributos.
@@ -164,6 +176,12 @@ type Session struct {
 	// Nil em sessões abertas e nos fechamentos sem resultado (ttl/admin/
 	// abandoned/host_left/host_killed).
 	Result *MatchOutcome
+
+	// ClosingEvent é o evento de participação que encerrou o mundo
+	// (HOST_KILLED, spec 029). Só vive no histórico em memória: permite que o
+	// reenvio dessa mesma ocorrência, depois de um publish falho, seja
+	// republicado em vez de receber NotFound. Nil nos demais fechamentos.
+	ClosingEvent *ParticipationEvent
 }
 
 // Participant é um jogador que participou da sessão, com o papel ocupado e o
@@ -194,6 +212,17 @@ type WorldAttributes struct {
 	// 020); vazia = sem senha. Só usada para computar PasswordHash no OpenWorld
 	// — não sobrevive além da chamada.
 	Password string
+	// HostConnection é o identificador de conexão do host num mundo p2p (spec
+	// 031; ex.: SteamID64 para Steam Networking Sockets). Opaco para o backend;
+	// obrigatório quando o modo é p2p, ignorado em dedicado.
+	HostConnection string
+}
+
+// WorldEndpoint é como um phantom alcança o mundo (spec 031): o endereço do
+// game server (dedicado) OU o identificador de conexão do host (p2p).
+type WorldEndpoint struct {
+	ServerAddress  string
+	HostConnection string
 }
 
 // InvadableWorld é a fotografia de um mundo aberto com vaga de invasor (spec
@@ -228,6 +257,11 @@ const (
 	ArchetypeHostWorldDropIn = "host_world_dropin"
 	ArchetypeBattleRoyale    = "battle_royale"
 	ArchetypeCoopMission     = "coop_mission"
+
+	// Topologias do perfil (ADR-0023). p2p só no host_world_dropin (spec 031,
+	// ADR-0032): o cliente do host hospeda o mundo, sem GameServer.
+	TopologyDedicated = "dedicated"
+	TopologyP2P       = "p2p"
 
 	// DefaultModeID é o modo assumido quando a entrada não declara um
 	// (ADR-0024). A normalização acontece no transport.
@@ -341,29 +375,48 @@ type SessionService interface {
 	// level / weapon tier) para o matchmaking casar depois (spec 012); zeros =
 	// mundo sem faixa. ErrUnsupportedArchetype se o jogo não for host_world_dropin;
 	// ErrNoServer se o pool esgotar. Spec 011/012, ADR-0023.
-	OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs WorldAttributes) (*Session, ConnectGrant, error)
+	//
+	// Em modo p2p (spec 031) não aloca server: guarda attrs.HostConnection
+	// (ErrHostConnectionRequired se vazio) e devolve worldToken, a credencial
+	// do host para reportar eventos deste mundo; em dedicado worldToken = "".
+	OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs WorldAttributes) (sess *Session, hostGrant ConnectGrant, worldToken string, err error)
 	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando
 	// um slot, e emite o connect token com o claim role. Devolve o endereço do
-	// game server junto do grant (spec 012): o phantom injetado pelo matchmaking
-	// precisa dele para conectar. ErrWorldNotFound, ErrRoleNotEnabled, ErrRoleFull,
+	// game server junto do grant (spec 012) — ou o id de conexão do host, se o
+	// mundo for p2p (spec 031): o phantom injetado pelo matchmaking precisa
+	// disso para conectar. ErrWorldNotFound, ErrRoleNotEnabled, ErrRoleFull,
 	// ErrAlreadyJoined.
-	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, string, error)
+	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, WorldEndpoint, error)
+	// ResolveWorldToken devolve o mundo a que o world token pertence (spec 031)
+	// e se ele já fechou (closed: só serve para o reenvio do evento que o
+	// fechou, spec 029); ok=false se o token não for de mundo nenhum.
+	ResolveWorldToken(token string) (sessionID string, closed, ok bool)
 	// ListInvadableWorlds devolve os mundos abertos do jogo (Origin=host_world)
 	// com slot de invasor livre, cada um com seus atributos e vagas (spec 012).
 	// Fonte de dados pura: sem filtro de faixa/senha (política é do matchmaking).
 	// Lista vazia (não erro) quando nada é elegível.
-	ListInvadableWorlds(ctx context.Context, gameID string) ([]InvadableWorld, error)
+	ListInvadableWorlds(ctx context.Context, gameID, modeID string) ([]InvadableWorld, error)
 	// LeaveWorld libera o slot do jogador; o mundo segue aberto. No-op idempotente
 	// se o jogador não estiver no mundo. Se o jogador for o host, encerra o mundo.
 	LeaveWorld(ctx context.Context, sessionID, playerID string) error
 	// CloseWorld encerra o mundo (CloseHostLeft), libera o server e encerra a
 	// participação de todos. ErrWorldNotFound se não houver mundo aberto.
 	CloseWorld(ctx context.Context, sessionID string) error
+	// AuthorizeWorldHost confere que playerID é o host do mundo aberto
+	// sessionID (spec 030): ErrNotWorldHost se não for, ErrWorldNotFound se o
+	// mundo não existir. Usado para invocar sinal e para fechar o mundo / tirar
+	// outro jogador a pedido de um jogador.
+	AuthorizeWorldHost(ctx context.Context, sessionID, playerID string) error
+
+	// Heartbeat registra que o mundo segue vivo (spec 032) e devolve o
+	// intervalo sugerido até o próximo. ErrWorldNotFound se não estiver aberto.
+	Heartbeat(ctx context.Context, sessionID string) (time.Duration, error)
 
 	// ReportParticipationEvent recebe um evento por participante do server do
 	// mundo (spec 013): publica no fan-out (kind=participation_event) e aplica o
 	// efeito no slot (DIED/LEFT liberam; HOST_KILLED encerra o mundo). Publica
-	// ANTES de mutar (ADR-0020). ErrInvalidParticipation (vocabulário),
+	// DEPOIS de mutar (fix 49e976d; reenvio do HOST_KILLED na spec 029).
+	// ErrInvalidParticipation (vocabulário),
 	// ErrWorldNotFound (mundo inexistente/fechado).
 	ReportParticipationEvent(ctx context.Context, sessionID string, evt ParticipationEvent) error
 }
@@ -376,7 +429,7 @@ type SessionService interface {
 type ProfileSnapshot struct {
 	ModeID     string
 	Archetype  string // Archetype* (vocabulário do ADR-0023)
-	Topology   string // "dedicated"
+	Topology   string // TopologyDedicated | TopologyP2P (spec 031)
 	ParamsJSON []byte // params crus do arquétipo (JSON)
 	Hash       string // hash do snapshot (SHA-256 truncado, calculado no adapter)
 

@@ -1,36 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  Badge,
-  Box,
   Button,
-  Collapse,
   Group,
   Loader,
   SegmentedControl,
   Select,
   Stack,
-  Table,
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconActivity } from "@tabler/icons-react";
 import { api, type GameSession } from "../lib/api";
+import { awaitHistory, goneIds, mergeClosed } from "../lib/closedSessions";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, truncate } from "../lib/format";
-import { SessionAvatar } from "../components/SessionAvatar";
-import { PlayersSummary } from "../components/PlayersSummary";
-import { SessionMatchDetail } from "../components/SessionMatchDetail";
 import { EmptyState } from "../components/EmptyState";
-import { archetypeMetaOf } from "../lib/archetypeMeta";
+import { SessionTable } from "../components/SessionTable";
 
 // GameSessions é a aba de operação/debug das partidas do jogo (spec 007):
 // abertas ao vivo (mapa in-memory, polling da preferência global) + histórico
 // de fechadas PERSISTIDO (spec 025), paginado com "carregar mais" (tamanho
-// da preferência global, spec 084). Polling só das abertas — o histórico não
-// muda sozinho, recarrega só ao trocar de jogo ou via "carregar mais".
+// da preferência global, spec 084). Polling só das abertas; o histórico
+// recarrega ao trocar de jogo, via "carregar mais" e quando uma aberta some
+// da lista entre dois pollings, ou seja, fechou (spec 095).
 // GameDetail usa keepMounted=false, então sair da aba desmonta e para o
 // polling.
 export function GameSessions({ gameId }: { gameId: string }) {
@@ -40,7 +34,11 @@ export function GameSessions({ gameId }: { gameId: string }) {
   // mais" acumula em closedExtra e avança o cursor (mesmo padrão do
   // leaderboard, spec 039). Postgres do histórico fora (503) -> cai pro ring
   // in-memory de `data.closed` (plan D6), com aviso.
-  const { data: closedPage, error: closedError } = useAsync(
+  const {
+    data: closedPage,
+    error: closedError,
+    reload: reloadClosed,
+  } = useAsync(
     (s) => api.closedGameSessions(gameId, { limit: pageSize }, s),
     [gameId, pageSize],
   );
@@ -53,13 +51,40 @@ export function GameSessions({ gameId }: { gameId: string }) {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // spec 095: ids abertos no último polling e sessões fechadas que ainda
+  // esperam aparecer no histórico (id -> tentativas).
+  const prevOpenIds = useRef<Set<string>>(new Set());
+  const awaiting = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
     setClosedExtra([]);
     setClosedCursor(undefined);
     setClosedNoMore(false);
+    prevOpenIds.current = new Set();
+    awaiting.current = new Map();
   }, [gameId]);
 
   usePolling(reload, pollingMs);
+
+  // spec 095: uma sessão que estava aberta e sumiu das abertas fechou; a
+  // primeira página do histórico é recarregada para ela aparecer em Fechadas.
+  // O session grava o histórico logo depois de tirá-la das abertas, então o
+  // recarregamento se repete nos ciclos seguintes até ela aparecer (com
+  // limite). A primeira página antiga vai para as extras: a linha que a nova
+  // empurrar para fora não some da lista.
+  useEffect(() => {
+    if (!data) return;
+    const gone = goneIds(prevOpenIds.current, data.active);
+    prevOpenIds.current = new Set(data.active.map((s) => s.sessionId));
+    const inHistory = new Set((closedPage?.closed ?? []).map((s) => s.sessionId));
+    const step = awaitHistory(awaiting.current, gone, inHistory);
+    awaiting.current = step.awaiting;
+    if (!step.reload) return;
+    const oldFirst = closedPage?.closed ?? [];
+    setClosedExtra((prev) => mergeClosed(oldFirst, prev));
+    reloadClosed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   useEffect(() => {
     if (data) setLastUpdate(new Date());
@@ -71,7 +96,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
   const historyUnavailable = !!closedError;
   const closedRows = useMemo(() => {
     if (historyUnavailable) return data?.closed ?? [];
-    return [...(closedPage?.closed ?? []), ...closedExtra];
+    return mergeClosed(closedPage?.closed ?? [], closedExtra);
   }, [historyUnavailable, data, closedPage, closedExtra]);
   const hasMoreClosed = !historyUnavailable && !closedNoMore && !!(closedCursor ?? closedPage?.nextBefore);
 
@@ -102,9 +127,12 @@ export function GameSessions({ gameId }: { gameId: string }) {
 
   // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
   const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
+  // filtro por um modo que sumiu da lista (o Select some com <2 modos) não
+  // pode deixar a tabela vazia sem jeito de limpar.
+  const effectiveModeFilter = modeFilter && distinctModes.includes(modeFilter) ? modeFilter : null;
   const rows = useMemo(
-    () => (modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows),
-    [allRows, modeFilter],
+    () => (effectiveModeFilter ? allRows.filter((s) => modeOf(s) === effectiveModeFilter) : allRows),
+    [allRows, effectiveModeFilter],
   );
 
   return (
@@ -131,7 +159,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
               w={170}
               placeholder="Todos os modos"
               clearable
-              value={modeFilter}
+              value={effectiveModeFilter}
               onChange={setModeFilter}
               data={distinctModes}
             />
@@ -164,30 +192,11 @@ export function GameSessions({ gameId }: { gameId: string }) {
         />
       )}
       {rows.length > 0 && (
-        <Table.ScrollContainer minWidth={640}>
-          <Table striped withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Match</Table.Th>
-                <Table.Th>Modo</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th>Players</Table.Th>
-                <Table.Th>Server</Table.Th>
-                <Table.Th>Tempos</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {rows.map((s) => (
-                <SessionRow
-                  key={s.sessionId}
-                  session={s}
-                  expanded={expandedId === s.sessionId}
-                  onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
-                />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+        <SessionTable
+          rows={rows}
+          expandedId={expandedId}
+          onToggle={(id) => setExpandedId((prev) => (prev === id ? null : id))}
+        />
       )}
       {hasMoreClosed && (filter === "all" || filter === "closed") && (
         <Group justify="center">
@@ -199,133 +208,3 @@ export function GameSessions({ gameId }: { gameId: string }) {
     </Stack>
   );
 }
-
-function SessionRow({
-  session: s,
-  expanded,
-  onToggle,
-}: {
-  session: GameSession;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const modeMeta = archetypeMetaOf(s.archetype);
-  return (
-    <>
-      <Table.Tr
-        style={{ cursor: "pointer" }}
-        bg={expanded ? "var(--mantine-color-default-hover)" : undefined}
-        onClick={onToggle}
-      >
-        <Table.Td>
-          {/* size=32 (padronização das tabelas, 2026-07-13): iguala a
-              densidade da tabela de referência (Achievements/Players). */}
-          <Group gap={6} wrap="nowrap">
-            <SessionAvatar seed={s.profileHash || s.sessionId} size={32} />
-            <Text ff="monospace" size="sm">
-              {truncate(s.matchId)}
-            </Text>
-          </Group>
-        </Table.Td>
-        <Table.Td>
-          <Badge
-            variant="light"
-            color="gray"
-            leftSection={modeMeta && <modeMeta.icon size={12} />}
-          >
-            {s.modeId || "default"}
-          </Badge>
-        </Table.Td>
-        <Table.Td>
-          {s.state === "open" ? (
-            <Badge color="nominal" variant="light">
-              ao vivo
-            </Badge>
-          ) : (
-            <Badge color="gray" variant="light">
-              closed · {s.closeReason ?? "?"}
-            </Badge>
-          )}
-        </Table.Td>
-        <Table.Td>
-          {/* resumo compacto (034): a lista completa vive no painel expandido.
-              size=32 (padronização das tabelas): mesmo motivo do avatar acima. */}
-          <PlayersSummary players={s.players} size={32} />
-        </Table.Td>
-        <Table.Td>
-          {/* fallback "—" (achado: coluna ficava em branco em sessão
-              fechada — servidor já desalocado — e parecia bug de
-              carregamento; o painel expandido já tinha o fallback). */}
-          <Text ff="monospace" size="sm" c={s.serverAddress ? undefined : "dimmed"}>
-            {s.serverAddress ? truncate(s.serverAddress) : "—"}
-          </Text>
-        </Table.Td>
-        <Table.Td>
-          {s.state === "open" ? (
-            <Text size="sm">há {formatDuration(Date.now() - Date.parse(s.openedAt))}</Text>
-          ) : (
-            <Text size="sm">
-              durou {s.closedAt ? formatDuration(Date.parse(s.closedAt) - Date.parse(s.openedAt)) : "?"} · fechou{" "}
-              {s.closedAt ? new Date(s.closedAt).toLocaleTimeString("pt-BR") : "?"}
-            </Text>
-          )}
-        </Table.Td>
-      </Table.Tr>
-      {expanded && (
-        <Table.Tr>
-          <Table.Td colSpan={6} p={0}>
-            <Collapse in={expanded}>
-              <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
-                <Stack gap="xs">
-                  <Group gap="xl" wrap="wrap">
-                    <SessionAvatar seed={s.profileHash || s.sessionId} size={40} />
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>SESSION ID</Text>
-                      <Text ff="monospace" size="xs">{s.sessionId}</Text>
-                    </Stack>
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>MATCH ID</Text>
-                      <Text ff="monospace" size="xs">{s.matchId}</Text>
-                    </Stack>
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>MODO</Text>
-                      <Text ff="monospace" size="xs">{s.modeId || "default"}</Text>
-                    </Stack>
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>SERVIDOR</Text>
-                      <Text ff="monospace" size="xs">{s.serverAddress || "—"}</Text>
-                    </Stack>
-                  </Group>
-
-                  {/* roster/formação/resultado vivem no painel por arquétipo
-                      (spec 019) — sem bloco PLAYERS duplicado. */}
-                  <SessionMatchDetail session={s} />
-
-                  <Group gap="xl" wrap="wrap">
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>ABERTA EM</Text>
-                      <Text size="xs">{new Date(s.openedAt).toLocaleString("pt-BR")}</Text>
-                    </Stack>
-                    {s.closedAt && (
-                      <Stack gap={2}>
-                        <Text size="xs" c="dimmed" fw={600}>FECHADA EM</Text>
-                        <Text size="xs">{new Date(s.closedAt).toLocaleString("pt-BR")}</Text>
-                      </Stack>
-                    )}
-                    {s.closeReason && (
-                      <Stack gap={2}>
-                        <Text size="xs" c="dimmed" fw={600}>MOTIVO</Text>
-                        <Text size="xs">{closeReasonLabel(s.closeReason)}</Text>
-                      </Stack>
-                    )}
-                  </Group>
-                </Stack>
-              </Box>
-            </Collapse>
-          </Table.Td>
-        </Table.Tr>
-      )}
-    </>
-  );
-}
-

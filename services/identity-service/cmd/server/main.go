@@ -24,9 +24,11 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/epic"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/presence"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/repository"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/steam"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/token"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/identity-service/internal/transport"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/auth"
@@ -100,8 +102,9 @@ func run(log *slog.Logger) error {
 	}
 
 	repo := repository.NewPostgresAccountRepository(pool)
-	svc := service.New(repo, issuer, notifier, log)
-	lister := service.NewPlayerLister(repo) // listing admin (003-admin-list-users)
+	svc := service.New(repo, issuer, notifier, log, externalLogin(repo, log)...)
+	// listing admin (003-admin-list-users) + vínculos de loja (006)
+	lister := service.NewPlayerLister(repo, service.WithExternalIdentities(repo))
 	handler := transport.NewHandler(svc, issuer, lister)
 
 	metrics := middleware.NewMetrics(prometheus.DefaultRegisterer, "identity-service")
@@ -183,4 +186,55 @@ func buildIssuer(cfg config.Config, log *slog.Logger) (*token.Issuer, error) {
 		return nil, errors.New("JWT_PRIVATE_KEY: não é uma chave Ed25519")
 	}
 	return token.New(priv), nil
+}
+
+// externalLogin liga os provedores de login externo configurados, cada um de
+// forma independente: Steam (spec 005-steam-login) exige a publisher key e o
+// app id; Epic (spec 008-epic-login) exige o client ID do produto no EOS. Um
+// provedor sem configuração responde 404 provider_not_supported.
+func externalLogin(repo *repository.PostgresAccountRepository, log *slog.Logger) []service.Option {
+	var verifiers []domain.ExternalIdentityVerifier
+	if v := steamVerifier(log); v != nil {
+		verifiers = append(verifiers, v)
+	}
+	if v := epicVerifier(log); v != nil {
+		verifiers = append(verifiers, v)
+	}
+	if len(verifiers) == 0 {
+		return nil
+	}
+	return []service.Option{service.WithExternalLogin(repo, verifiers...)}
+}
+
+func steamVerifier(log *slog.Logger) domain.ExternalIdentityVerifier {
+	key, appID := os.Getenv("STEAM_WEB_API_KEY"), os.Getenv("STEAM_APP_ID")
+	if key == "" || appID == "" {
+		log.Info("login Steam desligado (STEAM_WEB_API_KEY/STEAM_APP_ID ausentes)")
+		return nil
+	}
+	identity := os.Getenv("STEAM_TICKET_IDENTITY")
+	if identity == "" {
+		identity = "control-plane"
+	}
+	log.Info("login Steam ligado", "app_id", appID, "ticket_identity", identity)
+	return steam.New(steam.Config{
+		BaseURL:  os.Getenv("STEAM_API_BASE_URL"), // vazio = partner.steam-api.com
+		APIKey:   key,
+		AppID:    appID,
+		Identity: identity,
+	}, nil)
+}
+
+func epicVerifier(log *slog.Logger) domain.ExternalIdentityVerifier {
+	clientID := os.Getenv("EPIC_CLIENT_ID")
+	if clientID == "" {
+		log.Info("login Epic desligado (EPIC_CLIENT_ID ausente)")
+		return nil
+	}
+	v := epic.New(epic.Config{
+		ClientID: clientID,
+		JWKSURL:  os.Getenv("EPIC_JWKS_URL"), // vazio = JWKS público da Epic
+	}, nil)
+	log.Info("login Epic ligado", "client_id", clientID)
+	return v
 }

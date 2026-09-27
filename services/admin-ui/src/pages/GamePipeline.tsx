@@ -1,48 +1,39 @@
-import { Alert, CloseButton, Loader, Paper, Stack, Text } from "@mantine/core";
-import type { Node, NodeTypes } from "@xyflow/react";
-import { useMemo, useState } from "react";
-import { FlowCanvas } from "../components/flow/FlowCanvas";
-import {
-  PipelineConsumerNode,
-  PipelineKindNode,
-  PipelineModeNode,
-} from "../components/flow/pipelineNodes";
+import { Alert, Badge, Group, Loader, Stack, Table, Text } from "@mantine/core";
 import { api } from "../lib/api";
-import { buildPipelineGraph, type PipelineConsumerData } from "../lib/pipelineGraph";
+import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
+import { modeScoringStats } from "../lib/modes";
 import { useAsync } from "../lib/useAsync";
 
-const NODE_TYPES: NodeTypes = {
-  pipelineMode: PipelineModeNode,
-  pipelineKind: PipelineKindNode,
-  pipelineConsumer: PipelineConsumerNode,
+// Envelope que cada arquétipo publica no fan-out ao fim da partida/evento
+// (ADR-0020/0023) e quem o consome — espelha o dispatch real dos consumers Go:
+// o leaderboard descarta participation_event (nada a ranquear, adendo ADR-0028).
+const KIND_BY_ARCHETYPE: Record<string, string> = {
+  queue_arena: "win_loss_draw",
+  host_world_dropin: "participation_event",
+  battle_royale: "placement",
+  coop_mission: "collective",
+};
+const CONSUMERS_BY_KIND: Record<string, string[]> = {
+  win_loss_draw: ["achievements", "leaderboard", "analytics"],
+  placement: ["achievements", "leaderboard", "analytics"],
+  collective: ["achievements", "leaderboard", "analytics"],
+  participation_event: ["achievements", "analytics"],
 };
 
-// GamePipeline (spec 046): o mapa de dados do jogo — modos -> envelope ->
-// consumers, read-only, 3º uso do kit flow. Torna visível a fronteira do
-// adendo ADR-0028 (event rules só no ramo do achievements; participation não
-// alimenta leaderboard) e tira as scoringStats do esconderijo do form.
+// GamePipeline (spec 046, virou tabela na revisão 2026-09): o mapa de dados do
+// jogo — modo → envelope → consumidores, e o que cada consumidor faz com ele.
+// Era um grafo React Flow com alturas de card calibradas à mão; a mesma
+// informação cabe numa tabela, sem layout frágil, e agora inclui o
+// session_closed (que todo fechamento publica e o grafo omitia).
 export function GamePipeline({ gameId }: { gameId: string }) {
   const { data: modes, loading, error } = useAsync((s) => api.listMultiplayerModes(gameId, s), [gameId]);
   const { data: rules } = useAsync((s) => api.gameEventRules(gameId, s), [gameId]);
   const { data: catalog } = useAsync((s) => api.gameCatalog(gameId, s), [gameId]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const graph = useMemo(() => {
-    if (!modes) return { nodes: [], edges: [] };
-    const visibleRules = filterRulesForGame(rules ?? [], gameArchetypes(modes));
-    return buildPipelineGraph(modes, visibleRules, catalog ?? []);
-  }, [modes, rules, catalog]);
-
-  const selectedNode = useMemo(
-    () => graph.nodes.find((n) => n.id === selectedId) ?? null,
-    [graph, selectedId],
-  );
-
   if (loading && !modes) return <Loader />;
   if (error && !modes) return <Alert color="critical">game-registry indisponível.</Alert>;
-  if (modes && modes.length === 0) {
+  if (!modes || modes.length === 0) {
     return (
       <Text c="dimmed">
         Sem modos multiplayer cadastrados — o pipeline aparece quando o jogo tiver ao menos um modo
@@ -51,86 +42,81 @@ export function GamePipeline({ gameId }: { gameId: string }) {
     );
   }
 
-  return (
-    <Stack gap="xs">
-      <Text size="sm" c="dimmed">
-        O resultado de cada partida vira um <b>envelope</b> publicado no fan-out (SNS→SQS) e cada
-        consumer o traduz pra sua própria língua — as event rules moram só no ramo do achievements.
-      </Text>
-      <FlowCanvas
-        nodes={graph.nodes}
-        edges={graph.edges.map((e) => ({ ...e, style: { stroke: "#3a4657" } }))}
-        nodeTypes={NODE_TYPES}
-        fitKey={graph.nodes.length}
-        onNodeClick={setSelectedId}
-        onPaneClick={() => setSelectedId(null)}
-        // fitMargin menor que o default (90px, calibrado pro canvas de Event
-        // Rules) — pedido do Vitor: o pipeline tem só 3 colunas curtas, o
-        // respiro grande deixava os nodes pequenos demais.
-        fitMargin={32}
-        // interactive=false (pedido do Vitor): a vista de pipeline é só
-        // leitura — sem botões de zoom/fit, sem arrastar nó/canvas. Só
-        // clicar pra selecionar (onNodeClick/onPaneClick acima) continua.
-        interactive={false}
-        // minimap=false: não faz sentido um minimapa de navegação num canvas
-        // sem pan/zoom pra navegar.
-        minimap={false}
-        overlay={
-          selectedNode ? (
-            <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
-              <CloseButton
-                size="sm"
-                onClick={() => setSelectedId(null)}
-                style={{ position: "absolute", top: 8, right: 8 }}
-                aria-label="Fechar detalhe"
-              />
-              <PipelineDetails node={selectedNode} />
-            </Paper>
-          ) : undefined
-        }
-      />
-    </Stack>
-  );
-}
+  const visibleRules = filterRulesForGame(rules ?? [], gameArchetypes(modes));
+  const eventTypes = new Set(visibleRules.flatMap((r) => r.eventTypes)).size;
+  const byEvent = (catalog ?? []).filter((a) => !a.statKey && a.eventType).length;
+  const byStat = (catalog ?? []).filter((a) => a.statKey).length;
+  const allStats = [...new Set(modes.flatMap(modeScoringStats))];
 
-function PipelineDetails({ node }: { node: Node }) {
-  if (node.type === "pipelineConsumer") {
-    const d = node.data as unknown as PipelineConsumerData;
-    return (
-      <Stack gap="xs">
-        <Text fw={600} size="sm">
-          {d.title}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {d.hint}
-        </Text>
-      </Stack>
-    );
-  }
-  if (node.type === "pipelineKind") {
-    return (
-      <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Envelope
-        </Text>
-        <Text size="xs" c="dimmed">
-          Contrato do fan-out (ADR-0020/0023): a forma do resultado publicada pelo session-service ao
-          fim da partida. Carrega também o <code>modeId</code> (ADR-0024) — usado como fact{" "}
-          <code>mode</code> nas event rules.
-        </Text>
-      </Stack>
-    );
-  }
   return (
-    <Stack gap="xs">
-      <Text fw={600} size="sm">
-        Modo
+    <Stack gap="sm">
+      <Text size="sm" c="dimmed">
+        O resultado de cada partida (ou cada evento de participação) vira um <b>envelope</b> publicado no
+        fan-out (SNS→SQS); cada consumidor o traduz para a sua língua. Todo fechamento de sessão publica também
+        um <code>session_closed</code>, que alimenta a saúde das sessões no analytics.
       </Text>
-      <Text size="xs" c="dimmed">
-        Perfil de multiplayer nomeado (ADR-0024). As stats declaradas aqui viram boards no
-        leaderboard e podem alimentar achievements por métrica — o vocabulário de dados do jogo
-        nasce neste cadastro.
-      </Text>
+      <Table striped withTableBorder verticalSpacing="xs">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Modo</Table.Th>
+            <Table.Th>Arquétipo</Table.Th>
+            <Table.Th>Envelope</Table.Th>
+            <Table.Th>Stats declaradas</Table.Th>
+            <Table.Th>Consumidores</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {modes.map((m) => {
+            const kind = KIND_BY_ARCHETYPE[m.archetype];
+            const stats = modeScoringStats(m);
+            return (
+              <Table.Tr key={m.modeId}>
+                <Table.Td ff="monospace">{m.modeId}</Table.Td>
+                <Table.Td>{ARCHETYPE_META[m.archetype].label}</Table.Td>
+                <Table.Td>
+                  <code>{kind}</code>
+                </Table.Td>
+                <Table.Td c={stats.length ? undefined : "dimmed"}>{stats.length ? stats.join(", ") : "—"}</Table.Td>
+                <Table.Td>
+                  <Group gap={4}>
+                    {(CONSUMERS_BY_KIND[kind] ?? []).map((c) => (
+                      <Badge key={c} size="xs" variant="light">
+                        {c}
+                      </Badge>
+                    ))}
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+      <Table withTableBorder verticalSpacing="xs">
+        <Table.Tbody>
+          <Table.Tr>
+            <Table.Td w={140} fw={600}>achievements</Table.Td>
+            <Table.Td>
+              {visibleRules.length} regras → {eventTypes} event types · {byEvent} conquistas por evento, {byStat} por
+              stat. Traduz o envelope pelas event rules (aba Event Rules).
+            </Table.Td>
+          </Table.Tr>
+          <Table.Tr>
+            <Table.Td fw={600}>leaderboard</Table.Td>
+            <Table.Td>
+              board <code>score</code>
+              {allStats.length > 0 ? ` + um board por stat (${allStats.join(", ")})` : " (sem stats declaradas)"}. Não
+              recebe <code>participation_event</code> — não há o que ranquear.
+            </Table.Td>
+          </Table.Tr>
+          <Table.Tr>
+            <Table.Td fw={600}>analytics</Table.Td>
+            <Table.Td>
+              Agrega o envelope bruto, antes de qualquer regra (a história não muda quando as regras mudam), e o{" "}
+              <code>session_closed</code>.
+            </Table.Td>
+          </Table.Tr>
+        </Table.Tbody>
+      </Table>
     </Stack>
   );
 }

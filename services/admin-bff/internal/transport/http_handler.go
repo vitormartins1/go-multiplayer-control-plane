@@ -31,9 +31,7 @@ type AdminService interface {
 	SetDescription(ctx context.Context, id, description string) (*domain.Game, error)
 	DeleteGame(ctx context.Context, id string) error
 	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
-	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
 	ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error)
-	GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error)
 	SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error)
 	DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error
 	ModeSnapshotHashes(ctx context.Context, gameID string) (map[string]string, error)
@@ -90,11 +88,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/games/{gameId}/description", h.setDescription)
 	mux.HandleFunc("DELETE /api/games/{gameId}", h.deleteGame)
 	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profile", h.getMultiplayerProfile)
-	mux.HandleFunc("PUT /api/games/{gameId}/multiplayer-profile", h.setMultiplayerProfile)
 	// Modos nomeados (ADR-0024, spec 017) — passthrough cru da coleção.
 	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profiles", h.listMultiplayerModes)
 	mux.HandleFunc("PUT /api/games/{gameId}/multiplayer-profiles/{modeId}", h.setMultiplayerMode)
-	mux.HandleFunc("GET /api/games/{gameId}/multiplayer-profiles/{modeId}", h.getMultiplayerMode)
 	mux.HandleFunc("DELETE /api/games/{gameId}/multiplayer-profiles/{modeId}", h.deleteMultiplayerMode)
 	// Fora de /multiplayer-profiles/{modeId} de propósito (spec 022): um modo
 	// literalmente chamado "snapshot-hashes" colidiria com essa rota e ficaria
@@ -312,35 +308,10 @@ func (h *Handler) getMultiplayerProfile(w http.ResponseWriter, r *http.Request) 
 	writeRawJSON(w, http.StatusOK, raw)
 }
 
-// setMultiplayerProfile faz upsert do perfil; repassa o corpo cru e os erros de
-// validação (400) / não-encontrado (404) do game-registry.
-func (h *Handler) setMultiplayerProfile(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
-		return
-	}
-	raw, err := h.svc.SetMultiplayerProfile(r.Context(), r.PathValue("gameId"), body)
-	if err != nil {
-		writeUpstream(w, err)
-		return
-	}
-	writeRawJSON(w, http.StatusOK, raw)
-}
-
 // --- modos nomeados (ADR-0024, spec 017) ---
 
 func (h *Handler) listMultiplayerModes(w http.ResponseWriter, r *http.Request) {
 	raw, err := h.svc.ListMultiplayerModes(r.Context(), r.PathValue("gameId"))
-	if err != nil {
-		writeUpstream(w, err)
-		return
-	}
-	writeRawJSON(w, http.StatusOK, raw)
-}
-
-func (h *Handler) getMultiplayerMode(w http.ResponseWriter, r *http.Request) {
-	raw, err := h.svc.GetMultiplayerMode(r.Context(), r.PathValue("gameId"), r.PathValue("modeId"))
 	if err != nil {
 		writeUpstream(w, err)
 		return
@@ -744,7 +715,7 @@ func (h *Handler) analyticsOverview(w http.ResponseWriter, r *http.Request) {
 		ov.Games = []domain.AnalyticsGameStat{}
 	}
 	if ov.Daily == nil {
-		ov.Daily = []domain.AnalyticsDaily{}
+		ov.Daily = []domain.AnalyticsSessionsPoint{}
 	}
 	httpkit.WriteJSON(w, http.StatusOK, ov)
 }

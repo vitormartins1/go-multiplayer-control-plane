@@ -63,4 +63,3 @@ func (c *Client) ForPlayer(ctx context.Context, gameID, playerID string) (domain
 		Blob:        body.Blob,
 	}, nil
 }
-

@@ -176,19 +176,10 @@ func (s *Service) GetMultiplayerProfile(ctx context.Context, gameID string) (jso
 	return s.registry.GetMultiplayerProfile(ctx, gameID)
 }
 
-// SetMultiplayerProfile faz upsert do perfil de multiplayer (passthrough).
-func (s *Service) SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
-	return s.registry.SetMultiplayerProfile(ctx, gameID, profile)
-}
-
 // Modos nomeados (ADR-0024, spec 017): passthrough cru da coleção de modos.
 
 func (s *Service) ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error) {
 	return s.registry.ListMultiplayerModes(ctx, gameID)
-}
-
-func (s *Service) GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error) {
-	return s.registry.GetMultiplayerMode(ctx, gameID, modeID)
 }
 
 func (s *Service) SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error) {
@@ -257,9 +248,20 @@ func (s *Service) enrichLeaderboardHandles(ctx context.Context, entries []domain
 	}
 }
 
-// AchievementProgress devolve o progresso de todos os jogadores na conquista.
+// AchievementProgress devolve o progresso de todos os jogadores na conquista,
+// com o handle de cada um (spec 029; best-effort, como o leaderboard).
 func (s *Service) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
-	return s.reader.AchievementProgress(ctx, gameID, achievementID)
+	entries, err := s.reader.AchievementProgress(ctx, gameID, achievementID)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) > 0 {
+		handles := s.handlesByID(ctx)
+		for i := range entries {
+			entries[i].Handle = handles[entries[i].PlayerID]
+		}
+	}
+	return entries, nil
 }
 
 // GameEventRules lê as regras efetivas do jogo (globais do arquétipo +

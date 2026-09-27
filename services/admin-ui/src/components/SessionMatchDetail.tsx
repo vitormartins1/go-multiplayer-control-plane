@@ -19,6 +19,7 @@ import { PlayerAvatar } from "./PlayerAvatar";
 import { GuestBadge } from "./GuestBadge";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { formatDuration } from "../lib/format";
+import { matchOutcomeMeta, participationOutcomeMeta, roleMeta } from "../lib/vocab";
 
 // Detalhe rico da sessão (session specs 018/019), compartilhado entre a aba
 // Sessions do jogo e o board Rooms. O painel é específico por arquétipo:
@@ -43,10 +44,11 @@ export function SessionMatchDetail({ session: s }: { session: GameSession }) {
 
 // rótulos e cores dos papéis do host_world_dropin (compartilhado com o board
 // Rooms, que usa a mesma leitura na linha da tabela).
+// Fonte única em lib/vocab.ts (revisão 2026-09).
 export const ROLE_META: Record<string, { label: string; color: string }> = {
-  coop: { label: "co-op", color: "teal" },
-  invader: { label: "invasor", color: "red" },
-  host: { label: "host", color: "blue" },
+  coop: roleMeta("coop"),
+  invader: roleMeta("invader"),
+  host: roleMeta("host"),
 };
 
 // 10 cores (config de times/squads não tem teto duro — MultiplayerSettings
@@ -55,9 +57,9 @@ export const ROLE_META: Record<string, { label: string; color: string }> = {
 const TEAM_COLORS = ["blue", "red", "teal", "orange", "grape", "cyan", "pink", "lime", "indigo", "yellow"];
 
 const OUTCOME_META: Record<string, { label: string; color: string }> = {
-  win: { label: "vitória", color: "green" },
-  loss: { label: "derrota", color: "red" },
-  draw: { label: "empate", color: "yellow" },
+  win: matchOutcomeMeta("win"),
+  loss: matchOutcomeMeta("loss"),
+  draw: matchOutcomeMeta("draw"),
 };
 
 const RESPAWN_LABELS: Record<string, string> = {
@@ -655,9 +657,9 @@ function WorldRoleCards({ session: s, handleOf }: { session: GameSession; handle
 // (ReportParticipationEvent, spec 013/027) — distinto de OUTCOME_META
 // (win/loss/draw do queue_arena).
 const PARTICIPANT_OUTCOME_META: Record<string, { label: string; color: string }> = {
-  SUCCESS: { label: "sucesso", color: "green" },
-  FAIL: { label: "falha", color: "red" },
-  NEUTRAL: { label: "neutro", color: "gray" },
+  SUCCESS: participationOutcomeMeta("SUCCESS"),
+  FAIL: participationOutcomeMeta("FAIL"),
+  NEUTRAL: participationOutcomeMeta("NEUTRAL"),
 };
 
 // ParticipantOutcomeBadge mostra o último desfecho conhecido do participante

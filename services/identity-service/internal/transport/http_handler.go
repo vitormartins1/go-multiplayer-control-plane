@@ -32,12 +32,18 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /accounts", h.register)
 	mux.HandleFunc("POST /sessions", h.login)
 	mux.HandleFunc("POST /sessions/anonymous", h.loginAnonymous)
+	// Login por provedor externo (spec 005-steam-login): o padrão literal
+	// /sessions/anonymous acima é mais específico e continua valendo.
+	mux.HandleFunc("POST /sessions/{provider}", h.loginExternal)
 	mux.HandleFunc("GET /.well-known/jwks.json", h.jwks)
 
 	// Admin (interno, sem auth — ver specs/003-admin-list-users): lista de usuários.
 	mux.HandleFunc("GET /admin/players", h.adminListPlayers)
 	// Lookup por id (specs/004-admin-player-by-id): handle de UM jogador.
 	mux.HandleFunc("GET /admin/players/{playerID}", h.adminGetPlayer)
+	// Vínculos de loja (spec 006): o achievements lê o SteamID para espelhar
+	// conquistas na Steam (achievements/019).
+	mux.HandleFunc("GET /admin/players/{playerID}/external-identities", h.adminExternalIdentities)
 }
 
 type credentials struct {
@@ -75,6 +81,25 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, err := h.auth.Authenticate(r.Context(), req.Handle, req.Password, req.GameId)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	httpkit.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// loginExternal troca o ticket de um provedor (hoje "steam") pelo session
+// token (spec 005-steam-login).
+func (h *Handler) loginExternal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Ticket string `json:"ticket"`
+		GameId string `json:"gameId"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	token, err := h.auth.AuthenticateExternal(r.Context(), r.PathValue("provider"), req.Ticket, req.GameId)
 	if err != nil {
 		writeDomainError(w, err)
 		return
@@ -158,6 +183,28 @@ func (h *Handler) adminGetPlayer(w http.ResponseWriter, r *http.Request) {
 	httpkit.WriteJSON(w, http.StatusOK, playerDTO{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
 }
 
+type externalIdentityDTO struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"externalId"`
+}
+
+func (h *Handler) adminExternalIdentities(w http.ResponseWriter, r *http.Request) {
+	ids, err := h.players.ExternalIdentities(r.Context(), r.PathValue("playerID"))
+	if err != nil {
+		if errors.Is(err, domain.ErrAccountNotFound) {
+			httpkit.WriteError(w, http.StatusNotFound, "player_not_found")
+			return
+		}
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	out := make([]externalIdentityDTO, len(ids))
+	for i, e := range ids {
+		out[i] = externalIdentityDTO{Provider: e.Provider, ExternalID: e.ExternalID}
+	}
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"identities": out})
+}
+
 // atoiOr devolve o inteiro de s, ou def se vazio/inválido.
 func atoiOr(s string, def int) int {
 	if n, err := strconv.Atoi(s); err == nil {
@@ -166,8 +213,12 @@ func atoiOr(s string, def int) int {
 	return def
 }
 
+// maxBodyBytes limita o corpo das rotas do identity (credenciais e gameId são
+// pequenos; /accounts e /sessions não exigem auth, então o teto importa).
+const maxBodyBytes = 64 << 10
+
 func decode(r *http.Request, v any) error {
-	dec := json.NewDecoder(r.Body)
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBodyBytes))
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)
 }
@@ -183,6 +234,16 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		httpkit.WriteError(w, http.StatusConflict, "handle_taken")
 	case errors.Is(err, domain.ErrInvalidCredentials):
 		httpkit.WriteError(w, http.StatusUnauthorized, "invalid_credentials")
+	case errors.Is(err, domain.ErrTooManyAttempts):
+		httpkit.WriteError(w, http.StatusTooManyRequests, "too_many_attempts")
+	case errors.Is(err, domain.ErrProviderNotSupported):
+		httpkit.WriteError(w, http.StatusNotFound, "provider_not_supported")
+	case errors.Is(err, domain.ErrInvalidTicket):
+		httpkit.WriteError(w, http.StatusUnauthorized, "invalid_ticket")
+	case errors.Is(err, domain.ErrExternalBanned):
+		httpkit.WriteError(w, http.StatusForbidden, "banned")
+	case errors.Is(err, domain.ErrProviderUnavailable):
+		httpkit.WriteError(w, http.StatusServiceUnavailable, "provider_unavailable")
 	default:
 		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
 	}

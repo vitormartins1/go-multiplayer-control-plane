@@ -18,7 +18,23 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/sync/singleflight"
 )
+
+// Claims fixos do token de jogador (revisão 2026-09, G3): o identity emite
+// iss/aud e o Verifier exige os dois. Sem isso, qualquer JWT EdDSA assinado
+// por uma chave do JWKS valia como token de jogador — inclusive um token
+// emitido para outro propósito pela mesma chave no futuro.
+const (
+	PlayerTokenIssuer   = "go-multiplayer-control-plane/identity"
+	PlayerTokenAudience = "game-backend"
+)
+
+// minRefetchInterval limita o refetch do JWKS por kid desconhecido (G4): sem
+// ele, cada request com um kid inventado virava um GET no identity —
+// amplificação barata contra o identity. Rotação legítima de chave espera no
+// máximo este intervalo.
+const minRefetchInterval = 30 * time.Second
 
 // ErrUnauthorized indica token ausente, malformado, expirado ou com assinatura
 // inválida. O transport de cada serviço o mapeia para HTTP 401.
@@ -30,9 +46,13 @@ type Verifier struct {
 	client  *http.Client
 	ttl     time.Duration
 
-	mu      sync.RWMutex
-	keys    map[string]ed25519.PublicKey
-	fetched time.Time
+	mu          sync.RWMutex
+	keys        map[string]ed25519.PublicKey
+	fetched     time.Time // último fetch bem-sucedido (TTL do cache)
+	lastAttempt time.Time // última tentativa, com ou sem sucesso (throttle)
+
+	sf  singleflight.Group // refetches concorrentes viram um só GET
+	now func() time.Time
 }
 
 // NewVerifier cria um verificador que busca o JWKS em jwksURL e mantém as
@@ -60,10 +80,12 @@ func NewVerifier(jwksURL string, ttl time.Duration) (*Verifier, error) {
 		},
 		ttl:  ttl,
 		keys: map[string]ed25519.PublicKey{},
+		now:  time.Now,
 	}, nil
 }
 
-// Verify valida a assinatura e a expiração do token e devolve o sub (playerID).
+// Verify valida assinatura, expiração, issuer e audience do token e devolve o
+// sub (playerID).
 // Qualquer falha vira ErrUnauthorized (sem vazar o motivo ao chamador).
 func (v *Verifier) Verify(ctx context.Context, token string) (string, error) {
 	claims := jwt.MapClaims{}
@@ -73,7 +95,10 @@ func (v *Verifier) Verify(ctx context.Context, token string) (string, error) {
 			return nil, errors.New("token sem kid")
 		}
 		return v.keyForKid(ctx, kid)
-	}, jwt.WithValidMethods([]string{"EdDSA"}))
+	}, jwt.WithValidMethods([]string{"EdDSA"}),
+		jwt.WithIssuer(PlayerTokenIssuer),
+		jwt.WithAudience(PlayerTokenAudience),
+		jwt.WithExpirationRequired())
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrUnauthorized, err)
 	}
@@ -85,19 +110,36 @@ func (v *Verifier) Verify(ctx context.Context, token string) (string, error) {
 }
 
 // keyForKid devolve a chave pública do kid, atualizando o cache quando o kid é
-// desconhecido ou o cache está vencido. Se o refetch falhar mas houver uma
+// desconhecido ou o cache está vencido. Refetches são coalescidos
+// (singleflight) e limitados a um por minRefetchInterval: kid desconhecido
+// dentro do intervalo falha sem ir à rede. Se o refetch falhar mas houver uma
 // chave em cache (stale), usa-a — disponibilidade do identity não derruba a
 // validação de tokens já conhecidos.
 func (v *Verifier) keyForKid(ctx context.Context, kid string) (ed25519.PublicKey, error) {
 	v.mu.RLock()
 	key, ok := v.keys[kid]
-	stale := time.Since(v.fetched) >= v.ttl
+	stale := v.now().Sub(v.fetched) >= v.ttl
 	v.mu.RUnlock()
 	if ok && !stale {
 		return key, nil
 	}
 
-	if err := v.refresh(ctx); err != nil {
+	// A checagem do intervalo mora DENTRO do singleflight: quem chega enquanto
+	// um fetch está em andamento espera o resultado dele (em vez de ver o
+	// lastAttempt recém-gravado e desistir antes das chaves chegarem).
+	_, err, _ := v.sf.Do("jwks", func() (any, error) {
+		v.mu.RLock()
+		recent := v.now().Sub(v.lastAttempt) < minRefetchInterval
+		v.mu.RUnlock()
+		if recent {
+			return nil, errRefetchThrottled
+		}
+		// sem o cancelamento de quem chegou primeiro: se aquele cliente
+		// desistir, todos os que esperam no singleflight falhariam junto e o
+		// intervalo de 30 s já estaria contado. O http.Client tem timeout.
+		return nil, v.refresh(context.WithoutCancel(ctx))
+	})
+	if err != nil && !errors.Is(err, errRefetchThrottled) {
 		if ok {
 			return key, nil // fallback: usa a chave stale
 		}
@@ -105,16 +147,27 @@ func (v *Verifier) keyForKid(ctx context.Context, kid string) (ed25519.PublicKey
 	}
 
 	v.mu.RLock()
-	key, ok = v.keys[kid]
+	fresh, found := v.keys[kid]
 	v.mu.RUnlock()
-	if !ok {
+	switch {
+	case found:
+		return fresh, nil
+	case ok && err != nil:
+		return key, nil // throttled: segue com a chave stale conhecida
+	default: // inclui kid revogado (fetch ok e o kid saiu do JWKS)
 		return nil, fmt.Errorf("auth: kid desconhecido %q", kid)
 	}
-	return key, nil
 }
+
+// errRefetchThrottled: houve tentativa de fetch há menos de minRefetchInterval.
+var errRefetchThrottled = errors.New("auth: refetch do jwks limitado")
 
 // refresh busca o JWKS e substitui o cache de chaves.
 func (v *Verifier) refresh(ctx context.Context) error {
+	v.mu.Lock()
+	v.lastAttempt = v.now()
+	v.mu.Unlock()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.jwksURL, nil)
 	if err != nil {
 		return fmt.Errorf("auth: jwks request: %w", err)
@@ -154,7 +207,7 @@ func (v *Verifier) refresh(ctx context.Context) error {
 
 	v.mu.Lock()
 	v.keys = keys
-	v.fetched = time.Now()
+	v.fetched = v.now()
 	v.mu.Unlock()
 	return nil
 }

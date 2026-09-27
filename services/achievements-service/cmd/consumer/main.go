@@ -26,8 +26,10 @@ import (
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/awsx"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/consumer"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/domain"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/identityclient"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/repository"
 	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/service"
+	"github.com/vitormartins1/go-multiplayer-control-plane/services/achievements-service/internal/steam"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/config"
 	"github.com/vitormartins1/go-multiplayer-control-plane/shared/logger"
 )
@@ -87,6 +89,16 @@ func run(log *slog.Logger) error {
 		c.Run(ctx)
 	}()
 
+	// espelhamento na Steam (spec 019): opcional, na mesma árvore de lifecycle.
+	if mirror := buildSteamMirror(pool, log); mirror != nil {
+		registerSteamMetrics(mirror)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			mirror.Run(ctx, service.SteamSyncInterval)
+		}()
+	}
+
 	srv := metricsServer(cfg.Port)
 	errCh := make(chan error, 1)
 	go func() {
@@ -111,6 +123,37 @@ func run(log *slog.Logger) error {
 	wg.Wait() // espera o loop de consumo encerrar
 	log.Info("encerrado")
 	return nil
+}
+
+// buildSteamMirror liga o espelhamento de conquistas na Steam (spec 019) só com
+// a configuração completa: STEAM_WEB_API_KEY, STEAM_APP_ID, STEAM_GAME_ID (o
+// jogo do control plane que corresponde ao app na Steam), IDENTITY_URL e
+// INTERNAL_API_KEY (para ler o SteamID no identity). Faltou algo: nil.
+func buildSteamMirror(pool *pgxpool.Pool, log *slog.Logger) *service.SteamMirror {
+	key, appID, gameID := os.Getenv("STEAM_WEB_API_KEY"), os.Getenv("STEAM_APP_ID"), os.Getenv("STEAM_GAME_ID")
+	identityURL, internalKey := os.Getenv("IDENTITY_URL"), os.Getenv("INTERNAL_API_KEY")
+	if key == "" || appID == "" || gameID == "" || identityURL == "" || internalKey == "" {
+		log.Info("espelhamento na Steam desligado (STEAM_WEB_API_KEY/STEAM_APP_ID/STEAM_GAME_ID/IDENTITY_URL/INTERNAL_API_KEY)")
+		return nil
+	}
+	log.Info("espelhamento na Steam ligado", slog.String("game_id", gameID), slog.String("app_id", appID))
+	return service.NewSteamMirror(
+		repository.NewPostgresSteamSyncRepository(pool),
+		identityclient.New(identityURL, internalKey, nil),
+		steam.New(steam.Config{BaseURL: os.Getenv("STEAM_API_BASE_URL"), APIKey: key, AppID: appID}, nil),
+		gameID, log,
+	)
+}
+
+// registerSteamMetrics expõe achievements_steam_sync_total{result}.
+func registerSteamMetrics(m *service.SteamMirror) {
+	for _, result := range []string{service.SteamResultSynced, service.SteamResultSkipped, service.SteamResultRetry, service.SteamResultFailed} {
+		prometheus.MustRegister(prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name:        "achievements_steam_sync_total",
+			Help:        "Desbloqueios espelhados na Steam por resultado (spec 019).",
+			ConstLabels: prometheus.Labels{"result": result},
+		}, func() float64 { return m.SyncTotal(result) }))
+	}
 }
 
 // makeHandler desserializa o envelope do fan-out e o despacha por kind (ADR-0023,

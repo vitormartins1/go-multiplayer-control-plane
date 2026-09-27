@@ -132,17 +132,35 @@ type GameStat struct {
 
 // Totals são os totais cross-game do overview.
 type Totals struct {
-	Matches       int64
+	Sessions      int64 // sessões/mundos fechados, todos os arquétipos (spec 016)
+	Matches       int64 // partidas de queue_arena
 	UniquePlayers int64 // distintos globais
 	Games         int64 // jogos com atividade
 }
 
+// OverviewGame é a linha de um jogo no overview cross-game (spec 016): a
+// medida comum a todos os arquétipos é a SESSÃO fechada (game_session_rollup);
+// Matches/Wins/... seguem vindo do rollup de queue_arena.
+type OverviewGame struct {
+	GameStat
+	Sessions     int64
+	AvgSessionMs int64 // duração média das sessões fechadas
+	Abandoned    int64 // fechadas por abandoned (server/host sumiu) ou ttl sem resultado (exceto mundo host_world, cujo ttl é o fim normal)
+}
+
+// SessionsPoint é um ponto da série "sessões fechadas por dia".
+type SessionsPoint struct {
+	Day      string // YYYY-MM-DD (UTC)
+	Sessions int64
+}
+
 // Overview é o panorama cross-game (aba Analytics): totais, jogos e a série de
-// partidas por dia somada entre todos os jogos (spec 002).
+// sessões fechadas por dia somada entre todos os jogos (spec 016 — antes era
+// "partidas por dia", que só existia para queue_arena).
 type Overview struct {
 	Totals Totals
-	Games  []GameStat
-	Daily  []DailyPoint
+	Games  []OverviewGame
+	Daily  []SessionsPoint
 }
 
 // DailyPoint é uma partida-por-dia da série de um jogo.

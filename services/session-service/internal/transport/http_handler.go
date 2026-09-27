@@ -85,11 +85,16 @@ type sessionDTO struct {
 
 	// Detalhe rico (spec 018): snapshot do modo (ADR-0024) + formação +
 	// resultado persistido. Aditivos; ausentes em sessões sem snapshot/result.
-	Archetype   string          `json:"archetype,omitempty"`
-	ProfileHash string          `json:"profileHash,omitempty"`
-	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
-	Teams       []teamDTO       `json:"teams,omitempty"`
-	Result      *resultDTO      `json:"result,omitempty"`
+	Archetype string `json:"archetype,omitempty"`
+	Topology  string `json:"topology,omitempty"` // dedicated | p2p (spec 031); vazio em sessões fechadas antes da migration 004
+	// HostConnection (p2p, spec 031) e LastHeartbeatAt (spec 032): o console
+	// mostra com quem o jogo conecta e se o mundo está vivo (admin-ui/091).
+	HostConnection  string          `json:"hostConnection,omitempty"`
+	LastHeartbeatAt *time.Time      `json:"lastHeartbeatAt,omitempty"`
+	ProfileHash     string          `json:"profileHash,omitempty"`
+	ModeParams      json.RawMessage `json:"modeParams,omitempty"`
+	Teams           []teamDTO       `json:"teams,omitempty"`
+	Result          *resultDTO      `json:"result,omitempty"`
 
 	// Participants é a base do histórico persistido (spec 025): um registro por
 	// jogador com o papel ocupado. Aditivo — vem preenchido tanto nas sessões em
@@ -375,12 +380,18 @@ func toSessionDTO(s domain.Session) sessionDTO {
 		RoleSlots:     roleSlotsDTO(s.RoleSlots),
 		Participants:  participantsDTO(s.Participants),
 	}
+	dto.HostConnection = s.HostConnection
+	if !s.LastHeartbeatAt.IsZero() {
+		hb := s.LastHeartbeatAt
+		dto.LastHeartbeatAt = &hb
+	}
 	if !s.ClosedAt.IsZero() {
 		closedAt := s.ClosedAt
 		dto.ClosedAt = &closedAt
 	}
 	if s.Profile != nil {
 		dto.Archetype = s.Profile.Archetype
+		dto.Topology = s.Profile.Topology
 		dto.ProfileHash = s.Profile.Hash
 		dto.ModeParams = json.RawMessage(s.Profile.ParamsJSON)
 	}

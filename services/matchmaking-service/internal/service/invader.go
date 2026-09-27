@@ -75,7 +75,7 @@ func (in *Invader) Invade(ctx context.Context, gameID, modeID, playerID string, 
 	}
 
 	for attempt := 0; attempt < invadeListAttempts; attempt++ {
-		worlds, err := in.listWorlds(ctx, gameID)
+		worlds, err := in.listWorlds(ctx, gameID, modeID)
 		if err != nil {
 			return domain.Invaded{}, fmt.Errorf("invader: list worlds: %w", err)
 		}
@@ -112,7 +112,7 @@ func (in *Invader) tryInject(ctx context.Context, worlds []domain.InvadableWorld
 		injected, err := in.inject(ctx, w.SessionID, playerID)
 		switch {
 		case err == nil:
-			return domain.Invaded{SessionID: w.SessionID, ServerAddress: injected.ServerAddress, ConnectToken: injected.ConnectToken}, true, nil
+			return domain.Invaded{SessionID: w.SessionID, ServerAddress: injected.ServerAddress, HostConnection: injected.HostConnection, ConnectToken: injected.ConnectToken}, true, nil
 		case errors.Is(err, domain.ErrRoleFull), errors.Is(err, domain.ErrWorldNotFound):
 			continue // corrida: mundo encheu/fechou entre listar e injetar → tenta o próximo
 		default:
@@ -129,18 +129,20 @@ func (in *Invader) policyOf(ctx context.Context, gameID, modeID string) (domain.
 	return in.policies.InvasionPolicy(ctx, gameID, modeID)
 }
 
-// listWorlds lista os mundos invadíveis com timeout próprio.
-func (in *Invader) listWorlds(ctx context.Context, gameID string) ([]domain.InvadableWorld, error) {
+// listWorlds lista os mundos invadíveis DO MODO do invasor (spec 012) com
+// timeout próprio — a política aplicada é a desse modo, então os mundos
+// também precisam ser dele.
+func (in *Invader) listWorlds(ctx context.Context, gameID, modeID string) ([]domain.InvadableWorld, error) {
 	ctx, cancel := context.WithTimeout(ctx, invadeTimeout)
 	defer cancel()
-	return in.directory.ListInvadableWorlds(ctx, gameID)
+	return in.directory.ListInvadableWorlds(ctx, gameID, modeID)
 }
 
 // inject injeta o invasor num mundo com timeout próprio.
 func (in *Invader) inject(ctx context.Context, sessionID, playerID string) (domain.Injected, error) {
 	ctx, cancel := context.WithTimeout(ctx, invadeTimeout)
 	defer cancel()
-	return in.injector.Inject(ctx, sessionID, playerID, roleInvader)
+	return in.injector.Inject(ctx, sessionID, playerID, roleInvader, "")
 }
 
 // count incrementa o contador do resultado (métrica invasions_total{result}).

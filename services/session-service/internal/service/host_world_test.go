@@ -34,7 +34,7 @@ func openWorldSetup(t *testing.T) (*Service, *mockAllocator, *mockIssuer, string
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
-	sess, grant, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, grant, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	require.Equal(t, "host-1", grant.PlayerID)
 	require.Equal(t, "token", grant.Token)
@@ -57,7 +57,7 @@ func TestOpenWorld_PerfilOk_CriaMundoComSlotsEGrantDoHost(t *testing.T) {
 
 func TestOpenWorld_SemProfileProvider_ErrUnsupportedArchetype(t *testing.T) {
 	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}) // sem WithProfileProvider
-	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	assert.ErrorIs(t, err, domain.ErrUnsupportedArchetype)
 }
 
@@ -66,7 +66,7 @@ func TestOpenWorld_PerfilIndisponivel_ErrUnsupportedArchetype(t *testing.T) {
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(domain.ProfileSnapshot{}, domain.ErrProfileUnavailable)
 	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(prof))
 
-	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	assert.ErrorIs(t, err, domain.ErrUnsupportedArchetype)
 }
 
@@ -77,7 +77,7 @@ func TestOpenWorld_PoolEsgotado_ErrNoServer(t *testing.T) {
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(prof))
 
-	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	assert.ErrorIs(t, err, domain.ErrNoServer)
 }
 
@@ -93,7 +93,7 @@ func TestOpenWorld_PropagaFleetDoSnapshotParaAllocate(t *testing.T) {
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(snap, nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
 
-	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	alloc.AssertExpectations(t)
 }
@@ -106,7 +106,7 @@ func TestOpenWorld_FleetIndisponivel_ErrFleetUnavailable(t *testing.T) {
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, &mockIssuer{}, &mockPublisher{}, WithProfileProvider(prof))
 
-	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	assert.ErrorIs(t, err, domain.ErrFleetUnavailable)
 }
 
@@ -120,7 +120,7 @@ func TestOpenWorld_TokenFalha_LiberaServer(t *testing.T) {
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
 
-	_, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.Error(t, err)
 	alloc.AssertCalled(t, "Release", mock.Anything, "server-0")
 	assert.Equal(t, float64(0), svc.ActiveSessions())
@@ -132,7 +132,7 @@ func TestJoinWorld_SlotLivre_OcupaEEmiteToken(t *testing.T) {
 	grant, addr, err := svc.JoinWorld(context.Background(), sessionID, "phantom-1", domain.RoleCoop)
 	require.NoError(t, err)
 	assert.Equal(t, "phantom-1", grant.PlayerID)
-	assert.Equal(t, "10.0.0.1:7777", addr, "join devolve o endereço do server do mundo")
+	assert.Equal(t, domain.WorldEndpoint{ServerAddress: "10.0.0.1:7777"}, addr, "join devolve o endereço do server do mundo")
 	assert.Equal(t, float64(1), svc.OccupiedSlots(domain.RoleCoop))
 	assert.Equal(t, float64(0), svc.OccupiedSlots(domain.RoleInvader))
 }
@@ -148,7 +148,7 @@ func TestJoinWorld_PapelNaoHabilitado_ErrRoleNotEnabled(t *testing.T) {
 		Archetype: "host_world_dropin", EnabledRoles: []string{domain.RoleCoop}, CoopSlots: 1,
 	}, nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "phantom-1", domain.RoleInvader)
@@ -174,7 +174,7 @@ func TestJoinWorld_TokenFalha_ReverteSlot(t *testing.T) {
 	iss.On("Issue", "phantom-1", mock.Anything, mock.Anything, mock.Anything).Return("", assert.AnError)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "phantom-1", domain.RoleCoop)
@@ -264,7 +264,7 @@ func multiWorldSvc(t *testing.T, profiles map[string]domain.ProfileSnapshot) *Se
 
 func TestOpenWorld_ComAtributos_GuardaSoulLevelEWeaponTier(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{SoulLevel: 120, WeaponTier: 5})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{SoulLevel: 120, WeaponTier: 5})
 	require.NoError(t, err)
 	assert.Equal(t, 120, sess.HostSoulLevel)
 	assert.Equal(t, 5, sess.WeaponTier)
@@ -272,7 +272,7 @@ func TestOpenWorld_ComAtributos_GuardaSoulLevelEWeaponTier(t *testing.T) {
 
 func TestOpenWorld_SemAtributos_MundoComZeros(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	assert.Zero(t, sess.HostSoulLevel)
 	assert.Zero(t, sess.WeaponTier)
@@ -280,7 +280,7 @@ func TestOpenWorld_SemAtributos_MundoComZeros(t *testing.T) {
 
 func TestOpenWorld_ComSenha_GuardaHash(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
 	require.NoError(t, err)
 	assert.Equal(t, domain.HashWorldPassword("abrepalavra"), sess.PasswordHash)
 	assert.NotEmpty(t, sess.PasswordHash)
@@ -288,7 +288,7 @@ func TestOpenWorld_ComSenha_GuardaHash(t *testing.T) {
 
 func TestOpenWorld_SemSenha_HashVazio(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	assert.Empty(t, sess.PasswordHash)
 }
@@ -296,10 +296,10 @@ func TestOpenWorld_SemSenha_HashVazio(t *testing.T) {
 func TestListInvadableWorlds_RefleteHashDaSenha(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
 	ctx := context.Background()
-	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
+	w, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{Password: "abrepalavra"})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 1)
 	assert.Equal(t, w.PasswordHash, worlds[0].PasswordHash)
@@ -309,10 +309,10 @@ func TestListInvadableWorlds_RefleteHashDaSenha(t *testing.T) {
 func TestListInvadableWorlds_SoMundosAbertosComInvasorLivre(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
 	ctx := context.Background()
-	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{SoulLevel: 80, WeaponTier: 3})
+	w, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{SoulLevel: 80, WeaponTier: 3})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 1)
 	assert.Equal(t, w.ID, worlds[0].SessionID)
@@ -324,12 +324,12 @@ func TestListInvadableWorlds_SoMundosAbertosComInvasorLivre(t *testing.T) {
 func TestListInvadableWorlds_ExcluiInvasorCheio(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
 	ctx := context.Background()
-	w, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
+	w, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	_, _, err = svc.JoinWorld(ctx, w.ID, "inv-1", domain.RoleInvader) // InvaderSlots=1 → cheio
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "mundo com invasor cheio sai do diretório")
 }
@@ -338,10 +338,10 @@ func TestListInvadableWorlds_ExcluiSemPapelInvasor(t *testing.T) {
 	coopOnly := domain.ProfileSnapshot{Archetype: "host_world_dropin", EnabledRoles: []string{domain.RoleCoop}, CoopSlots: 2}
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopOnly})
 	ctx := context.Background()
-	_, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "mundo sem papel invasor não é invadível")
 }
@@ -352,12 +352,12 @@ func TestListInvadableWorlds_ExcluiOutroJogo(t *testing.T) {
 		"game-2": coopInvaderProfile(),
 	})
 	ctx := context.Background()
-	_, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
+	_, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
-	w2, _, err := svc.OpenWorld(ctx, "host-2", "game-2", "default", domain.WorldAttributes{})
+	w2, _, _, err := svc.OpenWorld(ctx, "host-2", "game-2", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-2")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-2", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 1)
 	assert.Equal(t, w2.ID, worlds[0].SessionID)
@@ -369,7 +369,7 @@ func TestListInvadableWorlds_ExcluiQueueArena(t *testing.T) {
 	_, _, err := svc.Create(ctx, "match-1", "game-1", "default", []domain.TeamAssignment{{Players: []string{"p1"}}})
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds, "sessão queue_arena (Origin=match) não é invadível")
 }
@@ -397,14 +397,14 @@ func TestListInvadableWorlds_OrdenaPorOpenedAtAsc(t *testing.T) {
 	}))
 
 	ctx := context.Background()
-	wC, _, err := svc.OpenWorld(ctx, "host-c", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+3h
+	wC, _, _, err := svc.OpenWorld(ctx, "host-c", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+3h
 	require.NoError(t, err)
-	wA, _, err := svc.OpenWorld(ctx, "host-a", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+1h
+	wA, _, _, err := svc.OpenWorld(ctx, "host-a", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+1h
 	require.NoError(t, err)
-	wB, _, err := svc.OpenWorld(ctx, "host-b", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+2h
+	wB, _, _, err := svc.OpenWorld(ctx, "host-b", "game-1", "default", domain.WorldAttributes{}) // OpenedAt = base+2h
 	require.NoError(t, err)
 
-	worlds, err := svc.ListInvadableWorlds(ctx, "game-1")
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "")
 	require.NoError(t, err)
 	require.Len(t, worlds, 3)
 	got := []string{worlds[0].SessionID, worlds[1].SessionID, worlds[2].SessionID}
@@ -413,7 +413,7 @@ func TestListInvadableWorlds_OrdenaPorOpenedAtAsc(t *testing.T) {
 
 func TestListInvadableWorlds_NenhumElegivel_ListaVaziaSemErro(t *testing.T) {
 	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
-	worlds, err := svc.ListInvadableWorlds(context.Background(), "game-1")
+	worlds, err := svc.ListInvadableWorlds(context.Background(), "game-1", "")
 	require.NoError(t, err)
 	assert.Empty(t, worlds)
 }
@@ -432,4 +432,38 @@ func TestCloseByAdmin_MundoHostWorld_FechaPorSessionID(t *testing.T) {
 	assert.Equal(t, domain.CloseAdmin, sess.CloseReason)
 	assert.Equal(t, float64(0), svc.ActiveSessions(), "sai das ativas")
 	alloc.AssertExpectations(t)
+}
+
+// Spec matchmaking/012: com modo, o diretório só devolve mundos abertos nesse
+// modo; sem modo, todos os modos do jogo (compat).
+func TestListInvadableWorlds_FiltraPorModo(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	ctx := context.Background()
+	_, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "roda-aberta", domain.WorldAttributes{})
+	require.NoError(t, err)
+	batizado, _, _, err := svc.OpenWorld(ctx, "host-2", "game-1", "batizado", domain.WorldAttributes{})
+	require.NoError(t, err)
+
+	worlds, err := svc.ListInvadableWorlds(ctx, "game-1", "batizado")
+	require.NoError(t, err)
+	require.Len(t, worlds, 1)
+	assert.Equal(t, batizado.ID, worlds[0].SessionID)
+
+	all, err := svc.ListInvadableWorlds(ctx, "game-1", "")
+	require.NoError(t, err)
+	assert.Len(t, all, 2, "sem modo: todos os mundos do jogo")
+
+}
+
+// Spec 030: só o host do mundo passa na autorização de host.
+func TestAuthorizeWorldHost_SoOHost(t *testing.T) {
+	svc := multiWorldSvc(t, map[string]domain.ProfileSnapshot{"game-1": coopInvaderProfile()})
+	ctx := context.Background()
+	w, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
+	require.NoError(t, err)
+
+	assert.NoError(t, svc.AuthorizeWorldHost(ctx, w.ID, "host-1"))
+	assert.ErrorIs(t, svc.AuthorizeWorldHost(ctx, w.ID, "intruso"), domain.ErrNotWorldHost)
+	assert.ErrorIs(t, svc.AuthorizeWorldHost(ctx, w.ID, ""), domain.ErrNotWorldHost)
+	assert.ErrorIs(t, svc.AuthorizeWorldHost(ctx, "nao-existe", "host-1"), domain.ErrWorldNotFound)
 }

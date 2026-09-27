@@ -165,6 +165,30 @@ type SNS struct {
 	client   snsClient
 	topicARN string
 	log      *slog.Logger
+	// timeout limita cada chamada ao SNS (0 = defaultPublishTimeout). Sem ele,
+	// com o SNS/LocalStack travado o Publish herdava só o deadline do cliente
+	// — um Dedicated Server sem deadline ficava pendurado no report em vez de
+	// receber o erro e reenviar (achado na bancada da revisão 2026-09).
+	timeout time.Duration
+}
+
+// defaultPublishTimeout: folga para a latência normal do SNS (dezenas de ms) e
+// curto o bastante para o server reenviar logo quando o tópico está fora.
+const defaultPublishTimeout = 5 * time.Second
+
+// send publica o corpo no tópico com o timeout do publisher.
+func (s *SNS) send(ctx context.Context, body []byte) error {
+	timeout := s.timeout
+	if timeout <= 0 {
+		timeout = defaultPublishTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	_, err := s.client.Publish(ctx, &sns.PublishInput{
+		TopicArn: aws.String(s.topicARN),
+		Message:  aws.String(string(body)),
+	})
+	return err
 }
 
 // NewSNS monta o publisher a partir do ambiente (AWS_ENDPOINT_URL → LocalStack).
@@ -305,10 +329,7 @@ func (s *SNS) publishCollective(ctx context.Context, gameID, matchID, modeID str
 // publish envia o corpo já serializado ao tópico e contabiliza o resultado
 // (fanout_publish_total). Reuso entre os kinds.
 func (s *SNS) publish(ctx context.Context, body []byte) error {
-	if _, err := s.client.Publish(ctx, &sns.PublishInput{
-		TopicArn: aws.String(s.topicARN),
-		Message:  aws.String(string(body)),
-	}); err != nil {
+	if err := s.send(ctx, body); err != nil {
 		publishTotal.WithLabelValues("error").Inc()
 		return fmt.Errorf("session publisher: sns publish: %w", err)
 	}
@@ -336,10 +357,7 @@ func (s *SNS) PublishParticipation(ctx context.Context, gameID, sessionID, modeI
 	if err != nil {
 		return fmt.Errorf("session publisher: marshal participation envelope: %w", err)
 	}
-	if _, err := s.client.Publish(ctx, &sns.PublishInput{
-		TopicArn: aws.String(s.topicARN),
-		Message:  aws.String(string(body)),
-	}); err != nil {
+	if err := s.send(ctx, body); err != nil {
 		publishTotal.WithLabelValues("error").Inc()
 		return fmt.Errorf("session publisher: sns publish participation: %w", err)
 	}

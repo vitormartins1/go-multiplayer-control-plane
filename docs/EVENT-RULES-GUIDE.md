@@ -72,7 +72,9 @@ condições vive num lugar só.
    *inócua*, não perigosa — o console avisa, mas não bloqueia.)
 6. **Global soma, jogo soma; ninguém substitui.** Regras globais (semeadas
    por arquétipo) valem pra todo jogo daquele arquétipo; regras do jogo
-   ADICIONAM. Hoje não há supressão de global (roadmap V2b).
+   ADICIONAM. Uma global que não serve a um jogo pode ser **suprimida só para
+   ele** (botão "Suprimir para este jogo" no detalhe da regra); os outros jogos
+   do arquétipo continuam com ela.
 7. **Avaliação é por jogador** (nos kinds com dado individual): no coop o
    desfecho é coletivo, mas condições com `stat.*` casam jogador a jogador —
    dá pra premiar só o MVP da missão.
@@ -86,7 +88,7 @@ condições vive num lugar só.
 | queue_arena | `outcome` (win/loss/draw) | ✓ | ✓ (scoringStats do modo) |
 | battle_royale | `placement` (número) | ✓ | ✓ (+ `stat.survived_ms`) |
 | coop_mission | `outcome` (MISSION_SUCCESS/FAILURE) | ✓ | ✓ |
-| host_world_dropin | `role`, `event`, `outcome` | ✓ | ✗ (envelope sem stats) |
+| host_world_dropin | `role`, `event`, `outcome` | ✓ | ✓ (`stats` do `ReportParticipationEvent`, spec session/026; chefe como `boss_<id>`) |
 
 ## Receitas
 

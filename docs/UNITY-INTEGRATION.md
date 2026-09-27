@@ -15,7 +15,7 @@ Os 4 arquétipos estão **completos no control plane** (ADR-0023), mas o data pl
 | Arquétipo | Data plane Unity | Estado |
 |---|---|---|
 | `queue_arena` | `unity-queue-arena-data-plane` (ex-`go-game-dataplane`) | **Rodando de verdade** — Fases 0-7: Dedicated Server ARM64 orquestrado por Agones (k3d local → homelab Pi 5), handshake completo `login → FindMatch → session aloca via Agones → connect token Ed25519 → partida → ReportResult`. É o exemplo canônico. **Tem dívida de contrato pendente** — ver seção abaixo. |
-| `host_world_dropin` | `unity-host-world-dropin-data-plane` | ✅ **Fases 0–5 done** (2026-07-11) — mundo do host, phantoms entrando no meio da sessão por papel, invasão + quadro de sinais via matchmaking (incluindo bypass por senha), combate com boss e ciclo de vida completo (host morto, boss derrotado, mundo fecha), **e2e orquestrado k3d→Pi 5 + carga real** (8 mundos/24 processos, GameServers reciclados, fan-out confirmado ponta a ponta). Falta só **Fase 6+** (refinamento: senha/pools por região/reconexão — backlog, sem data fixa). |
+| `host_world_dropin` | `unity-host-world-dropin-data-plane` | ✅ **Fases 0–5 done** (2026-07-11) — mundo do host, phantoms entrando no meio da sessão por papel, invasão + quadro de sinais via matchmaking (incluindo bypass por senha), combate com boss e ciclo de vida completo (host morto, boss derrotado, mundo fecha), **e2e orquestrado k3d→Pi 5 + carga real** (8 mundos/24 processos, GameServers reciclados, fan-out confirmado ponta a ponta). Falta só **Fase 6+** (refinamento: pools por região/reconexão/`stats` nos eventos — backlog, sem data fixa; senha já feita). |
 | `battle_royale` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
 | `coop_mission` | (nenhum ainda) | ⬜ Repo ainda não criado. Contrato pronto. |
 
@@ -29,11 +29,11 @@ O `ReportResult` mudou na spec `session/009` (resultado polimórfico, ADR-0023):
 `ReportParticipationEventRequest` — mesmo padrão de `ReportResult`. É
 **aditivo** (não quebra nada; ausente = comportamento atual). Ainda não há
 confirmação de que o `unity-host-world-dropin-data-plane` preenche o campo
-— ver a nota de correção em [`host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md#6-critério-de-conquista-por-stat-para-participação--feito-no-control-plane-2026-07-13). Preencher `stats` destrava achievements por métrica (`kills`, `deaths`, etc.) e o resumo agregado da aba Analytics (`analytics-service/011`) nesse arquétipo.
+— ver a nota de correção em [`host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md#6-critério-de-conquista-por-stat-para-participação---feito-no-control-plane-2026-07-13). Preencher `stats` destrava achievements por métrica (`kills`, `deaths`, etc.) e o resumo agregado da aba Analytics (`analytics-service/011`) nesse arquétipo.
 
 ## Visão geral
 
-- **Control plane (Go, este repo):** identity, matchmaking, session, leaderboard, achievements, player-data, cloud-save, analytics. Agnóstico de arquétipo (orientado por perfil, ADR-0023).
+- **Control plane (Go, este repo):** identity, game-registry, matchmaking, session, leaderboard, achievements, player-data, cloud-save, analytics. Agnóstico de arquétipo (orientado por perfil, ADR-0023).
 - **Data plane (Unity Dedicated Server):** simulação realtime da partida/mundo. Um repo por arquétipo.
 - **Go não entra no loop realtime** — só no control plane e em chamadas fora do caminho de tick (ver [ARCHITECTURE.md](ARCHITECTURE.md) "Onde o Go entra").
 

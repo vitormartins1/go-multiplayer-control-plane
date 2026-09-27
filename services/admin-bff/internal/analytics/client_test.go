@@ -16,8 +16,9 @@ func TestOverview_ParseiaTotaisEJogos(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/admin/analytics/overview", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"totals":{"matches":3,"uniquePlayers":2,"games":1},
-			"games":[{"gameId":"g1","matches":3,"uniquePlayers":2,"participations":5,"wins":1,"losses":2,"draws":1,"avgScore":4.5}]}`))
+		_, _ = w.Write([]byte(`{"totals":{"sessions":7,"matches":3,"uniquePlayers":2,"games":1},
+			"games":[{"gameId":"g1","sessions":7,"avgSessionMs":90000,"abandoned":2,"matches":3,"uniquePlayers":2,"participations":5,"wins":1,"losses":2,"draws":1,"avgScore":4.5}],
+			"daily":[{"day":"2026-09-25","sessions":7}]}`))
 	}))
 	defer upstream.Close()
 
@@ -31,6 +32,12 @@ func TestOverview_ParseiaTotaisEJogos(t *testing.T) {
 	assert.Equal(t, int64(2), ov.Games[0].Losses)
 	assert.Equal(t, int64(1), ov.Games[0].Draws)
 	assert.Empty(t, ov.Games[0].GameName, "nome é injetado pelo service, não vem do analytics")
+	// analytics/016: sessões são a medida comum a todos os arquétipos
+	assert.Equal(t, int64(7), ov.Totals.Sessions)
+	assert.Equal(t, int64(7), ov.Games[0].Sessions)
+	assert.Equal(t, int64(90000), ov.Games[0].AvgSessionMs)
+	assert.Equal(t, int64(2), ov.Games[0].Abandoned)
+	assert.Equal(t, []domain.AnalyticsSessionsPoint{{Day: "2026-09-25", Sessions: 7}}, ov.Daily)
 }
 
 func TestOverview_UpstreamFora_ErrAnalyticsUnavailable(t *testing.T) {

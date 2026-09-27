@@ -1,7 +1,7 @@
 # Spec: 069-session-health-classification
 
 **Serviço:** admin-ui
-**Status:** Proposed
+**Status:** Done (implementada e mergeada; status corrigido na revisão 2026-09)
 **Data:** 2026-07-13
 **Parte de:** fechamento do follow-up "classificação de % abandono" deixado
 em aberto nas specs 013 (analytics-service)/065 (admin-ui) — dado cru já

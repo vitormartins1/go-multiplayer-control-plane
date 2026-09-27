@@ -130,7 +130,7 @@ func (s *Summoner) ListSigns(ctx context.Context, gameID, modeID string, host do
 // uma vez) e entrega o Summoned pelo canal. A transição active→claimed é atômica
 // sob o lock (um sinal, um host); a injeção roda fora do lock (rede) e, se o mundo
 // estiver cheio, o sinal volta a ficar disponível (não consome).
-func (s *Summoner) Summon(ctx context.Context, sessionID, signID string) (string, error) {
+func (s *Summoner) Summon(ctx context.Context, sessionID, signID, summonerID string) (string, error) {
 	s.mu.Lock()
 	sg, ok := s.signs[signID]
 	if !ok {
@@ -151,7 +151,7 @@ func (s *Summoner) Summon(ctx context.Context, sessionID, signID string) (string
 	allyID := sg.PlayerID
 	s.mu.Unlock()
 
-	injected, err := s.inject(ctx, sessionID, allyID)
+	injected, err := s.inject(ctx, sessionID, allyID, summonerID)
 	if err != nil {
 		s.mu.Lock()
 		sg.claimed = false // release: mundo cheio/fechado → sinal segue disponível
@@ -161,6 +161,8 @@ func (s *Summoner) Summon(ctx context.Context, sessionID, signID string) (string
 			return "", fmt.Errorf("summoner: %w", domain.ErrRoleFull)
 		case errors.Is(err, domain.ErrWorldNotFound):
 			return "", fmt.Errorf("summoner: %w", domain.ErrWorldNotFound)
+		case errors.Is(err, domain.ErrNotWorldHost):
+			return "", fmt.Errorf("summoner: %w", domain.ErrNotWorldHost)
 		default:
 			return "", fmt.Errorf("summoner: inject: %w", err)
 		}
@@ -170,7 +172,7 @@ func (s *Summoner) Summon(ctx context.Context, sessionID, signID string) (string
 	delete(s.signs, signID)
 	s.consumed[signID] = s.now() // tombstone: reinvocação vira ErrSignConsumed
 	s.mu.Unlock()
-	sg.ch <- domain.Summoned{SessionID: sessionID, ServerAddress: injected.ServerAddress, ConnectToken: injected.ConnectToken}
+	sg.ch <- domain.Summoned{SessionID: sessionID, ServerAddress: injected.ServerAddress, HostConnection: injected.HostConnection, ConnectToken: injected.ConnectToken}
 	s.count(resultSummoned)
 	return allyID, nil
 }
@@ -243,11 +245,12 @@ func (s *Summoner) coopPolicy(ctx context.Context, gameID, modeID string) (domai
 	return s.policies.CoopPolicy(ctx, gameID, modeID)
 }
 
-// inject injeta o aliado no mundo como coop, com timeout próprio.
-func (s *Summoner) inject(ctx context.Context, sessionID, allyID string) (domain.Injected, error) {
+// inject injeta o aliado no mundo como coop, com timeout próprio. summonerID
+// é quem invocou (o session exige que seja o host do mundo — session/030).
+func (s *Summoner) inject(ctx context.Context, sessionID, allyID, summonerID string) (domain.Injected, error) {
 	ctx, cancel := context.WithTimeout(ctx, summonTimeout)
 	defer cancel()
-	return s.injector.Inject(ctx, sessionID, allyID, roleCoop)
+	return s.injector.Inject(ctx, sessionID, allyID, roleCoop, summonerID)
 }
 
 // count incrementa o contador do resultado (métrica summons_total{result}).

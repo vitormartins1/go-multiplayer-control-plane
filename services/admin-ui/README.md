@@ -6,6 +6,12 @@ Painel de operação do control plane — **games-first**: você entra pela list
 - **Porta dev:** `5173` (Vite) · **Porta prod:** `8089` (nginx, via `docker compose -f infra/docker/docker-compose.yml up`)
 - **Fala com o backend via proxy `/api` → admin-bff:** em dev o Vite proxya (`vite.config.ts`, alvo `http://localhost:8088`, sobrescrevível com `VITE_BFF_URL`); em prod o nginx (`nginx.conf`) proxya `/api/` → `admin-bff:8080` na rede do compose. Nunca fala direto com os serviços de domínio — sempre atrás do BFF.
 
+<p align="center"><img src="../../docs/images/rooms-p2p.jpg" alt="Rooms: salas ao vivo com hospedagem, heartbeat e o detalhe de um mundo P2P" width="720"/></p>
+
+▶ **Vídeos do console:** [cadastrar um jogo](../../docs/media/video-01-cadastro.mp4) ·
+[o motor de conquistas](../../docs/media/video-02-conquistas.mp4) · [visão 360 do jogador](../../docs/media/video-03-jogador.mp4).
+Como regravar: [`docs/media/README.md`](../../docs/media/README.md).
+
 > App de apresentação — fora do hexagonal Go. Segue um **SDD adaptado** (spec = telas/UX), ver seção "Testar / Specs".
 
 ## Áreas do app
@@ -13,7 +19,7 @@ Painel de operação do control plane — **games-first**: você entra pela list
 - **Games** (`/games`, rota raiz) — grid de jogos cadastrados (capa procedural + nome); ponto de entrada de tudo. "Registrar jogo" abre o wizard de criação.
 - **Game detail** (`/games/:gameId`) — header com capa mini + badges de modo, e sub-abas por jogo:
   - **Achievements** — catálogo de achievements do jogo, com preview de regra.
-  - **Event Rules** — canvas (`@xyflow/react`) do mapeamento evento → achievement/leaderboard (ADR-0027), edição visual de regras.
+  - **Event Rules** — canvas (`@xyflow/react`) do mapeamento evento → achievement/leaderboard (ADR-0027), edição visual de regras. A lista de regras recolhe para liberar o canvas, o enquadramento desvia da lista e do detalhe e amplia grafos pequenos até 150%, e há modo de tela cheia (spec 094).
   - **Leaderboards** — rankings do jogo.
   - **Players** — jogadores com presença naquele jogo (`game_players`), badge de quem está online agora (interseção com sessões ativas).
   - **Sessions** — sessões ativas/recentes do jogo, com detalhe de partida/mundo por arquétipo.
@@ -56,6 +62,6 @@ docker compose -f infra/docker/docker-compose.yml up
 
 ## Testar / Specs
 
-Sem testes automatizados de UI além do type-check (`tsc --noEmit`, parte do `npm run build`); há um `@playwright/test` nas devDependencies para specs que precisem de verificação end-to-end pontual.
+Testes: `npm test` (Vitest) cobre os `lib/` puros — parsing do CSV de importação, montagem/formatação das condições das event-rules, slug — e roda no CI junto com o type-check (`tsc --noEmit`, parte do `npm run build`). Componentes React ainda não têm teste; há um `@playwright/test` nas devDependencies para verificação end-to-end pontual.
 
 Specs individuais (SDD-lite, uma pasta por mudança de tela/UX) vivem em `specs/NNN-slug/` — histórico incremental de como cada área chegou ao estado atual. Exemplos recentes: `057-achievement-rule-preview` (preview de regra a partir do achievement), `058-canvas-first-event-rules` (Event Rules como canvas-first), `059-fleet-tab` (aba/nav Fleet), `060-rooms-grouped-sortable` (Rooms agrupável/ordenável). **Este README é a visão consolidada e atual do app; as specs são o registro incremental de como cada parte foi construída** — para entender "o que o app faz hoje", leia este arquivo; para entender "por que uma tela específica é como é", vá à spec correspondente.

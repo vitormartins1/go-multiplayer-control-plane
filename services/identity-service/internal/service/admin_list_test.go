@@ -75,3 +75,38 @@ func TestListPlayers_OffsetNegativo_ViraZero(t *testing.T) {
 	require.NoError(t, err)
 	repo.AssertExpectations(t)
 }
+
+type mockExternalLister struct{ mock.Mock }
+
+func (m *mockExternalLister) ListExternalByAccount(ctx context.Context, accountID string) ([]domain.ExternalIdentity, error) {
+	args := m.Called(ctx, accountID)
+	ids, _ := args.Get(0).([]domain.ExternalIdentity)
+	return ids, args.Error(1)
+}
+
+// spec 006.
+func TestExternalIdentities_ContaComVinculo(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByID", mock.Anything, "id-1").Return(&domain.Account{ID: "id-1"}, nil)
+	ext := new(mockExternalLister)
+	ext.On("ListExternalByAccount", mock.Anything, "id-1").Return([]domain.ExternalIdentity{{Provider: "steam", ExternalID: "42"}}, nil)
+
+	ids, err := NewPlayerLister(repo, WithExternalIdentities(ext)).ExternalIdentities(context.Background(), "id-1")
+	require.NoError(t, err)
+	assert.Equal(t, []domain.ExternalIdentity{{Provider: "steam", ExternalID: "42"}}, ids)
+}
+
+func TestExternalIdentities_ContaInexistente_ErrAccountNotFound(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByID", mock.Anything, "nope").Return(nil, domain.ErrAccountNotFound)
+	_, err := NewPlayerLister(repo, WithExternalIdentities(new(mockExternalLister))).ExternalIdentities(context.Background(), "nope")
+	assert.ErrorIs(t, err, domain.ErrAccountNotFound)
+}
+
+func TestExternalIdentities_SemLoginFederado_ListaVazia(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByID", mock.Anything, "id-1").Return(&domain.Account{ID: "id-1"}, nil)
+	ids, err := NewPlayerLister(repo).ExternalIdentities(context.Background(), "id-1")
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}

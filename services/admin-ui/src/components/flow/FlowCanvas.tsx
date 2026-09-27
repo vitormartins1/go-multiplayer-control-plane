@@ -1,16 +1,21 @@
+import { IconArrowsMaximize, IconArrowsMinimize } from "@tabler/icons-react";
 import {
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   Panel,
   ReactFlow,
   useReactFlow,
+  useStore,
+  useUpdateNodeInternals,
   type Edge,
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
 import type { Padding } from "@xyflow/system";
-import { useEffect, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { escapeOwnedByPopup } from "../../lib/keys";
 import "./flow.css";
 
 const FIT_MARGIN = 90; // respiro (px) além da área reservada pro dock/overlay.
@@ -26,27 +31,73 @@ const FIT_MARGIN = 90; // respiro (px) além da área reservada pro dock/overlay
 // os 90px de sempre, mas um canvas compacto (ex.: a prévia mini de
 // achievements) precisa de bem menos respiro, senão os nodes ficam
 // pequenos demais pra ler (achado do Vitor, spec 057).
-function reservedFitOptions(reservedLeft: number, margin: number = FIT_MARGIN): { padding: Padding; maxZoom: number } {
+// reservedRight (spec 094): o mesmo para a direita, onde flutua o overlay
+// (painel de detalhe); sem isso a última coluna do grafo ficava atrás dele.
+// maxZoom (spec 094): o Event Rules deixa o fit ampliar um grafo pequeno
+// além de 100%; os outros canvas mantêm o teto de 1.
+type FitReserve = { left: number; right: number; margin: number; maxZoom: number };
+
+function reservedFitOptions({ left, right, margin, maxZoom }: FitReserve): { padding: Padding; maxZoom: number } {
   return {
     padding: {
-      left: `${reservedLeft + margin}px`,
-      right: `${margin}px`,
+      left: `${left + margin}px`,
+      right: `${right + margin}px`,
       top: `${margin}px`,
       bottom: `${margin}px`,
     },
-    maxZoom: 1,
+    maxZoom,
   };
 }
 
 // AutoFit re-enquadra o grafo quando `fitKey` muda (nó rascunho adicionado,
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
 // mount. Filho de <ReactFlow>, então tem acesso ao store interno.
-function AutoFit({ fitKey, reservedLeft, margin }: { fitKey: unknown; reservedLeft: number; margin: number }) {
+// Também re-enquadra quando a área livre muda (spec 094): lista recolhida,
+// detalhe expandido, tela cheia. E só enquadra com todos os nós medidos: um
+// fit antes disso não enquadra nada, e o canvas ficava com o enquadramento
+// anterior (ex.: ao salvar uma regra nova). O `nodesInitialized` do store não
+// serve para isso: ele não volta a false quando o grafo é trocado.
+const unmeasuredSelector = (s: { nodeLookup: Map<string, { id: string; measured?: { width?: number } }> }) => {
+  const ids: string[] = [];
+  for (const [, node] of s.nodeLookup) if (!node.measured?.width) ids.push(node.id);
+  return ids.join("\n"); // string: o store compara por valor, sem re-render à toa
+};
+
+function AutoFit({ fitKey, reserve, full }: { fitKey: unknown; reserve: FitReserve; full: boolean }) {
   const rf = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const unmeasured = useStore(unmeasuredSelector);
+  const nodeCount = useStore((s) => s.nodeLookup.size);
+  const ready = nodeCount > 0 && unmeasured === "";
+  const { left, right, margin, maxZoom } = reserve;
+
+  // Achado da spec 094: quando um grafo troca por outro com nós de mesmo id
+  // (ex.: "src:event" no rascunho e na regra salva), o React Flow às vezes
+  // reaproveita o elemento sem medir de novo, e o nó fica invisível para
+  // sempre (ele esconde nós sem medida). Um nó ainda sem medida depois de um
+  // instante é medido à força.
   useEffect(() => {
-    const t = setTimeout(() => rf.fitView({ ...reservedFitOptions(reservedLeft, margin), duration: 250 }), 50);
+    if (!unmeasured) return;
+    const t = setTimeout(() => updateNodeInternals(unmeasured.split("\n")), 150);
     return () => clearTimeout(t);
-  }, [fitKey, reservedLeft, margin, rf]);
+  }, [unmeasured, updateNodeInternals]);
+
+  // O fit fica pendente quando algo que pede enquadramento muda, e roda assim
+  // que os nós estão medidos. Só `ready` voltar a true não pede fit: nós
+  // recriados pela seleção ou pela busca são medidos de novo, e o zoom manual
+  // do operador não pode ser desfeito a cada clique.
+  const pending = useRef(true);
+  useEffect(() => {
+    pending.current = true;
+  }, [fitKey, left, right, margin, maxZoom, full]);
+  useEffect(() => {
+    if (!ready || !pending.current) return;
+    const t = setTimeout(() => {
+      pending.current = false;
+      rf.fitView({ ...reservedFitOptions({ left, right, margin, maxZoom }), duration: 250 });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [fitKey, left, right, margin, maxZoom, full, ready, rf]);
   return null;
 }
 
@@ -57,9 +108,6 @@ const MINIMAP_COLOR: Record<string, string> = {
   eventType: "#b197fc",
   stat: "#ffa94d",
   achievement: "#fab005",
-  pipelineMode: "#4dabf7",
-  pipelineKind: "#b197fc",
-  pipelineConsumer: "#51cf66",
 };
 
 // FlowCanvas é o wrapper tematizado do React Flow (kit da spec 043 R7):
@@ -77,9 +125,12 @@ export function FlowCanvas({
   dock,
   dockReservedWidth,
   overlay,
+  overlayReservedWidth,
   fitKey,
   height,
   fitMargin,
+  fitMaxZoom = 1,
+  fullscreenToggle = false,
   interactive = true,
   minimap = true,
   scrollZoom,
@@ -105,6 +156,10 @@ export function FlowCanvas({
   // overlay flutua sobre o canvas (Panel top-right) — detalhe do nó
   // selecionado etc., sem coluna lateral roubando largura (spec 044).
   overlay?: ReactNode;
+  // overlayReservedWidth (spec 094): largura (px) que o fit reserva à
+  // direita para o overlay. Só o chamador sabe se o overlay está expandido
+  // (e tapando nós) ou recolhido; 0/undefined = sem reserva.
+  overlayReservedWidth?: number;
   // fitKey: qualquer mudança re-enquadra o grafo (ver AutoFit).
   fitKey?: unknown;
   // height sobrescreve os 580px do CSS — número (px) ou expressão CSS
@@ -116,6 +171,13 @@ export function FlowCanvas({
   // o respiro fixo consome proporcionalmente demais da área e os nodes
   // encolhem pra caber.
   fitMargin?: number;
+  // fitMaxZoom (spec 094): teto do zoom do enquadramento automático e do
+  // botão de fit. Default 1 (os canvas de sempre); o Event Rules passa 1.5
+  // para um grafo pequeno ocupar o espaço em vez de ficar ilhado no meio.
+  fitMaxZoom?: number;
+  // fullscreenToggle (spec 094): botão "Tela cheia" nos controles; o canvas
+  // passa a cobrir a janela inteira, e Esc (ou o botão) volta.
+  fullscreenToggle?: boolean;
   // interactive=false (achado do Vitor, pipeline): desliga pan/zoom/arrastar
   // nós e some com os botões de zoom/fit — só clicar/selecionar continua
   // funcionando (onNodeClick/onPaneClick inalterados). Default true preserva
@@ -144,10 +206,30 @@ export function FlowCanvas({
   emptyState?: ReactNode;
 }) {
   const wheelZooms = scrollZoom ?? interactive;
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return;
+    // Captura: roda antes dos outros atalhos de Esc da página e marca o evento
+    // como tratado, para o mesmo Esc não sair da tela cheia e descartar um
+    // rascunho junto. Com um diálogo ou um dropdown aberto, o Esc é deles.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || escapeOwnedByPopup()) return;
+      e.preventDefault();
+      setFull(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [full]);
+  const reserve: FitReserve = {
+    left: dockReservedWidth ?? 0,
+    right: overlayReservedWidth ?? 0,
+    margin: fitMargin ?? FIT_MARGIN,
+    maxZoom: fitMaxZoom,
+  };
   return (
     <div
-      className="flow-wrap"
-      style={height ? { height, minHeight: 460 } : undefined}
+      className={full ? "flow-wrap flow-wrap--full" : "flow-wrap"}
+      style={height && !full ? { height, minHeight: 460 } : undefined}
       onDragOver={onDrop ? (e) => e.preventDefault() : undefined}
       onDrop={onDrop}
     >
@@ -181,9 +263,7 @@ export function FlowCanvas({
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#232c3a" gap={22} />
-        {fitKey !== undefined && (
-          <AutoFit fitKey={fitKey} reservedLeft={dockReservedWidth ?? 0} margin={fitMargin ?? FIT_MARGIN} />
-        )}
+        {fitKey !== undefined && <AutoFit fitKey={fitKey} reserve={reserve} full={full} />}
         {dock && <Panel position="top-left">{dock}</Panel>}
         {overlay && <Panel position="top-right">{overlay}</Panel>}
         {emptyState && nodes.length === 0 && (
@@ -192,10 +272,18 @@ export function FlowCanvas({
           </Panel>
         )}
         {interactive && (
-          <Controls
-            showInteractive={false}
-            fitViewOptions={reservedFitOptions(dockReservedWidth ?? 0, fitMargin ?? FIT_MARGIN)}
-          />
+          <Controls showInteractive={false} fitViewOptions={reservedFitOptions(reserve)}>
+            {fullscreenToggle && (
+              <ControlButton
+                onClick={() => setFull((f) => !f)}
+                title={full ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+                aria-label={full ? "Sair da tela cheia" : "Tela cheia"}
+                aria-pressed={full}
+              >
+                {full ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
+              </ControlButton>
+            )}
+          </Controls>
         )}
         {minimap && (
           <MiniMap

@@ -28,7 +28,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		tcpostgres.WithDatabase("identity"),
 		tcpostgres.WithUsername("dev"),
 		tcpostgres.WithPassword("dev"),
-		tcpostgres.WithInitScripts("../../migrations/001_create_accounts.sql"),
+		tcpostgres.WithInitScripts("../../migrations/001_create_accounts.sql", "../../migrations/002_external_identities.sql"),
 		tcpostgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
@@ -156,4 +156,66 @@ func TestPostgresAccountRepository_CountAccounts(t *testing.T) {
 	n2, err := repo.CountAccounts(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n2)
+}
+
+// Spec 005-steam-login: conta + vínculo numa transação; achar pelo vínculo.
+func TestCreateWithExternal_CriaContaEVinculo_FindByExternalAcha(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	ctx := context.Background()
+	acc := newAccount("steam_61198000000042")
+	acc.PasswordHash = ""
+
+	require.NoError(t, repo.CreateWithExternal(ctx, acc, "steam", "76561198000000042"))
+
+	got, err := repo.FindByExternal(ctx, "steam", "76561198000000042")
+	require.NoError(t, err)
+	assert.Equal(t, acc.ID, got.ID)
+	assert.Equal(t, "steam_61198000000042", got.Handle)
+
+	_, err = repo.FindByExternal(ctx, "steam", "outro")
+	assert.ErrorIs(t, err, domain.ErrAccountNotFound)
+}
+
+// Vínculo repetido (corrida entre dois logins) → ErrExternalLinked, e a
+// segunda conta não fica órfã (a transação desfaz o INSERT da conta).
+func TestCreateWithExternal_VinculoRepetido_ErrExternalLinkedSemContaOrfa(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresAccountRepository(pool)
+	ctx := context.Background()
+	require.NoError(t, repo.CreateWithExternal(ctx, newAccount("steam_a"), "steam", "42"))
+
+	err := repo.CreateWithExternal(ctx, newAccount("steam_b"), "steam", "42")
+	assert.ErrorIs(t, err, domain.ErrExternalLinked)
+
+	n, err := repo.CountAccounts(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "rollback: a conta da tentativa perdedora não ficou")
+}
+
+func TestCreateWithExternal_HandleOcupado_ErrHandleTaken(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	ctx := context.Background()
+	require.NoError(t, repo.Create(ctx, newAccount("steam_x")))
+
+	err := repo.CreateWithExternal(ctx, newAccount("STEAM_X"), "steam", "43")
+	assert.ErrorIs(t, err, domain.ErrHandleTaken)
+}
+
+// spec 006: vínculos de loja por conta.
+func TestListExternalByAccount(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	ctx := context.Background()
+	acc := newAccount("steam_list")
+	require.NoError(t, repo.CreateWithExternal(ctx, acc, "steam", "76561198000000099"))
+	semVinculo := newAccount("senha_list")
+	require.NoError(t, repo.Create(ctx, semVinculo))
+
+	ids, err := repo.ListExternalByAccount(ctx, acc.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.ExternalIdentity{{Provider: "steam", ExternalID: "76561198000000099"}}, ids)
+
+	ids, err = repo.ListExternalByAccount(ctx, semVinculo.ID)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+	assert.NotNil(t, ids, "lista vazia, não nil (vira [] no JSON)")
 }

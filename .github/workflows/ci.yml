@@ -52,8 +52,44 @@ jobs:
       - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
       - run: golangci-lint run ./...
 
+  vulncheck:
+    name: govulncheck (dependências com CVE)
+    runs-on: ubuntu-latest
+    # Bloqueia: vulnerabilidade alcançável pelo código reprova o PR. Começou
+    # report-only; o primeiro run achou 29 (deps antigas) e depois o
+    # GO-2026-6443 do grpc, todos corrigidos por atualização (2026-09-27).
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      # só reporta vulnerabilidade em código que o projeto de fato chama
+      - run: govulncheck ./...
+
+  contract:
+    name: contrato · buf breaking (proto vs main)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # precisa do histórico para comparar com a main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install github.com/bufbuild/buf/cmd/buf@v1.50.0
+      # Mudança incompatível no .proto (tipo/número de campo, RPC removido) quebra
+      # o jogo em produção — só com decisão do dono e pacote v2. Ver
+      # docs/contracts/CHANGELOG.md.
+      - run: |
+          for svc in session-service matchmaking-service; do
+            buf breaking "services/$svc" --against ".git#ref=origin/main,subdir=services/$svc"
+          done
+
   frontend:
-    name: admin-ui · build
+    name: admin-ui · lint + test + build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -66,4 +102,6 @@ jobs:
           cache: npm
           cache-dependency-path: services/admin-ui/package-lock.json
       - run: npm ci
+      - run: npm run lint # eslint: dependência faltando em hook é erro
+      - run: npm test # vitest nos lib/ puros
       - run: npm run build # tsc --noEmit && vite build

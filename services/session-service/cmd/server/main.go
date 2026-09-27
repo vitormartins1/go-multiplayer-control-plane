@@ -121,7 +121,9 @@ func run(log *slog.Logger) error {
 		service.WithHistoryStore(historyStore), // persistência de fechadas (spec 025)
 		service.WithLogger(log),
 		service.WithServerRegistry(registry),
-		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
+		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)),
+		// heartbeat de mundo (spec 032): sem heartbeat além disto, o mundo fecha.
+		service.WithWorldHeartbeatTTL(durationEnv("WORLD_HEARTBEAT_TTL", service.DefaultWorldHeartbeatTTL, log)))
 
 	// métricas custom: sessões ativas + fechamentos por motivo (spec 004).
 	prometheus.MustRegister(
@@ -176,12 +178,23 @@ func run(log *slog.Logger) error {
 			Name: "session_closed_publish_failures_total",
 			Help: "Falhas ao publicar o fechamento de sessão no fan-out (SNS indisponível).",
 		}, svc.SessionClosedPublishFailures),
+		// heartbeats de mundo recebidos (spec 032) — zerado = o jogo ainda não manda.
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "session_world_heartbeats_total",
+			Help: "Heartbeats de mundo recebidos (host_world_dropin, spec 032).",
+		}, svc.HeartbeatsTotal),
 	)
 
+	authCfg, err := buildGRPCAuth(cfg, log)
+	if err != nil {
+		return err
+	}
+	authCfg.WorldTokens = svc // host de mundo p2p (spec 031)
 	grpcSrv := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),                 // tracing gRPC (ADR-0014)
+		grpc.UnaryInterceptor(transport.UnaryAuthInterceptor(authCfg)), // spec 030 / ADR-0030
 	)
-	pb.RegisterSessionServer(grpcSrv, transport.NewServer(svc))
+	pb.RegisterSessionServer(grpcSrv, transport.NewServer(svc, transport.WithAuth(authCfg)))
 	reflection.Register(grpcSrv) // permite grpcurl sem o .proto
 
 	grpcLis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
@@ -208,7 +221,13 @@ func run(log *slog.Logger) error {
 	// superfície admin (spec 005): a aba Sessions do painel lê via BFF.
 	// historyStore alimenta as rotas paginadas do histórico persistido (spec 025).
 	transport.NewAdminHandler(svc, historyStore, fleets, clusterLabel).Register(mux)
-	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	// /admin exige a internal key serviço-a-serviço (ADR-0018), como nos demais
+	// serviços — inclui o force-close. JWKS, /metrics e /healthz ficam abertos.
+	adminKey := os.Getenv("INTERNAL_API_KEY")
+	if adminKey == "" {
+		log.Warn("INTERNAL_API_KEY ausente — os endpoints /admin vão negar (401); configure a chave")
+	}
+	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: auth.RequireInternalKey(adminKey, "/admin")(mux), ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -448,3 +467,49 @@ func buildIssuer(cfg config.Config, log *slog.Logger) (*token.ConnectIssuer, err
 	}
 	return token.New(priv), nil
 }
+
+// buildGRPCAuth monta a autenticação do gRPC (spec 030 / ADR-0030): JWT do
+// jogador via JWKS do identity, internal key do matchmaking (ADR-0018) e a
+// chave do Dedicated Server, no modo SESSION_AUTH_MODE (padrão warn). O
+// resolvedor de world token (spec 031) é o service, ligado pelo chamador.
+func buildGRPCAuth(cfg config.Config, log *slog.Logger) (transport.AuthConfig, error) {
+	mode := transport.ParseAuthMode(os.Getenv("SESSION_AUTH_MODE"))
+	ac := transport.AuthConfig{
+		Mode:          mode,
+		InternalKey:   os.Getenv("INTERNAL_API_KEY"),
+		GameServerKey: os.Getenv("GAME_SERVER_KEY"),
+		Rejections:    newRejectionCounter(),
+		Log:           log,
+	}
+	if cfg.IdentityJWKSURL != "" {
+		v, err := auth.NewVerifier(cfg.IdentityJWKSURL, 5*time.Minute)
+		if err != nil {
+			return ac, fmt.Errorf("grpc auth: %w", err)
+		}
+		ac.Players = v
+	}
+	switch {
+	case mode == transport.AuthOff:
+		log.Warn("SESSION_AUTH_MODE=off — o gRPC do session aceita qualquer chamador (só para teste local)")
+	case ac.Players == nil || ac.GameServerKey == "":
+		log.Warn("auth do gRPC incompleta: sem IDENTITY_JWKS_URL nenhum jogador autentica; sem GAME_SERVER_KEY nenhum game server autentica",
+			"mode", string(mode))
+	}
+	log.Info("auth do gRPC do session", "mode", string(mode))
+	return ac, nil
+}
+
+// rejectionCounter adapta a CounterVec session_auth_rejections_total à Port
+// do transport.
+type rejectionCounter struct{ vec *prometheus.CounterVec }
+
+func newRejectionCounter() rejectionCounter {
+	vec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "session_auth_rejections_total",
+		Help: "Chamadas gRPC ao session sem credencial válida ou sem permissão (spec 030), por RPC e motivo. Em warn a chamada segue.",
+	}, []string{"method", "reason"})
+	prometheus.MustRegister(vec)
+	return rejectionCounter{vec: vec}
+}
+
+func (r rejectionCounter) Inc(method, reason string) { r.vec.WithLabelValues(method, reason).Inc() }

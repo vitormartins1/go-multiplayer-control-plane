@@ -137,7 +137,7 @@ func TestSummon_Sucesso_InjetaEntregaEConsome(t *testing.T) {
 	signID, ch, err := s.PostSign(ctx, "game-1", "default", "ally-1", domain.CoopCriteria{SoulLevel: 100})
 	require.NoError(t, err)
 
-	allyID, err := s.Summon(ctx, "world-7", signID)
+	allyID, err := s.Summon(ctx, "world-7", signID, "host-1")
 	require.NoError(t, err)
 	assert.Equal(t, "ally-1", allyID)
 
@@ -145,6 +145,7 @@ func TestSummon_Sucesso_InjetaEntregaEConsome(t *testing.T) {
 	require.True(t, ok, "aliado recebe SUMMONED")
 	assert.Equal(t, "world-7", got.SessionID)
 	assert.Equal(t, "addr-world-7", got.ServerAddress)
+	assert.Equal(t, "host-world-7", got.HostConnection, "session/031: id de conexão do host repassado")
 	assert.Equal(t, "tok-ally-1", got.ConnectToken)
 
 	assert.Equal(t, float64(0), s.SignsActive(), "sinal consumido")
@@ -153,7 +154,7 @@ func TestSummon_Sucesso_InjetaEntregaEConsome(t *testing.T) {
 
 func TestSummon_SinalInexistente_ErrSignNotFound(t *testing.T) {
 	s := NewSummoner(&fakeCoopPolicies{policy: coopOn()}, &fakeInjector{byWorld: map[string]error{}})
-	_, err := s.Summon(context.Background(), "world-1", "nope")
+	_, err := s.Summon(context.Background(), "world-1", "nope", "host-1")
 	assert.ErrorIs(t, err, domain.ErrSignNotFound)
 }
 
@@ -162,10 +163,10 @@ func TestSummon_JaConsumido_ErrSignConsumed(t *testing.T) {
 	ctx := context.Background()
 	signID, _, err := s.PostSign(ctx, "game-1", "default", "ally-1", domain.CoopCriteria{SoulLevel: 100})
 	require.NoError(t, err)
-	_, err = s.Summon(ctx, "world-1", signID)
+	_, err = s.Summon(ctx, "world-1", signID, "host-1")
 	require.NoError(t, err)
 
-	_, err = s.Summon(ctx, "world-2", signID)
+	_, err = s.Summon(ctx, "world-2", signID, "host-1")
 	assert.ErrorIs(t, err, domain.ErrSignConsumed)
 }
 
@@ -175,13 +176,13 @@ func TestSummon_MundoCheio_NaoConsome(t *testing.T) {
 	signID, _, err := s.PostSign(ctx, "game-1", "default", "ally-1", domain.CoopCriteria{SoulLevel: 100})
 	require.NoError(t, err)
 
-	_, err = s.Summon(ctx, "world-1", signID)
+	_, err = s.Summon(ctx, "world-1", signID, "host-1")
 	assert.ErrorIs(t, err, domain.ErrRoleFull)
 	assert.Equal(t, float64(1), s.SignsActive(), "sinal segue disponível")
 
 	// e ainda pode ser invocado por outro mundo (com vaga).
 	s.injector = &fakeInjector{byWorld: map[string]error{}}
-	allyID, err := s.Summon(ctx, "world-2", signID)
+	allyID, err := s.Summon(ctx, "world-2", signID, "host-1")
 	require.NoError(t, err)
 	assert.Equal(t, "ally-1", allyID)
 }
@@ -199,7 +200,7 @@ func TestSummon_Corrida_UmSoConsome(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := s.Summon(ctx, "world-1", signID)
+			_, err := s.Summon(ctx, "world-1", signID, "host-1")
 			mu.Lock()
 			switch {
 			case err == nil:
@@ -260,4 +261,17 @@ func TestListSigns_FiltraPorModo(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mesmos, 1)
 	assert.Equal(t, "tdm", mesmos[0].ModeID)
+}
+
+// session/030: quem não é o host não invoca sinal no mundo; o sinal continua no
+// quadro para o host de verdade.
+func TestSummon_NaoEHost_ErrNotWorldHost_SinalContinuaDisponivel(t *testing.T) {
+	s := NewSummoner(&fakeCoopPolicies{policy: coopOn()}, &fakeInjector{byWorld: map[string]error{"world-7": domain.ErrNotWorldHost}})
+	ctx := context.Background()
+	signID, _, err := s.PostSign(ctx, "game-1", "default", "ally-1", domain.CoopCriteria{SoulLevel: 100})
+	require.NoError(t, err)
+
+	_, err = s.Summon(ctx, "world-7", signID, "intruso")
+	require.ErrorIs(t, err, domain.ErrNotWorldHost)
+	assert.Equal(t, float64(1), s.SignsActive(), "sinal não foi consumido")
 }

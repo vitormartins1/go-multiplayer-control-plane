@@ -30,10 +30,12 @@ type fakeDirectory struct {
 	responses [][]domain.InvadableWorld
 	err       error
 	calls     int
+	gotMode   string
 }
 
-func (f *fakeDirectory) ListInvadableWorlds(context.Context, string) ([]domain.InvadableWorld, error) {
+func (f *fakeDirectory) ListInvadableWorlds(_ context.Context, _, modeID string) ([]domain.InvadableWorld, error) {
 	f.calls++
+	f.gotMode = modeID
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -54,12 +56,14 @@ type fakeInjector struct {
 	calls   []string
 }
 
-func (f *fakeInjector) Inject(_ context.Context, sessionID, playerID, role string) (domain.Injected, error) {
+func (f *fakeInjector) Inject(_ context.Context, sessionID, playerID, role, _ string) (domain.Injected, error) {
 	f.calls = append(f.calls, sessionID)
 	if err := f.byWorld[sessionID]; err != nil {
 		return domain.Injected{}, err
 	}
-	return domain.Injected{ServerAddress: "addr-" + sessionID, ConnectToken: "tok-" + playerID}, nil
+	// HostConnection preenchido junto só para provar o repasse (session/031);
+	// no session real é um OU outro.
+	return domain.Injected{ServerAddress: "addr-" + sessionID, HostConnection: "host-" + sessionID, ConnectToken: "tok-" + playerID}, nil
 }
 
 // invasionOn é uma política host_world_dropin com invasão ligada e sem filtro de
@@ -78,6 +82,7 @@ func TestInvade_MundoElegivel_InjetaEDevolveServerEToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "w1", got.SessionID)
 	assert.Equal(t, "addr-w1", got.ServerAddress)
+	assert.Equal(t, "host-w1", got.HostConnection, "session/031: id de conexão do host repassado")
 	assert.Equal(t, "tok-invader-1", got.ConnectToken)
 	assert.Equal(t, float64(1), in.InvasionsTotal(resultInjected))
 }
@@ -247,4 +252,16 @@ func TestInvade_PerfilIndisponivel_Propaga(t *testing.T) {
 
 	_, err := in.Invade(context.Background(), "game-1", "default", "invader-1", domain.InvaderCriteria{})
 	assert.ErrorIs(t, err, domain.ErrProfileUnavailable)
+}
+
+// Spec 012: o diretório é consultado no modo do invasor — a política aplicada
+// é a desse modo, então os mundos candidatos também precisam ser dele.
+func TestInvade_ListaMundosDoModoDoInvasor(t *testing.T) {
+	pol := &fakePolicies{policy: invasionOn()}
+	dir := &fakeDirectory{worlds: []domain.InvadableWorld{{SessionID: "w1", FreeInvaderSlots: 1}}}
+	in := NewInvader(pol, dir, &fakeInjector{byWorld: map[string]error{}})
+
+	_, err := in.Invade(context.Background(), "game-1", "batizado", "invader-1", domain.InvaderCriteria{})
+	require.NoError(t, err)
+	assert.Equal(t, "batizado", dir.gotMode)
 }

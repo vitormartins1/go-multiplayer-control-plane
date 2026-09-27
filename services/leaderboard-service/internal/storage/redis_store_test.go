@@ -301,3 +301,37 @@ func TestForceScore_SubstituiEmTodasAsJanelas(t *testing.T) {
 		assert.Equal(t, int64(10), score, "janela %s", w)
 	}
 }
+
+// Spec 008: a guarda de idempotência é uma key por partida com TTL (o SET
+// único crescia para sempre).
+func TestApplyCumulative_GuardaPorPartidaComTTL(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	_, err := store.ApplyCumulative(ctx, "g1", "match-1", []domain.Increment{{Board: domain.BoardWins, PlayerID: "p1", Delta: 1}})
+	require.NoError(t, err)
+
+	ttl, err := store.client.TTL(ctx, store.processedKey("g1", "match-1")).Result()
+	require.NoError(t, err)
+	assert.Greater(t, ttl, time.Duration(0), "a guarda expira")
+	assert.LessOrEqual(t, ttl, processedTTL)
+
+	exists, err := store.client.Exists(ctx, store.legacyProcessedKey("g1")).Result()
+	require.NoError(t, err)
+	assert.Zero(t, exists, "o SET legado não é mais escrito")
+}
+
+// Spec 008 (compat): partida aplicada antes do deploy (só no SET legado)
+// continua sendo detectada como reentrega.
+func TestApplyCumulative_PartidaNoSetLegado_Dup(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	require.NoError(t, store.client.SAdd(ctx, store.legacyProcessedKey("g1"), "match-antiga").Err())
+
+	dup, err := store.ApplyCumulative(ctx, "g1", "match-antiga", []domain.Increment{{Board: domain.BoardWins, PlayerID: "p1", Delta: 1}})
+	require.NoError(t, err)
+	assert.True(t, dup)
+
+	_, _, err = store.Rank(ctx, "g1", domain.BoardWins, alltime, "p1")
+	assert.ErrorIs(t, err, domain.ErrNotRanked, "reentrega do legado não soma")
+}

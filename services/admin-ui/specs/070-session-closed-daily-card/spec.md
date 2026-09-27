@@ -1,7 +1,7 @@
 # Spec: 070-session-closed-daily-card
 
 **Serviço:** admin-ui
-**Status:** Proposed
+**Status:** Done (implementada e mergeada; status corrigido na revisão 2026-09)
 **Data:** 2026-07-13
 **Parte de:** analytics-service/015-session-closed-daily +
 admin-bff/028 (passthrough).

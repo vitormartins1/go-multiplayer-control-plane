@@ -341,12 +341,13 @@ func (x *InvadeRequest) GetPassword() string {
 }
 
 type InvadeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`             // mundo em que o invasor entrou
-	ServerAddress string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server do mundo
-	ConnectToken  string                 `protobuf:"bytes,3,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`    // connect token EdDSA do invasor (claim role=invader)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`                // mundo em que o invasor entrou
+	ServerAddress  string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"`    // endereço do game server do mundo
+	ConnectToken   string                 `protobuf:"bytes,3,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`       // connect token EdDSA do invasor (claim role=invader)
+	HostConnection string                 `protobuf:"bytes,4,opt,name=host_connection,json=hostConnection,proto3" json:"host_connection,omitempty"` // session/031: id de conexão do host quando o mundo é p2p (server_address vem vazio)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InvadeResponse) Reset() {
@@ -396,6 +397,13 @@ func (x *InvadeResponse) GetServerAddress() string {
 func (x *InvadeResponse) GetConnectToken() string {
 	if x != nil {
 		return x.ConnectToken
+	}
+	return ""
+}
+
+func (x *InvadeResponse) GetHostConnection() string {
+	if x != nil {
+		return x.HostConnection
 	}
 	return ""
 }
@@ -479,14 +487,15 @@ func (x *PostSummonSignRequest) GetPassword() string {
 }
 
 type SummonUpdate struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        SummonStatus           `protobuf:"varint,1,opt,name=status,proto3,enum=matchmaking.v1.SummonStatus" json:"status,omitempty"`
-	SignId        string                 `protobuf:"bytes,2,opt,name=sign_id,json=signId,proto3" json:"sign_id,omitempty"`                      // preenchido em POSTED
-	SessionId     string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`             // mundo do host (SUMMONED)
-	ServerAddress string                 `protobuf:"bytes,4,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server (SUMMONED)
-	ConnectToken  string                 `protobuf:"bytes,5,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`    // connect token EdDSA do aliado, claim role=coop (SUMMONED)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Status         SummonStatus           `protobuf:"varint,1,opt,name=status,proto3,enum=matchmaking.v1.SummonStatus" json:"status,omitempty"`
+	SignId         string                 `protobuf:"bytes,2,opt,name=sign_id,json=signId,proto3" json:"sign_id,omitempty"`                         // preenchido em POSTED
+	SessionId      string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`                // mundo do host (SUMMONED)
+	ServerAddress  string                 `protobuf:"bytes,4,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"`    // endereço do game server (SUMMONED)
+	ConnectToken   string                 `protobuf:"bytes,5,opt,name=connect_token,json=connectToken,proto3" json:"connect_token,omitempty"`       // connect token EdDSA do aliado, claim role=coop (SUMMONED)
+	HostConnection string                 `protobuf:"bytes,6,opt,name=host_connection,json=hostConnection,proto3" json:"host_connection,omitempty"` // session/031: id de conexão do host quando o mundo é p2p (SUMMONED)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SummonUpdate) Reset() {
@@ -550,6 +559,13 @@ func (x *SummonUpdate) GetServerAddress() string {
 func (x *SummonUpdate) GetConnectToken() string {
 	if x != nil {
 		return x.ConnectToken
+	}
+	return ""
+}
+
+func (x *SummonUpdate) GetHostConnection() string {
+	if x != nil {
+		return x.HostConnection
 	}
 	return ""
 }
@@ -861,12 +877,13 @@ const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
 	"weaponTier\x12\x17\n" +
 	"\amode_id\x18\x04 \x01(\tR\x06modeId\x12\x1a\n" +
-	"\bpassword\x18\x05 \x01(\tR\bpassword\"{\n" +
+	"\bpassword\x18\x05 \x01(\tR\bpassword\"\xa4\x01\n" +
 	"\x0eInvadeResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x12#\n" +
-	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken\"\xa5\x01\n" +
+	"\rconnect_token\x18\x03 \x01(\tR\fconnectToken\x12'\n" +
+	"\x0fhost_connection\x18\x04 \x01(\tR\x0ehostConnection\"\xa5\x01\n" +
 	"\x15PostSummonSignRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1d\n" +
 	"\n" +
@@ -874,14 +891,15 @@ const file_matchmaking_v1_matchmaking_proto_rawDesc = "" +
 	"\vweapon_tier\x18\x03 \x01(\x05R\n" +
 	"weaponTier\x12\x17\n" +
 	"\amode_id\x18\x04 \x01(\tR\x06modeId\x12\x1a\n" +
-	"\bpassword\x18\x05 \x01(\tR\bpassword\"\xc8\x01\n" +
+	"\bpassword\x18\x05 \x01(\tR\bpassword\"\xf1\x01\n" +
 	"\fSummonUpdate\x124\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1c.matchmaking.v1.SummonStatusR\x06status\x12\x17\n" +
 	"\asign_id\x18\x02 \x01(\tR\x06signId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12#\n" +
-	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\"\xb2\x01\n" +
+	"\rconnect_token\x18\x05 \x01(\tR\fconnectToken\x12'\n" +
+	"\x0fhost_connection\x18\x06 \x01(\tR\x0ehostConnection\"\xb2\x01\n" +
 	"\x10ListSignsRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12&\n" +
 	"\x0fhost_soul_level\x18\x02 \x01(\x05R\rhostSoulLevel\x12(\n" +

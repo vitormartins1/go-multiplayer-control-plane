@@ -65,6 +65,7 @@ message InvadeResponse {
   string session_id = 1;     // mundo em que o invasor entrou
   string server_address = 2; // endereço do game server do mundo
   string connect_token = 3;  // connect token EdDSA do invasor (claim role=invader)
+  string host_connection = 4; // session/031: id de conexão do host quando o mundo é p2p (server_address vem vazio)
 }
 
 // Co-op por quadro de sinais (spec 007). O aliado anuncia com a sua faixa; o
@@ -91,6 +92,7 @@ message SummonUpdate {
   string session_id = 3;     // mundo do host (SUMMONED)
   string server_address = 4; // endereço do game server (SUMMONED)
   string connect_token = 5;  // connect token EdDSA do aliado, claim role=coop (SUMMONED)
+  string host_connection = 6; // session/031: id de conexão do host quando o mundo é p2p (SUMMONED)
 }
 
 message ListSignsRequest {

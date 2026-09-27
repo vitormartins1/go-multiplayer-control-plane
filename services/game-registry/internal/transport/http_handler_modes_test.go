@@ -163,6 +163,7 @@ func TestGetGame_IncluiResumoDosModos(t *testing.T) {
 	require.Len(t, resp.MultiplayerModes, 1)
 	assert.Equal(t, "tdm", resp.MultiplayerModes[0]["modeId"])
 	assert.Equal(t, "queue_arena", resp.MultiplayerModes[0]["archetype"])
+	assert.Equal(t, "dedicated", resp.MultiplayerModes[0]["topology"], "admin-ui/091: topologia no resumo")
 	assert.Nil(t, resp.MultiplayerModes[0]["params"], "resumo não carrega params")
 }
 
@@ -177,4 +178,29 @@ func TestGetGame_SemModos_ListaVazia(t *testing.T) {
 	modes, ok := resp["multiplayerModes"].([]any)
 	require.True(t, ok, "multiplayerModes presente como lista")
 	assert.Empty(t, modes)
+}
+
+// Params com o tipo errado eram decodificados com o erro ignorado e viravam
+// zero-values silenciosos; agora são 400 invalid_profile_params, sem chegar
+// ao service (revisão 2026-09).
+func TestSetMode_ParamsComTipoErrado_400SemTocarService(t *testing.T) {
+	svc := new(mockService)
+	body := `{"displayName":"Mundo","archetype":"host_world_dropin","topology":"dedicated",` +
+		`"params":{"enabledRoles":["coop"],"coopSlots":"dois"}}`
+	rr := do(newServer(svc), http.MethodPut, "/games/g1/multiplayer-profiles/default", body)
+
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid_profile_params")
+	svc.AssertNotCalled(t, "SetMode", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Sem params (ou null) continua chegando ao service: a validação do arquétipo
+// é quem decide o que é obrigatório.
+func TestSetMode_ParamsAusente_ChegaAoService(t *testing.T) {
+	svc := new(mockService)
+	svc.On("SetMode", mock.Anything, "g1", "tdm", "", mock.Anything).Return(nil, domain.ErrInvalidProfileParams)
+	rr := do(newServer(svc), http.MethodPut, "/games/g1/multiplayer-profiles/tdm", `{"archetype":"queue_arena","topology":"dedicated","params":null}`)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	svc.AssertCalled(t, "SetMode", mock.Anything, "g1", "tdm", "", mock.Anything)
 }

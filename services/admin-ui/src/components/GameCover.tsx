@@ -70,6 +70,9 @@ export function GameCover({ game, variant = "cover", withName = true, modes, rat
   const { gameCoverStyle } = useSettings();
   const uri = useMemo(
     () => coverDataUri(game, gameCoverStyle),
+    // de propósito pelos campos, não pelo objeto: o polling devolve um objeto
+    // novo a cada ciclo e regenerar a capa (DiceBear) a cada vez é caro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [game.id, game.generatedImageSeed, game.slug, game.image, game.imageSource, gameCoverStyle],
   );
 

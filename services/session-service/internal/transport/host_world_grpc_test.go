@@ -304,3 +304,24 @@ func TestReportParticipationEvent_EventoInvalido_InvalidArgument(t *testing.T) {
 	})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
+
+// Spec matchmaking/012: mode_id no request filtra; o mundo aberto sem modo fica
+// no "default" (normalizado no OpenWorld), e mode_id vazio lista todos.
+func TestListInvadableWorlds_ModeID_FiltraSemNormalizar(t *testing.T) {
+	client, _ := setupWorld(t, []string{"10.0.0.1:7777", "10.0.0.2:7777"})
+	ctx := context.Background()
+	_, err := client.OpenWorld(ctx, &pb.OpenWorldRequest{HostPlayerId: "host-1", GameId: "hw"})
+	require.NoError(t, err)
+
+	list, err := client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw", ModeId: "default"})
+	require.NoError(t, err)
+	assert.Len(t, list.GetWorlds(), 1)
+
+	list, err = client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw", ModeId: "batizado"})
+	require.NoError(t, err)
+	assert.Empty(t, list.GetWorlds(), "outro modo não enxerga o mundo")
+
+	list, err = client.ListInvadableWorlds(ctx, &pb.ListInvadableWorldsRequest{GameId: "hw"})
+	require.NoError(t, err)
+	assert.Len(t, list.GetWorlds(), 1, "sem mode_id: todos os modos")
+}

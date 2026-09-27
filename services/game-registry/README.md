@@ -27,12 +27,13 @@ Todas as rotas abaixo (exceto `/healthz`, `/metrics`) exigem o header `X-Interna
 | POST | `/games` | registra um jogo `{slug, name}` -> 201 `{id, slug, name, createdAt, ...}` |
 | GET | `/games` | lista jogos (por `name` asc); não inclui perfil/modos |
 | GET | `/games/{id}` | consulta um jogo + perfil `default` + resumo dos modos; 404 se ausente/deletado |
-| PUT | `/games/{id}` | renomeia (`{name}`); slug/id são estáveis |
+| PUT | `/games/{id}` | renomeia (`{name}`); não muda slug nem id |
+| PUT | `/games/{id}/slug` | troca o slug (`{slug}`; rename de produto, spec 014) — 400 `invalid_slug`, 409 `slug_taken`; o `id` e a capa gerada não mudam |
 | DELETE | `/games/{id}` | soft delete (ADR-0025) -> 204; a partir daí o jogo responde como inexistente em toda a API |
 | PUT | `/games/{id}/description` | define descrição curta (`{description}`, até 500 caracteres; vazio limpa) |
 | PUT | `/games/{id}/fleet` | define a Fleet Agones (`{fleet}`; vazio limpa) |
 
-`slug` = chave humana estável (única, case-insensitive, `^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$`); `id` (UUID) = chave canônica usada pelos outros serviços como `game_id`. `fleet` valida o mesmo formato de slug de label Kubernetes (`^[a-z][a-z0-9-]{0,31}$`).
+`slug` = chave humana (única, case-insensitive, `^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$`); `id` (UUID) = chave canônica e **estável**, usada pelos outros serviços como `game_id`; o slug pode mudar num rename de produto (spec 014). `fleet` valida o mesmo formato de slug de label Kubernetes (`^[a-z][a-z0-9-]{0,31}$`).
 
 ### Perfil de multiplayer — alias legado (spec 006-008)
 

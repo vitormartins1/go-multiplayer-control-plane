@@ -7,6 +7,10 @@ até a meta). O vocabulário de eventos ("o que dispara uma conquista") não é
 mais hardcoded por arquétipo — é dado, editável sem redeploy. Primeiro serviço
 a validar o JWT do identity (via `shared/auth`).
 
+<p align="center"><img src="../../docs/images/achievements-steam.jpg" alt="Catálogo de conquistas com o selo Steam nas que são espelhadas" width="720"/></p>
+
+▶ **Vídeo (~2 min):** [o motor de conquistas](../../docs/media/video-02-conquistas.mp4): critérios por evento e por métrica, regras globais e do jogo com comparadores, e o desbloqueio ao vivo pelo fan-out.
+
 - **Protocolo:** REST · **Porta host:** 8082
 - **Storage:** PostgreSQL (`achievements-postgres`, DB `achievements`)
 - **Dependências:** identity (JWKS); consome o fan-out durável (SQS, ADR-0020) publicado pelo session-service
@@ -104,6 +108,24 @@ fan-out durável, ADR-0020) que traduz cada envelope (`kind`
 mesma transação, idempotente por `match_id`/`event_id`). Erro não deleta a
 mensagem (retry → DLQ); duplicata é no-op idempotente e a mensagem é
 deletada normalmente.
+
+### Espelhamento na Steam (spec 019)
+
+Conquista com `steamApiName` (o "API Name" do Steamworks) tem o desbloqueio espelhado na Steam do jogador por um
+worker no consumer: a cada 15 s ele pega os desbloqueios pendentes do jogo configurado, lê o SteamID no identity
+(`GET /admin/players/{id}/external-identities`) e chama `ISteamUserStats/SetUserStatsForGame`. Jogador sem conta
+Steam vira `skipped`; falha reagenda (1 min, 2 min… até 1 h) e desiste após 10 tentativas (`failed`). Preencher o
+`steamApiName` depois espelha quem já tinha desbloqueado. Estado em `player_achievements.steam_sync_*`.
+
+| Env (consumer) | Uso |
+|---|---|
+| `STEAM_WEB_API_KEY`, `STEAM_APP_ID` | publisher key e app id (as mesmas do login Steam do identity) |
+| `STEAM_GAME_ID` | id, no control plane, do jogo publicado na Steam (um app por deploy) |
+| `IDENTITY_URL`, `INTERNAL_API_KEY` | leitura do SteamID |
+| `STEAM_API_BASE_URL` | opcional (padrão `https://partner.steam-api.com`; aponte para uma Steam falsa em teste) |
+
+Sem as cinco primeiras, o espelhamento fica desligado. Métrica: `achievements_steam_sync_total{result}`.
+O jogo **não** deve chamar `SetAchievement` no cliente para essas conquistas (quem manda é o backend).
 
 ## Modelo de dados
 

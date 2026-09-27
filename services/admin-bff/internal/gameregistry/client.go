@@ -146,24 +146,6 @@ func (c *Client) GetMultiplayerProfile(ctx context.Context, gameID string) (json
 	return raw, nil
 }
 
-// SetMultiplayerProfile faz upsert do perfil (PUT, internal key). Repassa o corpo
-// cru recebido do painel e devolve o perfil persistido cru.
-func (c *Client) SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
-	u := c.baseURL + "/games/" + url.PathEscape(gameID) + "/multiplayer-profile"
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(profile))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := upstream.Do(c.http, req, domain.ErrGameRegistryUnavailable)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("gameregistry: read profile: %w", err)
-	}
-	return raw, nil
-}
-
 // --- modos nomeados (ADR-0024, spec 017) — passthrough cru como o perfil ---
 
 // doRaw executa a request e devolve o corpo cru (o BFF não interpreta a forma
@@ -192,12 +174,6 @@ func (c *Client) modeURL(gameID, modeID string) string {
 // ListMultiplayerModes lê a coleção de modos do jogo (cru).
 func (c *Client) ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.modeURL(gameID, ""), nil)
-	return c.doRaw(req)
-}
-
-// GetMultiplayerMode lê um modo (cru). UpstreamError(404) se jogo/modo ausente.
-func (c *Client) GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.modeURL(gameID, modeID), nil)
 	return c.doRaw(req)
 }
 

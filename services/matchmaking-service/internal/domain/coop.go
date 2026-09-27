@@ -26,9 +26,10 @@ type Sign struct {
 // Summoned é o que o aliado recebe quando um host o invoca (spec 007): o mundo em
 // que entrou como coop e como conectar. Entregue pelo canal do PostSummonSign.
 type Summoned struct {
-	SessionID     string
-	ServerAddress string
-	ConnectToken  string
+	SessionID      string
+	ServerAddress  string
+	HostConnection string // mundo p2p (session/031)
+	ConnectToken   string
 }
 
 // CoopCriteria é a faixa que o aliado traz ao anunciar o sinal — e, do outro
@@ -117,7 +118,8 @@ type Summoner interface {
 	// (no máximo uma vez) e entrega o Summoned ao aliado pelo canal. Devolve o
 	// playerID do aliado invocado. ErrSignNotFound, ErrSignConsumed, ErrRoleFull,
 	// ErrWorldNotFound.
-	Summon(ctx context.Context, sessionID, signID string) (allyID string, err error)
+	// summonerID é o jogador (JWT) que invocou: precisa ser o host do mundo (ErrNotWorldHost, session/030).
+	Summon(ctx context.Context, sessionID, signID, summonerID string) (allyID string, err error)
 	// CancelSign remove um sinal do quadro (o aliado fechou o stream). Idempotente.
 	CancelSign(signID string)
 }

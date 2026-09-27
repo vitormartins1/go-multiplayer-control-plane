@@ -1,0 +1,138 @@
+[
+ {
+  "at": 1.0,
+  "text": "Go Multiplayer Control Plane. O backend do seu jogo online, no seu servidor, sem cobrança por jogador."
+ },
+ {
+  "at": 7.4,
+  "text": "Todo jogo online precisa de muito mais que netcode: contas e login, matchmaking, um servidor por partida, conquistas, rankings, métricas e um painel para operar tudo isso."
+ },
+ {
+  "at": 18.0,
+  "text": "As plataformas prontas cobram por jogador e prendem o seu jogo ao fornecedor."
+ },
+ {
+  "at": 21.8,
+  "text": "Aqui está tudo isso pronto, em Go, rodando onde você quiser: de um Raspberry Pi a um cluster Kubernetes na nuvem."
+ },
+ {
+  "at": 25.4,
+  "text": "Veja como funciona."
+ },
+ {
+  "at": 30.4,
+  "text": "Primeiro, o jogador entra com conta própria, anônimo ou pela Steam."
+ },
+ {
+  "at": 36.6,
+  "text": "Depois, o matchmaking acha a partida ou o mundo, e as sessões cuidam do servidor."
+ },
+ {
+  "at": 42.8,
+  "text": "E cada resultado vira evento: conquistas, rankings e métricas se atualizam sozinhos."
+ },
+ {
+  "at": 49.5,
+  "text": "Você descreve a forma do multiplayer, e o backend se configura."
+ },
+ {
+  "at": 51.4,
+  "text": "Arena por fila, mundo do host, battle royale ou missão co-op."
+ },
+ {
+  "at": 57.4,
+  "text": "Tudo num formulário do console: matchmaking, sessões e conquistas leem o modo em tempo real, sem deploy. E cada modo escolhe entre servidor dedicado ou P2P."
+ },
+ {
+  "at": 68.5,
+  "text": "Servidor dedicado quando o jogo precisa. P2P quando não precisa pagar por ele. Veja uma invasão num mundo P2P do Folclore Souls."
+ },
+ {
+  "at": 75.36,
+  "text": "O host abre o mundo e informa o seu ID da Steam. O control plane devolve uma chave que só vale naquele mundo."
+ },
+ {
+  "at": 79.55,
+  "text": "Um invasor pede para invadir. O matchmaking escolhe o mundo pela faixa de nível e entrega um ingresso com o endereço do host."
+ },
+ {
+  "at": 85.36,
+  "text": "Os dois se conectam direto, pela rede da Steam, e o ingresso é validado no jogo do host."
+ },
+ {
+  "at": 89.27,
+  "text": "O host é derrotado: o evento chega ao backend, e a conquista do invasor desbloqueia na hora."
+ },
+ {
+  "at": 95.34,
+  "text": "Servidor de jogo: zero. O host hospeda, e o control plane cuida do resto."
+ },
+ {
+  "at": 98.2,
+  "text": "Por trás das conquistas, os fatos da partida chegam do jogo: o evento, o papel e as stats de cada jogador."
+ },
+ {
+  "at": 103.8,
+  "text": "Regras editáveis no console transformam fatos em eventos, com comparadores como maior ou igual."
+ },
+ {
+  "at": 109.6,
+  "text": "E as conquistas contam eventos ou acumulam métricas. Com o nome na Steam, aparecem lá também."
+ },
+ {
+  "at": 117.9,
+  "text": "No console, vários jogos no mesmo backend, cada um com seus modos de multiplayer."
+ },
+ {
+  "at": 122.9,
+  "text": "Todas as salas abertas, de todos os jogos, atualizando sozinhas."
+ },
+ {
+  "at": 127.5,
+  "text": "Servidor dedicado ou P2P lado a lado, com o sinal de vida de cada host."
+ },
+ {
+  "at": 132.1,
+  "text": "Dentro do mundo: quem hospeda, os papéis, as vagas e as regras do modo."
+ },
+ {
+  "at": 136.9,
+  "text": "Rankings por métrica e por período: geral, dia, semana e mês."
+ },
+ {
+  "at": 141.5,
+  "text": "O catálogo de conquistas de cada jogo, com regras editáveis e espelho na Steam."
+ },
+ {
+  "at": 145.9,
+  "text": "Tudo sobre um jogador numa tela: conquistas, histórico, inventário e save."
+ },
+ {
+  "at": 150.5,
+  "text": "Analytics de todos os jogos: sessões, jogadores, duração e abandono."
+ },
+ {
+  "at": 155.5,
+  "text": "E o detalhe de cada jogo e modo: invasões, vitórias, chefes derrotados."
+ },
+ {
+  "at": 160.3,
+  "text": "Servidores dedicados no Agones, uma frota por jogo."
+ },
+ {
+  "at": 166.7,
+  "text": "E a infraestrutura: cada serviço, suas dependências e a saúde, com atalho para o Grafana."
+ },
+ {
+  "at": 169.9,
+  "text": "Engenharia aberta, pronta para evoluir: dez serviços em Go, decisões documentadas, uma spec para cada feature e o contrato com o jogo versionado."
+ },
+ {
+  "at": 174.0,
+  "text": "Cada decisão num ADR, cada feature numa spec, testes com race detector e CI em cada mudança."
+ },
+ {
+  "at": 180.4,
+  "text": "Go Multiplayer Control Plane. Seu jogo online, sem aluguel por jogador. Sobe local com um docker compose, e está tudo no GitHub."
+ }
+]

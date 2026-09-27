@@ -43,6 +43,16 @@ spec:
                 # pelo compose no host em :50052 (interno :50051).
                 - name: SESSION_GRPC_ADDR
                   value: host.k3d.internal:50052
+                # Chave do Dedicated Server para o gRPC do session (spec 030 /
+                # ADR-0030), metadata x-game-server-key nos Report*/GetSessionConfig.
+                # Secret opcional: sem ele o pod sobe e o session (em warn) só conta.
+                # kubectl create secret generic game-server-key --from-literal=key=...
+                - name: GAME_SERVER_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: game-server-key
+                      key: key
+                      optional: true
               resources:
                 requests:
                   cpu: 100m

@@ -1,10 +1,10 @@
 # cloud-save-service
 
-≈ **GameKit Game State Saving**. Guarda o **arquivo de save** do jogador — um blob opaco — em **object storage** (MinIO local / S3 em prod). Primeiro serviço sem Postgres (polyglot, ADR-0015).
+≈ **GameKit Game State Saving**. Guarda o **arquivo de save** do jogador — um blob opaco — em **object storage** (S3 do LocalStack no local / S3 em prod). Primeiro serviço sem Postgres (polyglot, ADR-0015).
 
 - **Protocolo:** REST · **Porta host:** 8084
-- **Storage:** MinIO / S3 (bucket `cloud-save`, um objeto por jogo+jogador) via `aws-sdk-go-v2`
-- **Dependências:** identity (JWKS), MinIO
+- **Storage:** S3 (LocalStack no local) (bucket `cloud-save`, um objeto por jogo+jogador) via `aws-sdk-go-v2`
+- **Dependências:** identity (JWKS), S3
 - **Multi-tenant por jogo** (ADR-0017): escopo por `game_id` (prefixo da key).
 
 ## API
@@ -20,7 +20,7 @@ Endpoint admin: internal key `X-Internal-Key` (ADR-0018), sem JWT.
 
 ## Modelo de dados
 
-**Object storage** (MinIO/S3) — não há tabelas; cada save é um objeto:
+**Object storage** (S3) — não há tabelas; cada save é um objeto:
 
 | Item | Valor |
 |---|---|
@@ -33,7 +33,7 @@ Endpoint admin: internal key `X-Internal-Key` (ADR-0018), sem JWT.
 
 ## Observabilidade
 
-`/metrics` na porta 8084 (**Service Overview**, `$job=cloud-save-service`). Tracing no Tempo. Storage no dashboard **MinIO** (métricas Prometheus nativas do MinIO, sem exporter). Console do MinIO: http://localhost:9001 (`minioadmin`/`minioadmin`).
+`/metrics` na porta 8084 (**Service Overview**, `$job=cloud-save-service`). Tracing no Tempo. O S3 local é o LocalStack (`localstack:4566`, credenciais `test`/`test`); até 2026-09 era um MinIO, cuja imagem saiu do Docker Hub. Os saves locais não persistem entre restarts do LocalStack.
 
 ## Testar / Specs
 

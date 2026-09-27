@@ -29,6 +29,7 @@ type fakeReader struct {
 	out          []domain.PlayerAchievement
 	catalog      []domain.Achievement
 	eventRules   []domain.EventRule
+	progress     []domain.AchievementProgressEntry
 	err          error
 	gotGameID    string
 	gotPlayer    string
@@ -64,7 +65,7 @@ func (f *fakeReader) ImportAchievements(_ context.Context, gameID string, _ []do
 
 func (f *fakeReader) AchievementProgress(_ context.Context, gameID, _ string) ([]domain.AchievementProgressEntry, error) {
 	f.gotGameID = gameID
-	return nil, f.err
+	return f.progress, f.err
 }
 func (f *fakeReader) GameEventRules(_ context.Context, gameID string) ([]domain.EventRule, error) {
 	f.gotGameID = gameID
@@ -159,18 +160,7 @@ func (f *fakeRegistry) GetMultiplayerProfile(_ context.Context, gameID string) (
 	f.gotGameID = gameID
 	return f.profile, f.err
 }
-func (f *fakeRegistry) SetMultiplayerProfile(_ context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error) {
-	f.gotGameID, f.gotProfile = gameID, profile
-	if f.err != nil {
-		return nil, f.err
-	}
-	return profile, nil
-}
 func (f *fakeRegistry) ListMultiplayerModes(_ context.Context, gameID string) (json.RawMessage, error) {
-	f.gotGameID = gameID
-	return f.profile, f.err
-}
-func (f *fakeRegistry) GetMultiplayerMode(_ context.Context, gameID, _ string) (json.RawMessage, error) {
 	f.gotGameID = gameID
 	return f.profile, f.err
 }
@@ -370,6 +360,18 @@ func TestGames_DelegaAoRegistry(t *testing.T) {
 	assert.Equal(t, "tetris", got[0].Slug)
 }
 
+// admin-ui/091: o resumo de modo da listagem carrega a topologia.
+func TestGames_ResumoDosModosComTopologia(t *testing.T) {
+	reg := &fakeRegistry{
+		games:   []domain.Game{{ID: "g1", Slug: "souls"}},
+		profile: json.RawMessage(`[{"modeId":"default","archetype":"host_world_dropin","topology":"p2p","params":{}}]`),
+	}
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).Games(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got[0].MultiplayerModes, 1)
+	assert.Equal(t, "p2p", got[0].MultiplayerModes[0].Topology)
+}
+
 func TestCreateGame_DelegaAoRegistry(t *testing.T) {
 	reg := &fakeRegistry{}
 	g, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).CreateGame(context.Background(), "tetris", "Tetris")
@@ -435,13 +437,6 @@ func TestMultiplayerProfile_DelegaAoRegistry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "g1", reg.gotGameID)
 	assert.JSONEq(t, `{"archetype":"queue_arena"}`, string(got))
-
-	body := json.RawMessage(`{"archetype":"queue_arena","topology":"dedicated"}`)
-	saved, err := svc.SetMultiplayerProfile(context.Background(), "g2", body)
-	require.NoError(t, err)
-	assert.Equal(t, "g2", reg.gotGameID)
-	assert.JSONEq(t, string(body), string(reg.gotProfile))
-	assert.JSONEq(t, string(body), string(saved))
 }
 
 func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
@@ -458,9 +453,13 @@ func TestGameCatalogECreateAchievement_DelegamAoReader(t *testing.T) {
 	assert.Equal(t, "speedrun", reader.gotCreate.ID)
 }
 
+// TestGameLeaderboard_DelegaAoLeaderboard: desde a spec 088 o GameLeaderboard
+// enriquece o handle via identity — o teste original não injetava o Directory
+// (nil pointer em handlesByID) e a main ficou vermelha desde c8168bb.
 func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
-	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb}).GameLeaderboard(context.Background(), "game-9", "kills", "weekly", 10, 20)
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 1, Players: []domain.Player{{ID: "bob", Handle: "Bob"}}}}
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Leaderboard: lb, Directory: dir}).GameLeaderboard(context.Background(), "game-9", "kills", "weekly", 10, 20)
 	require.NoError(t, err)
 	assert.Equal(t, "game-9", lb.gotGameID)
 	assert.Equal(t, "kills", lb.gotBoard)
@@ -469,6 +468,42 @@ func TestGameLeaderboard_DelegaAoLeaderboard(t *testing.T) {
 	assert.Equal(t, 20, lb.gotOffset)
 	require.Len(t, got, 1)
 	assert.Equal(t, "bob", got[0].PlayerID)
+	assert.Equal(t, "Bob", got[0].Handle, "handle resolvido pelo identity (spec 088)")
+}
+
+func TestAchievementProgress_ResolveHandle(t *testing.T) {
+	reader := &fakeReader{progress: []domain.AchievementProgressEntry{{PlayerID: "bob", Progress: 1, Unlocked: true}, {PlayerID: "sumido"}}}
+	dir := &fakeDirectory{page: domain.PlayerPage{Total: 1, Players: []domain.Player{{ID: "bob", Handle: "Bob"}}}}
+	got, err := New(Deps{Reader: reader, Directory: dir}).AchievementProgress(context.Background(), "game-9", "invasor")
+	require.NoError(t, err)
+	assert.Equal(t, "game-9", reader.gotGameID)
+	require.Len(t, got, 2)
+	assert.Equal(t, "Bob", got[0].Handle, "handle resolvido pelo identity (spec 029)")
+	assert.Empty(t, got[1].Handle, "jogador que o identity não conhece fica sem handle")
+}
+
+func TestAchievementProgress_IdentityFora_HandleVazio_SemErro(t *testing.T) {
+	reader := &fakeReader{progress: []domain.AchievementProgressEntry{{PlayerID: "bob"}}}
+	dir := &fakeDirectory{err: domain.ErrIdentityUnavailable}
+	got, err := New(Deps{Reader: reader, Directory: dir}).AchievementProgress(context.Background(), "game-9", "invasor")
+	require.NoError(t, err, "enriquecimento é best-effort")
+	require.Len(t, got, 1)
+	assert.Empty(t, got[0].Handle)
+}
+
+func TestAchievementProgress_ErroDoAchievements_Propaga(t *testing.T) {
+	reader := &fakeReader{err: domain.ErrAchievementsUnavailable}
+	_, err := New(Deps{Reader: reader}).AchievementProgress(context.Background(), "game-9", "invasor")
+	assert.ErrorIs(t, err, domain.ErrAchievementsUnavailable)
+}
+
+func TestGameLeaderboard_IdentityFora_HandleVazio_SemErro(t *testing.T) {
+	lb := &fakeLeaderboard{entries: []domain.LeaderboardEntry{{Rank: 1, PlayerID: "bob", Score: 300}}}
+	dir := &fakeDirectory{err: domain.ErrIdentityUnavailable}
+	got, err := New(Deps{Leaderboard: lb, Directory: dir}).GameLeaderboard(context.Background(), "game-9", "kills", "alltime", 10, 0)
+	require.NoError(t, err, "enriquecimento é best-effort")
+	require.Len(t, got, 1)
+	assert.Empty(t, got[0].Handle)
 }
 
 func TestGamePlayers_DelegaAoRegistry(t *testing.T) {

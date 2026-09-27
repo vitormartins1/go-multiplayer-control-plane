@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,9 +22,11 @@ type fakeRepo struct {
 	participated atomic.Int64
 	placed       atomic.Int64
 	collected    atomic.Int64
+	closed       atomic.Int64
 	mu           sync.Mutex
 	byGame       map[string]int64
 	err          error
+	dup          bool // simula reentrega (idempotência do repo)
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{byGame: map[string]int64{}} }
@@ -35,7 +39,7 @@ func (f *fakeRepo) ApplyMatch(_ context.Context, m domain.MatchResult) (bool, er
 	f.mu.Lock()
 	f.byGame[m.GameID]++
 	f.mu.Unlock()
-	return false, nil
+	return f.dup, nil
 }
 func (f *fakeRepo) ApplyParticipation(_ context.Context, evt domain.ParticipationEvent) (bool, error) {
 	if f.err != nil {
@@ -71,7 +75,7 @@ func (f *fakeRepo) ApplySessionClosed(_ context.Context, evt domain.SessionClose
 	if f.err != nil {
 		return false, f.err
 	}
-	f.collected.Add(1)
+	f.closed.Add(1)
 	f.mu.Lock()
 	f.byGame[evt.GameID]++
 	f.mu.Unlock()
@@ -187,4 +191,81 @@ func TestPool_Stop_DrenaPendentes(t *testing.T) {
 	}
 	pool.Stop()
 	assert.Equal(t, int64(50), repo.applied.Load())
+}
+
+// SubmitSessionClosed roteia para ApplySessionClosed (spec 013).
+func TestPool_SubmitSessionClosed_RoteiaParaApplySessionClosed(t *testing.T) {
+	repo := newFakeRepo()
+	pool := NewPool(repo, 2, 4, logger.New("test"), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	done := pool.SubmitSessionClosed(ctx, domain.SessionCloseEvent{SessionID: "s1", GameID: "g1", CloseReason: "result"})
+	require.NoError(t, <-done)
+	pool.Stop()
+
+	assert.Equal(t, int64(1), repo.closed.Load())
+	assert.Equal(t, int64(0), repo.applied.Load(), "não passou pelo caminho de match")
+	assert.Equal(t, int64(0), repo.collected.Load())
+}
+
+// Com o ctx já cancelado (shutdown), todo Submit* devolve ctx.Err() sem
+// enfileirar — o pool nem precisa estar de pé.
+func TestPool_SubmitComCtxCancelado_DevolveErroSemEnfileirar(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	submits := map[string]func(*Pool) <-chan error{
+		"match":         func(p *Pool) <-chan error { return p.Submit(ctx, domain.MatchResult{}) },
+		"participation": func(p *Pool) <-chan error { return p.SubmitParticipation(ctx, domain.ParticipationEvent{}) },
+		"placement":     func(p *Pool) <-chan error { return p.SubmitPlacement(ctx, domain.PlacementResult{}) },
+		"collective":    func(p *Pool) <-chan error { return p.SubmitCollective(ctx, domain.CollectiveResult{}) },
+		"sessionClosed": func(p *Pool) <-chan error { return p.SubmitSessionClosed(ctx, domain.SessionCloseEvent{}) },
+	}
+	for name, submit := range submits {
+		t.Run(name, func(t *testing.T) {
+			pool := NewPool(newFakeRepo(), 1, 0, logger.New("test"), nil) // buffer 0 e sem workers: só o ctx libera
+			assert.ErrorIs(t, <-submit(pool), context.Canceled)
+		})
+	}
+}
+
+// NewPool com workers < 1 sobe 1 worker (nunca um pool parado).
+func TestNewPool_WorkersInvalido_UsaUm(t *testing.T) {
+	pool := NewPool(newFakeRepo(), 0, 1, logger.New("test"), nil)
+	assert.Equal(t, 1, pool.workers)
+}
+
+// As métricas RED do ingest contam recebidos e processados por resultado
+// (ok/dup/error) — são o que alimenta o dashboard Analytics Worker Pool.
+func TestPool_Metricas_ContamRecebidosEResultado(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	metrics := NewMetrics(reg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ok := newFakeRepo()
+	pool := NewPool(ok, 1, 4, logger.New("test"), metrics)
+	pool.Start(ctx)
+	require.NoError(t, <-pool.Submit(ctx, domain.MatchResult{GameID: "g1"}))
+	pool.Stop()
+
+	dup := newFakeRepo()
+	dup.dup = true
+	pool = NewPool(dup, 1, 4, logger.New("test"), metrics)
+	pool.Start(ctx)
+	require.NoError(t, <-pool.Submit(ctx, domain.MatchResult{GameID: "g1"}))
+	pool.Stop()
+
+	failing := &fakeRepo{err: errors.New("db fora")}
+	pool = NewPool(failing, 1, 4, logger.New("test"), metrics)
+	pool.Start(ctx)
+	require.Error(t, <-pool.Submit(ctx, domain.MatchResult{GameID: "g1"}))
+	pool.Stop()
+
+	assert.Equal(t, float64(3), testutil.ToFloat64(metrics.received))
+	assert.Equal(t, float64(1), testutil.ToFloat64(metrics.processed.WithLabelValues("ok")))
+	assert.Equal(t, float64(1), testutil.ToFloat64(metrics.processed.WithLabelValues("dup")))
+	assert.Equal(t, float64(1), testutil.ToFloat64(metrics.processed.WithLabelValues("error")))
+	assert.Equal(t, float64(0), testutil.ToFloat64(metrics.workersActive), "gauge volta a zero ao fim de cada job")
 }

@@ -605,3 +605,20 @@ func TestAdminUnsuppressEventRule_SemSupressaoAtiva_404(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
+
+// spec 019: steamApiName entra no domínio e volta no DTO.
+func TestAdminCreateAchievement_SteamAPIName(t *testing.T) {
+	svc := &fakeService{}
+	srv := newServer(svc, errVerifier{})
+	defer srv.Close()
+
+	resp := do(t, srv, http.MethodPost, "/admin/games/game-9/achievements", "", "",
+		`{"id":"boss","name":"Boss","eventType":"boss_killed","target":1,"steamApiName":"ACH_BOSS"}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	assert.Equal(t, "ACH_BOSS", svc.gotCreate.SteamAPIName)
+
+	var body achievementDTO
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "ACH_BOSS", body.SteamAPIName)
+}

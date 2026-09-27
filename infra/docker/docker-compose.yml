@@ -2,6 +2,7 @@
 # Ver ADR-0006 e docs/OBSERVABILITY.md.
 services:
   identity-service:
+    restart: unless-stopped # gameplay não pode depender de subir serviço à mão (incidente 2026-08-19)
     build:
       context: ../..
       dockerfile: services/identity-service/Dockerfile
@@ -13,6 +14,23 @@ services:
       INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018)
       GAME_REGISTRY_URL: http://game-registry:8080 # presença no login-into-game (ADR-0019)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
+      # Chave Ed25519 persistente do JWT do jogador (PEM PKCS8). Sem ela o
+      # identity gera uma efêmera a cada boot e todo token emitido antes do
+      # restart deixa de validar. Gerar uma vez: infra/docker/gen-secrets.sh
+      JWT_PRIVATE_KEY_FILE: /run/secrets/identity-jwt-key
+      # Login Steam (spec 005-steam-login): vazio = desligado (POST
+      # /sessions/steam -> 404). Preencher com a publisher key e o app id do
+      # jogo; o cliente pede o ticket com a mesma STEAM_TICKET_IDENTITY.
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      STEAM_APP_ID: ${STEAM_APP_ID:-}
+      STEAM_TICKET_IDENTITY: ${STEAM_TICKET_IDENTITY:-control-plane}
+      # Login Epic (spec 008-epic-login): vazio = desligado (POST /sessions/epic
+      # -> 404). EPIC_CLIENT_ID = client ID do produto no EOS; EPIC_JWKS_URL só
+      # para apontar para um JWKS falso em teste.
+      EPIC_CLIENT_ID: ${EPIC_CLIENT_ID:-}
+      EPIC_JWKS_URL: ${EPIC_JWKS_URL:-}
+    secrets:
+      - identity-jwt-key
     depends_on:
       identity-postgres:
         condition: service_healthy
@@ -22,6 +40,7 @@ services:
         condition: service_started
 
   achievements-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/achievements-service/Dockerfile
@@ -42,6 +61,7 @@ services:
         condition: service_started
 
   player-data-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/player-data-service/Dockerfile
@@ -62,6 +82,7 @@ services:
         condition: service_started
 
   cloud-save-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/cloud-save-service/Dockerfile
@@ -69,15 +90,15 @@ services:
       - "8084:8080"
     environment:
       PORT: "8080"
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
+      S3_ENDPOINT: http://localstack:4566 # S3 do LocalStack (a imagem do MinIO saiu do Docker Hub)
+      S3_ACCESS_KEY: test
+      S3_SECRET_KEY: test
       S3_BUCKET: cloud-save
       IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json # valida o JWT (ADR-0009)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
       INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço nos /admin (ADR-0018)
     depends_on:
-      minio:
+      localstack:
         condition: service_started
       identity-service:
         condition: service_started
@@ -85,6 +106,7 @@ services:
         condition: service_started
 
   leaderboard-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/leaderboard-service/Dockerfile
@@ -106,6 +128,7 @@ services:
 
   # Primeiro serviço gRPC (ADR-0003). Duas portas: gRPC + HTTP (métricas/health).
   matchmaking-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/matchmaking-service/Dockerfile
@@ -133,6 +156,7 @@ services:
   # session-service: control plane interno (≈ GameLift). gRPC unary
   # (CreateSession, ReportResult) + HTTP para o JWKS do connect token (ADR-0010).
   session-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/session-service/Dockerfile
@@ -147,13 +171,19 @@ services:
       # Snapshot do perfil do modo no CreateSession (ADR-0024) — obrigatório
       # para QUALQUER sessão; sem isso o Create falha com profile unavailable.
       GAME_REGISTRY_URL: http://game-registry:8080
-      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018)
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço (ADR-0018); o matchmaking a manda no gRPC
+      # Auth do gRPC (spec 030 / ADR-0030): JWT do jogador via JWKS do identity e
+      # chave do Dedicated Server. warn = conta e loga, não bloqueia; virar para
+      # enforce quando o jogo mandar as credenciais.
+      IDENTITY_JWKS_URL: http://identity-service:8080/.well-known/jwks.json
+      GAME_SERVER_KEY: dev-game-server-key
+      SESSION_AUTH_MODE: warn
       # Pool mock maior que o default (3): permite várias salas abertas ao
       # mesmo tempo no console em dev (cada sessão aberta segura um slot).
       SERVER_POOL: 10.0.0.1:7777,10.0.0.2:7777,10.0.0.3:7777,10.0.0.4:7777,10.0.0.5:7777,10.0.0.6:7777,10.0.0.7:7777,10.0.0.8:7777
       # Fan-out durável (ADR-0020): publica o resultado no tópico SNS match-results.
       MATCH_RESULTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:match-results
-      AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão MinIO/S3)
+      AWS_ENDPOINT_URL: http://localstack:4566 # LocalStack (mesmo padrão do S3)
       AWS_REGION: us-east-1
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317 # liga o tracing (ADR-0014)
       # Chave Ed25519 persistente do connect token (PEM PKCS8). Sem ela o
@@ -175,6 +205,7 @@ services:
   # aplica match_played/match_won (idempotente por matchID). Mesmo image do
   # achievements-service, entrypoint no binário consumer.
   achievements-consumer:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/achievements-service/Dockerfile
@@ -186,6 +217,13 @@ services:
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: us-east-1
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
+      # espelhamento de conquistas na Steam (achievements/019): desligado sem a
+      # publisher key. STEAM_GAME_ID = id (control plane) do jogo publicado na Steam.
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      STEAM_APP_ID: ${STEAM_APP_ID:-}
+      STEAM_GAME_ID: ${STEAM_GAME_ID:-}
+      IDENTITY_URL: http://identity-service:8080
+      INTERNAL_API_KEY: dev-internal-key # lê o SteamID no /admin do identity (ADR-0018)
     depends_on:
       achievements-postgres:
         condition: service_healthy
@@ -197,6 +235,7 @@ services:
   # Worker do fan-out durável (ADR-0020): consome match-results-leaderboard e
   # submete o score (idempotente via ZADD GT).
   leaderboard-consumer:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/leaderboard-service/Dockerfile
@@ -219,6 +258,7 @@ services:
   # analytics-service (ADR-0021): consome o fan-out match-results por um worker
   # pool e agrega rollups por jogo; expõe a read API do overview p/ o painel.
   analytics-service:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/analytics-service/Dockerfile
@@ -231,6 +271,7 @@ services:
       ANALYTICS_WORKERS: "4"
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: us-east-1
+      INTERNAL_API_KEY: dev-internal-key # auth serviço-a-serviço nos /admin (ADR-0018)
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
     depends_on:
       analytics-postgres:
@@ -243,6 +284,7 @@ services:
   # admin-bff: back-end-for-frontend do painel admin (ADR-0016). Agregador
   # read-only — lê o Prometheus e a API admin do achievements. Sem banco.
   admin-bff:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/admin-bff/Dockerfile
@@ -280,6 +322,7 @@ services:
   # admin-ui: front do painel admin (React+Vite). nginx serve o build estático e
   # faz proxy de /api -> admin-bff (mesma origem, sem CORS). Ver ADR-0016.
   admin-ui:
+    restart: unless-stopped
     build:
       context: ../../services/admin-ui
       dockerfile: Dockerfile
@@ -292,6 +335,7 @@ services:
   # game-registry: fonte canônica de jogos (ADR-0017). Fornece o game_id
   # (multi-tenant). REST + Postgres próprio. Control plane interno.
   game-registry:
+    restart: unless-stopped
     build:
       context: ../..
       dockerfile: services/game-registry/Dockerfile
@@ -310,6 +354,7 @@ services:
 
   # Banco próprio do identity (database-per-service, ADR-0015).
   identity-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: identity
@@ -319,7 +364,8 @@ services:
       - "5432:5432"
     volumes:
       # aplica a migration na inicialização do banco
-      - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/identity-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d identity"]
       interval: 5s
@@ -328,6 +374,7 @@ services:
 
   # Banco próprio do achievements (database-per-service, ADR-0015).
   achievements-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: achievements
@@ -336,16 +383,8 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ../../services/achievements-service/migrations/001_create_achievements.sql:/docker-entrypoint-initdb.d/001_create_achievements.sql:ro
-      - ../../services/achievements-service/migrations/002_add_progress.sql:/docker-entrypoint-initdb.d/002_add_progress.sql:ro
-      - ../../services/achievements-service/migrations/003_add_game_scope.sql:/docker-entrypoint-initdb.d/003_add_game_scope.sql:ro
-      - ../../services/achievements-service/migrations/004_processed_matches.sql:/docker-entrypoint-initdb.d/004_processed_matches.sql:ro
-      - ../../services/achievements-service/migrations/005_stat_criteria.sql:/docker-entrypoint-initdb.d/005_stat_criteria.sql:ro
-      - ../../services/achievements-service/migrations/006_processed_participations.sql:/docker-entrypoint-initdb.d/006_processed_participations.sql:ro
-      - ../../services/achievements-service/migrations/007_participation_event_id.sql:/docker-entrypoint-initdb.d/007_participation_event_id.sql:ro
-      - ../../services/achievements-service/migrations/008_event_rules.sql:/docker-entrypoint-initdb.d/008_event_rules.sql:ro
-      - ../../services/achievements-service/migrations/009_match_operators.sql:/docker-entrypoint-initdb.d/009_match_operators.sql:ro
-      - ../../services/achievements-service/migrations/010_event_rule_suppressions.sql:/docker-entrypoint-initdb.d/010_event_rule_suppressions.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/achievements-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
@@ -354,6 +393,7 @@ services:
 
   # Banco próprio do player-data (database-per-service, ADR-0015).
   player-data-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: player_data
@@ -362,8 +402,8 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - ../../services/player-data-service/migrations/001_create_player_data.sql:/docker-entrypoint-initdb.d/001_create_player_data.sql:ro
-      - ../../services/player-data-service/migrations/002_add_game_scope.sql:/docker-entrypoint-initdb.d/002_add_game_scope.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/player-data-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d player_data"]
       interval: 5s
@@ -372,6 +412,7 @@ services:
 
   # Banco próprio do game-registry (database-per-service, ADR-0015).
   game-registry-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: game_registry
@@ -380,36 +421,18 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - ../../services/game-registry/migrations/001_create_games.sql:/docker-entrypoint-initdb.d/001_create_games.sql:ro
-      - ../../services/game-registry/migrations/002_seed_sandbox.sql:/docker-entrypoint-initdb.d/002_seed_sandbox.sql:ro
-      - ../../services/game-registry/migrations/003_create_game_players.sql:/docker-entrypoint-initdb.d/003_create_game_players.sql:ro
-      - ../../services/game-registry/migrations/004_add_cover_metadata.sql:/docker-entrypoint-initdb.d/004_add_cover_metadata.sql:ro
-      - ../../services/game-registry/migrations/005_add_multiplayer_profile.sql:/docker-entrypoint-initdb.d/005_add_multiplayer_profile.sql:ro
-      - ../../services/game-registry/migrations/006_add_deleted_at.sql:/docker-entrypoint-initdb.d/006_add_deleted_at.sql:ro
-      - ../../services/game-registry/migrations/007_add_fleet.sql:/docker-entrypoint-initdb.d/007_add_fleet.sql:ro
-      - ../../services/game-registry/migrations/008_add_modes_version.sql:/docker-entrypoint-initdb.d/008_add_modes_version.sql:ro
-      - ../../services/game-registry/migrations/009_add_description.sql:/docker-entrypoint-initdb.d/009_add_description.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/game-registry/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  # Object storage do cloud-save (S3-compatible; ADR-0015). Métricas Prometheus
-  # nativas em /minio/v2/metrics/cluster (sem exporter separado).
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_PROMETHEUS_AUTH_TYPE: public # métricas sem auth
-    ports:
-      - "9000:9000" # API S3
-      - "9001:9001" # console web
-
-  # LocalStack: SNS/SQS locais do fan-out durável (ADR-0020), mesmo padrão do
-  # MinIO p/ S3 — o código só troca o endpoint (AWS_ENDPOINT_URL) na prod.
+  # LocalStack: SNS/SQS do fan-out durável (ADR-0020) e o S3 do cloud-save
+  # (ADR-0015) — o código só troca o endpoint na prod. Até 2026-09 o S3 era um
+  # MinIO; a imagem minio/minio saiu do Docker Hub. Os saves NÃO persistem entre
+  # restarts do localstack (ok para dev; o bucket é recriado no boot do cloud-save).
   localstack:
     image: localstack/localstack:3
     # 2026-08-19: SIGKILL do Docker Desktop derrubou o localstack e ele ficou
@@ -420,7 +443,7 @@ services:
     # terraform) pra recriar tópico+filas.
     restart: unless-stopped
     environment:
-      SERVICES: sns,sqs
+      SERVICES: sns,sqs,s3
       DEBUG: "0"
     ports:
       - "4566:4566"
@@ -446,11 +469,13 @@ services:
 
   # Ranking real-time do leaderboard (Redis sorted sets; ADR-0015).
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
   redis-exporter:
+    restart: unless-stopped
     image: oliver006/redis_exporter:latest
     environment:
       REDIS_ADDR: redis://redis:6379
@@ -460,6 +485,7 @@ services:
       - redis
 
   prometheus:
+    restart: unless-stopped
     image: prom/prometheus:latest
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -474,6 +500,7 @@ services:
       - identity-service
 
   tempo:
+    restart: unless-stopped
     image: grafana/tempo:latest
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
@@ -483,6 +510,7 @@ services:
       - "4317:4317" # OTLP gRPC (ingestão)
 
   grafana:
+    restart: unless-stopped
     image: grafana/grafana:latest
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -498,6 +526,7 @@ services:
 
   # Um exporter por banco — padrão a repetir a cada serviço novo (ver OBSERVABILITY.md).
   identity-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@identity-postgres:5432/identity?sslmode=disable
@@ -507,6 +536,7 @@ services:
       - identity-postgres
 
   achievements-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@achievements-postgres:5432/achievements?sslmode=disable
@@ -516,6 +546,7 @@ services:
       - achievements-postgres
 
   player-data-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@player-data-postgres:5432/player_data?sslmode=disable
@@ -525,6 +556,7 @@ services:
       - player-data-postgres
 
   game-registry-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@game-registry-postgres:5432/game_registry?sslmode=disable
@@ -535,6 +567,7 @@ services:
 
   # Banco próprio do analytics (database-per-service, ADR-0015).
   analytics-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: analytics
@@ -543,13 +576,8 @@ services:
     ports:
       - "5436:5432"
     volumes:
-      - ../../services/analytics-service/migrations/001_create_analytics.sql:/docker-entrypoint-initdb.d/001_create_analytics.sql:ro
-      - ../../services/analytics-service/migrations/002_outcome_counts.sql:/docker-entrypoint-initdb.d/002_outcome_counts.sql:ro
-      - ../../services/analytics-service/migrations/003_participation_rollup.sql:/docker-entrypoint-initdb.d/003_participation_rollup.sql:ro
-      - ../../services/analytics-service/migrations/004_placement_rollup.sql:/docker-entrypoint-initdb.d/004_placement_rollup.sql:ro
-      - ../../services/analytics-service/migrations/005_mission_rollup.sql:/docker-entrypoint-initdb.d/005_mission_rollup.sql:ro
-      - ../../services/analytics-service/migrations/006_participation_event_id_and_outcome.sql:/docker-entrypoint-initdb.d/006_participation_event_id_and_outcome.sql:ro
-      - ../../services/analytics-service/migrations/007_participation_mode_id.sql:/docker-entrypoint-initdb.d/007_participation_mode_id.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/analytics-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d analytics"]
       interval: 5s
@@ -557,6 +585,7 @@ services:
       retries: 10
 
   analytics-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@analytics-postgres:5432/analytics?sslmode=disable
@@ -569,6 +598,7 @@ services:
   # sessões fechadas (spec 025). Único banco novo do session-service; até aqui
   # era o único serviço stateful-por-natureza sem Postgres.
   session-postgres:
+    restart: unless-stopped
     image: postgres:16
     environment:
       POSTGRES_DB: session
@@ -577,8 +607,8 @@ services:
     ports:
       - "5437:5432"
     volumes:
-      - ../../services/session-service/migrations/001_create_closed_sessions.sql:/docker-entrypoint-initdb.d/001_create_closed_sessions.sql:ro
-      - ../../services/session-service/migrations/002_create_closed_session_players.sql:/docker-entrypoint-initdb.d/002_create_closed_session_players.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/session-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d session"]
       interval: 5s
@@ -586,6 +616,7 @@ services:
       retries: 10
 
   session-postgres-exporter:
+    restart: unless-stopped
     image: prometheuscommunity/postgres-exporter:latest
     environment:
       DATA_SOURCE_NAME: postgresql://dev:dev@session-postgres:5432/session?sslmode=disable
@@ -598,3 +629,5 @@ services:
 secrets:
   session-jwt-key:
     file: ./secrets/session-jwt-ed25519.pem
+  identity-jwt-key:
+    file: ./secrets/identity-jwt-ed25519.pem

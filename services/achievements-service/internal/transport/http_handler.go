@@ -38,6 +38,11 @@ const playerIDKey ctxKey = iota
 // de jogador o game_id vem do header X-Game-Id (contexto ambiente); nas de
 // /admin vem do path {gameId}. As de jogador ficam atrás do auth; as de /admin
 // são control plane interno (sem auth no MVP).
+// maxPlayerBodyBytes limita o corpo das rotas de jogador (o payload legítimo
+// tem poucas dezenas de bytes; o teto evita que um corpo gigante seja
+// bufferizado inteiro pelo decoder).
+const maxPlayerBodyBytes = 64 << 10
+
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /events", h.auth(http.HandlerFunc(h.recordEvent)))
 	mux.Handle("GET /achievements", h.auth(http.HandlerFunc(h.listCatalog)))
@@ -94,8 +99,9 @@ func (h *Handler) recordEvent(w http.ResponseWriter, r *http.Request) {
 		Type string `json:"type"`
 	}
 	// sem DisallowUnknownFields de propósito: um id de jogador no corpo é
-	// ignorado (o playerID vem do JWT), e o evento é extensível.
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// ignorado (o playerID vem do JWT), e o evento é extensível. Corpo com teto
+	// (rota de jogador): acima dele o decode falha e vira 400.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPlayerBodyBytes)).Decode(&req); err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
@@ -145,6 +151,8 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		StatKey     string `json:"statKey"`
 		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
+		// spec 019: "API Name" da conquista no Steamworks; vazio = não espelha.
+		SteamAPIName string `json:"steamApiName"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
@@ -153,6 +161,7 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 	a, err := h.svc.CreateAchievement(r.Context(), r.PathValue("gameId"), domain.Achievement{
 		ID: req.ID, Name: req.Name, Description: req.Description,
 		EventType: req.EventType, StatKey: req.StatKey, StatMode: req.StatMode, Target: req.Target,
+		SteamAPIName: req.SteamAPIName,
 	})
 	if err != nil {
 		writeDomainError(w, err)
@@ -170,6 +179,8 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		StatKey     string `json:"statKey"`
 		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
+		// spec 019: "API Name" da conquista no Steamworks; vazio = não espelha.
+		SteamAPIName string `json:"steamApiName"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
@@ -178,6 +189,7 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 	a, err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.Achievement{
 		Name: req.Name, Description: req.Description,
 		EventType: req.EventType, StatKey: req.StatKey, StatMode: req.StatMode, Target: req.Target,
+		SteamAPIName: req.SteamAPIName,
 	})
 	if err != nil {
 		writeDomainError(w, err)
@@ -369,6 +381,8 @@ type achievementDTO struct {
 	StatKey     string `json:"statKey,omitempty"`  // critério por stat (ADR-0023 A1)
 	StatMode    string `json:"statMode,omitempty"` // cumulative | per_match
 	Target      int    `json:"target"`
+	// spec 019: nome da conquista no Steamworks (espelhamento na Steam).
+	SteamAPIName string `json:"steamApiName,omitempty"`
 }
 
 type eventRuleDTO struct {
@@ -424,6 +438,7 @@ func toAchievementDTO(a domain.Achievement) achievementDTO {
 	return achievementDTO{
 		ID: a.ID, Name: a.Name, Description: a.Description,
 		EventType: a.EventType, StatKey: a.StatKey, StatMode: a.StatMode, Target: a.Target,
+		SteamAPIName: a.SteamAPIName,
 	}
 }
 

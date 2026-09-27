@@ -6,11 +6,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "${SCRIPT_DIR}/secrets"
 
-KEY="${SCRIPT_DIR}/secrets/session-jwt-ed25519.pem"
-if [[ -f "${KEY}" ]]; then
-  echo "já existe: ${KEY} (mantido)"
-else
-  openssl genpkey -algorithm ed25519 -out "${KEY}"
-  chmod 600 "${KEY}"
-  echo "gerado: ${KEY}"
-fi
+# session-jwt: connect token (JWKS baixado pelos game servers).
+# identity-jwt: token do jogador (JWKS lido pelos serviços player-facing).
+for name in session-jwt identity-jwt; do
+  KEY="${SCRIPT_DIR}/secrets/${name}-ed25519.pem"
+  if [[ -f "${KEY}" ]]; then
+    echo "já existe: ${KEY} (mantido)"
+  else
+    openssl genpkey -algorithm ed25519 -out "${KEY}"
+    chmod 600 "${KEY}"
+    echo "gerado: ${KEY}"
+  fi
+done

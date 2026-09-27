@@ -1,22 +1,23 @@
+import { closeReasonMeta } from "./vocab";
+
 // Helpers de formatação compartilhados pelas telas de sessões/salas.
+
+// shortId mostra só o prefixo de um UUID (8 chars bastam para distinguir
+// sessões na tela; o id completo fica no tooltip/detalhe).
+export function shortId(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) : id;
+}
 
 // truncate encurta ids longos (match/server) para caber na tabela.
 export function truncate(id: string): string {
   return id.length > 12 ? `${id.slice(0, 12)}…` : id;
 }
 
-// closeReasonLabel traduz o motivo de fechamento da sessão para exibição.
-export function closeReasonLabel(reason?: string): string {
-  switch (reason) {
-    case "ttl":
-      return "TTL expirado (sessão abandonada)";
-    case "admin":
-      return "Encerrada pelo operador";
-    case "result":
-      return "Resultado reportado";
-    default:
-      return reason ?? "—";
-  }
+// closeReasonLabel traduz o motivo de fechamento da sessão para exibição —
+// fonte única em lib/vocab.ts (cobre os 6 motivos do session-service). A
+// topologia distingue servidor de host no motivo "abandoned" (admin-ui/093).
+export function closeReasonLabel(reason?: string, topology?: string): string {
+  return closeReasonMeta(reason, topology).label;
 }
 
 // formatDuration formata uma duração (ms) como "Ns" / "Nmin Ns" / "Nh Nmin".

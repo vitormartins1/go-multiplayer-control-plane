@@ -444,9 +444,66 @@ func TestOverview_OrdenaPorMatchesESomaTotais(t *testing.T) {
 	assert.Equal(t, int64(2), ov.Totals.Games)
 	assert.Equal(t, int64(2), ov.Totals.UniquePlayers, "p1 e p2 distintos globais")
 
-	// série diária cross-game: as 3 partidas caem hoje -> 1 ponto com 3.
+	// spec 016: a série do overview é de SESSÕES fechadas (nenhuma aqui).
+	assert.Empty(t, ov.Daily)
+}
+
+// Spec 016: um jogo só de host_world_dropin (o Folclore Souls) aparece no
+// overview com sessões, duração média, abandono e jogadores únicos — antes
+// sumia (o overview lia só o rollup do queue_arena).
+func TestOverview_JogoSoDeMundo_ApareceComSessoesEJogadores(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	base := recentDay()
+
+	_, err := repo.ApplyParticipation(ctx, domain.ParticipationEvent{
+		GameID: "souls", ModeID: "default", SessionID: "w1", PlayerID: "inv-1",
+		Role: "invader", Event: "HOST_KILLED", Outcome: "SUCCESS", EventID: "e1",
+	})
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("w1", "souls", "default", "host_world_dropin", "host_killed", base, base.Add(10*time.Minute)))
+	require.NoError(t, err)
+	_, err = repo.ApplySessionClosed(ctx, closeEvent("w2", "souls", "default", "host_world_dropin", "abandoned", base, base.Add(20*time.Minute)))
+	require.NoError(t, err)
+
+	ov, err := repo.Overview(ctx)
+	require.NoError(t, err)
+	require.Len(t, ov.Games, 1)
+	g := ov.Games[0]
+	assert.Equal(t, "souls", g.GameID)
+	assert.Equal(t, int64(2), g.Sessions)
+	assert.Equal(t, int64(15*60*1000), g.AvgSessionMs)
+	assert.Equal(t, int64(1), g.Abandoned)
+	assert.Equal(t, int64(1), g.UniquePlayers, "participação marca o jogador como visto")
+	assert.Equal(t, int64(0), g.Matches)
+	assert.Equal(t, int64(2), ov.Totals.Sessions)
 	require.Len(t, ov.Daily, 1)
-	assert.Equal(t, int64(3), ov.Daily[0].Matches, "soma partidas/dia entre jogos")
+	assert.Equal(t, int64(2), ov.Daily[0].Sessions)
+}
+
+// Revisão 2026-09-27: TTL de mundo host_world é o fim normal (jogo sem
+// heartbeat), não abandono; TTL de partida (sem resultado) continua sendo.
+func TestOverview_AbandonoIgnoraTTLDeMundo(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	base := recentDay()
+	for _, c := range []struct{ id, game, arch, reason string }{
+		{"w1", "souls", "host_world_dropin", "ttl"},
+		{"w2", "souls", "host_world_dropin", "abandoned"},
+		{"m1", "arena", "queue_arena", "ttl"},
+		{"m2", "arena", "queue_arena", "result"},
+	} {
+		_, err := repo.ApplySessionClosed(ctx, closeEvent(c.id, c.game, "default", c.arch, c.reason, base, base.Add(time.Minute)))
+		require.NoError(t, err)
+	}
+	ov, err := repo.Overview(ctx)
+	require.NoError(t, err)
+	byGame := map[string]int64{}
+	for _, g := range ov.Games {
+		byGame[g.GameID] = g.Abandoned
+	}
+	assert.Equal(t, int64(1), byGame["souls"], "só o abandoned; o ttl do mundo não conta")
+	assert.Equal(t, int64(1), byGame["arena"], "partida que venceu o TTL sem resultado conta")
 }
 
 func mustApply(repo *PostgresRepository, ctx context.Context, m domain.MatchResult) error {
@@ -825,13 +882,21 @@ func TestOverview_JogoComDoisModos_NaoDuplica(t *testing.T) {
 	assert.Equal(t, int64(2), ov.Totals.UniquePlayers)
 }
 
+// recentDay devolve ontem às 10h UTC: dentro da janela de 30 dias da série
+// diária e sempre no passado. Os testes da spec 015 usavam a data fixa
+// 2026-07-13 e começaram a falhar sozinhos quando ela saiu da janela.
+func recentDay() time.Time {
+	y := time.Now().UTC().AddDate(0, 0, -1)
+	return time.Date(y.Year(), y.Month(), y.Day(), 10, 0, 0, 0, time.UTC)
+}
+
 // TestApplySessionClosed_GravaSerieDiaria (spec 015): sessões fechadas
 // grava um ponto no dia (derivado de ClosedAt), soma no mesmo dia.
 func TestApplySessionClosed_GravaSerieDiaria(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	base := recentDay()
 	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(time.Minute)))
 	require.NoError(t, err)
 	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "default", "queue_arena", "result", base, base.Add(2*time.Minute)))
@@ -840,7 +905,7 @@ func TestApplySessionClosed_GravaSerieDiaria(t *testing.T) {
 	ga, err := repo.GameAnalytics(ctx, "g1", 30, "")
 	require.NoError(t, err)
 	require.Len(t, ga.SessionCloseDaily, 1)
-	assert.Equal(t, "2026-07-13", ga.SessionCloseDaily[0].Day)
+	assert.Equal(t, base.Format("2006-01-02"), ga.SessionCloseDaily[0].Day)
 	assert.Equal(t, int64(2), ga.SessionCloseDaily[0].Matches)
 }
 
@@ -848,7 +913,7 @@ func TestApplySessionClosed_Reprocessado_NaoDobraSerieDiaria(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	base := recentDay()
 	evt := closeEvent("s1", "g1", "default", "queue_arena", "result", base, base.Add(time.Minute))
 	_, err := repo.ApplySessionClosed(ctx, evt)
 	require.NoError(t, err)
@@ -865,7 +930,7 @@ func TestApplySessionClosed_SerieDiaria_FiltraPorModo(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	base := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	base := recentDay()
 	_, err := repo.ApplySessionClosed(ctx, closeEvent("s1", "g1", "modo-a", "queue_arena", "result", base, base.Add(time.Minute)))
 	require.NoError(t, err)
 	_, err = repo.ApplySessionClosed(ctx, closeEvent("s2", "g1", "modo-b", "queue_arena", "result", base, base.Add(time.Minute)))

@@ -60,8 +60,8 @@ func (c *Client) Provision(ctx context.Context, matchID string, teams []domain.T
 // ListInvadableWorlds chama o diretório do session (session/012) e traduz os
 // mundos invadíveis para o domínio. A política de faixa é aplicada no service,
 // não aqui — este adapter é passthrough.
-func (c *Client) ListInvadableWorlds(ctx context.Context, gameID string) ([]domain.InvadableWorld, error) {
-	resp, err := c.session.ListInvadableWorlds(ctx, &sessionv1.ListInvadableWorldsRequest{GameId: gameID})
+func (c *Client) ListInvadableWorlds(ctx context.Context, gameID, modeID string) ([]domain.InvadableWorld, error) {
+	resp, err := c.session.ListInvadableWorlds(ctx, &sessionv1.ListInvadableWorldsRequest{GameId: gameID, ModeId: modeID})
 	if err != nil {
 		return nil, fmt.Errorf("sessionclient: list invadable worlds: %w", err)
 	}
@@ -82,11 +82,12 @@ func (c *Client) ListInvadableWorlds(ctx context.Context, gameID string) ([]doma
 // endereço do server (JoinWorldResponse.server_address, spec 012) + o token.
 // codes.ResourceExhausted (slot cheio na corrida) → ErrRoleFull (dirige o retry);
 // codes.NotFound (mundo fechou) → ErrWorldNotFound.
-func (c *Client) Inject(ctx context.Context, sessionID, playerID, role string) (domain.Injected, error) {
+func (c *Client) Inject(ctx context.Context, sessionID, playerID, role, summonerID string) (domain.Injected, error) {
 	resp, err := c.session.JoinWorld(ctx, &sessionv1.JoinWorldRequest{
-		SessionId: sessionID,
-		PlayerId:  playerID,
-		Role:      role,
+		SessionId:        sessionID,
+		PlayerId:         playerID,
+		Role:             role,
+		SummonerPlayerId: summonerID,
 	})
 	if err != nil {
 		switch status.Code(err) {
@@ -94,13 +95,16 @@ func (c *Client) Inject(ctx context.Context, sessionID, playerID, role string) (
 			return domain.Injected{}, domain.ErrRoleFull
 		case codes.NotFound:
 			return domain.Injected{}, domain.ErrWorldNotFound
+		case codes.PermissionDenied:
+			return domain.Injected{}, domain.ErrNotWorldHost
 		default:
 			return domain.Injected{}, fmt.Errorf("sessionclient: inject: %w", err)
 		}
 	}
 	return domain.Injected{
-		ServerAddress: resp.GetServerAddress(),
-		ConnectToken:  resp.GetGrant().GetConnectToken(),
+		ServerAddress:  resp.GetServerAddress(),
+		HostConnection: resp.GetHostConnection(),
+		ConnectToken:   resp.GetGrant().GetConnectToken(),
 	}, nil
 }
 

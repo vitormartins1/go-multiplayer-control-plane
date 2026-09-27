@@ -1,7 +1,7 @@
 # Spec: 015-session-closed-daily
 
 **Serviço:** analytics-service (fatias em admin-bff, admin-ui)
-**Status:** Proposed
+**Status:** Done (implementada e mergeada; status corrigido na revisão 2026-09)
 **Data:** 2026-07-13
 **Parte de:** fecha o follow-up "fora de escopo" explícito da spec 013 —
 série diária de sessões fechadas, além do rollup cumulativo.

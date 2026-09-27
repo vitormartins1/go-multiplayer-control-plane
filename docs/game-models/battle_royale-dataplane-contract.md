@@ -55,7 +55,7 @@ sequenceDiagram
   participant DS as Server do BR (Unity)
 
   C->>MM: FindMatch(game_id [, modo solo/squad]) [JWT]
-  MM->>MM: lê perfil, enche o lobby até <b>lobbySize</b> e <b>compõe squads</b> (squad-K; solo = FFA)
+  MM->>MM: lê perfil, enche o lobby até <b>lobbySize</b> e <b>compõe squads</b> (squad-K, solo = FFA)
   MM->>SS: CreateSession(match_id, game_id, <b>teams[]=squads</b>)
   SS->>SS: aloca server, registra composição, emite tokens
   SS-->>MM: server_address + grants{player_id, connect_token(<b>team_id=squad-K</b>)}

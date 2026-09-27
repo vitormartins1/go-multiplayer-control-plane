@@ -38,7 +38,7 @@ sequenceDiagram
   participant Inv as Invasor (Client Unity)
   participant MM as matchmaking
 
-  Host->>SS: OpenWorld(host_player_id, game_id, soul_level, weapon_tier) [JWT]
+  Host->>SS: OpenWorld(game_id, soul_level, weapon_tier) [JWT do host → host = sub]
   SS->>SS: lê perfil, aloca server, deriva slots por papel
   SS-->>Host: session_id + server_address + host_grant(connect_token, role=host)
   Host->>World: conecta com o token (role=host)
@@ -50,7 +50,7 @@ sequenceDiagram
   SS-->>MM: connect_token(role=invader) + server_address
   MM-->>Inv: session_id + server_address + connect_token
   Inv->>World: conecta com o token (role=invader)
-  Note over World: mundo autoritativo; phantom injetado no meio
+  Note over World: mundo autoritativo, phantom injetado no meio
 ```
 
 ### B) Co-op — quadro de sinais em dois passos (o host escolhe)
@@ -76,6 +76,68 @@ sequenceDiagram
 
 > **O que o server do mundo precisa saber destes fluxos:** nada sobre invasão/sinais/faixa — isso é control plane. O server só recebe **conexões novas** (via connect token com `role`) a qualquer momento e as trata como **join-in-progress**. A capacidade por papel já foi garantida pelo `JoinWorld` (o control plane recusa com `ErrRoleFull`); o server confia no token.
 
+## Autenticação no session (spec `session/030`, ADR-0030 — contrato 1.2.0)
+
+Toda chamada ao gRPC do session leva uma credencial na **metadata**:
+
+| Quem chama | Metadata | RPCs |
+|---|---|---|
+| Cliente do jogo | `authorization: Bearer <JWT do identity>` | `OpenWorld` (o host é o `sub` do token — `host_player_id` pode ir vazio), `LeaveWorld` (a si mesmo; o host pode tirar outro), `CloseWorld` (só o host) |
+| Dedicated Server | `x-game-server-key: <GAME_SERVER_KEY>` | `ReportResult`, `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld` |
+| Jogo do host, mundo p2p (spec `session/031`) | `x-world-token: <world_token do OpenWorld>` | `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld` — só do próprio mundo |
+
+A chave do Dedicated Server chega ao pod pela env `GAME_SERVER_KEY` (Secret `game-server-key` nas fleets de
+`infra/agones/fleets/`; `dev-game-server-key` no compose). O session roda em **`warn`** enquanto o jogo não manda as
+credenciais: a chamada sem credencial funciona como antes, mas aparece em `session_auth_rejections_total`. Quando o
+jogo for atualizado, o operador vira `SESSION_AUTH_MODE=enforce` (aí a falta de credencial vira `Unauthenticated` e
+a falta de permissão, `PermissionDenied`). O `SummonSign` só funciona para o host do mundo em qualquer modo.
+
+**O que muda no jogo:** (1) o `SessionRpcClient` do cliente anexa o bearer que já tem do login e pode parar de
+extrair o `sub` do JWT; (2) o server lê `GAME_SERVER_KEY` do ambiente e anexa `x-game-server-key` nos reports.
+
+## Topologia p2p (spec `session/031`, ADR-0032 — contrato 1.4.0)
+
+Com o modo em `topology: p2p`, **o jogo do host hospeda o mundo** (como nos Souls da FromSoftware) e não há
+Dedicated Server:
+
+[![Invasão P2P: o invasor pede ao matchmaking, recebe o SteamID do host e conecta pela Steam (quadro do vídeo; clique para assistir)](../media/invasao-p2p.jpg)](../media/go-multiplayer-control-plane.mp4)
+
+```mermaid
+sequenceDiagram
+    participant H as Jogo do host
+    participant S as session
+    participant M as matchmaking
+    participant I as Jogo do invasor
+    H->>S: OpenWorld (bearer, host_connection)
+    S-->>H: session_id, host_grant, world_token
+    I->>M: Invade (bearer)
+    M-->>I: connect_token + host_connection
+    I->>H: conecta pela rede da loja (Steam Networking / SDR) e entrega o connect token
+    H->>H: valida o token (JWKS do session), lê role
+    H->>S: ReportParticipationEvent (x-world-token)
+```
+
+| Campo | Dedicado | p2p |
+|---|---|---|
+| `OpenWorldRequest.host_connection` | ignorado | **obrigatório** (id de conexão do host; ex.: SteamID64) — sem ele, `InvalidArgument` |
+| `OpenWorldResponse.server_address` | endereço do GameServer | vazio |
+| `OpenWorldResponse.world_token` | vazio | credencial do host para reportar; vale só para este mundo e morre quando ele fecha |
+| `JoinWorldResponse` / `InvadeResponse` / `SummonUpdate` `.host_connection` | vazio | o id de conexão do host |
+| claim `server` do connect token | endereço do GameServer | o `host_connection` — o host confere que o token é para ele |
+
+O jogo do host faz o papel que o Dedicated Server faz no dedicado: valida o connect token de quem entra, aplica os
+papéis e reporta os eventos. **Confiança:** os eventos vêm do host — ele pode mentir, como nos Souls. Se o host cair
+sem `CloseWorld`, o sweeper de TTL do session fecha o mundo. O netcode (NGO com transporte da Steam no modo host) é
+decisão do repo do jogo.
+
+## Heartbeat do mundo (spec `session/032` — contrato 1.5.0)
+
+Quem hospeda o mundo (o Dedicated Server, ou o jogo do host em p2p) chama `Heartbeat(session_id)` logo depois de
+abrir/assumir o mundo e a cada `interval_seconds` da resposta (hoje 30 s). Sem heartbeat o mundo fecha aos 30 min
+de vida, jogando ou não; com heartbeat ele vive enquanto os avisos chegarem, e fecha como `abandoned` ~90 s depois
+do último — é assim que um host que crashou some da lista de invasão. `NotFound` na resposta = o mundo já fechou:
+pare de mandar.
+
 ## Connect token (session → data plane)
 
 JWT **EdDSA** (Ed25519), validado **offline** pelo server do mundo via JWKS (`/.well-known/jwks.json` do session). Mesmos claims do `queue_arena`, com **`role`** no lugar de `team_id`:
@@ -84,7 +146,7 @@ JWT **EdDSA** (Ed25519), validado **offline** pelo server do mundo via JWKS (`/.
 |---|---|---|
 | `sub` | playerID | — |
 | `match_id` | **o `session_id` do mundo** (o refID do token) | ⚠️ o claim se chama `match_id` por herança, mas **carrega o `session_id`** neste arquétipo |
-| `server` | endereço do server do mundo | — |
+| `server` | endereço do server do mundo | em p2p, o `host_connection` do host (spec `session/031`) |
 | `iat` / `exp` | emissão / expiração (TTL 5 min) | — |
 | **`role`** | **`"host"` \| `"coop"` \| `"invader"`** | **host_world_dropin** (spec `011`); `team_id` **ausente** aqui |
 
@@ -108,7 +170,16 @@ session.v1.Session/ReportParticipationEvent(
   (kills, revives, ...), mesmo padrão de `ReportResult`. Ausente/vazio = ok
   (compat total); o session não valida conteúdo, é autoritativo o server.
 
-Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo inexistente/já encerrado — sinal para o server **parar** de reenviar aquele evento).
+Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo inexistente/já encerrado — sinal para o server **parar** de reenviar aquele evento), `Internal` (falha transitória — p.ex. publish no fan-out ou devolução do GameServer; **reenviar** a mesma ocorrência).
+
+### Identidade do boss no `BOSS_DEFEATED` (convenção, decisão D3 de 2026-09)
+
+O evento não tem campo de "alvo". Para conquistas/analytics por boss, o server reporta o boss em `stats`, com uma
+chave por boss e valor `1`: `stats: {"boss_boitata": 1}`. As event-rules enxergam isso como o fact
+`stat.boss_boitata` (ex.: regra `event = BOSS_DEFEATED` + `stat.boss_boitata gte 1` → event type
+`boitata_derrotado`), e o analytics guarda os `stats` brutos por jogador. Declare as chaves em `scoringStats` do modo
+para o console não marcá-las como "drift". Um campo próprio (`subject_id`) só entra quando o analytics precisar de
+uma dimensão "boss" — até lá, zero mudança de proto.
 
 ### Efeito de cada evento no mundo (o control plane aplica)
 
@@ -120,7 +191,9 @@ Erros: `InvalidArgument` (event/outcome fora do vocabulário), `NotFound` (mundo
 | `LEFT` | phantom que sai voluntariamente | **libera o slot** do `player_id` |
 | `HOST_KILLED` | o invasor que matou o host | **encerra o mundo** (`CloseReason=host_killed`), libera o server, encerra a participação de todos |
 
-**Ordem no control plane:** o session **publica** o evento no fan-out **antes** de mutar o slot (ADR-0020) — se a publicação falha, o estado não muda e o server **refaz** o report (retry). Logo, o server deve tratar `ReportParticipationEvent` como **idempotente/retriável**: em erro de rede, reenviar; ao receber `NotFound`, parar (o mundo já fechou).
+**Ordem no control plane (desde 2026-08-19, fix `49e976d`):** o session **aplica o efeito primeiro** (libera o slot, encerra o mundo) e **depois publica** no fan-out — o gameplay nunca fica refém da infra de analytics. Se o publish falha, o efeito já valeu e o erro volta ao server, que **reenvia a mesma ocorrência (mesmo `event_id`)**; toda mutação é idempotente e os sinks deduplicam por `event_id`. Logo, o server deve tratar `ReportParticipationEvent` como **idempotente/retriável**: em erro, reenviar; ao receber `NotFound`, parar (o mundo já fechou).
+
+**Reenvio do `HOST_KILLED` (spec `session-service/029`, 2026-09-26):** o `HOST_KILLED` fecha o mundo antes do publish; se o publish (ou a devolução do GameServer) falhar, o reenvio **da mesma ocorrência** (mesmo `event_id`; sem `event_id`, mesmo `player_id`) é aceito e só republica — antes recebia `NotFound` e o evento se perdia. Qualquer outro evento para o mundo já fechado continua recebendo `NotFound`. **Impacto no jogo: nenhum** — o comportamento esperado (reenviar em erro, parar em `NotFound`) é o mesmo; só deixa de perder o evento.
 
 > **Semântica de papel:** o session **não** valida se o `role` combina com o `event` (ex.: "invasor não pode reportar BOSS_DEFEATED") — o server do mundo é **autoritativo**. Ver follow-up #12 se essa validação virar necessária.
 
@@ -138,11 +211,13 @@ O session publica cada evento no **mesmo** tópico `match-results` do `queue_are
   "role": "host | coop | invader",
   "event": "JOINED | BOSS_DEFEATED | HOST_KILLED | DIED | LEFT",
   "outcome": "SUCCESS | FAIL | NEUTRAL",
+  "modeId": "<modo>",
+  "eventId": "<ocorrência, gerado pelo data plane>",
   "stats": {"kills": 2}
 }
 ```
 
-Sinks (control plane, já implementados): **achievements** reage por papel (`invader`+`HOST_KILLED`+`SUCCESS` → `invasion_won`; `coop`+`BOSS_DEFEATED`+`SUCCESS` → `coop_boss_helped`; `JOINED` → `world_joined`), idempotente por `(sessionId, playerId, event)`. **analytics** agrega `(gameId, role, event)`.
+Sinks (control plane, já implementados): **achievements** reage por papel (`invader`+`HOST_KILLED`+`SUCCESS` → `invasion_won`; `coop`+`BOSS_DEFEATED`+`SUCCESS` → `coop_boss_helped`; `JOINED` → `world_joined`), idempotente por `eventId` (fallback `(sessionId, playerId, event)` para data plane sem `eventId`). **analytics** agrega `(gameId, modeId, role, event, outcome)` e guarda os `stats` brutos.
 
 ## Ciclo de vida do mundo e dos slots (referência)
 
@@ -176,7 +251,10 @@ O repo Unity implementou o contrato acima integralmente — todos os itens abaix
 
 Evoluções seguintes (senha, pools por região, reconexão do host) ficam no [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md) e na Fase 6+ do roadmap Unity — não são mudança de contrato, são refinamento sobre o que já está de pé.
 
-> **Nota de topologia.** Este arquétipo tem afinidade com **P2P** (host como listen-server), mas o MVP usa **dedicated** (Agones/Unity) pela autoridade neutra (ADR-0008). O contrato acima vale para dedicated; a variante `p2p` é um investimento à parte (follow-up/aberturas do roadmap) — muda só a camada de provisionamento/connect da sessão, não os eventos nem os papéis.
+> **Nota de topologia (atualizada 2026-09-27).** A variante **P2P** existe no backend desde o contrato 1.4.0
+> (seção "Topologia p2p" acima, ADR-0032): muda só o provisionamento/connect e quem reporta, não os eventos nem os
+> papéis. O que o projeto Unity precisa fazer para adotá-la (e o heartbeat, o login Steam e as credenciais) está no
+> [guia de integração](../integration/UNITY-GUIA-INTEGRACAO.md).
 
 ## Resumo por papel (o que muda no gameplay)
 
@@ -208,4 +286,4 @@ GetSessionConfigResponse{
 
 3. **Validação de forma no `ReportResult`:** o session agora rejeita (`FailedPrecondition`) um outcome cujo *kind* não corresponda ao arquétipo do modo — reportar a forma errada é bug do server, não entra no fan-out.
 
-> No host_world, o `mode_id` também flui no `OpenWorld`/entradas do matchmaking (`Invade`/sinais); o quadro de sinais é segmentado por modo (aliado do modo X não aparece para host do modo Y).
+> No host_world, o `mode_id` também flui no `OpenWorld`/entradas do matchmaking (`Invade`/sinais); o quadro de sinais é segmentado por modo (aliado do modo X não aparece para host do modo Y) e, desde a spec `matchmaking/012` (2026-09-26), a **invasão também**: o `Invade` só encontra mundos abertos no mesmo modo do invasor (vazio = `default`). **Impacto no jogo:** mandar no `Invade` o mesmo `mode_id` com que o host abriu o mundo.

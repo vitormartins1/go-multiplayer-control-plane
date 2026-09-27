@@ -70,6 +70,22 @@ import {
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
+// "API Name" de conquista no Steamworks (achievements/019).
+const STEAM_API_NAME_RE = /^[A-Za-z0-9_]{1,128}$/;
+const steamApiNameValidator = (v: string) =>
+  !v.trim() || STEAM_API_NAME_RE.test(v.trim()) ? null : "letras, dígitos e _ (ex.: ACH_BOSS_BOITATA)";
+
+// SteamApiNameInput: campo opcional do espelhamento na Steam (achievements/019).
+function SteamApiNameInput({ inputProps }: { inputProps: ReturnType<UseFormReturnType<{ steamApiName: string }>["getInputProps"]> }) {
+  return (
+    <TextInput
+      label="Nome na Steam (opcional)"
+      description="API Name da conquista no Steamworks. Preenchido, o desbloqueio aparece também na Steam do jogador."
+      placeholder="ACH_BOSS_BOITATA"
+      {...inputProps}
+    />
+  );
+}
 
 // Sugestões de um campo: os valores (data do Autocomplete) + a origem de cada
 // um, mostrada esmaecida na opção (ex.: kills → "modo tdm").
@@ -408,11 +424,13 @@ export function GameAchievements({
       statKey: "",
       statMode: "cumulative" as StatMode,
       target: 1 as number | string,
+      steamApiName: "",
     },
     validate: {
       id: (v) => (ID_RE.test(v.trim()) ? null : "id minúsculo (ex.: first_win)"),
       name: (v) => (v.trim() ? null : "obrigatório"),
       ...criterionValidators,
+      steamApiName: steamApiNameValidator,
     },
   });
 
@@ -426,10 +444,12 @@ export function GameAchievements({
       statKey: "",
       statMode: "cumulative" as StatMode,
       target: 1 as number | string,
+      steamApiName: "",
     },
     validate: {
       name: (v) => (v.trim() ? null : "obrigatório"),
       ...criterionValidators,
+      steamApiName: steamApiNameValidator,
     },
   });
   // editSnapshot guarda os valores no momento em que a edição abriu — é pra
@@ -452,6 +472,7 @@ export function GameAchievements({
         name: values.name,
         description: values.description,
         ...buildCriterion(values),
+        steamApiName: values.steamApiName.trim(),
       });
       notifications.show({ color: "nominal", message: "Conquista adicionada." });
       close();
@@ -480,6 +501,7 @@ export function GameAchievements({
       statKey: a.statKey ?? "",
       statMode: a.statMode ?? "cumulative",
       target: a.target,
+      steamApiName: a.steamApiName ?? "",
     };
     editForm.setValues(values);
     setEditSnapshot(values);
@@ -494,6 +516,7 @@ export function GameAchievements({
         name: values.name,
         description: values.description,
         ...buildCriterion(values),
+        steamApiName: values.steamApiName.trim(),
       });
       notifications.show({ color: "nominal", message: "Conquista atualizada." });
       focusRow(null);
@@ -553,8 +576,8 @@ export function GameAchievements({
 
     setImporting(true);
     try {
-      const achievements = rows.map(({ id, name, description, eventType, target, statKey, statMode }) => ({
-        id, name, description, eventType, target, statKey: statKey ?? "", statMode,
+      const achievements = rows.map(({ id, name, description, eventType, target, statKey, statMode, steamApiName }) => ({
+        id, name, description, eventType, target, statKey: statKey ?? "", statMode, steamApiName,
       }));
       const result = await api.importAchievements(gameId, achievements);
       setImportResult(result);
@@ -666,9 +689,18 @@ export function GameAchievements({
                     </Table.Td>
                     <Table.Td c="dimmed" ff="monospace">{a.id}</Table.Td>
                     <Table.Td>
-                      <Text truncate="end" maw={200} title={a.name}>
-                        {a.name}
-                      </Text>
+                      <Group gap={6} wrap="nowrap">
+                        <Text truncate="end" maw={200} title={a.name}>
+                          {a.name}
+                        </Text>
+                        {a.steamApiName && (
+                          <Tooltip label={`Espelhada na Steam como ${a.steamApiName}`} withArrow>
+                            <Badge size="xs" variant="light" color="blue">
+                              Steam
+                            </Badge>
+                          </Tooltip>
+                        )}
+                      </Group>
                     </Table.Td>
                     <Table.Td c="dimmed">{a.description}</Table.Td>
                     <Table.Td>
@@ -765,6 +797,7 @@ export function GameAchievements({
                                         {...editForm.getInputProps("description")}
                                       />
                                       <CriterionFields form={editForm} stats={stats} events={events} />
+                                      <SteamApiNameInput inputProps={editForm.getInputProps("steamApiName")} />
                                     </Stack>
                                     <Stack gap="xs" mt="md">
                                       <Button type="submit" size="xs" fullWidth>
@@ -832,6 +865,7 @@ export function GameAchievements({
             <TextInput label="Nome" placeholder="Primeira Vitória" {...form.getInputProps("name")} />
             <Textarea label="Descrição" autosize minRows={2} {...form.getInputProps("description")} />
             <CriterionFields form={form} stats={stats} events={events} />
+            <SteamApiNameInput inputProps={form.getInputProps("steamApiName")} />
             <Group justify="flex-end">
               <Button type="submit">Adicionar</Button>
             </Group>
@@ -966,9 +1000,13 @@ export function GameAchievements({
                         <Group gap={6} wrap="nowrap">
                           <PlayerAvatar seed={e.playerId} size={24} />
                           <Tooltip label={e.playerId}>
-                            <Text size="sm" c="dimmed">
-                              {e.playerId.slice(0, 8)}…
-                            </Text>
+                            {e.handle ? (
+                              <Text size="sm">{e.handle}</Text>
+                            ) : (
+                              <Text size="sm" c="dimmed">
+                                {e.playerId.slice(0, 8)}…
+                              </Text>
+                            )}
                           </Tooltip>
                           <GuestBadge playerId={e.playerId} />
                         </Group>

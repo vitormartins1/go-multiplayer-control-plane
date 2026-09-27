@@ -100,6 +100,7 @@ type ModeSummary struct {
 	ModeID      string `json:"modeId"`
 	DisplayName string `json:"displayName,omitempty"`
 	Archetype   string `json:"archetype"`
+	Topology    string `json:"topology,omitempty"` // dedicated | p2p (session/031, admin-ui/091)
 }
 
 // Achievement é uma entrada do catálogo de conquistas de um jogo. O critério é
@@ -113,6 +114,8 @@ type Achievement struct {
 	StatKey     string `json:"statKey,omitempty"`
 	StatMode    string `json:"statMode,omitempty"`
 	Target      int    `json:"target"`
+	// SteamAPIName: "API Name" no Steamworks (achievements/019); vazio = não espelha.
+	SteamAPIName string `json:"steamApiName,omitempty"`
 }
 
 // Status de cada linha na importação em lote.
@@ -196,14 +199,10 @@ type GameRegistry interface {
 	// UpstreamError(404) se o jogo ou o perfil não existir; indisponibilidade ->
 	// ErrGameRegistryUnavailable. O BFF não interpreta a forma do perfil.
 	GetMultiplayerProfile(ctx context.Context, gameID string) (json.RawMessage, error)
-	// SetMultiplayerProfile faz upsert do perfil (cru). Validação/estado do
-	// upstream (400/404) viram UpstreamError; indisponibilidade -> unavailable.
-	SetMultiplayerProfile(ctx context.Context, gameID string, profile json.RawMessage) (json.RawMessage, error)
 	// Modos nomeados (ADR-0024, spec 017): passthrough cru da coleção
 	// /multiplayer-profiles. Erros do upstream (400/404/409) viram UpstreamError
 	// com o código intacto; indisponibilidade -> ErrGameRegistryUnavailable.
 	ListMultiplayerModes(ctx context.Context, gameID string) (json.RawMessage, error)
-	GetMultiplayerMode(ctx context.Context, gameID, modeID string) (json.RawMessage, error)
 	SetMultiplayerMode(ctx context.Context, gameID, modeID string, mode json.RawMessage) (json.RawMessage, error)
 	DeleteMultiplayerMode(ctx context.Context, gameID, modeID string) error
 	// ModeSnapshotHashes calcula o hash "atual" de cada modo do jogo (spec 022)
@@ -245,6 +244,7 @@ type AchievementProgressEntry struct {
 	Progress   int        `json:"progress"`
 	Unlocked   bool       `json:"unlocked"`
 	UnlockedAt *time.Time `json:"unlockedAt,omitempty"`
+	Handle     string     `json:"handle,omitempty"` // spec 029: resolvido no identity, best-effort
 }
 
 // AchievementsReader é a Port de saída para a API admin do achievements-service,

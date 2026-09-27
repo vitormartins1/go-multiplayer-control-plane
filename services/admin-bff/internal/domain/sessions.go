@@ -66,11 +66,15 @@ type GameSession struct {
 	// lê as chaves que conhece), formação por time e resultado persistido.
 	// Passthrough 1:1 do session-service; handles do resultado se resolvem no
 	// front via Players.
-	Archetype   string          `json:"archetype,omitempty"`
-	ProfileHash string          `json:"profileHash,omitempty"`
-	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
-	Teams       []SessionTeam   `json:"teams,omitempty"`
-	Result      *MatchResult    `json:"result,omitempty"`
+	Archetype string `json:"archetype,omitempty"`
+	Topology  string `json:"topology,omitempty"` // dedicated | p2p (session/031)
+	// passthrough do session (admin-ui/091): conexão do host p2p e último heartbeat.
+	HostConnection  string          `json:"hostConnection,omitempty"`
+	LastHeartbeatAt *time.Time      `json:"lastHeartbeatAt,omitempty"`
+	ProfileHash     string          `json:"profileHash,omitempty"`
+	ModeParams      json.RawMessage `json:"modeParams,omitempty"`
+	Teams           []SessionTeam   `json:"teams,omitempty"`
+	Result          *MatchResult    `json:"result,omitempty"`
 
 	// Participants é a base do histórico persistido (spec 025): um registro por
 	// jogador com o papel ocupado. Presente tanto nas sessões em memória quanto

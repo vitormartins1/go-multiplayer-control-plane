@@ -30,6 +30,11 @@ func (m *mockAuth) Authenticate(ctx context.Context, handle, password, gameID st
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockAuth) AuthenticateExternal(ctx context.Context, provider, ticket, gameID string) (string, error) {
+	args := m.Called(ctx, provider, ticket, gameID)
+	return args.String(0), args.Error(1)
+}
+
 func (m *mockAuth) LoginAnonymous(ctx context.Context, gameID string) (string, error) {
 	args := m.Called(ctx, gameID)
 	return args.String(0), args.Error(1)
@@ -60,6 +65,12 @@ func (m *mockLister) GetPlayer(ctx context.Context, id string) (*domain.Account,
 	args := m.Called(ctx, id)
 	acc, _ := args.Get(0).(*domain.Account)
 	return acc, args.Error(1)
+}
+
+func (m *mockLister) ExternalIdentities(ctx context.Context, id string) ([]domain.ExternalIdentity, error) {
+	args := m.Called(ctx, id)
+	ids, _ := args.Get(0).([]domain.ExternalIdentity)
+	return ids, args.Error(1)
 }
 
 func newServer(auth domain.AuthService, tokens domain.TokenIssuer) http.Handler {
@@ -235,4 +246,81 @@ func TestAdminListPlayers_SemAuthorization_NaoBloqueia(t *testing.T) {
 
 	rr := do(srv, http.MethodGet, "/admin/players", "") // sem header Authorization
 	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+// /accounts não exige auth: corpo acima do teto é recusado (400) sem chegar
+// ao service — o decoder não bufferiza um corpo arbitrariamente grande.
+func TestRegister_CorpoAcimaDoTeto_400SemTocarService(t *testing.T) {
+	auth := new(mockAuth)
+	srv := newServer(auth, new(mockTokens))
+
+	body := `{"handle":"vitor","password":"` + strings.Repeat("x", maxBodyBytes) + `"}`
+	rr := do(srv, http.MethodPost, "/accounts", body)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	auth.AssertNotCalled(t, "Register", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Spec 005-steam-login: o ticket vira o token de sempre; cada erro do
+// provedor tem seu código HTTP.
+func TestLoginExternal_Steam_200ComToken(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("AuthenticateExternal", mock.Anything, "steam", "abcd", "g1").Return("jwt", nil)
+	rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/steam", `{"ticket":"abcd","gameId":"g1"}`)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"token":"jwt"}`, rr.Body.String())
+}
+
+func TestLoginExternal_ErrosMapeiamStatus(t *testing.T) {
+	cases := map[error]int{
+		domain.ErrProviderNotSupported: http.StatusNotFound,
+		domain.ErrInvalidTicket:        http.StatusUnauthorized,
+		domain.ErrExternalBanned:       http.StatusForbidden,
+		domain.ErrProviderUnavailable:  http.StatusServiceUnavailable,
+	}
+	for err, want := range cases {
+		auth := new(mockAuth)
+		auth.On("AuthenticateExternal", mock.Anything, "steam", "abcd", "").Return("", err)
+		rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/steam", `{"ticket":"abcd"}`)
+		assert.Equal(t, want, rr.Code, err.Error())
+	}
+}
+
+func TestLoginExternal_AnonymousContinuaNaRotaLiteral(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("LoginAnonymous", mock.Anything, "").Return("guest-jwt", nil)
+	rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/anonymous", ``)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	auth.AssertNotCalled(t, "AuthenticateExternal", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// spec 006: vínculos de loja do jogador (o achievements lê o SteamID).
+func TestAdminExternalIdentities(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("ExternalIdentities", mock.Anything, "id-1").Return(
+		[]domain.ExternalIdentity{{Provider: "steam", ExternalID: "76561198000000042"}}, nil)
+	lister.On("ExternalIdentities", mock.Anything, "sem-vinculo").Return([]domain.ExternalIdentity{}, nil)
+	lister.On("ExternalIdentities", mock.Anything, "nope").Return(nil, domain.ErrAccountNotFound)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players/id-1/external-identities", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"identities":[{"provider":"steam","externalId":"76561198000000042"}]}`, rr.Body.String())
+
+	rr = do(srv, http.MethodGet, "/admin/players/sem-vinculo/external-identities", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"identities":[]}`, rr.Body.String())
+
+	rr = do(srv, http.MethodGet, "/admin/players/nope/external-identities", "")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+// spec 007: handle com tentativas esgotadas → 429 com código estável.
+func TestLogin_MuitasTentativas_429(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("Authenticate", mock.Anything, "alice", "x", "").Return("", domain.ErrTooManyAttempts)
+	srv := newServer(auth, new(mockTokens))
+
+	rr := do(srv, http.MethodPost, "/sessions", `{"handle":"alice","password":"x"}`)
+	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+	assert.Contains(t, rr.Body.String(), "too_many_attempts")
 }

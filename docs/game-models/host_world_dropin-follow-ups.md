@@ -2,7 +2,7 @@
 
 > **Propósito:** backlog consolidado das **evoluções deliberadamente adiadas** ao longo das fatias H0–H2 do `host_world_dropin`. Cada item foi cortado do escopo por foco (control plane primeiro) ou por depender de validação no data plane. Aqui ficam reunidos com **contexto suficiente para retomar** — o quê, por que foi adiado, onde mexer, e o que destrava.
 >
-> **Quando voltar:** a validação no data plane (`unity-host-world-dropin-data-plane`, Unity) **já está substancialmente em andamento** — repo real, Fases 0–4 done (mundo do host, phantoms join-in-progress, invasão+sinais com senha, combate/boss). O follow-up #1 (senha) já foi **confirmado por esse feedback real**. **Correção 2026-07-13:** o #6 (stats) NÃO foi confirmado — o campo `stats` nem existia no proto/envelope de `ReportParticipationEvent` até `session-service/026` (achado ao especificar `analytics-service/011`); a alegação anterior era otimista/incorreta (ver nota na seção 6). Continue priorizando por evidência: o que o gameplay real mostrar que falta primeiro (Fase 5 e2e-orquestrado k3d→Pi 5 ainda pendente; confirmar se o Dedicated Server já preenche `stats` agora que o campo existe).
+> **Quando voltar:** a validação no data plane (`unity-host-world-dropin-data-plane`, Unity) **já está substancialmente em andamento** — repo real, Fases 0–5 done (mundo do host, phantoms join-in-progress, invasão+sinais com senha, combate/boss). O follow-up #1 (senha) já foi **confirmado por esse feedback real**. **Correção 2026-07-13:** o #6 (stats) NÃO foi confirmado — o campo `stats` nem existia no proto/envelope de `ReportParticipationEvent` até `session-service/026` (achado ao especificar `analytics-service/011`); a alegação anterior era otimista/incorreta (ver nota na seção 6). Continue priorizando por evidência: o que o gameplay real mostrar que falta primeiro (Fase 5 — e2e orquestrado k3d→Pi 5 — concluída em 2026-07-11; falta confirmar se o Dedicated Server já preenche `stats`).
 >
 > **Fontes:** a seção "Aberturas" do [`host_world_dropin-roadmap.md`](./host_world_dropin-roadmap.md) e o "Fora de escopo" de cada spec (`session/011–013`, `matchmaking/006–007`, `achievements/009`, `analytics/004`). A tabela de estado vive no [README](./README.md).
 
@@ -25,8 +25,8 @@ declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por pap
   - Decidir armazenamento da senha (hash vs plaintext efêmero) e se vira um pool/quadro separado.
 - **Destrava:** jogar com amigos ignorando o range — o caso de uso social nº 1 do arquétipo.
 - **Fonte:** "Fora de escopo" de `session/012`, `matchmaking/006`, `matchmaking/007`.
-- **Evidência (2026-07-08):** o Capoeira Souls tem o modo `batizado` cadastrado com `passwordEnabled=true` e faixas desligadas (catálogo em `unity-host-world-dropin-data-plane/docs/MODES.md`) — o modo existe e espera este follow-up para funcionar de verdade.
-- **Implementado (`session/020-password-world-matching`, `matchmaking/011-password-matching`):** hash SHA-256 da senha gravado no `OpenWorld`; `Invade`/`PostSummonSign`/`ListSigns` bypassam a faixa de nível/arma quando a senha do candidato bate com a do mundo. Destrava o modo `batizado` do Capoeira Souls de verdade.
+- **Evidência (2026-07-08):** o Folclore Souls (então Capoeira Souls) tem o modo `batizado` cadastrado com `passwordEnabled=true` e faixas desligadas (catálogo em `unity-host-world-dropin-data-plane/docs/MODES.md`) — o modo existe e espera este follow-up para funcionar de verdade.
+- **Implementado (`session/020-password-world-matching`, `matchmaking/011-password-matching`):** hash SHA-256 da senha gravado no `OpenWorld`; `Invade`/`PostSummonSign`/`ListSigns` bypassam a faixa de nível/arma quando a senha do candidato bate com a do mundo. Destrava o modo `batizado` do Folclore Souls de verdade.
 
 ## 2. Pools / área / região no quadro de sinais
 
@@ -97,6 +97,8 @@ declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por pap
 
 ## 10. Alocação do dedicated server **sob demanda** (a economia real)
 
+> **Revisão 2026-09:** continua não implementado (`OpenWorld` aloca na hora — `session_service.go`, `OpenWorld`). Pedido pelo Folclore Souls, mas depende da decisão de topologia (P2P × dedicado) que o jogo ainda está tomando.
+
 - **O quê:** a H0 aloca um Agones GameServer **no `OpenWorld`** (mundo sempre num server — simples, mais caro). A evolução é alocar **sob demanda** só quando o mundo abre para multiplayer (1º co-op/invasão) e liberar ao esvaziar (barato, exige handoff de estado).
 - **Por que adiado:** validar o fluxo ponta a ponta e **medir** antes; o handoff introduz latência/complexidade.
 - **Onde mexe:** `session` (ciclo de vida do server no mundo host_world) — decisão #2 do roadmap. Candidato a **ADR** quando escolhido.
@@ -118,7 +120,7 @@ declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por pap
 - **Onde mexe:** `validateParticipation` no service do session, se o modelo de confiança mudar.
 - **Fonte:** "Fora de escopo" de `session/013`.
 
-## 13. Params novos para o arquétipo (propostos pelo catálogo de modos do Capoeira Souls)
+## 13. Params novos para o arquétipo (propostos pelo catálogo de modos do Folclore Souls)
 
 - **O quê:** o exercício de multi-modo no data plane (2026-07-08, `unity-host-world-dropin-data-plane/docs/MODES.md`) propôs params colhidos dos jogos de referência: `invasionRequiresCoop` (ER: host solo não é invadível), `hostDeathPolicy` (`close_world`|`respawn` — Seamless Co-op), `invasionCooldownSeconds`, `bossPowerScalingPerPhantom` e `passwordScaling` (data plane, declaráveis por modo), papel "cinza"/`extraRoles` (Mound-Maker; `invaderAsBoss` do Old Monk), `worldScene`/`mapId`.
 - **Onde mexe:** `HostWorldDropInParams` (game-registry) + consumidores conforme o dono (control plane: diretório/matchmaking; data plane: só declaração no blob).
@@ -129,14 +131,14 @@ declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por pap
 - **O quê:** o registry decodifica `params` num struct tipado — **chave desconhecida é descartada em silêncio** no PUT. O data plane não tem como declarar params próprios por modo (o princípio do manifest "leia só o que conhece" vale na leitura, mas a escrita filtra tudo).
 - **Onde mexe:** game-registry (DTO/validação/persistência): um bloco livre `worldParams` (JSON cru, sem validação de schema) preservado no snapshot/manifest; ou, no mínimo, **rejeitar** chave desconhecida em vez de descartar (surpresa silenciosa de operador).
 - **Destrava:** params de gameplay por modo sem mudança de schema no registry (ex.: os do item 13 com dono "data plane").
-- **Fonte:** descoberta operacional de 2026-07-08 (cadastro dos modos do Capoeira Souls).
+- **Fonte:** descoberta operacional de 2026-07-08 (cadastro dos modos do Folclore Souls (então Capoeira Souls)).
 - **Implementado (branch `feat/game-registry/worldparams-passthrough`):** escolhida a opção do **passthrough** (não a rejeição) — chave fora do vocabulário tipado de `host_world_dropin` some do struct decodificado mas sobrevive crua em `MultiplayerProfile.ExtraParams` (novo pacote `internal/jsonparams`, `Extract`/`Merge`) e é reinjetada no `params` de volta na leitura (HTTP GET e persistência JSONB) — chave tipada sempre manda, extra nunca sobrescreve. **Zero mudança no session-service ou no contrato do data plane**: `ParamsJSON`/`params_json` já eram bytes crus repassados verbatim (`registryclient.ModeProfile`), então a chave extra já chega ao Unity dentro do `params_json` de sempre — é só ler quando alguma spec precisar (ex.: item 13). Escopo só `host_world_dropin` por ora (outros arquétipos têm o mesmo problema, mas sem evidência de demanda ainda — replicar por evidência, mesmo princípio deste doc).
 
 ## 15. Phantom morto sumia da sala do admin (`players[]` como presença) — ✅ FEITO (2026-07-12)
 
 - **O quê:** na bateria real do data plane (Agones/k3d, 2026-07-12), o operador viu o coop invocado por sinal "nunca aparecer" na sala do admin. Investigação com repro limpa (grpcurl ponta a ponta) mostrou que o caminho dos sinais **estava correto** (`SummonSign → JoinWorld → Players`); a causa real: `DIED`/`LEFT` chamavam `removeFromWorld`, que apagava o phantom **de `Players` além do slot** — e os bots coop morriam rápido pro boss. O jogador sumia da sala como se nunca tivesse entrado.
 - **Implementado (session-service, 2026-07-12):** `Players` de host_world virou lista de **PARTICIPANTES** (acumula no `JoinWorld`, com dedupe na re-entrada pós-morte; rollback de token remove só quem nunca entrou) — presença/capacidade continua sendo papel dos `RoleSlots`. `removeFromWorld` só libera o slot. Validado por teste (176 no serviço) e ao vivo (DIED → slot 0, participante permanece na sala).
-- **Evolução natural:** spec **`session/025-session-history`** (Proposed) — participantes com PAPEL no domínio + persistência das sessões fechadas (hoje 100% in-memory) + aba History no player e fechadas persistidas na aba Sessions do jogo.
+- **Evolução natural:** spec **`session/025-session-history`** — ✅ feita (2026-07-13): participantes com PAPEL no domínio, sessões fechadas persistidas em Postgres, aba History no player. Mundos **abertos** seguem só em memória.
 
 ---
 
