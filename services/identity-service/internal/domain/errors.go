@@ -9,6 +9,8 @@ var (
 	ErrHandleTaken        = errors.New("identity: handle já em uso")
 	ErrWeakPassword       = errors.New("identity: senha fraca")
 	ErrInvalidCredentials = errors.New("identity: credenciais inválidas")
+	// ErrTooManyAttempts: o handle esgotou as falhas de login da janela (spec 007).
+	ErrTooManyAttempts = errors.New("identity: muitas tentativas de login")
 
 	// ErrAccountNotFound nasce no repository. No fluxo de login o service o
 	// traduz para ErrInvalidCredentials (não revelar se o handle existe); na

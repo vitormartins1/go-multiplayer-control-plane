@@ -33,6 +33,9 @@ type service struct {
 	// identidade federada (spec 005-steam-login); vazio = nenhum provedor.
 	external  domain.ExternalIdentityRepository
 	verifiers map[string]domain.ExternalIdentityVerifier
+
+	// limite de falhas do login por senha (spec 007)
+	guard *loginGuard
 }
 
 // Option configura dependências opcionais do service.
@@ -49,10 +52,20 @@ func WithExternalLogin(repo domain.ExternalIdentityRepository, verifiers ...doma
 	}
 }
 
+// WithLoginLimit troca o limite de falhas do login por senha (spec 007) e o
+// relógio — os testes usam para não esperar 15 minutos.
+func WithLoginLimit(maxFailures int, window time.Duration, now func() time.Time) Option {
+	return func(s *service) { s.guard = newLoginGuard(maxFailures, window, now) }
+}
+
 // New cria o AuthService do identity-service. notifier pode ser nil (sem
 // login-into-game); quando presente, marca presença best-effort (ADR-0019).
 func New(repo domain.AccountRepository, tokens domain.TokenIssuer, notifier domain.PresenceNotifier, log *slog.Logger, opts ...Option) domain.AuthService {
-	s := &service{repo: repo, tokens: tokens, presence: notifier, log: log, verifiers: map[string]domain.ExternalIdentityVerifier{}}
+	s := &service{
+		repo: repo, tokens: tokens, presence: notifier, log: log,
+		verifiers: map[string]domain.ExternalIdentityVerifier{},
+		guard:     newLoginGuard(defaultLoginMaxFailures, defaultLoginWindow, time.Now),
+	}
 	for _, o := range opts {
 		o(s)
 	}
@@ -102,18 +115,25 @@ func (s *service) Register(ctx context.Context, handle, password string) (*domai
 }
 
 func (s *service) Authenticate(ctx context.Context, handle, password, gameID string) (string, error) {
+	// spec 007: handle com tentativas esgotadas nem chega ao banco/bcrypt
+	if s.guard.blocked(handle) {
+		return "", domain.ErrTooManyAttempts
+	}
 	acc, err := s.repo.FindByHandle(ctx, handle)
 	if errors.Is(err, domain.ErrAccountNotFound) {
 		// gasta tempo de bcrypt para não vazar a inexistência do handle
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+		s.guard.fail(handle)
 		return "", domain.ErrInvalidCredentials
 	}
 	if err != nil {
 		return "", fmt.Errorf("identity service: authenticate: %w", err)
 	}
 	if bcrypt.CompareHashAndPassword([]byte(acc.PasswordHash), []byte(password)) != nil {
+		s.guard.fail(handle)
 		return "", domain.ErrInvalidCredentials
 	}
+	s.guard.reset(handle)
 	token, err := s.tokens.Sign(ctx, acc.ID, nil)
 	if err != nil {
 		return "", fmt.Errorf("identity service: authenticate: sign: %w", err)

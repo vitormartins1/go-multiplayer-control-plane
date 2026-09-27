@@ -17,6 +17,12 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+### Security
+- `POST /sessions` (login por senha): 5 falhas para o mesmo handle em 15 min bloqueiam o handle até a janela
+  vencer, com `429 too_many_attempts` (spec `identity/007`). Pela regra deste arquivo "erro novo" seria MAJOR, mas só
+  atinge quem já errou a senha 5 vezes seguidas e o login do jogo em produção é o da Steam, que não passa por aqui —
+  fica registrado como correção de segurança. O cliente deve tratar 429 como "tente mais tarde".
+
 ## [1.5.0] — 2026-09-27
 
 ### Added

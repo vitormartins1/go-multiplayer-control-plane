@@ -88,7 +88,7 @@ tarefa); depois remover o `continue-on-error` para o job bloquear.
 | Login no console (admin-bff) — D6 | decidir **junto com o deploy real**: login de operador (OIDC/senha) ou console só atrás de VPN | `review/REVISAO-2026-09.md` §6 |
 | Deploy real e medição de custo (G10, a tese do projeto — ADR-0008) | o próximo grande marco depois do lançamento; P2P já cortou o maior custo | `review/REVISAO-2026-09.md` |
 | Resultado de partida sem outbox (G7) | só importa quando houver um jogo `queue_arena` real | `review/REVISAO-2026-09.md` |
-| Limite de tentativas no login (G5) | antes de expor o identity publicamente | idem |
+| Limite de tentativas no login (G5) | **feito em memória** (spec `identity/007`); com várias réplicas, trocar por um limite distribuído (Redis) no deploy real | idem |
 | Mais de um app Steam por deploy | quando um segundo jogo for para a Steam: `STEAM_APP_ID` por jogo no game-registry | `achievements-service/specs/019-steam-mirror` |
 | SDK UPM | extrair do Folclore quando a camada C# (guia, seção 4) estabilizar | guia Unity, seção 8 |
 | Abrir o repositório (Apache-2.0) + post técnico | no fim, como você pediu | `review/ESTRATEGIA-PRODUTO-2026-09.md` §4 |

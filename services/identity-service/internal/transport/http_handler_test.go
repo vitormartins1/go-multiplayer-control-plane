@@ -313,3 +313,14 @@ func TestAdminExternalIdentities(t *testing.T) {
 	rr = do(srv, http.MethodGet, "/admin/players/nope/external-identities", "")
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
+
+// spec 007: handle com tentativas esgotadas → 429 com código estável.
+func TestLogin_MuitasTentativas_429(t *testing.T) {
+	auth := new(mockAuth)
+	auth.On("Authenticate", mock.Anything, "alice", "x", "").Return("", domain.ErrTooManyAttempts)
+	srv := newServer(auth, new(mockTokens))
+
+	rr := do(srv, http.MethodPost, "/sessions", `{"handle":"alice","password":"x"}`)
+	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+	assert.Contains(t, rr.Body.String(), "too_many_attempts")
+}

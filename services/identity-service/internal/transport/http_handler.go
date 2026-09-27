@@ -234,6 +234,8 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		httpkit.WriteError(w, http.StatusConflict, "handle_taken")
 	case errors.Is(err, domain.ErrInvalidCredentials):
 		httpkit.WriteError(w, http.StatusUnauthorized, "invalid_credentials")
+	case errors.Is(err, domain.ErrTooManyAttempts):
+		httpkit.WriteError(w, http.StatusTooManyRequests, "too_many_attempts")
 	case errors.Is(err, domain.ErrProviderNotSupported):
 		httpkit.WriteError(w, http.StatusNotFound, "provider_not_supported")
 	case errors.Is(err, domain.ErrInvalidTicket):
