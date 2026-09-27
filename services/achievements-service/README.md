@@ -9,6 +9,8 @@ a validar o JWT do identity (via `shared/auth`).
 
 <p align="center"><img src="../../docs/images/achievements-steam.jpg" alt="Catálogo de conquistas com o selo Steam nas que são espelhadas" width="720"/></p>
 
+▶ **Vídeo (~1 min):** [conquistas sem deploy](../../docs/media/video-02-conquistas.mp4), do cadastro no console ao desbloqueio pelo fan-out.
+
 - **Protocolo:** REST · **Porta host:** 8082
 - **Storage:** PostgreSQL (`achievements-postgres`, DB `achievements`)
 - **Dependências:** identity (JWKS); consome o fan-out durável (SQS, ADR-0020) publicado pelo session-service
