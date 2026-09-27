@@ -152,7 +152,10 @@ export function GameAnalytics({ gameId, modes = [] }: { gameId: string; modes?: 
   const modeIdsInData = useMemo(() => [...new Set(participations.map((p) => p.modeId))], [participations]);
   // total por partida (independente de arquétipo) — só some se não houver nenhum resultado.
   const hasOutcomes = !!data && data.wins + data.losses + data.draws > 0;
-  const roleChart = participations.length > 0 ? participationByRole(participations) : null;
+  const roleChart = useMemo(
+    () => (participations.length > 0 ? participationByRole(participations) : null),
+    [participations],
+  );
 
   // leitura mono de cada canal (ChannelStrip) — um total por arquétipo, o
   // dado mais "de assinatura" de cada um (partidas/eventos/participações/

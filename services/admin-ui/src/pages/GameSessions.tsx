@@ -94,9 +94,12 @@ export function GameSessions({ gameId }: { gameId: string }) {
 
   // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
   const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
+  // filtro por um modo que sumiu da lista (o Select some com <2 modos) não
+  // pode deixar a tabela vazia sem jeito de limpar.
+  const effectiveModeFilter = modeFilter && distinctModes.includes(modeFilter) ? modeFilter : null;
   const rows = useMemo(
-    () => (modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows),
-    [allRows, modeFilter],
+    () => (effectiveModeFilter ? allRows.filter((s) => modeOf(s) === effectiveModeFilter) : allRows),
+    [allRows, effectiveModeFilter],
   );
 
   return (
@@ -123,7 +126,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
               w={170}
               placeholder="Todos os modos"
               clearable
-              value={modeFilter}
+              value={effectiveModeFilter}
               onChange={setModeFilter}
               data={distinctModes}
             />

@@ -131,11 +131,12 @@ func (r *PostgresRepository) ApplyParticipation(ctx context.Context, evt domain.
 		return false, fmt.Errorf("analytics repository: apply participation: daily: %w", err)
 	}
 
+	// jogador visto (spec 016): conta nos jogadores únicos do overview
+	if err := markPlayerSeen(ctx, tx, evt.GameID, evt.ModeID, evt.PlayerID); err != nil {
+		return false, fmt.Errorf("analytics repository: apply participation: player seen: %w", err)
+	}
 	// stats brutos por jogador (spec 011, destravado por session-service/026):
 	// match_id = session_id — host_world_dropin não tem matchId.
-	if err := markPlayerSeen(ctx, tx, evt.GameID, evt.ModeID, evt.PlayerID); err != nil {
-		return false, fmt.Errorf("analytics repository: player seen: %w", err)
-	}
 	if err := insertPlayerStats(ctx, tx, evt.GameID, evt.ModeID, evt.SessionID, evt.PlayerID, evt.Stats); err != nil {
 		return false, fmt.Errorf("analytics repository: apply participation: stats: %w", err)
 	}
@@ -357,7 +358,11 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 			SELECT game_id FROM game_rollup
 		), sess AS (
 			SELECT game_id, SUM(count) AS sessions, SUM(duration_sum_ms) AS dur,
-			       COALESCE(SUM(count) FILTER (WHERE close_reason IN ('abandoned', 'ttl')), 0) AS abandoned
+			       -- abandono = o servidor/host sumiu (abandoned) ou a partida venceu o TTL sem
+			       -- resultado. Mundo host_world_dropin que vence o TTL é o fim normal de um
+			       -- mundo sem heartbeat (session/032), não abandono (revisão 2026-09-27).
+			       COALESCE(SUM(count) FILTER (WHERE close_reason = 'abandoned'
+			           OR (close_reason = 'ttl' AND archetype <> 'host_world_dropin')), 0) AS abandoned
 			FROM game_session_rollup GROUP BY game_id
 		), m AS (
 			SELECT game_id, SUM(matches_total) AS matches, SUM(participations) AS parts,
@@ -408,7 +413,7 @@ func (r *PostgresRepository) Overview(ctx context.Context) (domain.Overview, err
 	// overviewDailyDays) — a medida que existe para todo arquétipo.
 	drows, err := r.pool.Query(ctx, `
 		SELECT to_char(day, 'YYYY-MM-DD'), SUM(count) FROM game_session_daily
-		WHERE day >= (now() AT TIME ZONE 'utc')::date - $1::int
+		WHERE day > (now() AT TIME ZONE 'utc')::date - $1::int -- N dias = hoje + N-1 anteriores
 		GROUP BY day ORDER BY day`, overviewDailyDays)
 	if err != nil {
 		return domain.Overview{}, fmt.Errorf("analytics repository: overview daily: %w", err)
@@ -590,7 +595,7 @@ func (r *PostgresRepository) GameAnalytics(ctx context.Context, gameID string, d
 func (r *PostgresRepository) dailySeries(ctx context.Context, table, valueCol, gameID string, days int, modeID string) ([]domain.DailyPoint, error) {
 	q := fmt.Sprintf(`
 		SELECT to_char(day, 'YYYY-MM-DD'), SUM(%s) FROM %s
-		WHERE game_id = $1 AND day >= (now() AT TIME ZONE 'utc')::date - $2::int
+		WHERE game_id = $1 AND day > (now() AT TIME ZONE 'utc')::date - $2::int -- N dias, não N+1
 		  AND ($3 = '' OR mode_id = $3)
 		GROUP BY day ORDER BY day`, valueCol, table)
 	rows, err := r.pool.Query(ctx, q, gameID, days, modeID)

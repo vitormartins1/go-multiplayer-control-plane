@@ -3,6 +3,7 @@ import { IconBroadcast, IconInfoCircle } from "@tabler/icons-react";
 import type { GameSession } from "../lib/api";
 import { formatDuration, truncate } from "../lib/format";
 import { HEARTBEAT_META, heartbeatStatus, hostingOf, shortConnection } from "../lib/hosting";
+import { useNow } from "../lib/useNow";
 
 // Peças de hospedagem do console (admin-ui/091): quem hospeda o mundo
 // (GameServer dedicado ou o jogo do host em p2p) e se ele está vivo
@@ -45,8 +46,14 @@ export function HostingCell({ session: s }: { session: GameSession }) {
 
 // HeartbeatBadge é o sinal de vida de um mundo aberto. Só faz sentido em
 // host_world aberto — partidas e sessões fechadas não mostram nada.
-export function HeartbeatBadge({ session: s, now = Date.now() }: { session: GameSession; now?: number }) {
+export function HeartbeatBadge({ session: s }: { session: GameSession }) {
   if (s.origin !== "host_world" || s.state !== "open") return null;
+  return <LiveHeartbeat session={s} />;
+}
+
+// LiveHeartbeat é separado para o relógio (useNow) só rodar em mundo aberto.
+function LiveHeartbeat({ session: s }: { session: GameSession }) {
+  const now = useNow(5_000);
   const status = heartbeatStatus(s.lastHeartbeatAt, now);
   const meta = HEARTBEAT_META[status];
   const age = s.lastHeartbeatAt ? ` · ${formatDuration(now - Date.parse(s.lastHeartbeatAt))}` : "";

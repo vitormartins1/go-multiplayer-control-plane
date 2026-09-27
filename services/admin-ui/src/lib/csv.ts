@@ -4,21 +4,24 @@
 
 const ID_RE = /^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/;
 const STAT_RE = /^[a-z][a-z0-9_]*$/;
+// "API Name" do Steamworks (achievements/019)
+const STEAM_API_NAME_RE = /^[A-Za-z0-9_]{1,128}$/;
 const REQUIRED_HEADERS = ["id", "name", "description", "eventtype", "target"] as const;
 
 // Modelo baixável (033): CSV não tem comentários padronizados, então a
 // documentação são as próprias linhas de exemplo — uma por tipo de critério,
 // com descrições que explicam o que cada linha demonstra. statKey/statMode são
 // opcionais: preenchidos → critério por métrica (eventType fica vazio);
-// vazios → critério por evento (formato antigo, retrocompatível).
+// vazios → critério por evento (formato antigo, retrocompatível). steamApiName
+// também é opcional: preenchido, o desbloqueio é espelhado na Steam (019).
 export const CSV_TEMPLATE =
-  "id,name,description,eventType,target,statKey,statMode\n" +
-  'primeira_vitoria,Primeira Vitória,"Exemplo: evento simples — dispara na 1ª ocorrência de match_won",match_won,1,,\n' +
-  'veterano,Veterano,"Exemplo: evento acumulado — 10 ocorrências de match_played",match_played,10,,\n' +
-  'campeao_royale,Campeão do Royale,"Exemplo: evento de outro arquétipo (battle_royale)",battle_royale_win,1,,\n' +
-  'exterminador,Exterminador,"Exemplo: métrica acumulada — soma de kills entre partidas até 500",,500,kills,cumulative\n' +
-  'furia,Fúria,"Exemplo: métrica por partida — 8 kills numa única partida",,8,kills,per_match\n' +
-  'pontuacao_lendaria,Pontuação Lendária,"Exemplo: métrica score (intrínseca a todo resultado) numa partida",,100,score,per_match\n';
+  "id,name,description,eventType,target,statKey,statMode,steamApiName\n" +
+  'primeira_vitoria,Primeira Vitória,"Exemplo: evento simples — dispara na 1ª ocorrência de match_won",match_won,1,,,ACH_FIRST_WIN\n' +
+  'veterano,Veterano,"Exemplo: evento acumulado — 10 ocorrências de match_played",match_played,10,,,\n' +
+  'campeao_royale,Campeão do Royale,"Exemplo: evento de outro arquétipo (battle_royale)",battle_royale_win,1,,,\n' +
+  'exterminador,Exterminador,"Exemplo: métrica acumulada — soma de kills entre partidas até 500",,500,kills,cumulative,\n' +
+  'furia,Fúria,"Exemplo: métrica por partida — 8 kills numa única partida",,8,kills,per_match,\n' +
+  'pontuacao_lendaria,Pontuação Lendária,"Exemplo: métrica score (intrínseca a todo resultado) numa partida",,100,score,per_match,\n';
 
 export interface ParsedRow {
   row: number;
@@ -29,6 +32,7 @@ export interface ParsedRow {
   target: number;
   statKey?: string;
   statMode?: "cumulative" | "per_match";
+  steamApiName?: string;
 }
 
 export interface ParseError {
@@ -100,6 +104,7 @@ export function parseCSV(text: string): ParseResult {
   // colunas opcionais (033): ausentes no arquivo → -1 → campo sempre vazio.
   const iStatKey = idx("statkey");
   const iStatMode = idx("statmode");
+  const iSteam = idx("steamapiname");
 
   const rows: ParsedRow[] = [];
   const errors: ParseError[] = [];
@@ -116,6 +121,7 @@ export function parseCSV(text: string): ParseResult {
     const rawTarget = cols[iTarget] ?? "";
     const statKey = (iStatKey >= 0 ? cols[iStatKey] : "") ?? "";
     const statMode = ((iStatMode >= 0 ? cols[iStatMode] : "") ?? "").toLowerCase();
+    const steamApiName = (iSteam >= 0 ? cols[iSteam] : "") ?? "";
 
     if (!id) {
       errors.push({ row, message: `Linha ${row}: campo 'id' é obrigatório.` });
@@ -161,6 +167,13 @@ export function parseCSV(text: string): ParseResult {
       });
       continue;
     }
+    if (steamApiName && !STEAM_API_NAME_RE.test(steamApiName)) {
+      errors.push({
+        row,
+        message: `Linha ${row}: 'steamApiName' inválido — letras, dígitos e _ (ex.: ACH_BOSS_BOITATA).`,
+      });
+      continue;
+    }
     const target = parseInt(rawTarget, 10);
     if (isNaN(target) || target < 1) {
       errors.push({
@@ -187,6 +200,7 @@ export function parseCSV(text: string): ParseResult {
       eventType,
       target,
       ...(statKey ? { statKey, statMode: statMode as "cumulative" | "per_match" } : {}),
+      ...(steamApiName ? { steamApiName } : {}),
     });
   }
 

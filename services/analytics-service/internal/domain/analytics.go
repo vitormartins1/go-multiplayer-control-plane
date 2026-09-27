@@ -145,7 +145,7 @@ type OverviewGame struct {
 	GameStat
 	Sessions     int64
 	AvgSessionMs int64 // duração média das sessões fechadas
-	Abandoned    int64 // fechadas por abandoned (server morreu) ou ttl (ninguém reportou)
+	Abandoned    int64 // fechadas por abandoned (server/host sumiu) ou ttl sem resultado (exceto mundo host_world, cujo ttl é o fim normal)
 }
 
 // SessionsPoint é um ponto da série "sessões fechadas por dia".

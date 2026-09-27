@@ -34,4 +34,7 @@ var KnownEdges = []Edge{
 	{From: "admin-bff", To: "game-registry", Label: "lê jogos e modos"},
 	{From: "admin-bff", To: "analytics-service", Label: "lê agregados"},
 	{From: "admin-bff", To: "identity-service", Label: "lê jogadores"},
+	{From: "admin-bff", To: "leaderboard-service", Label: "lê rankings"},
+	{From: "admin-bff", To: "player-data-service", Label: "lê dados do jogador"},
+	{From: "admin-bff", To: "cloud-save-service", Label: "lê saves"},
 }

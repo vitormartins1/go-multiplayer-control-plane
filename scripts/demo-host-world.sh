@@ -121,7 +121,7 @@ echo "mundo encerrado (host_killed); evento publicado no fan-out"
 step "7. conquista desbloqueada para o invasor (fan-out assíncrono)"
 for _ in $(seq 1 20); do
   unlocked="$(curl -sS "$ACHIEVEMENTS/me/achievements" -H "Authorization: Bearer $invader_token" -H "X-Game-Id: $game_id" \
-    | jq -r '.achievements[] | select(.id=="invasor_vitorioso") | .unlocked')"
+    | jq -r '(.achievements // [])[] | select(.id=="invasor_vitorioso") | .unlocked' || true)"
   [[ "$unlocked" == "true" ]] && { echo "✅ Invasor Vitorioso desbloqueada"; exit 0; }
   sleep 1
 done

@@ -281,7 +281,7 @@ export interface GameSession {
   // Detalhe rico (session spec 018): snapshot do modo (params crus do
   // arquétipo), formação por time e resultado persistido (fechadas por result).
   archetype?: string;
-  topology?: "dedicated" | "p2p"; // session/031; ausente no histórico persistido
+  topology?: "dedicated" | "p2p"; // session/031; ausente em sessões fechadas antes da migration 004
   hostConnection?: string; // p2p: id de conexão do host (ex.: SteamID) — admin-ui/091
   lastHeartbeatAt?: string; // último heartbeat do mundo (session/032); ausente = o jogo não manda
   profileHash?: string;

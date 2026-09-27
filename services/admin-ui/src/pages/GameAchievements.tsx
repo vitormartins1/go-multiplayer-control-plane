@@ -576,8 +576,8 @@ export function GameAchievements({
 
     setImporting(true);
     try {
-      const achievements = rows.map(({ id, name, description, eventType, target, statKey, statMode }) => ({
-        id, name, description, eventType, target, statKey: statKey ?? "", statMode,
+      const achievements = rows.map(({ id, name, description, eventType, target, statKey, statMode, steamApiName }) => ({
+        id, name, description, eventType, target, statKey: statKey ?? "", statMode, steamApiName,
       }));
       const result = await api.importAchievements(gameId, achievements);
       setImportResult(result);

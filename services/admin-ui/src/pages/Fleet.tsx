@@ -66,7 +66,7 @@ export function Fleet() {
           <ChannelStrip
             icon={IconServer2}
             label="Cadastro"
-            readout={`${fleetGames.length}/${needFleet.length} jogos com fleet${
+            readout={`${needFleet.filter((g) => g.fleet).length}/${needFleet.length} jogos com fleet${
               games.length > needFleet.length ? ` · ${games.length - needFleet.length} só P2P` : ""
             }`}
           />

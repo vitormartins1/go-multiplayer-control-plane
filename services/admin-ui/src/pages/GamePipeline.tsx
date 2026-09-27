@@ -1,7 +1,8 @@
 import { Alert, Badge, Group, Loader, Stack, Table, Text } from "@mantine/core";
-import { api, type MultiplayerMode } from "../lib/api";
+import { api } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { gameArchetypes, filterRulesForGame } from "../lib/eventRules";
+import { modeScoringStats } from "../lib/modes";
 import { useAsync } from "../lib/useAsync";
 
 // Envelope que cada arquétipo publica no fan-out ao fim da partida/evento
@@ -19,12 +20,6 @@ const CONSUMERS_BY_KIND: Record<string, string[]> = {
   collective: ["achievements", "leaderboard", "analytics"],
   participation_event: ["achievements", "analytics"],
 };
-
-// modeScoringStats extrai as stats declaradas por um modo (mesmo campo nos 4
-// arquétipos) — também usada na tabela de modos (MultiplayerSettings).
-export function modeScoringStats(m: MultiplayerMode): string[] {
-  return "scoringStats" in m.params ? m.params.scoringStats : [];
-}
 
 // GamePipeline (spec 046, virou tabela na revisão 2026-09): o mapa de dados do
 // jogo — modo → envelope → consumidores, e o que cada consumidor faz com ele.

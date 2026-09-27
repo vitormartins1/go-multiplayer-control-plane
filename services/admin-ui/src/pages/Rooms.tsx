@@ -125,15 +125,18 @@ export function Rooms() {
 
   // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
   const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
+  // filtro por um modo que sumiu da lista (o Select some com <2 modos) não
+  // pode deixar a tabela vazia sem jeito de limpar.
+  const effectiveModeFilter = modeFilter && distinctModes.includes(modeFilter) ? modeFilter : null;
   const hasP2P = useMemo(() => allRows.some((s) => hostingOf(s) === "p2p"), [allRows]);
   const rows = useMemo(() => {
-    const byMode = modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows;
+    const byMode = effectiveModeFilter ? allRows.filter((s) => modeOf(s) === effectiveModeFilter) : allRows;
     const filtered =
       hasP2P && hostingFilter !== "all" ? byMode.filter((s) => hostingOf(s) === hostingFilter) : byMode;
     // Array.prototype.sort é estável (ECMA2019+) — itens iguais no critério
     // mantêm a ordem original da API, de propósito (spec 060, item 11).
     return [...filtered].sort((a, b) => compareSessions(a, b, sortBy, sortDir, gamesById));
-  }, [allRows, modeFilter, hasP2P, hostingFilter, sortBy, sortDir, gamesById]);
+  }, [allRows, effectiveModeFilter, hasP2P, hostingFilter, sortBy, sortDir, gamesById]);
 
   // Agrupamento por jogo (spec 060, visão "Por jogo") — só sobre `rows` já
   // filtradas/ordenadas; jogo sem sessão no filtro atual não gera seção
@@ -232,7 +235,7 @@ export function Rooms() {
               w={170}
               placeholder="Todos os modos"
               clearable
-              value={modeFilter}
+              value={effectiveModeFilter}
               onChange={setModeFilter}
               data={distinctModes}
             />

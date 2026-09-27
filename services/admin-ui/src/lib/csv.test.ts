@@ -8,6 +8,14 @@ describe("parseCSV", () => {
     expect(rows).toHaveLength(6);
     expect(rows[0]).toMatchObject({ id: "primeira_vitoria", eventType: "match_won", target: 1 });
     expect(rows[3]).toMatchObject({ id: "exterminador", eventType: "", statKey: "kills", statMode: "cumulative" });
+    expect(rows[0].steamApiName).toBe("ACH_FIRST_WIN");
+    expect(rows[1].steamApiName).toBeUndefined();
+  });
+
+  it("steamApiName é opcional e validado (achievements/019)", () => {
+    const { rows, errors } = parseCSV("id,name,description,eventType,target,steamApiName\nab,A,,x,1,ACH_A\ncd,C,,x,1,ACH C!\n");
+    expect(rows.map((r) => r.steamApiName)).toEqual(["ACH_A"]);
+    expect(errors[0].message).toContain("steamApiName");
   });
 
   it("respeita aspas duplas com vírgula e aspas escapadas", () => {

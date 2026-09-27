@@ -481,6 +481,31 @@ func TestOverview_JogoSoDeMundo_ApareceComSessoesEJogadores(t *testing.T) {
 	assert.Equal(t, int64(2), ov.Daily[0].Sessions)
 }
 
+// Revisão 2026-09-27: TTL de mundo host_world é o fim normal (jogo sem
+// heartbeat), não abandono; TTL de partida (sem resultado) continua sendo.
+func TestOverview_AbandonoIgnoraTTLDeMundo(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	base := recentDay()
+	for _, c := range []struct{ id, game, arch, reason string }{
+		{"w1", "souls", "host_world_dropin", "ttl"},
+		{"w2", "souls", "host_world_dropin", "abandoned"},
+		{"m1", "arena", "queue_arena", "ttl"},
+		{"m2", "arena", "queue_arena", "result"},
+	} {
+		_, err := repo.ApplySessionClosed(ctx, closeEvent(c.id, c.game, "default", c.arch, c.reason, base, base.Add(time.Minute)))
+		require.NoError(t, err)
+	}
+	ov, err := repo.Overview(ctx)
+	require.NoError(t, err)
+	byGame := map[string]int64{}
+	for _, g := range ov.Games {
+		byGame[g.GameID] = g.Abandoned
+	}
+	assert.Equal(t, int64(1), byGame["souls"], "só o abandoned; o ttl do mundo não conta")
+	assert.Equal(t, int64(1), byGame["arena"], "partida que venceu o TTL sem resultado conta")
+}
+
 func mustApply(repo *PostgresRepository, ctx context.Context, m domain.MatchResult) error {
 	_, err := repo.ApplyMatch(ctx, m)
 	return err
