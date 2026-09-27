@@ -200,6 +200,7 @@ export interface AchievementProgressEntry {
   progress: number;
   unlocked: boolean;
   unlockedAt?: string;
+  handle?: string; // admin-bff/029: resolvido no identity, best-effort
 }
 
 // EventRule é uma regra de mapeamento evento->achievement-event-type

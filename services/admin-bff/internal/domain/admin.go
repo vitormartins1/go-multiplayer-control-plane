@@ -244,6 +244,7 @@ type AchievementProgressEntry struct {
 	Progress   int        `json:"progress"`
 	Unlocked   bool       `json:"unlocked"`
 	UnlockedAt *time.Time `json:"unlockedAt,omitempty"`
+	Handle     string     `json:"handle,omitempty"` // spec 029: resolvido no identity, best-effort
 }
 
 // AchievementsReader é a Port de saída para a API admin do achievements-service,

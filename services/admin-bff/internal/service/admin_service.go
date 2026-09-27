@@ -248,9 +248,20 @@ func (s *Service) enrichLeaderboardHandles(ctx context.Context, entries []domain
 	}
 }
 
-// AchievementProgress devolve o progresso de todos os jogadores na conquista.
+// AchievementProgress devolve o progresso de todos os jogadores na conquista,
+// com o handle de cada um (spec 029; best-effort, como o leaderboard).
 func (s *Service) AchievementProgress(ctx context.Context, gameID, achievementID string) ([]domain.AchievementProgressEntry, error) {
-	return s.reader.AchievementProgress(ctx, gameID, achievementID)
+	entries, err := s.reader.AchievementProgress(ctx, gameID, achievementID)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) > 0 {
+		handles := s.handlesByID(ctx)
+		for i := range entries {
+			entries[i].Handle = handles[entries[i].PlayerID]
+		}
+	}
+	return entries, nil
 }
 
 // GameEventRules lê as regras efetivas do jogo (globais do arquétipo +

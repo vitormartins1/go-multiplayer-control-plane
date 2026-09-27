@@ -31,16 +31,27 @@ export const CLOSE_CATEGORY_LABELS: Record<CloseCategory, string> = {
   abandoned: "Abandonada",
 };
 
-export function closeReasonMeta(reason: string | undefined): Meta & { category: CloseCategory } {
+// "abandoned" depende de quem hospedava (admin-ui/093): no P2P não há servidor,
+// quem caiu foi o jogo do host. Sem topologia (agregados do analytics, sessões
+// fechadas antes da migration session/004), o rótulo cobre os dois casos.
+const ABANDONED_BY_TOPOLOGY: Record<string, string> = {
+  dedicated: "Servidor caiu",
+  p2p: "Host caiu (sem heartbeat)",
+};
+
+export function closeReasonMeta(reason: string | undefined, topology?: string): Meta & { category: CloseCategory } {
+  if (reason === "abandoned") {
+    return { ...CLOSE_REASONS.abandoned, label: (topology && ABANDONED_BY_TOPOLOGY[topology]) || "Servidor ou host caiu" };
+  }
   if (reason && CLOSE_REASONS[reason]) return CLOSE_REASONS[reason];
   return { label: reason || "—", color: "gray.4", category: "abandoned" };
 }
 
 // --- Estado da sessão (open/closed) ---
 
-export function sessionStateLabel(state: string, closeReason?: string): string {
+export function sessionStateLabel(state: string, closeReason?: string, topology?: string): string {
   if (state === "open") return "ao vivo";
-  return closeReason ? `fechada · ${closeReasonMeta(closeReason).label}` : "fechada";
+  return closeReason ? `fechada · ${closeReasonMeta(closeReason, topology).label}` : "fechada";
 }
 
 // --- Papéis do host_world_dropin ---

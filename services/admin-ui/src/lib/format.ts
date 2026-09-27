@@ -14,9 +14,10 @@ export function truncate(id: string): string {
 }
 
 // closeReasonLabel traduz o motivo de fechamento da sessão para exibição —
-// fonte única em lib/vocab.ts (cobre os 6 motivos do session-service).
-export function closeReasonLabel(reason?: string): string {
-  return closeReasonMeta(reason).label;
+// fonte única em lib/vocab.ts (cobre os 6 motivos do session-service). A
+// topologia distingue servidor de host no motivo "abandoned" (admin-ui/093).
+export function closeReasonLabel(reason?: string, topology?: string): string {
+  return closeReasonMeta(reason, topology).label;
 }
 
 // formatDuration formata uma duração (ms) como "Ns" / "Nmin Ns" / "Nh Nmin".

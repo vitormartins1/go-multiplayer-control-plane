@@ -168,7 +168,7 @@ function SessionRow({
       <Table.Td>
         <Stack gap={4} align="flex-start">
           <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
-            {sessionStateLabel(s.state, s.closeReason)}
+            {sessionStateLabel(s.state, s.closeReason, s.topology)}
           </Badge>
           <HeartbeatBadge session={s} />
         </Stack>
@@ -242,7 +242,7 @@ export function SessionDetailPanel({ session: s }: { session: GameSession }) {
       <Group gap="xl" wrap="wrap">
         <Field label="ABERTA EM" value={new Date(s.openedAt).toLocaleString("pt-BR")} />
         {s.closedAt && <Field label="FECHADA EM" value={new Date(s.closedAt).toLocaleString("pt-BR")} />}
-        {s.closeReason && <Field label="MOTIVO" value={closeReasonLabel(s.closeReason)} />}
+        {s.closeReason && <Field label="MOTIVO" value={closeReasonLabel(s.closeReason, s.topology)} />}
       </Group>
     </Stack>
   );

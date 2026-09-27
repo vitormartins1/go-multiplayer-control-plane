@@ -126,7 +126,7 @@ function PlayerHistoryRow({ session: s, playerId }: { session: GameSession; play
         </Group>
       </Table.Td>
       <Table.Td>
-        <Text size="sm">{closeReasonLabel(s.closeReason)}</Text>
+        <Text size="sm">{closeReasonLabel(s.closeReason, s.topology)}</Text>
       </Table.Td>
       <Table.Td>
         <Text size="sm">{duration}</Text>

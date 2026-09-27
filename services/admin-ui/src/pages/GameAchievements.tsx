@@ -1000,9 +1000,13 @@ export function GameAchievements({
                         <Group gap={6} wrap="nowrap">
                           <PlayerAvatar seed={e.playerId} size={24} />
                           <Tooltip label={e.playerId}>
-                            <Text size="sm" c="dimmed">
-                              {e.playerId.slice(0, 8)}…
-                            </Text>
+                            {e.handle ? (
+                              <Text size="sm">{e.handle}</Text>
+                            ) : (
+                              <Text size="sm" c="dimmed">
+                                {e.playerId.slice(0, 8)}…
+                              </Text>
+                            )}
                           </Tooltip>
                           <GuestBadge playerId={e.playerId} />
                         </Group>
