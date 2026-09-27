@@ -60,17 +60,17 @@ uma feature de cada vez, passo a passo.
 <table>
 <tr>
 <td width="33%" valign="top">
-<a href="docs/media/video-01-cadastro.mp4"><img src="docs/media/thumb-01-cadastro.jpg" alt="Vídeo 1: do zero ao jogo online"/></a>
+<a href="docs/VIDEOS.md#video-1"><img src="docs/media/thumb-01-cadastro.jpg" alt="Vídeo 1: do zero ao jogo online"/></a>
 <br/><b>Do zero ao jogo online</b><br/>
 <sub>Registrar um jogo, ver o que o backend configurou sozinho, e acompanhar o primeiro mundo abrir, ser invadido e terminar no analytics. Sem deploy.</sub>
 </td>
 <td width="33%" valign="top">
-<a href="docs/media/video-02-conquistas.mp4"><img src="docs/media/thumb-02-conquistas.jpg" alt="Vídeo 2: conquistas sem deploy"/></a>
+<a href="docs/VIDEOS.md#video-2"><img src="docs/media/thumb-02-conquistas.jpg" alt="Vídeo 2: conquistas sem deploy"/></a>
 <br/><b>Conquistas sem deploy</b><br/>
 <sub>Critério por evento ou por métrica, regras visuais com comparadores, regras globais por arquétipo e o desbloqueio ao vivo.</sub>
 </td>
 <td width="33%" valign="top">
-<a href="docs/media/video-03-jogador.mp4"><img src="docs/media/thumb-03-jogador.jpg" alt="Vídeo 3: visão 360 do jogador"/></a>
+<a href="docs/VIDEOS.md#video-3"><img src="docs/media/thumb-03-jogador.jpg" alt="Vídeo 3: visão 360 do jogador"/></a>
 <br/><b>Visão 360 do jogador</b><br/>
 <sub>Tudo o que o backend sabe de um jogador: conquistas, histórico de partidas, dados, save e a sessão em que ele está agora.</sub>
 </td>
@@ -133,7 +133,7 @@ em [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 | Para… | Leia |
 |---|---|
-| entender o produto | [Visão de produto](docs/PRODUCT-OVERVIEW.md) · [vídeos](docs/media/README.md) |
+| entender o produto | [Visão de produto](docs/PRODUCT-OVERVIEW.md) · [vídeos](docs/VIDEOS.md) |
 | entender a arquitetura | [Arquitetura](docs/ARCHITECTURE.md) · [ADRs](docs/adr/README.md) · [topologia de repositórios](docs/REPO-TOPOLOGY.md) |
 | integrar um jogo | [Guia de integração (Unity, a referência)](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [contratos por arquétipo](docs/game-models/README.md) · [changelog do contrato](docs/contracts/CHANGELOG.md) |
 | operar | [Infra local](infra/docker/README.md) · [observabilidade](docs/OBSERVABILITY.md) · [regras de eventos](docs/EVENT-RULES-GUIDE.md) |

@@ -148,3 +148,7 @@ Com eles, o plano é:
   cada vídeo de feature toca embutido, com o resumo do que ele mostra. Três players seguidos no README deixariam a
   página pesada; a página própria mantém o README leve e dá a cada vídeo um link direto (`docs/VIDEOS.md#…`).
 - Os MP4 continuam em `docs/media/` como fonte (e para quem clona o repositório).
+
+**Andamento:** a página [`VIDEOS.md`](VIDEOS.md) existe e as capas do "Veja em ação" já levam para ela. O vídeo 3
+está embutido (link recebido em 2026-09-27); faltam os links do vídeo principal e dos vídeos 1 e 2, que agora têm
+menos de 10 MB. Enquanto o repositório for privado, o anexo só toca para quem tem acesso a ele.

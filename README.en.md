@@ -62,17 +62,17 @@ and walk through one feature at a time (narration in Portuguese).
 <table>
 <tr>
 <td width="33%" valign="top">
-<a href="docs/media/video-01-cadastro.mp4"><img src="docs/media/thumb-01-cadastro.jpg" alt="Video 1: from zero to online"/></a>
+<a href="docs/VIDEOS.md#video-1"><img src="docs/media/thumb-01-cadastro.jpg" alt="Video 1: from zero to online"/></a>
 <br/><b>From zero to online</b><br/>
 <sub>Register a game, see what the backend configured on its own, and follow the first world as it opens, gets invaded and lands in analytics. No deploy.</sub>
 </td>
 <td width="33%" valign="top">
-<a href="docs/media/video-02-conquistas.mp4"><img src="docs/media/thumb-02-conquistas.jpg" alt="Video 2: achievements without redeploys"/></a>
+<a href="docs/VIDEOS.md#video-2"><img src="docs/media/thumb-02-conquistas.jpg" alt="Video 2: achievements without redeploys"/></a>
 <br/><b>Achievements without redeploys</b><br/>
 <sub>Event-based or metric-based criteria, visual rules with comparators, global rules per archetype, and a live unlock.</sub>
 </td>
 <td width="33%" valign="top">
-<a href="docs/media/video-03-jogador.mp4"><img src="docs/media/thumb-03-jogador.jpg" alt="Video 3: 360° player view"/></a>
+<a href="docs/VIDEOS.md#video-3"><img src="docs/media/thumb-03-jogador.jpg" alt="Video 3: 360° player view"/></a>
 <br/><b>360° player view</b><br/>
 <sub>Everything the backend knows about a player: achievements, match history, data, saves and the session they are in right now.</sub>
 </td>
@@ -135,7 +135,7 @@ Detailed documentation is in Portuguese.
 
 | To… | Read |
 |---|---|
-| understand the product | [Product overview](docs/PRODUCT-OVERVIEW.md) · [videos](docs/media/README.md) |
+| understand the product | [Product overview](docs/PRODUCT-OVERVIEW.md) · [videos](docs/VIDEOS.md) |
 | understand the architecture | [Architecture](docs/ARCHITECTURE.md) · [ADRs](docs/adr/README.md) · [repository topology](docs/REPO-TOPOLOGY.md) |
 | integrate a game | [Integration guide (Unity, the reference)](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [per-archetype contracts](docs/game-models/README.md) · [contract changelog](docs/contracts/CHANGELOG.md) |
 | operate it | [Local infra](infra/docker/README.md) · [observability](docs/OBSERVABILITY.md) · [event rules](docs/EVENT-RULES-GUIDE.md) |
