@@ -37,6 +37,10 @@ D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `s
 | Virar `SESSION_AUTH_MODE=enforce` | quando o jogo mandar bearer e chave de servidor |
 | Abrir o repo como open source (Apache-2.0) | sim, depois do lançamento ou quando quiser a vitrine |
 
+**Integração do jogo:** o que o projeto Unity precisa fazer (credenciais, login Steam, heartbeat, P2P) está em
+[`integration/UNITY-GUIA-INTEGRACAO.md`](integration/UNITY-GUIA-INTEGRACAO.md), com um prompt pronto para o agente
+de lá.
+
 ## Pendente de você (fora do código)
 
 1. **Reinstalar o LaunchAgent do túnel Pi 5** (`infra/agones/pi5/pi5-tunnels.sh install`) — a ADR-0029 moveu o

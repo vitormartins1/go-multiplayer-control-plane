@@ -1535,3 +1535,48 @@ if !supportedTopologies[p.Archetype][p.Topology] {
 pediria `TryGetValue` em cada nível (ou `GetValueOrDefault`). Em Go a leitura nunca falha; quando precisar
 distinguir "ausente" de "presente com zero", use a forma de dois valores: `v, ok := m[k]`. E cuidado com a escrita:
 `var m map[string]bool; m["x"] = true` entra em pânico — o map precisa de `make` ou de um literal antes.
+
+---
+
+## 44 — Sufixo `Locked`: o nome da função diz que o mutex já está com você
+
+**O que é / por que importa:** `sync.Mutex` do Go **não é reentrante**: se uma função trava o mutex e chama outra
+que tenta travar de novo, a goroutine trava para sempre (deadlock). A convenção da biblioteca padrão para helpers
+que leem estado protegido é o sufixo **`Locked`** — "chame só com o lock na mão; eu não travo". O nome vira a
+documentação do contrato e evita tanto o deadlock quanto a corrida de ler sem lock.
+
+**Onde no projeto:** `session-service/internal/service/heartbeat.go` — `expiredLocked` decide se um mundo venceu
+(heartbeat ou idade) e é chamado de dentro do `Sweep`, que já segura `s.mu`; também `closingRetryLocked`
+(spec 029).
+
+```mermaid
+sequenceDiagram
+    participant Sweep
+    participant mu as s.mu
+    participant exp as expiredLocked
+    Sweep->>mu: Lock()
+    loop cada sessão
+        Sweep->>exp: expiredLocked(sess)  (não trava de novo)
+        exp-->>Sweep: motivo, venceu?
+    end
+    Sweep->>mu: Unlock()
+    Sweep->>Sweep: closeSession(...) fora do lock (faz I/O)
+```
+
+```go
+s.mu.Lock()
+for id, sess := range s.sessions {
+	if reason, ok := s.expiredLocked(sess, cutoff); ok { // já temos o lock
+		expired[id] = reason
+	}
+}
+s.mu.Unlock()
+for id, reason := range expired {
+	s.closeSession(ctx, id, reason) // trava de novo lá dentro — por isso fora do loop travado
+}
+```
+
+**Pegadinha (vs C#):** o `lock` do C# (`Monitor`) **é** reentrante — a mesma thread pode entrar duas vezes, então
+esse bug nem existe lá e ninguém precisa da convenção. Em Go, "junte o que precisa sob o lock, solte, e só então faça
+I/O" é o padrão; o sufixo `Locked` marca as funções do lado de dentro. (Bônus visto no teste do heartbeat: desde o Go
+1.22 dá para escrever `for range 240 { ... }` — range sobre inteiro, sem a variável de índice.)

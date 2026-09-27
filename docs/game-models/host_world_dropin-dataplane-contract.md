@@ -249,7 +249,10 @@ O repo Unity implementou o contrato acima integralmente — todos os itens abaix
 
 Evoluções seguintes (senha, pools por região, reconexão do host) ficam no [`host_world_dropin-follow-ups.md`](./host_world_dropin-follow-ups.md) e na Fase 6+ do roadmap Unity — não são mudança de contrato, são refinamento sobre o que já está de pé.
 
-> **Nota de topologia.** Este arquétipo tem afinidade com **P2P** (host como listen-server), mas o MVP usa **dedicated** (Agones/Unity) pela autoridade neutra (ADR-0008). O contrato acima vale para dedicated; a variante `p2p` é um investimento à parte (follow-up/aberturas do roadmap) — muda só a camada de provisionamento/connect da sessão, não os eventos nem os papéis.
+> **Nota de topologia (atualizada 2026-09-27).** A variante **P2P** existe no backend desde o contrato 1.4.0
+> (seção "Topologia p2p" acima, ADR-0032): muda só o provisionamento/connect e quem reporta, não os eventos nem os
+> papéis. O que o projeto Unity precisa fazer para adotá-la (e o heartbeat, o login Steam e as credenciais) está no
+> [guia de integração](../integration/UNITY-GUIA-INTEGRACAO.md).
 
 ## Resumo por papel (o que muda no gameplay)
 

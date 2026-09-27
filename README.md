@@ -132,5 +132,6 @@ Mapa de portas e dashboards: [`infra/docker/README.md`](infra/docker/README.md).
 | [docs/PRODUCT-OVERVIEW.md](docs/PRODUCT-OVERVIEW.md) | o que o sistema faz, na visão de quem opera um jogo |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | panorama técnico |
 | [docs/game-models/](docs/game-models/README.md) | arquétipos, contratos com o data plane, follow-ups |
+| [docs/integration/UNITY-GUIA-INTEGRACAO.md](docs/integration/UNITY-GUIA-INTEGRACAO.md) | guia do projeto Unity: credenciais, login Steam, heartbeat, P2P (contrato 1.0.0 → 1.5.0) |
 | [docs/adr/](docs/adr/README.md) · [docs/sdd/SDD-GUIDE.md](docs/sdd/SDD-GUIDE.md) · [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | decisões · metodologia · branches e commits |
 | [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) · [docs/GO-LEARNINGS.md](docs/GO-LEARNINGS.md) | observabilidade · aprendizados de Go |
