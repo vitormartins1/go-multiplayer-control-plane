@@ -24,6 +24,11 @@ services:
       STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
       STEAM_APP_ID: ${STEAM_APP_ID:-}
       STEAM_TICKET_IDENTITY: ${STEAM_TICKET_IDENTITY:-control-plane}
+      # Login Epic (spec 008-epic-login): vazio = desligado (POST /sessions/epic
+      # -> 404). EPIC_CLIENT_ID = client ID do produto no EOS; EPIC_JWKS_URL só
+      # para apontar para um JWKS falso em teste.
+      EPIC_CLIENT_ID: ${EPIC_CLIENT_ID:-}
+      EPIC_JWKS_URL: ${EPIC_JWKS_URL:-}
     secrets:
       - identity-jwt-key
     depends_on:

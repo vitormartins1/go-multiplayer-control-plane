@@ -136,3 +136,14 @@ func TestAuthenticateExternal_DoisHandlesOcupados_NaoViraHandleTaken(t *testing.
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, domain.ErrHandleTaken)
 }
+
+func TestExternalHandle_EpicEStem_CabemNoLimiteDoHandle(t *testing.T) {
+	// spec 008: o PUID da Epic (32 hex) entra com os últimos caracteres que cabem
+	// nos 20 do handle, a mesma regra da Steam (spec 005).
+	epic := externalHandle(domain.ExternalIdentity{Provider: "epic", ExternalID: "0002b2c7e8b54f6c9a1d3e4f5a6b7c8d"})
+	steam := externalHandle(domain.ExternalIdentity{Provider: "steam", ExternalID: "76561198000000042"})
+
+	assert.Equal(t, "epic_a1d3e4f5a6b7c8d", epic) // os 15 últimos do PUID
+	assert.Len(t, epic, 20)
+	assert.Equal(t, "steam_61198000000042", steam)
+}

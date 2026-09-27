@@ -1,7 +1,7 @@
 # Spec: 008-epic-login
 
 **Serviço:** identity-service
-**Status:** Draft (aguardando aprovação)
+**Status:** Done (2026-09-27; validado com um JWKS falso, a Epic real depende do client ID do produto no EOS)
 **Data:** 2026-09-27
 **Decisão:** ADR-0033 (Epic como segunda loja, começando pelo login) sobre a ADR-0031 (provedor por provedor)
 
@@ -22,11 +22,13 @@ jogador.
 - O token SHALL ser aceito só se:
   - a assinatura confere com uma chave do JWKS da Epic (`EPIC_JWKS_URL`, padrão
     `https://api.epicgames.dev/epic/oauth/v2/.well-known/jwks.json`), e o `alg` existe e não é `none`;
-  - o `iss` começa com `https://api.epicgames.dev`;
+  - o `iss` é uma URL `https` do host `api.epicgames.dev` (host exato: um prefixo aceitaria
+    `api.epicgames.dev.outro-dominio`);
   - o `aud` é o client ID do produto (`EPIC_CLIENT_ID`);
   - o `iat` está no passado e o `exp` no futuro (com a mesma tolerância de relógio do resto do projeto).
 - WHEN o token é válido -> THE SYSTEM SHALL achar a conta vinculada ao PUID (`external_identities`, provider `epic`)
-  ou, na primeira vez, criar a conta (handle `epic_<12 últimos caracteres do PUID>`, sem senha) e vincular; emitir o
+  ou, na primeira vez, criar a conta (handle `epic_` + os últimos caracteres do PUID até o limite de 20 do handle,
+  a mesma regra da Steam; sem senha) e vincular; emitir o
   JWT de sempre com `idp: "epic"` e marcar presença no jogo se `gameId` vier (ADR-0019). Mesmo fluxo da Steam.
 - Erros, iguais aos da Steam: sem `EPIC_CLIENT_ID` o provedor não é registrado → 404 `provider_not_supported`;
   token malformado, assinatura inválida, `iss`/`aud`/`exp` errados → 401 `invalid_ticket`; JWKS da Epic

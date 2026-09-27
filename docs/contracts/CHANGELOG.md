@@ -17,6 +17,14 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+### Added
+- **Login pela Epic** (`POST /sessions/epic`, spec `identity/008`, ADR-0033): o jogo manda o ID token do EOS Connect
+  (`{ticket, gameId?}`) e recebe o mesmo JWT do login por senha (claim extra `idp: "epic"`). O identity valida o
+  token pelo JWKS da Epic (assinatura, `iss` em `api.epicgames.dev`, `aud` = client ID do produto, `exp`/`iat`); na
+  primeira vez a conta é criada e vinculada ao ProductUserId. Erros iguais aos da Steam: 401 `invalid_ticket`, 503
+  `provider_unavailable`, 404 `provider_not_supported` (sem `EPIC_CLIENT_ID`). Aditivo: nada muda para quem usa
+  Steam ou senha. No P2P pelo EOS, `host_connection = "eos:<ProductUserId>"`.
+
 ### Fixed
 - `ReportResult` reenviado depois de já aceito (resposta perdida, ou o release do GameServer falhou depois do
   publish) respondia `NotFound`; agora responde sucesso sem republicar (spec `session/033`).

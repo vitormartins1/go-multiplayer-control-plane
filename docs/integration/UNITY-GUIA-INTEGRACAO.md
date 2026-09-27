@@ -90,6 +90,13 @@ Steam do jogador quando ela desbloqueia aqui (conquista com "Nome na Steam" pree
 deve chamar `SetAchievement`/`StoreStats` do Steamworks para essas conquistas — seria o mesmo desbloqueio por dois
 caminhos, e o do cliente não passa pelas regras do console. Só funciona para jogador que entrou pelo login Steam.
 
+**Opcional: login pela Epic (spec `identity/008`).** Para o jogo que também sair na Epic Games Store, o login
+alternativo é o **EOS Connect**: o jogo faz `EOS_Connect_Login` com a identidade que tiver (conta Epic, Steam ou de
+console), copia o ID token (`EOS_Connect_CopyIdToken`) e manda para `POST /sessions/epic` com
+`{"ticket": "<ID token>", "gameId": "<id do jogo>"}`. A resposta, os erros e o JWT são os mesmos do login Steam
+(`idp: "epic"`). O backend precisa do `EPIC_CLIENT_ID` do produto. No P2P pelo EOS, o `host_connection` do
+`OpenWorld` é `eos:<ProductUserId>`. Espelhar conquistas na Epic ainda não existe (ADR-0033).
+
 ### Passo 3 — Modo e boss (1.1.0)
 
 - `Invade` e `OpenWorld` com o **mesmo `mode_id`** — a invasão só acha mundos do mesmo modo (vazio = `default`).

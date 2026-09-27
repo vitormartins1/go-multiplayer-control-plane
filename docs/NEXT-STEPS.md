@@ -71,8 +71,7 @@ no histórico do git: `git show 6b8b0c7:docs/review/RASCUNHO-ADR-analytics-daily
 1. **Consolidar as séries diárias do analytics** assim que o rascunho de ADR for aprovado.
 2. **Limite de login distribuído** (Redis) quando houver mais de uma réplica do identity.
 3. **Login no console (D6)**, junto com o primeiro deploy fora da máquina local.
-4. **Login da Epic** (ADR-0033): provedor `epic` no identity, validando o ID token do EOS Connect pelo JWKS público
-   da Epic. Pede a spec `identity/008`.
+4. ~~Login da Epic~~ (ADR-0033): **feito** (spec `identity/008`); falta o client ID do produto no EOS para ligar.
 
 Backlog de engines e lojas (ADR-0033), por custo: espelho de conquistas na Epic (confirmar a API de servidor
 confiável), SDK Unity empacotado (quando a camada C# do Folclore estabilizar), SDKs de Godot e Unreal (sob demanda),

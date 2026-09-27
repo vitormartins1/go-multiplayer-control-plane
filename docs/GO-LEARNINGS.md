@@ -1665,3 +1665,57 @@ bateria. Por isso o `claim` faz `RETURNING steam_next_attempt_at` e o worker gua
 integração pegou a diferença). **Vs C#:** é a mesma ideia do *optimistic concurrency* do EF Core (`[ConcurrencyCheck]`
 / `rowversion` e a `DbUpdateConcurrencyException`), feita à mão: em Go não há ORM detectando o conflito, então o
 `RowsAffected()` é quem dá o sinal.
+
+---
+
+## 47 — Variável capturada pela closure: resgatar a causa que a biblioteca embrulhou
+
+**O que é / por que importa:** quando você passa uma função sua para uma biblioteca (um *callback*), o erro que ela
+devolve às vezes chega do outro lado **reembrulhado ou achatado**, e a causa original fica difícil de distinguir. No
+login pela Epic, o `jwt.ParseWithClaims` chama o nosso `keyFunc` para buscar a chave pública; se a busca falhou
+porque **a Epic está fora**, o login deve responder 503 (tente depois), não 401 (token ruim). Mas o `jwt` devolve
+tudo como "token inválido". A saída idiomática: uma variável local que a closure **captura por referência** e
+preenche quando vê a causa que interessa. Depois do `Parse`, o código olha a variável antes de olhar o erro.
+
+**Onde no projeto:** `identity-service/internal/epic/verifier.go` (`Verify`), spec `identity/008`.
+
+```mermaid
+sequenceDiagram
+  participant V as Verify
+  participant J as jwt.ParseWithClaims
+  participant K as keyFunc (closure)
+  V->>J: Parse(token, keyFunc)
+  J->>K: chave do kid?
+  K->>K: busca o JWKS: Epic fora
+  K-->>V: unavailable = ErrProviderUnavailable (variável capturada)
+  K-->>J: erro
+  J-->>V: "token inválido" (causa achatada)
+  V->>V: unavailable != nil → 503, senão → 401
+```
+
+```go
+var unavailable error // a closure abaixo enxerga e escreve nesta variável
+_, err := jwt.ParseWithClaims(ticket, claims, func(t *jwt.Token) (any, error) {
+    key, err := v.keyForKid(ctx, kid)
+    if errors.Is(err, domain.ErrProviderUnavailable) {
+        unavailable = err // guarda a causa antes de a biblioteca embrulhar
+    }
+    return key, err
+}, jwt.WithValidMethods(validMethods)) // lista branca: "none" e HMAC nunca passam
+if unavailable != nil {
+    return domain.ExternalIdentity{}, fmt.Errorf("epic: %w", unavailable) // 503
+}
+if err != nil {
+    return domain.ExternalIdentity{}, domain.ErrInvalidTicket // 401
+}
+```
+
+**Contraste com C#:** em C# o equivalente seria uma lambda que captura uma variável local (o compilador gera uma
+classe de *closure* por trás), ou uma exceção específica que atravessa a biblioteca. Em Go não há exceção para
+atravessar camadas: o erro é valor e quem está no meio decide como embrulhar. A variável capturada é o jeito de
+passar a informação "por fora" do canal de erro, sem depender do formato que a biblioteca escolheu.
+
+**Pegadinha / nuance:** a closure roda **dentro** da chamada (síncrona), então não há concorrência na variável. Se a
+biblioteca chamasse o callback em outra goroutine, a variável precisaria de mutex ou de um canal. E o
+`WithValidMethods` no mesmo trecho é a outra metade da segurança: sem a lista branca, um token com `alg: none` ou
+HMAC (usando a chave pública como segredo) poderia passar.
