@@ -17,6 +17,13 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+### Fixed
+- `ReportResult` reenviado depois de já aceito (resposta perdida, ou o release do GameServer falhou depois do
+  publish) respondia `NotFound`; agora responde sucesso sem republicar (spec `session/033`).
+- Mundo p2p: o reenvio do `HOST_KILLED` com o world token do mundo que ele mesmo fechou passa em `enforce`; qualquer
+  outra chamada com esse token é `Unauthenticated`. Evento de jogador que nunca esteve no mundo p2p é recusado
+  (`InvalidArgument`). Um host tem no máximo um mundo p2p aberto (abrir outro fecha o anterior).
+
 ### Security
 - `POST /sessions` (login por senha): 5 falhas para o mesmo handle em 15 min bloqueiam o handle até a janela
   vencer, com `429 too_many_attempts` (spec `identity/007`). Pela regra deste arquivo "erro novo" seria MAJOR, mas só

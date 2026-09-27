@@ -91,7 +91,7 @@ tarefa); depois remover o `continue-on-error` para o job bloquear.
 | Consolidar as 5 tabelas `*_daily` do analytics numa só | sim, quando mexer de novo no analytics — pede uma ADR nova sobre a ADR-0021 (você aprova o rascunho) | `review/REVISAO-2026-09.md` |
 | Login no console (admin-bff) — D6 | decidir **junto com o deploy real**: login de operador (OIDC/senha) ou console só atrás de VPN | `review/REVISAO-2026-09.md` §6 |
 | Deploy real e medição de custo (G10, a tese do projeto — ADR-0008) | o próximo grande marco depois do lançamento; P2P já cortou o maior custo | `review/REVISAO-2026-09.md` |
-| Resultado de partida sem outbox (G7) | só importa quando houver um jogo `queue_arena` real | `review/REVISAO-2026-09.md` |
+| Resultado de partida sem outbox (G7) | **reenvio corrigido** (spec `session/033`); outbox de verdade só se o session deixar de ser em memória | `review/REVISAO-2026-09.md` |
 | Limite de tentativas no login (G5) | **feito em memória** (spec `identity/007`); com várias réplicas, trocar por um limite distribuído (Redis) no deploy real | idem |
 | Mais de um app Steam por deploy | quando um segundo jogo for para a Steam: `STEAM_APP_ID` por jogo no game-registry | `achievements-service/specs/019-steam-mirror` |
 | SDK UPM | extrair do Folclore quando a camada C# (guia, seção 4) estabilizar | guia Unity, seção 8 |

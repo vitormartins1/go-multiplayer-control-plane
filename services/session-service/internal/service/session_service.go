@@ -329,7 +329,13 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 	if ok {
 		gameID, modeID, snap = sess.GameID, sess.ModeID, sess.Profile
 	}
+	alreadyReported := !ok && s.resultReportedLocked(matchID)
 	s.mu.Unlock()
+	if alreadyReported {
+		// reenvio de um resultado já aceito (spec 033): a resposta anterior se
+		// perdeu ou o release falhou depois do publish. Sucesso, sem republicar.
+		return nil
+	}
 	if !ok {
 		return fmt.Errorf("session service: report result: %w", domain.ErrSessionNotFound)
 	}
@@ -361,6 +367,17 @@ func (s *Service) ReportResult(ctx context.Context, matchID string, outcome doma
 		return fmt.Errorf("session service: report result: %w", err)
 	}
 	return nil
+}
+
+// resultReportedLocked diz se o match está no histórico em memória fechado por
+// resultado (spec 033). Exige s.mu travado.
+func (s *Service) resultReportedLocked(matchID string) bool {
+	for i := len(s.history) - 1; i >= 0; i-- {
+		if h := s.history[i]; h.MatchID == matchID {
+			return h.CloseReason == domain.CloseResult
+		}
+	}
+	return false
 }
 
 // stampTeams sobrescreve o TeamID de cada entrada com o time registrado na
