@@ -11,6 +11,18 @@
   background: #0a0d12;
 }
 
+/* tela cheia (spec 094): cobre a janela, por cima do AppShell (z-index 100)
+   e abaixo de modais/drawers (200) e dropdowns (300) do Mantine, que
+   continuam abrindo por cima do canvas. */
+.flow-wrap--full {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
 /* --- cards --- */
 .flow-card {
   min-width: 170px;

@@ -29,6 +29,8 @@ import {
   IconChevronUp,
   IconHandClick,
   IconInfoCircle,
+  IconLayoutSidebarLeftCollapse,
+  IconListDetails,
   IconPlus,
   IconRefresh,
   IconRotate2,
@@ -157,6 +159,14 @@ export function GameEventRulesCanvas({
   // node, só a lista tapa área de verdade). Medida só do painel da lista
   // (ver EventRulesDock), repassada pro FlowCanvas via dockReservedWidth.
   const [listPanelWidth, setListPanelWidth] = useState(0);
+  // listCollapsed (spec 094): a lista recolhe para um botão compacto e deixa
+  // de ser reservada pelo fit, devolvendo a largura ao grafo. A escolha fica
+  // no navegador; sem storage (modo privado etc.), começa aberta.
+  const [listCollapsed, setListCollapsed] = useState(readListCollapsed);
+  const toggleList = (collapsed: boolean) => {
+    setListCollapsed(collapsed);
+    writeListCollapsed(collapsed);
+  };
   const [listFilter, setListFilter] = useState("");
   // draftArchetype (spec 058): o seletor de arquétipo saiu da toolbar fixa —
   // só importa no momento de CRIAR uma regra num jogo com mais de um
@@ -761,7 +771,13 @@ export function GameEventRulesCanvas({
         onPaneClick={() => setSelectedId(null)}
         fitKey={`${arch}|${focusRuleId ?? "none"}|${[...relatedKinds].sort().join(",")}|${statIgnoreValue}|${!!draft}|${nodes.length}`}
         height="calc(100vh - 224px)"
-        dockReservedWidth={listPanelWidth}
+        dockReservedWidth={listCollapsed ? 0 : listPanelWidth}
+        // spec 094: o detalhe expandido tapa a direita do canvas (Paper de
+        // 290 px); recolhido, só o cabeçalho fica, e o grafo pode passar
+        // por baixo dele.
+        overlayReservedWidth={selectedNode && !draft && !detailsCollapsed ? DETAIL_WIDTH : 0}
+        fitMaxZoom={1.5}
+        fullscreenToggle
         // emptyState (achado, revisão Event Rules): antes o canvas ficava
         // em branco (spec 055 é deliberada — sem regra focada, sem grafo),
         // mas sem nenhuma pista pro usuário. Só aparece quando nodes.length
@@ -798,11 +814,13 @@ export function GameEventRulesCanvas({
             onToggleSuppress={toggleSuppress}
             onReload={reload}
             onListPanelWidthChange={setListPanelWidth}
+            listCollapsed={listCollapsed}
+            onListCollapsed={toggleList}
           />
         }
         overlay={
           selectedNode && !draft ? (
-            <Paper withBorder p="sm" w={290} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
+            <Paper withBorder p="sm" w={DETAIL_WIDTH} shadow="md" style={{ background: "rgba(18, 24, 33, 0.95)" }}>
               <Group justify="space-between" wrap="nowrap" align="flex-start" gap={4} mb={detailsCollapsed ? 0 : "xs"}>
                 <Group gap={6} wrap="nowrap" align="baseline" style={{ minWidth: 0 }}>
                   <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
@@ -985,6 +1003,30 @@ function EventRulesToolbarRail({
   );
 }
 
+// DETAIL_WIDTH: largura do painel de detalhe (overlay), reservada pelo fit
+// quando ele está expandido (spec 094).
+const DETAIL_WIDTH = 290;
+
+// preferência "lista recolhida" (spec 094): conveniência por navegador; o
+// storage pode não existir ou lançar (modo privado, cookies bloqueados).
+const LIST_COLLAPSED_KEY = "eventRules.listCollapsed";
+
+function readListCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(LIST_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeListCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(LIST_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // sem storage, a escolha vale só até recarregar a página
+  }
+}
+
 // EventRulesDock (spec 058): painel flutuando sobre o canvas — rail de
 // controles (acima) + lista de regras, lado a lado, ambos flutuando juntos
 // no canto do canvas. Antes disso, lista/toolbar/texto eram chrome FIXO em
@@ -1009,6 +1051,8 @@ function EventRulesDock({
   onToggleSuppress,
   onReload,
   onListPanelWidthChange,
+  listCollapsed,
+  onListCollapsed,
 }: {
   rules: EventRule[];
   focusRuleId: string | null;
@@ -1031,9 +1075,13 @@ function EventRulesDock({
   // atrás de node nenhum, reservar a largura dele também só empurrava o
   // grafo mais longe do que precisava.
   onListPanelWidthChange: (w: number) => void;
+  listCollapsed: boolean;
+  onListCollapsed: (collapsed: boolean) => void;
 }) {
   const filtered = rules.filter(matchesListFilter(listFilter));
   const listRef = useRef<HTMLDivElement>(null);
+  // re-observa quando a lista volta a montar (spec 094: recolhida, ela sai
+  // da árvore e o observer antigo fica apontando para o nada).
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -1041,7 +1089,7 @@ function EventRulesDock({
     ro.observe(el);
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [listCollapsed]);
   return (
     // pointerEvents "none" no container + "auto" nos dois cards (spec 058,
     // achado do Vitor: às vezes não dava pra clicar em alguns facts/regras)
@@ -1052,117 +1100,139 @@ function EventRulesDock({
     // clique nos nodes por baixo. Só os cards de verdade (lista/rail)
     // voltam a aceitar clique.
     <Group align="flex-start" gap={8} wrap="nowrap" style={{ pointerEvents: "none" }}>
-      <Paper
-        ref={listRef}
-        withBorder
-        shadow="md"
-        w={320}
-        style={{
-          background: "rgba(18, 24, 33, 0.95)",
-          maxHeight: "calc(100vh - 190px)",
-          display: "flex",
-          flexDirection: "column",
-          pointerEvents: "auto",
-        }}
-      >
-        <Group justify="space-between" wrap="nowrap" align="center" p="xs">
-          <Group gap={6} wrap="nowrap" align="center" style={{ flex: 1, minWidth: 0 }}>
-            <TextInput
-              size="xs"
-              placeholder="filtrar…"
-              value={listFilter}
-              onChange={(e) => onListFilter(e.currentTarget.value)}
-              rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
-              style={{ flex: 1, minWidth: 0 }}
-            />
-            <Badge size="xs" variant="light" color="gray" style={{ flexShrink: 0 }}>
-              {filtered.length}
-            </Badge>
-            <Popover width={300} withArrow position="bottom-start" withinPortal>
-              <Popover.Target>
-                <ActionIcon size="xs" variant="subtle" color="gray" aria-label="Como funciona">
-                  <IconInfoCircle size={13} />
+      {listCollapsed ? (
+        <Paper withBorder shadow="md" p={4} style={{ background: "rgba(18, 24, 33, 0.95)", pointerEvents: "auto" }}>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="gray"
+            leftSection={<IconListDetails size={14} />}
+            onClick={() => onListCollapsed(false)}
+            aria-label="Mostrar lista de regras"
+          >
+            Regras · {rules.length}
+          </Button>
+        </Paper>
+      ) : (
+        <Paper
+          ref={listRef}
+          withBorder
+          shadow="md"
+          w={320}
+          style={{
+            background: "rgba(18, 24, 33, 0.95)",
+            maxHeight: "calc(100vh - 190px)",
+            display: "flex",
+            flexDirection: "column",
+            pointerEvents: "auto",
+          }}
+        >
+          <Group justify="space-between" wrap="nowrap" align="center" p="xs">
+            <Group gap={6} wrap="nowrap" align="center" style={{ flex: 1, minWidth: 0 }}>
+              <TextInput
+                size="xs"
+                placeholder="filtrar…"
+                value={listFilter}
+                onChange={(e) => onListFilter(e.currentTarget.value)}
+                rightSection={listFilter ? <CloseButton size="xs" onClick={() => onListFilter("")} /> : undefined}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <Badge size="xs" variant="light" color="gray" style={{ flexShrink: 0 }}>
+                {filtered.length}
+              </Badge>
+              <Popover width={300} withArrow position="bottom-start" withinPortal>
+                <Popover.Target>
+                  <ActionIcon size="xs" variant="subtle" color="gray" aria-label="Como funciona">
+                    <IconInfoCircle size={13} />
+                  </ActionIcon>
+                </Popover.Target>
+                <Popover.Dropdown>
+                  <Text size="xs">
+                    Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome
+                    no host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event
+                    types listados ao progresso das conquistas cadastradas na aba Achievements. Regras{" "}
+                    <b>globais</b> valem pra todo jogo com o arquétipo (semeadas por padrão, não editáveis
+                    aqui); regras do <b>jogo</b> só valem pra este jogo. Selecione uma regra pra ver o subgrafo
+                    dela no canvas.
+                  </Text>
+                </Popover.Dropdown>
+              </Popover>
+            </Group>
+            <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+              <ActionIcon size="xs" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar">
+                <IconRefresh size={14} />
+              </ActionIcon>
+              <Tooltip label="Recolher lista" withArrow openDelay={300}>
+                <ActionIcon size="xs" variant="subtle" color="gray" onClick={() => onListCollapsed(true)} aria-label="Recolher lista">
+                  <IconLayoutSidebarLeftCollapse size={14} />
                 </ActionIcon>
-              </Popover.Target>
-              <Popover.Dropdown>
-                <Text size="xs">
-                  Cada regra casa um subconjunto exato de "facts" do evento recebido (ex.: role/event/outcome
-                  no host_world_dropin; placement/tier no battle_royale; outcome nos demais) e soma os event
-                  types listados ao progresso das conquistas cadastradas na aba Achievements. Regras{" "}
-                  <b>globais</b> valem pra todo jogo com o arquétipo (semeadas por padrão, não editáveis
-                  aqui); regras do <b>jogo</b> só valem pra este jogo. Selecione uma regra pra ver o subgrafo
-                  dela no canvas.
-                </Text>
-              </Popover.Dropdown>
-            </Popover>
+              </Tooltip>
+            </Group>
           </Group>
-          <ActionIcon size="xs" variant="subtle" color="gray" onClick={onReload} aria-label="Atualizar" style={{ flexShrink: 0 }}>
-            <IconRefresh size={14} />
-          </ActionIcon>
-        </Group>
-        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-          <Table highlightOnHover fz="xs">
-            <Table.Tbody>
-              {filtered.map((r, i) => {
-                const ArchIcon = ARCHETYPE_META[r.archetype].icon;
-                return (
-                <Table.Tr
-                  key={r.id}
-                  onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
-                  style={{
-                    cursor: "pointer",
-                    opacity: r.suppressed ? 0.5 : undefined,
-                    background:
-                      r.id === focusRuleId
-                        ? "var(--mantine-color-blue-light)"
-                        : i % 2 === 1
-                          ? "rgba(255, 255, 255, 0.045)"
-                          : undefined,
-                  }}
-                >
-                  <Table.Td style={{ whiteSpace: "nowrap" }}>
-                    <Group gap={4} wrap="nowrap">
-                      <Tooltip label={ARCHETYPE_META[r.archetype].label} withArrow position="top-start" openDelay={300}>
-                        <ArchIcon size={13} />
-                      </Tooltip>
-                      <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
-                        {r.scope === "global" ? "global" : "jogo"}
-                      </Badge>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={3} wrap="wrap">
-                      {r.eventTypes.map((et) => (
-                        <Badge key={et} size="xs" variant="light" color="gray">
-                          {et}
+          <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+            <Table highlightOnHover fz="xs">
+              <Table.Tbody>
+                {filtered.map((r, i) => {
+                  const ArchIcon = ARCHETYPE_META[r.archetype].icon;
+                  return (
+                  <Table.Tr
+                    key={r.id}
+                    onClick={() => onFocusRule(focusRuleId === r.id ? null : r.id)}
+                    style={{
+                      cursor: "pointer",
+                      opacity: r.suppressed ? 0.5 : undefined,
+                      background:
+                        r.id === focusRuleId
+                          ? "var(--mantine-color-blue-light)"
+                          : i % 2 === 1
+                            ? "rgba(255, 255, 255, 0.045)"
+                            : undefined,
+                    }}
+                  >
+                    <Table.Td style={{ whiteSpace: "nowrap" }}>
+                      <Group gap={4} wrap="nowrap">
+                        <Tooltip label={ARCHETYPE_META[r.archetype].label} withArrow position="top-start" openDelay={300}>
+                          <ArchIcon size={13} />
+                        </Tooltip>
+                        <Badge size="xs" variant="outline" color={r.scope === "global" ? "gray" : "teal"}>
+                          {r.scope === "global" ? "global" : "jogo"}
                         </Badge>
-                      ))}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
-                    {r.scope === "game" ? (
-                      <ActionIcon size="xs" variant="subtle" color="critical" onClick={() => onDelete(r)} aria-label="Remover">
-                        <IconTrash size={13} />
-                      </ActionIcon>
-                    ) : (
-                      <ActionIcon
-                        size="xs"
-                        variant="subtle"
-                        color={r.suppressed ? "teal" : "orange"}
-                        onClick={() => onToggleSuppress(r)}
-                        aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
-                      >
-                        {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
-                      </ActionIcon>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-                );
-              })}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      </Paper>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={3} wrap="wrap">
+                        {r.eventTypes.map((et) => (
+                          <Badge key={et} size="xs" variant="light" color="gray">
+                            {et}
+                          </Badge>
+                        ))}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td onClick={(e) => e.stopPropagation()} w={28}>
+                      {r.scope === "game" ? (
+                        <ActionIcon size="xs" variant="subtle" color="critical" onClick={() => onDelete(r)} aria-label="Remover">
+                          <IconTrash size={13} />
+                        </ActionIcon>
+                      ) : (
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color={r.suppressed ? "teal" : "orange"}
+                          onClick={() => onToggleSuppress(r)}
+                          aria-label={r.suppressed ? "Restaurar" : "Suprimir"}
+                        >
+                          {r.suppressed ? <IconRotate2 size={13} /> : <IconBan size={13} />}
+                        </ActionIcon>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        </Paper>
+      )}
       <EventRulesToolbarRail
         focusRuleId={focusRuleId}
         draft={draft}

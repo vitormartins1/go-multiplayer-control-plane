@@ -19,7 +19,7 @@ Como regravar: [`docs/media/README.md`](../../docs/media/README.md).
 - **Games** (`/games`, rota raiz) — grid de jogos cadastrados (capa procedural + nome); ponto de entrada de tudo. "Registrar jogo" abre o wizard de criação.
 - **Game detail** (`/games/:gameId`) — header com capa mini + badges de modo, e sub-abas por jogo:
   - **Achievements** — catálogo de achievements do jogo, com preview de regra.
-  - **Event Rules** — canvas (`@xyflow/react`) do mapeamento evento → achievement/leaderboard (ADR-0027), edição visual de regras.
+  - **Event Rules** — canvas (`@xyflow/react`) do mapeamento evento → achievement/leaderboard (ADR-0027), edição visual de regras. A lista de regras recolhe para liberar o canvas, o enquadramento desvia da lista e do detalhe e amplia grafos pequenos até 150%, e há modo de tela cheia (spec 094).
   - **Leaderboards** — rankings do jogo.
   - **Players** — jogadores com presença naquele jogo (`game_players`), badge de quem está online agora (interseção com sessões ativas).
   - **Sessions** — sessões ativas/recentes do jogo, com detalhe de partida/mundo por arquétipo.
