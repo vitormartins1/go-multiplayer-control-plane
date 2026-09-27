@@ -55,11 +55,9 @@ jobs:
   vulncheck:
     name: govulncheck (dependências com CVE)
     runs-on: ubuntu-latest
-    # Report-only até o primeiro resultado ser visto: a VM da revisão não
-    # alcança o vuln.go.dev, então o estado inicial das dependências nunca foi
-    # checado. Depois do primeiro run verde (ou das correções), tirar o
-    # continue-on-error para o job bloquear. Ver docs/PENDENCIAS-DO-DONO.md.
-    continue-on-error: true
+    # Bloqueia: vulnerabilidade alcançável pelo código reprova o PR. Começou
+    # report-only; o primeiro run achou 29 (deps antigas) e depois o
+    # GO-2026-6443 do grpc, todos corrigidos por atualização (2026-09-27).
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
