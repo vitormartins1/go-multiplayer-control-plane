@@ -45,6 +45,7 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Console | `8ba454d` | `lib/vocab.ts` (rótulos únicos; corrige `FAIL`), "Resumo do mundo" para host_world, pipeline vira tabela (−430 linhas), coluna Sessão nas salas (spec `admin-ui/090`) | Playwright com 5 mundos reais |
 | Produto | `af3a677` | `ESTRATEGIA-PRODUTO-2026-09.md`: crítica do colega, Steam/GOG, SaaS × Asset Store × open source, SDK | — |
 | Steam | `aea9f87` | login federado Steam no identity (spec `identity/005-steam-login`), contrato 1.3.0 | unit + integração + **ao vivo com Steam falsa** |
+| Console | ver `git log` | Rooms e Sessões do jogo na mesma `SessionTable` (spec `admin-ui/092`): ~1000 → ~800 linhas; a aba do jogo ganha slots por papel e o painel completo | vitest (32), build, Playwright |
 | Console | `299fca3` | mapa de serviços com o analytics e as dependências reais; capturas novas na documentação | Playwright |
 | ADRs | `aa344f1` | ADR-0031 (identidade federada, rascunho A) e spec `session/031` em rascunho | — |
 | P2P | `43441db` | topologia p2p no `host_world_dropin` (spec `session/031`, ADR-0032, contrato 1.4.0): session sem GameServer + world token, registry, matchmaking, admin "P2P · host" | unit + **demo ao vivo p2p e dedicado em `enforce`** |
@@ -61,7 +62,6 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Próximo (executável sem decisão do dono)
 
-2. Unificar Rooms e Sessions do jogo (`SessionTable`/`SessionDetail` compartilhados) — hoje quase duplicados.
 3. Consolidar as 5 tabelas `*_daily` do analytics numa `game_activity_daily` — pede ADR (altera a ADR-0021).
 4. ESLint no admin-ui; `govulncheck` no CI (validar localmente — a VM não alcança o `vuln.go.dev`).
 

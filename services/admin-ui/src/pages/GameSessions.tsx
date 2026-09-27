@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Badge,
-  Box,
   Button,
-  Collapse,
   Group,
   Loader,
   SegmentedControl,
   Select,
   Stack,
-  Table,
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -19,15 +15,8 @@ import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, shortId } from "../lib/format";
-import { hostingOf } from "../lib/hosting";
-import { HeartbeatBadge, HostingCell, P2PTrustNote } from "../components/Hosting";
-import { sessionStateLabel } from "../lib/vocab";
-import { SessionAvatar } from "../components/SessionAvatar";
-import { PlayersSummary } from "../components/PlayersSummary";
-import { SessionMatchDetail } from "../components/SessionMatchDetail";
 import { EmptyState } from "../components/EmptyState";
-import { archetypeMetaOf } from "../lib/archetypeMeta";
+import { SessionTable } from "../components/SessionTable";
 
 // GameSessions é a aba de operação/debug das partidas do jogo (spec 007):
 // abertas ao vivo (mapa in-memory, polling da preferência global) + histórico
@@ -167,30 +156,11 @@ export function GameSessions({ gameId }: { gameId: string }) {
         />
       )}
       {rows.length > 0 && (
-        <Table.ScrollContainer minWidth={640}>
-          <Table striped withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Sessão</Table.Th>
-                <Table.Th>Modo</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th>Players</Table.Th>
-                <Table.Th>Hospedagem</Table.Th>
-                <Table.Th>Tempos</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {rows.map((s) => (
-                <SessionRow
-                  key={s.sessionId}
-                  session={s}
-                  expanded={expandedId === s.sessionId}
-                  onToggle={() => setExpandedId((prev) => (prev === s.sessionId ? null : s.sessionId))}
-                />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+        <SessionTable
+          rows={rows}
+          expandedId={expandedId}
+          onToggle={(id) => setExpandedId((prev) => (prev === id ? null : id))}
+        />
       )}
       {hasMoreClosed && (filter === "all" || filter === "closed") && (
         <Group justify="center">
@@ -202,132 +172,3 @@ export function GameSessions({ gameId }: { gameId: string }) {
     </Stack>
   );
 }
-
-function SessionRow({
-  session: s,
-  expanded,
-  onToggle,
-}: {
-  session: GameSession;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const modeMeta = archetypeMetaOf(s.archetype);
-  return (
-    <>
-      <Table.Tr
-        style={{ cursor: "pointer" }}
-        bg={expanded ? "var(--mantine-color-default-hover)" : undefined}
-        onClick={onToggle}
-      >
-        <Table.Td>
-          {/* size=32 (padronização das tabelas, 2026-07-13): iguala a
-              densidade da tabela de referência (Achievements/Players). */}
-          <Group gap={6} wrap="nowrap">
-            <SessionAvatar seed={s.profileHash || s.sessionId} size={32} />
-            <Text ff="monospace" size="sm">
-              {shortId(s.matchId || s.sessionId)}
-            </Text>
-          </Group>
-        </Table.Td>
-        <Table.Td>
-          <Badge
-            variant="light"
-            color="gray"
-            leftSection={modeMeta && <modeMeta.icon size={12} />}
-          >
-            {s.modeId || "default"}
-          </Badge>
-        </Table.Td>
-        <Table.Td>
-          <Stack gap={4} align="flex-start">
-            <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
-              {sessionStateLabel(s.state, s.closeReason)}
-            </Badge>
-            <HeartbeatBadge session={s} />
-          </Stack>
-        </Table.Td>
-        <Table.Td>
-          {/* resumo compacto (034): a lista completa vive no painel expandido.
-              size=32 (padronização das tabelas): mesmo motivo do avatar acima. */}
-          <PlayersSummary players={s.players} size={32} />
-        </Table.Td>
-        <Table.Td>
-          {/* GameServer / P2P + conexão do host / "—" (admin-ui/091) */}
-          <HostingCell session={s} />
-        </Table.Td>
-        <Table.Td>
-          {s.state === "open" ? (
-            <Text size="sm">há {formatDuration(Date.now() - Date.parse(s.openedAt))}</Text>
-          ) : (
-            <Text size="sm">
-              durou {s.closedAt ? formatDuration(Date.parse(s.closedAt) - Date.parse(s.openedAt)) : "?"} · fechou{" "}
-              {s.closedAt ? new Date(s.closedAt).toLocaleTimeString("pt-BR") : "?"}
-            </Text>
-          )}
-        </Table.Td>
-      </Table.Tr>
-      {expanded && (
-        <Table.Tr>
-          <Table.Td colSpan={6} p={0}>
-            <Collapse in={expanded}>
-              <Box p="md" style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
-                <Stack gap="xs">
-                  <Group gap="xl" wrap="wrap">
-                    <SessionAvatar seed={s.profileHash || s.sessionId} size={40} />
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>SESSION ID</Text>
-                      <Text ff="monospace" size="xs">{s.sessionId}</Text>
-                    </Stack>
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>MATCH ID</Text>
-                      <Text ff="monospace" size="xs">{s.matchId}</Text>
-                    </Stack>
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>MODO</Text>
-                      <Text ff="monospace" size="xs">{s.modeId || "default"}</Text>
-                    </Stack>
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>
-                        {hostingOf(s) === "p2p" ? "CONEXÃO DO HOST (P2P)" : "SERVIDOR"}
-                      </Text>
-                      <Text ff="monospace" size="xs">
-                        {hostingOf(s) === "p2p" ? s.hostConnection || "—" : s.serverAddress || "—"}
-                      </Text>
-                    </Stack>
-                  </Group>
-
-                  {hostingOf(s) === "p2p" && <P2PTrustNote />}
-
-                  {/* roster/formação/resultado vivem no painel por arquétipo
-                      (spec 019) — sem bloco PLAYERS duplicado. */}
-                  <SessionMatchDetail session={s} />
-
-                  <Group gap="xl" wrap="wrap">
-                    <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>ABERTA EM</Text>
-                      <Text size="xs">{new Date(s.openedAt).toLocaleString("pt-BR")}</Text>
-                    </Stack>
-                    {s.closedAt && (
-                      <Stack gap={2}>
-                        <Text size="xs" c="dimmed" fw={600}>FECHADA EM</Text>
-                        <Text size="xs">{new Date(s.closedAt).toLocaleString("pt-BR")}</Text>
-                      </Stack>
-                    )}
-                    {s.closeReason && (
-                      <Stack gap={2}>
-                        <Text size="xs" c="dimmed" fw={600}>MOTIVO</Text>
-                        <Text size="xs">{closeReasonLabel(s.closeReason)}</Text>
-                      </Stack>
-                    )}
-                  </Group>
-                </Stack>
-              </Box>
-            </Collapse>
-          </Table.Td>
-        </Table.Tr>
-      )}
-    </>
-  );
-}
-
