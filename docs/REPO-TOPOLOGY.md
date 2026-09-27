@@ -54,8 +54,8 @@ Renomear toca o module path Go e várias referências. Estado:
 1. ~~**Repos GitHub**~~ ✅ **feito (2026-07-08):** os dois repos publicados como **privados** com os nomes novos; `git remote set-url` aplicado no data plane (o antigo `go-game-dataplane.git` redirecionava para o nome novo).
 2. ~~**Module path Go**~~ ✅ **feito (2026-07-07):** `go.mod` + 128 arquivos de imports + `go_package` dos 2 protos + stubs regenerados via `buf` (não usar `sed` no `.pb.go` — corrompe o `rawDesc`). 721 testes verdes com `-race`.
 3. ~~**Referências em docs do backend**~~ ✅ **feito/verificado (2026-07-08):** varredura completa — só restam menções históricas intencionais (`ADR-0001`, `GO-LEARNINGS #30`, notas de rename neste doc e no NEXT-STEPS). Nenhum path/config embute o nome da pasta (o project name do compose deriva de `infra/docker`).
-4. ~~**Referências no data plane**~~ ✅ **feito (2026-07-08):** README, CLAUDE.md, ROADMAP, specs, ADRs, tools e `codegen.csproj` (links `../go-game-backend` → `../go-multiplayer-control-plane`); namespace/asmdefs `GameDataplane.*` → `QueueArena.*`; `mv` da pasta executado (memória do assistente movida junto).
-5. **Memórias** do assistente que citam nomes de repo (`dataplane-repo`, etc.) — conteúdo atualizado em 2026-07-08; a pasta de memória move junto com o `mv`.
+4. ~~**Referências no data plane**~~ ✅ **feito (2026-07-08):** README, CLAUDE.md, ROADMAP, specs, ADRs, tools e `codegen.csproj` (links `../go-game-backend` → `../go-multiplayer-control-plane`); namespace/asmdefs `GameDataplane.*` → `QueueArena.*`; `mv` da pasta executado.
+5. ~~**Notas locais** que citam nomes de repo~~ ✅ atualizadas em 2026-07-08.
 6. **CI/CD e paths** que embutam o nome do repo/módulo.
 
 > Sugestão de sequência: renomear os repos → module path → varredura de referências → validar build/CI. Feito de uma vez para não conviver com nomes mistos.

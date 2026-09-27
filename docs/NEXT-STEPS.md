@@ -27,7 +27,9 @@ doc não é changelog.
   de vida; code review da branch inteira com os achados corrigidos (reenvio do `ReportResult`, limite de tentativas
   no login, lease do espelho Steam, `session_service.go` dividido); CI com ESLint e `govulncheck` bloqueante; o S3
   local trocado de MinIO para LocalStack (a imagem saiu do Docker Hub); README, arquitetura e produto reescritos,
-  com [vídeo e imagens do produto](media/README.md). Tudo no [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1).
+  com [vídeo e imagens do produto](media/README.md); control plane agnóstico de engine e de loja (ADR-0033) e **login
+  Epic** (`identity/008`); repositório preparado para abrir (Apache-2.0, README em inglês, comunidade) e os vídeos
+  tocando no GitHub ([`VIDEOS.md`](VIDEOS.md)), com versões narradas para o YouTube. Tudo no [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1).
 
 ## Decisões do dono
 
@@ -38,7 +40,7 @@ D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `s
 | ~~Topologia P2P (rascunho B)~~ | **aprovada e feita no backend** (ADR-0032, `session/031`, contrato 1.4.0); falta o netcode no jogo (NGO + transporte Steam no modo host) |
 | ~~Rascunho A virar ADR~~ | **feito** — ADR-0031 |
 | Virar `SESSION_AUTH_MODE=enforce` | quando o jogo mandar bearer e chave de servidor |
-| Abrir o repo como open source (Apache-2.0) | sim, depois do lançamento ou quando quiser a vitrine |
+| ~~Abrir o repo como open source~~ | **decidida** (Apache-2.0); falta só tornar público, no fim (checklist em [`PENDENCIAS-DO-DONO.md`](PENDENCIAS-DO-DONO.md), seção 8) |
 
 **O que depende de você** (chaves da Steam, Unity, `enforce`, decisões, validações locais), com o passo a passo:
 [`PENDENCIAS-DO-DONO.md`](PENDENCIAS-DO-DONO.md).
@@ -56,7 +58,7 @@ de lá.
 3. **Recriar a stack local** depois de puxar esta branch: o compose ganhou restart policy, a `INTERNAL_API_KEY` do
    analytics e o secret do identity — rodar `infra/docker/gen-secrets.sh` e depois
    `docker compose -f infra/docker/docker-compose.yml up -d --build`; em seguida `scripts/demo-host-world.sh`
-   (a VM da revisão não conseguiu buildar as imagens — validou com os binários no host).
+   (o build das imagens não foi validado na revisão, só os binários no host).
 4. **Validar com o jogo** (quando a fase multiplayer voltar): reenvio do `HOST_KILLED` com o fan-out fora
    (derrubar o localstack, matar o host, subir o localstack — o evento deve chegar ao achievements).
 
@@ -88,7 +90,7 @@ Dependem de decisão/evidência (não começar sem):
 
 ## Gotchas operacionais
 
-- **Migrations Postgres** só rodam em **volume novo**: ao mudar/adicionar migration, ou aplicar manualmente no volume em uso (`docker exec -i <postgres> psql -U dev -d <db> < migration.sql`) ou `docker compose ... rm -sfv <svc> <svc>-postgres` (apaga o volume anônimo) e remontar. Já mordeu várias vezes nesta sessão (achievements/010, analytics/006 — mount que faltava desde a spec 007 original).
+- **Migrations Postgres** só rodam em **volume novo**: ao mudar/adicionar migration, ou aplicar manualmente no volume em uso (`docker exec -i <postgres> psql -U dev -d <db> < migration.sql`) ou `docker compose ... rm -sfv <svc> <svc>-postgres` (apaga o volume anônimo) e remontar. Já mordeu várias vezes (achievements/010, analytics/006 — mount que faltava desde a spec 007 original).
 - **Proto**: após mexer no module path / `.proto`, **regenerar com `buf`** (`PATH="$(go env GOPATH)/bin:$PATH" buf generate` dentro do serviço) — um `sed` no `.pb.go` corrompe o `rawDesc` (go_package tem prefixo de tamanho).
 - **golangci-lint** não está instalado por padrão: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2` (o CI usa a mesma versão pinada). Config em `.golangci.yml` (v2): errcheck dispensado só nos `_test.go`.
 - **Prometheus** não raspa job novo sem `docker compose restart prometheus`; **Grafana** provisioning só no boot (restart do container).

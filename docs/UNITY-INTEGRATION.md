@@ -29,7 +29,7 @@ O `ReportResult` mudou na spec `session/009` (resultado polimórfico, ADR-0023):
 `ReportParticipationEventRequest` — mesmo padrão de `ReportResult`. É
 **aditivo** (não quebra nada; ausente = comportamento atual). Ainda não há
 confirmação de que o `unity-host-world-dropin-data-plane` preenche o campo
-— ver a nota de correção em [`host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md#6-critério-de-conquista-por-stat-para-participação--feito-no-control-plane-2026-07-13). Preencher `stats` destrava achievements por métrica (`kills`, `deaths`, etc.) e o resumo agregado da aba Analytics (`analytics-service/011`) nesse arquétipo.
+— ver a nota de correção em [`host_world_dropin-follow-ups.md`](game-models/host_world_dropin-follow-ups.md#6-critério-de-conquista-por-stat-para-participação---feito-no-control-plane-2026-07-13). Preencher `stats` destrava achievements por métrica (`kills`, `deaths`, etc.) e o resumo agregado da aba Analytics (`analytics-service/011`) nesse arquétipo.
 
 ## Visão geral
 

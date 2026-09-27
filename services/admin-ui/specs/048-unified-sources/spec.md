@@ -1,7 +1,7 @@
 # Spec 048 — Fontes unificadas + criação IN-CANVAS (edição dentro do nó)
 
-**Status:** Draft v2 — aguardando aprovação (v1 aprovada; interação de criação
-revisada após novo feedback: edição dentro do nó em vez de drawer)
+**Status:** Done (v2 aprovada e implementada; a interação de criação foi revisada
+após novo feedback: edição dentro do nó em vez de drawer)
 **Serviço:** admin-ui (UI-only; zero mudança de backend)
 **Relaciona:** specs 043–047, achievements/014–015, ADR-0028,
 `docs/EVENT-RULES-GUIDE.md` (conceitos que esta tela materializa)

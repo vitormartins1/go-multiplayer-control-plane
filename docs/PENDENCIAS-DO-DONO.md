@@ -1,18 +1,17 @@
-# Pendências do dono — o que depende de você, e de onde retomar
+# Pendências do mantenedor — o que depende de uma pessoa, e de onde retomar
 
-> Tudo que o código já não resolve sozinho: burocracia (Steam), decisões de produto, trabalho no projeto Unity e
-> validações que a VM da revisão não conseguiu fazer. Cada item diz **o que fazer**, **onde** e **como saber que
-> terminou**. Estado em 2026-09-27, branch `claude/revisao-produto-l2k7hr`.
+> Tudo que o código já não resolve sozinho: burocracia (Steam, Epic), decisões de produto, trabalho no projeto Unity
+> e validações que só dá para fazer com Docker e o jogo de verdade. Cada item diz **o que fazer**, **onde** e **como
+> saber que terminou**. Estado em 2026-09-27.
 >
 > Histórico do que foi feito: `git log` e o [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1). Estado geral: [`NEXT-STEPS.md`](NEXT-STEPS.md).
 
-## 0. Primeiro de tudo: trazer a branch para a `main`
+## 0. Ordem de deploy da revisão 2026-09
 
-Toda a revisão (2026-09-26 e 27) está na branch `claude/revisao-produto-l2k7hr`, no
-[PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1), com o CI verde. O caminho de sempre
-(ADR-0013): revisar e fazer `merge --no-ff` na `main`.
+A revisão de 2026-09-26 e 27 entrou na `main` pelo
+[PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1).
 
-**Ordem de deploy desta branch:** suba o **identity primeiro** e espere 15 min (a validade do JWT) antes dos
+**Ordem de deploy:** suba o **identity primeiro** e espere 15 min (a validade do JWT) antes dos
 outros serviços. Os consumidores de token passaram a exigir `iss`/`aud`, que só o identity novo emite — um token
 antigo ainda válido tomaria 401. No compose local isso não importa (tudo sobe junto e o login é refeito).
 
@@ -46,6 +45,11 @@ teste. Se aparecer `retry`/`failed`, o motivo está em `player_achievements.stea
 
 **Limite conhecido:** um app Steam por deploy (um `STEAM_APP_ID` ↔ um `STEAM_GAME_ID`). Outro jogo na Steam pede
 evoluir isso (ver seção 6).
+
+**1.5 Epic (opcional):** o **login Epic** (ID token do EOS Connect, `identity/008`) está pronto e desligado até
+receber o client ID. No [Epic Developer Portal](https://dev.epicgames.com/portal), criar o produto e um client do
+EOS Connect; copiar o **client ID** para `EPIC_CLIENT_ID` no `identity-service` (não é segredo: é o `aud` esperado do
+token). **Pronto quando:** `POST /sessions/epic` com um ID token real devolve JWT.
 
 ## 2. Projeto Unity — o trabalho do lado do jogo
 
@@ -97,9 +101,9 @@ dependências em dia quando ele reprovar um PR futuro.
 | Limite de tentativas no login (G5) | **feito em memória** (spec `identity/007`); com várias réplicas, trocar por um limite distribuído (Redis) no deploy real | idem |
 | Mais de um app Steam por deploy | quando um segundo jogo for para a Steam: `STEAM_APP_ID` por jogo no game-registry | `achievements-service/specs/019-steam-mirror` |
 | SDK UPM | extrair do Folclore quando a camada C# (guia, seção 4) estabilizar | guia Unity, seção 8 |
-| Abrir o repositório + post técnico | no fim, como você pediu; o checklist está na seção 8 | seção 8 |
+| Abrir o repositório + post técnico | no fim; o checklist está na seção 8 | seção 8 |
 
-## 7. Validar na sua máquina (a VM não conseguiu)
+## 7. Validar numa máquina com Docker e o jogo (fora do alcance do CI)
 
 - **Imagens Docker:** `infra/docker/gen-secrets.sh`, depois
   `docker compose -f infra/docker/docker-compose.yml up -d --build` e `scripts/demo-host-world.sh` (e
@@ -127,28 +131,15 @@ O que falta, numa passada só, na hora de abrir:
 4. ~~Segredos no histórico~~: **feito** com o gitleaks em todo o histórico (2026-09-27): nenhum segredo; os dois
    achados eram um comentário de teste (`key -> ...`), registrados em `.gitleaksignore`. Para repetir:
    `gitleaks git --log-opts="--all" .`
-5. **Vídeos tocando no README:** ver a seção 9.
+5. ~~Vídeos tocando no README~~: **feito** (seção 9).
 6. **Tornar público** (Settings → General → Danger Zone → Change visibility) e publicar o post técnico.
 
-## 9. Vídeos tocando dentro do GitHub
-
-O GitHub só toca vídeo embutido (README, docs, issues) a partir de um link `github.com/user-attachments/assets/…`,
-que ele gera quando o arquivo é enviado pela interface web. Não há API para esse envio, então este passo é seu:
-
-1. Abra qualquer caixa de comentário do GitHub (por exemplo, um comentário novo no PR #1) e arraste os quatro
-   MP4 de `docs/media/`: `go-multiplayer-control-plane.mp4`, `video-01-cadastro.mp4`,
-   `video-02-conquistas.mp4` e `video-03-jogador.mp4`. Não precisa publicar o comentário: os links aparecem no
-   texto assim que o envio termina.
-2. Copie os quatro links e me passe.
-
-Com eles, o plano é:
-
-- **README (pt e en):** o vídeo principal toca no topo, no lugar da capa estática.
-- **"Veja em ação":** as três capas continuam lado a lado, mas o clique leva a uma página `docs/VIDEOS.md` em que
-  cada vídeo de feature toca embutido, com o resumo do que ele mostra. Três players seguidos no README deixariam a
-  página pesada; a página própria mantém o README leve e dá a cada vídeo um link direto (`docs/VIDEOS.md#…`).
-- Os MP4 continuam em `docs/media/` como fonte (e para quem clona o repositório).
+## 9. Vídeos
 
 **Feito (2026-09-27):** o vídeo principal toca no topo dos dois READMEs e os quatro tocam em
-[`VIDEOS.md`](VIDEOS.md), pelos anexos publicados no PR #1. Enquanto o repositório for privado, só tocam para
-quem tem acesso a ele; ao abrir, passam a tocar para todos.
+[`VIDEOS.md`](VIDEOS.md), pelos anexos do GitHub (`github.com/user-attachments/assets/…`, gerados ao arrastar o MP4
+numa caixa de comentário; não há API para isso). Enquanto o repositório for privado, só tocam para quem tem acesso
+a ele; ao abrir, passam a tocar para todos. Um vídeo regravado precisa ser enviado de novo e ter o link trocado.
+
+**Pendente:** publicar no YouTube as versões narradas em alta qualidade. Elas não vão para o git: são geradas em
+`docs/media/hq/` (ver [`media/README.md`](media/README.md)), cada uma com a legenda `.srt`.

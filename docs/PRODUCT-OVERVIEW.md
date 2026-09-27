@@ -109,7 +109,7 @@ Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distri
 
 ### B. Jornada do jogador
 
-Login (anônimo, conta ou Steam, com presença marcada no jogo) → entra na fila **ou** abre/entra num mundo → o sistema aloca servidor (ou aponta para o host, no P2P) + emite token → joga no Dedicated Server real → o server reporta o desfecho (resultado terminal ou eventos por participante) → fan-out atualiza conquistas, leaderboard e analytics de forma assíncrona e idempotente.
+Login (anônimo, conta, Steam ou Epic, com presença marcada no jogo) → entra na fila **ou** abre/entra num mundo → o sistema aloca servidor (ou aponta para o host, no P2P) + emite token → joga no Dedicated Server real → o server reporta o desfecho (resultado terminal ou eventos por participante) → fan-out atualiza conquistas, leaderboard e analytics de forma assíncrona e idempotente.
 
 ### C. Jornada do operador (live-ops)
 

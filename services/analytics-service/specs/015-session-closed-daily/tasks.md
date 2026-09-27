@@ -15,6 +15,6 @@
       integration)
 - [x] 7. Validação ao vivo: fechar sessão real, conferir
       `sessionCloseDaily` com 1 ponto no dia de hoje
-- [ ] 8. admin-bff (028): passthrough, validar ao vivo
-- [ ] 9. admin-ui (070): card pareado com "Saúde das sessões", `raw-stats`
+- [x] 8. admin-bff (028): passthrough, validar ao vivo
+- [x] 9. admin-ui (070): card pareado com "Saúde das sessões", `raw-stats`
       vira span 12; validar ao vivo (Playwright)

@@ -2,7 +2,7 @@
 
 | Arquivo | O que mostra | Onde aparece |
 |---|---|---|
-| [`go-multiplayer-control-plane.mp4`](go-multiplayer-control-plane.mp4) | o filme do produto (~3 min, 1080p): o problema, como funciona, qualquer tipo de jogo, dedicado ou P2P, conquistas e regras, um tour pelo console e a engenharia. Os exemplos usam o Folclore Souls, mas o foco é o produto | links no README, PRODUCT-OVERVIEW e contrato do `host_world_dropin` |
+| [`go-multiplayer-control-plane.mp4`](go-multiplayer-control-plane.mp4) | o filme do produto (~3 min, 1080p): o problema, como funciona, qualquer tipo de jogo, dedicado ou P2P, conquistas e regras, um tour pelo console e a engenharia. Os exemplos usam o Folclore Souls, mas o foco é o produto | fonte do vídeo que toca no topo do README e em [`../VIDEOS.md`](../VIDEOS.md) (pelo anexo do GitHub); links no PRODUCT-OVERVIEW e no contrato do `host_world_dropin` |
 | `hero.jpg` | quadro da arquitetura com o fan-out aceso e o selo "Assista ao vídeo" | capa de reserva (o README toca o vídeo pelo anexo do GitHub; ver [`../VIDEOS.md`](../VIDEOS.md)) |
 | `invasao-p2p.jpg` | quadro da invasão P2P com a conquista desbloqueada | PRODUCT-OVERVIEW, contrato do `host_world_dropin` |
 | `thumb-0N-*.jpg` | as capas clicáveis dos três vídeos de feature: um quadro do vídeo com o título, a duração e o play | seção "Veja em ação" do README |

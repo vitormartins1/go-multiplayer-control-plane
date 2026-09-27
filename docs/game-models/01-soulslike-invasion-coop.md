@@ -80,7 +80,7 @@ Aqui o modelo atual quebra de vez. **Não há vitória de partida** — há **ou
 
 ## 6. Impacto no backend (o elo com o control plane)
 
-Confronto com o [baseline](./README.md#estado-atual-do-backend-baseline). Veredito: **❌ exige generalização** — este jogo não cabe no modelo atual em nenhum dos três serviços.
+Confronto com o [baseline](./README.md#baseline-histórico-do-backend-ponto-de-partida-pré-adr-0023). Veredito: **❌ exige generalização** — este jogo não cabe no modelo atual em nenhum dos três serviços.
 
 - **Cabe no modelo atual?** ❌. O atual é "fila forma partida simétrica de N iguais → 1 ReportResult com `Won`/`Score`". Souls é "mundo persistente de host + join-in-progress de papéis + eventos por participante".
 

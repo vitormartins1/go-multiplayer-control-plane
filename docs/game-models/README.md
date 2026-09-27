@@ -8,7 +8,7 @@
 
 ## Por que este documento existe
 
-O backend (matchmaking, session, game-registry, fan-out) precisa dar suporte a **vários tipos de jogo multiplayer** — cooperativo, competitivo, por times, battle royale, turnos, etc. Até a ADR-0023 ele assumia **um único arquétipo** (N jogadores independentes, cada um com placar, alguém vence por booleano — ver "Estado atual do backend"). O jogo-exemplo do data plane (Unity) acabou moldando os contratos, e queremos genericidade **com qualidade**, não por acidente.
+O backend (matchmaking, session, game-registry, fan-out) precisa dar suporte a **vários tipos de jogo multiplayer** — cooperativo, competitivo, por times, battle royale, turnos, etc. Até a ADR-0023 ele assumia **um único arquétipo** (N jogadores independentes, cada um com placar, alguém vence por booleano — ver "Baseline histórico do backend"). O jogo-exemplo do data plane (Unity) acabou moldando os contratos, e queremos genericidade **com qualidade**, não por acidente.
 
 A abordagem é **engenharia reversa de jogos reais**: para cada jogo que nos interessa, dissecamos como funcionam sessão, matchmaking, condição de término e resultado — e daí extraímos o que o backend precisa **modelar, mudar ou generalizar**. Este documento é o input de design; ADRs e specs são o output.
 
@@ -23,7 +23,7 @@ flowchart LR
     A[Escolher um jogo real] --> B[Preencher a ficha<br/>_TEMPLATE-jogo.md]
     B --> C[Engenharia reversa:<br/>sessão · matchmaking · término · resultado · bordas]
     C --> D[Extrair requisitos:<br/>o que o backend precisa modelar]
-    D --> E[Confrontar com o<br/>Estado atual do backend]
+    D --> E[Confrontar com o<br/>Baseline do backend]
     E --> F{Cabe no modelo<br/>atual?}
     F -->|sim| G[Registrar na matriz de cobertura]
     F -->|não| H[Anotar gap no<br/>Log de generalizações]

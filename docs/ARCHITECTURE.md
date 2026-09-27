@@ -17,7 +17,7 @@ A observabilidade é o **instrumento de medição** dessa comparação, não um 
 
 ## 2. Topologia: control plane (Go) vs data plane (a engine do jogo)
 
-A decisão estrutural mais importante: o realtime de gameplay **não é Go**. Go cuida do *control plane*; o Unity Dedicated Server cuida do *data plane*. É como o GameLift de fato funciona — ele orquestra, não simula. (ADR-0010, ADR-0011)
+A decisão estrutural mais importante: o realtime de gameplay **não é Go**. Go cuida do *control plane*; o servidor ou o host do jogo cuida do *data plane* (Unity é a integração de referência; ADR-0033). É como o GameLift de fato funciona — ele orquestra, não simula. (ADR-0010, ADR-0011)
 
 > **Qualquer engine** ([ADR-0033](adr/0033-engine-and-store-agnostic.md)). O data plane nasceu como Unity Dedicated
 > Server, e o Unity segue como integração de referência, mas o contrato não depende dele: gRPC e REST versionados,
@@ -38,7 +38,7 @@ flowchart TB
     direction TB
     subgraph EDGE["APIs do jogador"]
       direction LR
-      ID["identity<br/>contas · Steam · JWT"]
+      ID["identity<br/>contas · Steam · Epic · JWT"]
       MM["matchmaking<br/>fila · invasão · sinais"]
       SE["session<br/>mundos · alocação · connect token"]
       PD["player-data · cloud-save"]
@@ -183,8 +183,9 @@ que seria recusado; `enforce` recusa.
 Um `world_token` de mundo já fechado só serve para reenviar um `ReportParticipationEvent` (o reenvio do
 `HOST_KILLED`, spec `session/029`).
 
-O JWT do jogador vem do identity, que aceita **login Steam** (ticket de sessão verificado na Steam Web API) além de
-conta própria e anônimo; a conta Steam é uma identidade externa ligada à conta do control plane (ADR-0031).
+O JWT do jogador vem do identity, que aceita **login Steam** (ticket de sessão verificado na Steam Web API) e
+**login Epic** (ID token do EOS Connect, validado pelo JWKS da Epic, `identity/008`) além de conta própria e anônimo;
+a conta da loja é uma identidade externa ligada à conta do control plane (ADR-0031).
 Tokens exigem `iss`, `aud` e `exp`; a chave pública vem do JWKS, com refetch por `kid` desconhecido.
 
 ---
@@ -213,7 +214,7 @@ Protocolo, armazenamento e porta local de cada um (o mapa completo, com bancos e
 |---|---|---|---|
 | identity | REST | Postgres | 8081 |
 | game-registry | REST | Postgres | 8090 |
-| matchmaking | gRPC (streaming) | memória | 50051 |
+| matchmaking | gRPC (streaming) | memória | 50051 · 8086 |
 | session | gRPC + REST admin | memória + Postgres (histórico) | 50052 · 8087 |
 | achievements | REST + consumidor SQS | Postgres | 8082 |
 | leaderboard | REST + consumidor SQS | Redis | 8085 |

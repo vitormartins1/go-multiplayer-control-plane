@@ -48,7 +48,7 @@ O primeiro jogo em produção é o **Folclore Souls**, um Souls-like com mundo d
 | 🎟️ **Ingresso criptográfico** | Cada jogador recebe um connect token Ed25519 com o seu papel, validado **offline** pelo servidor do jogo. |
 | 🏆 **Conquistas sem deploy** | Regras editadas num canvas visual, critério por evento ou por métrica, e espelho automático na **Steam**. |
 | 📊 **Rankings e analytics** | Leaderboards por janela (diária, semanal, mensal, geral) e analytics por jogo, modo e papel. |
-| 💾 **Dados do jogador** | Dados em JSON e save na nuvem por jogador, com login anônimo, por senha ou pela Steam. |
+| 💾 **Dados do jogador** | Dados em JSON e save na nuvem por jogador, com login anônimo, por senha, pela Steam ou pela Epic. |
 | 🧭 **Console de operação** | Jogos, salas ao vivo, frota, jogadores, regras, conquistas e analytics, numa tela só. |
 | 🔭 **Observável de fábrica** | Métricas RED, tracing OpenTelemetry até o banco e dashboards Grafana prontos. |
 
@@ -123,7 +123,7 @@ em [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - **Engines e lojas** ([ADR-0033](docs/adr/0033-engine-and-store-agnostic.md)): o contrato é gRPC e REST, e o
   ingresso é validado por chave pública, então nada depende de engine. Unity é a integração de referência; Godot e
   Unreal integram direto pelo contrato, e a web (Three.js) está no roadmap. Na loja, a Steam está completa (login,
-  conquistas, P2P); o login da Epic é o próximo; GOG, sob demanda.
+  conquistas, P2P), a Epic tem login (EOS Connect) e o espelho de conquistas dela fica para depois; GOG, sob demanda.
 - **Ainda não exponha na internet:** o console não tem login e a autenticação do gRPC da sessão sobe em modo
   de observação (`warn`).
 - **Próximos passos:** deploy de referência na AWS, login no console e um SDK Unity empacotado

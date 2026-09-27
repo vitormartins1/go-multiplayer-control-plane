@@ -22,6 +22,7 @@ Os serviços em Go deste repositório, o console (`services/admin-ui` e `admin-b
 - **Tokens**: o JWT do jogador (identity), o connect token Ed25519 (session) e o `world_token` de um mundo P2P.
 - **Autenticação do gRPC do session** (ADR-0030): quem pode chamar cada RPC.
 - **Login Steam** e o espelho de conquistas: a chave de publisher da Steam nunca pode vazar em log, erro ou resposta.
+- **Login Epic**: o ID token do EOS Connect é validado pelo JWKS da Epic (assinatura, `iss`, `aud`, `exp`, `iat`).
 
 ## Limitações conhecidas (não são vulnerabilidades)
 

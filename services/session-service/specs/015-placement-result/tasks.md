@@ -35,6 +35,6 @@ Ordem: proto → domínio → validação/carimbo → transport → publisher �
 
 ## Verificação final
 
-- [ ] **T12 (automático)** — `go build ./...`; `go test ./services/session-service/... -race -cover` (verde, service/domain ≥ 80%); `golangci-lint run ./services/session-service/...` (0 issues); `gofmt`.
+- [x] **T12 (automático)** — `go build ./...`; `go test ./services/session-service/... -race -cover` (verde, service/domain ≥ 80%); `golangci-lint run ./services/session-service/...` (0 issues); `gofmt`.
 - [ ] **T13 (smoke manual — pendente do Vitor)** — subir docker-compose; via cliente de teste, `ReportResult` com `placement` de um lobby BR → conferir a sessão encerrada e o envelope `kind=placement` no tópico (log do consumidor / LocalStack).
-- [ ] **T14** — Loop de aprendizado (CLAUDE.md): avaliar se há algo novo de Go. Provável **nada novo** (novo ponteiro no tagged union + dispatch por kind, já documentado). Se nada, dizer e não inventar.
+- [x] **T14** — Loop de aprendizado (CLAUDE.md): avaliar se há algo novo de Go. Provável **nada novo** (novo ponteiro no tagged union + dispatch por kind, já documentado). Se nada, dizer e não inventar.

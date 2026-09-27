@@ -8,12 +8,12 @@ O loop MVP (`login → find match → aloca server + connect token → partida �
 
 | Serviço | Features futuras (não construídas) |
 |---|---|
-| identity | login federado além da Steam (Google, GOG, Epic — ADR-0031 prevê o desenho); account linking (guest → conta) |
+| identity | login federado além de Steam e Epic (Google, GOG — ADR-0031 prevê o desenho); account linking (guest → conta) |
 | achievements | conquistas secretas / recompensas associadas |
 | player-data | controle de concorrência (optimistic locking); quota por jogador; bulk get/set |
 | cloud-save | múltiplos slots; compressão / sync delta |
 | leaderboard | boards por modo/temporada (boards por métrica já existem — spec 003); **ranking de invasões/co-ops** (host_world_dropin, cauda); anti-cheat de score; seasons nomeadas (adiado, precisa de ADR sobre onde vive a config) |
-| analytics | telemetria genérica (`POST /events`); sessionization / funis / retenção; dimensão "boss" nas participações (se o Folclore pedir — ver decisão D3 da revisão 2026-09) |
+| analytics | telemetria genérica (`POST /events`); sessionization / funis / retenção; dimensão "boss" nas participações (se o Folclore pedir) |
 | matchmaking | agrupamento por latência/região; relaxamento progressivo; party/grupos, backfill; **pools por região** (host_world_dropin, follow-up) |
 | session | virar o `SESSION_AUTH_MODE` para `enforce` depois do Unity migrar (a autenticação existe desde 2026-09, spec 030); alocação de server **sob demanda** (host_world_dropin, follow-up); persistir mundos abertos; reconnection / spectator / migração de sessão |
 | game-registry | purge assíncrono do soft delete (ADR-0025, Opção C — gated por evidência) |

@@ -17,6 +17,7 @@ analytics and an operations console. What GameLift and PlayFab sell per player, 
 [**Videos**](docs/VIDEOS.md) ·
 [Getting started](#getting-started) ·
 [Documentation](#documentation) ·
+[Integrate a game](docs/integration/UNITY-GUIA-INTEGRACAO.md) ·
 [Contributing](CONTRIBUTING.md)
 
 </div>
@@ -50,14 +51,14 @@ The first game in production is **Folclore Souls**, a Souls-like with host world
 | 🎟️ **Cryptographic tickets** | Each player gets an Ed25519 connect token carrying their role, validated **offline** by the game server. |
 | 🏆 **Achievements without redeploys** | Rules edited on a visual canvas, event-based or metric-based criteria, and automatic mirroring to **Steam**. |
 | 📊 **Leaderboards and analytics** | Leaderboards per window (daily, weekly, monthly, all-time) and analytics per game, mode and role. |
-| 💾 **Player data** | JSON player data and cloud saves, with anonymous, password or Steam login. |
+| 💾 **Player data** | JSON player data and cloud saves, with anonymous, password, Steam or Epic login. |
 | 🧭 **Operations console** | Games, live rooms, fleet, players, rules, achievements and analytics, in one place. |
 | 🔭 **Observable by default** | RED metrics, OpenTelemetry tracing down to the database, and ready-made Grafana dashboards. |
 
 ## See it in action
 
 The video at the top shows the whole product in 3 minutes. The three below are recorded from the real console
-and walk through one feature at a time (narration in Portuguese).
+and walk through one feature at a time (Portuguese captions).
 
 <table>
 <tr>
@@ -124,7 +125,8 @@ listed in [`infra/docker/README.md`](infra/docker/README.md); tests, lint and th
 - **Engines and stores** ([ADR-0033](docs/adr/0033-engine-and-store-agnostic.md)): the contract is gRPC and REST,
   and tickets are validated with a public key, so nothing depends on the engine. Unity is the reference
   integration; Godot and Unreal integrate straight through the contract, and the web (Three.js) is on the roadmap.
-  On the store side, Steam is complete (login, achievements, P2P); Epic login is next; GOG, on demand.
+  On the store side, Steam is complete (login, achievements, P2P), Epic has login (EOS Connect) with achievement
+  mirroring still to come; GOG, on demand.
 - **Don't expose it to the internet yet:** the console has no login, and the session gRPC auth starts in
   observe-only mode (`warn`).
 - **Next:** a reference AWS deployment, console login and a packaged Unity SDK ([roadmap](docs/NEXT-STEPS.md)).

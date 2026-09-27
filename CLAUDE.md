@@ -9,7 +9,7 @@ Metodologia: Spec-Driven Development (SDD). Leia `docs/sdd/SDD-GUIDE.md` antes d
 - **Linguagem:** Go 1.26 (`go.mod`) — **módulo único** na raiz (ainda não multi-módulo; ver ADR-0001)
 - **Arquitetura interna:** Hexagonal (domain / service / repository / transport)
 - **API:** REST com `net/http` (identity, game-registry, achievements, player-data, cloud-save, leaderboard, analytics, admin-bff) | gRPC (matchmaking com streaming; session unário + REST admin)
-- **Banco local:** PostgreSQL via `pgx/v5` por padrão; Redis (leaderboard) e MinIO (cloud-save) — banco por serviço, ver ADR-0015
+- **Banco local:** PostgreSQL via `pgx/v5` por padrão; Redis (leaderboard) e S3 via LocalStack (cloud-save) — banco por serviço, ver ADR-0015
 - **Cloud:** AWS — compute por serviço (Lambda/Fargate/ECS-EC2/EC2/EKS — ver ADR-0005), DynamoDB, SQS, API Gateway, ECR
 - **IaC:** Terraform (local → LocalStack, prod → AWS)
 - **Observabilidade:** Prometheus + Grafana + OpenTelemetry
