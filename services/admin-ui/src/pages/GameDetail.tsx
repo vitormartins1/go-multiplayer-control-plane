@@ -85,8 +85,14 @@ export function GameDetail() {
             gameModes.map((m) => {
               const Icon = ARCHETYPE_META[m.archetype].icon;
               return (
-                <Badge key={m.modeId} variant="light" color="gray" leftSection={<Icon size={12} />}>
+                <Badge
+                  key={m.modeId}
+                  variant="light"
+                  color={m.topology === "p2p" ? "grape" : "gray"}
+                  leftSection={<Icon size={12} />}
+                >
                   {m.modeId}
+                  {m.topology === "p2p" ? " · P2P" : ""}
                 </Badge>
               );
             })

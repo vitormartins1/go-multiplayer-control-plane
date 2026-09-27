@@ -100,6 +100,7 @@ type ModeSummary struct {
 	ModeID      string `json:"modeId"`
 	DisplayName string `json:"displayName,omitempty"`
 	Archetype   string `json:"archetype"`
+	Topology    string `json:"topology,omitempty"` // dedicated | p2p (session/031, admin-ui/091)
 }
 
 // Achievement é uma entrada do catálogo de conquistas de um jogo. O critério é

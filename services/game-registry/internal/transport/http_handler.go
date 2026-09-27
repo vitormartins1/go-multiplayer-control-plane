@@ -160,6 +160,7 @@ type modeSummaryDTO struct {
 	ModeID      string `json:"modeId"`
 	DisplayName string `json:"displayName,omitempty"`
 	Archetype   string `json:"archetype"`
+	Topology    string `json:"topology,omitempty"` // session/031 (aditivo)
 }
 
 // modeDTO é um modo completo (coleção multiplayer-profiles). O embed do
@@ -366,7 +367,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	for i := range g.MultiplayerModes {
 		m := &g.MultiplayerModes[i]
 		summaries = append(summaries, modeSummaryDTO{
-			ModeID: m.ModeID, DisplayName: m.DisplayName, Archetype: m.Profile.Archetype,
+			ModeID: m.ModeID, DisplayName: m.DisplayName, Archetype: m.Profile.Archetype, Topology: m.Profile.Topology,
 		})
 	}
 	httpkit.WriteJSON(w, http.StatusOK, gameWithProfileDTO{

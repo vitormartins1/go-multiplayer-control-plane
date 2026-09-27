@@ -163,6 +163,7 @@ func TestGetGame_IncluiResumoDosModos(t *testing.T) {
 	require.Len(t, resp.MultiplayerModes, 1)
 	assert.Equal(t, "tdm", resp.MultiplayerModes[0]["modeId"])
 	assert.Equal(t, "queue_arena", resp.MultiplayerModes[0]["archetype"])
+	assert.Equal(t, "dedicated", resp.MultiplayerModes[0]["topology"], "admin-ui/091: topologia no resumo")
 	assert.Nil(t, resp.MultiplayerModes[0]["params"], "resumo não carrega params")
 }
 

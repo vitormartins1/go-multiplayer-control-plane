@@ -48,6 +48,8 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Console | `299fca3` | mapa de serviços com o analytics e as dependências reais; capturas novas na documentação | Playwright |
 | ADRs | `aa344f1` | ADR-0031 (identidade federada, rascunho A) e spec `session/031` em rascunho | — |
 | P2P | `43441db` | topologia p2p no `host_world_dropin` (spec `session/031`, ADR-0032, contrato 1.4.0): session sem GameServer + world token, registry, matchmaking, admin "P2P · host" | unit + **demo ao vivo p2p e dedicado em `enforce`** |
+| Heartbeat | `2ffa569` | heartbeat do mundo (spec `session/032`, contrato 1.5.0): mundo que avisa não fecha mais aos 30 min; host caído fecha em ~90 s como `abandoned` | unit + **demo ao vivo nos dois modos** |
+| Console P2P | ver `git log` | hospedagem e sinal de vida no console (spec `admin-ui/091`): filtro e coluna Hospedagem, badge de heartbeat, detalhe p2p com aviso de confiança, Fleet "P2P — sem frota", selo P2P no jogo | vitest (27), build, **Playwright com mundos p2p/dedicado reais** |
 
 
 ## Em andamento
@@ -56,7 +58,6 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Próximo (executável sem decisão do dono)
 
-0. Console: trabalho de UI/layout para o que é específico de p2p (pedido do dono em 2026-09-27).
 0. Guia de integração para o projeto Unity (login Steam, auth, p2p, heartbeat) — no fim desta rodada.
 1. Espelhar conquistas na Steam (consumidor do fan-out → Web API `SetUserStatsForGame`) — precisa do mapeamento
    conquista → nome da API na Steam por jogo.

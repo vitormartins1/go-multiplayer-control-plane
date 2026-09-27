@@ -60,12 +60,15 @@ type sessionDTO struct {
 
 	// Detalhe rico (session spec 018) — passthrough 1:1; os tipos do domain já
 	// espelham o shape do session, então decodifica direto neles.
-	Archetype   string               `json:"archetype"`
-	Topology    string               `json:"topology"` // session/031
-	ProfileHash string               `json:"profileHash"`
-	ModeParams  json.RawMessage      `json:"modeParams"`
-	Teams       []domain.SessionTeam `json:"teams"`
-	Result      *domain.MatchResult  `json:"result"`
+	Archetype string `json:"archetype"`
+	Topology  string `json:"topology"` // session/031
+	// admin-ui/091: conexão do host p2p e último heartbeat (session/032).
+	HostConnection  string               `json:"hostConnection"`
+	LastHeartbeatAt *time.Time           `json:"lastHeartbeatAt"`
+	ProfileHash     string               `json:"profileHash"`
+	ModeParams      json.RawMessage      `json:"modeParams"`
+	Teams           []domain.SessionTeam `json:"teams"`
+	Result          *domain.MatchResult  `json:"result"`
 
 	// Participants é a base do histórico persistido (spec 025).
 	Participants []participantDTO `json:"participants"`
@@ -268,26 +271,28 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 			})
 		}
 		out = append(out, domain.GameSession{
-			SessionID:     d.SessionID,
-			MatchID:       d.MatchID,
-			GameID:        d.GameID,
-			ModeID:        d.ModeID,
-			State:         d.State,
-			Players:       players,
-			ServerAddress: d.ServerAddress,
-			OpenedAt:      d.OpenedAt,
-			ClosedAt:      d.ClosedAt,
-			CloseReason:   d.CloseReason,
-			Origin:        d.Origin,
-			HostPlayerID:  d.HostPlayerID,
-			RoleSlots:     slots,
-			Archetype:     d.Archetype,
-			Topology:      d.Topology,
-			ProfileHash:   d.ProfileHash,
-			ModeParams:    d.ModeParams,
-			Teams:         d.Teams,
-			Result:        d.Result,
-			Participants:  participants,
+			SessionID:       d.SessionID,
+			MatchID:         d.MatchID,
+			GameID:          d.GameID,
+			ModeID:          d.ModeID,
+			State:           d.State,
+			Players:         players,
+			ServerAddress:   d.ServerAddress,
+			OpenedAt:        d.OpenedAt,
+			ClosedAt:        d.ClosedAt,
+			CloseReason:     d.CloseReason,
+			Origin:          d.Origin,
+			HostPlayerID:    d.HostPlayerID,
+			RoleSlots:       slots,
+			Archetype:       d.Archetype,
+			Topology:        d.Topology,
+			HostConnection:  d.HostConnection,
+			LastHeartbeatAt: d.LastHeartbeatAt,
+			ProfileHash:     d.ProfileHash,
+			ModeParams:      d.ModeParams,
+			Teams:           d.Teams,
+			Result:          d.Result,
+			Participants:    participants,
 		})
 	}
 	return out

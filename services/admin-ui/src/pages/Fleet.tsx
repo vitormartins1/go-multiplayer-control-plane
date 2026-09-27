@@ -20,6 +20,7 @@ import { GameCover } from "../components/GameCover";
 import { FleetLocationBadge } from "../components/FleetLocationBadge";
 import { ChannelStrip } from "../components/ChannelStrip";
 import { fleetLocationOf } from "../lib/fleetLocation";
+import { p2pOnly } from "../lib/hosting";
 
 // Fleet (spec 059, simplificada na revisão 2026-09 — decisão D4): só dado
 // real. Um card por jogo com fleet cadastrada, com o status que o
@@ -31,6 +32,9 @@ import { fleetLocationOf } from "../lib/fleetLocation";
 export function Fleet() {
   const { data: games, loading, error, reload } = useAsync((s) => api.games(s), []);
   const fleetGames = (games ?? []).filter((g) => g.fleet);
+  // jogos só com modos p2p (admin-ui/091) não precisam de fleet: o jogo do
+  // host hospeda. Ficam fora da conta "com fleet / total".
+  const needFleet = (games ?? []).filter((g) => !p2pOnly(g.multiplayerModes));
 
   return (
     <Stack>
@@ -62,7 +66,9 @@ export function Fleet() {
           <ChannelStrip
             icon={IconServer2}
             label="Cadastro"
-            readout={`${fleetGames.length}/${games.length} jogos com fleet`}
+            readout={`${fleetGames.length}/${needFleet.length} jogos com fleet${
+              games.length > needFleet.length ? ` · ${games.length - needFleet.length} só P2P` : ""
+            }`}
           />
           <FleetConfigTable games={games} onSaved={reload} />
         </>
@@ -159,6 +165,7 @@ function FleetConfigRow({ game, onSaved }: { game: Game; onSaved: () => void }) 
   const [saving, setSaving] = useState(false);
   const dirty = fleetInput.trim() !== (game.fleet ?? "");
   const hasFleet = !!game.fleet;
+  const onlyP2P = p2pOnly(game.multiplayerModes);
 
   async function save() {
     setSaving(true);
@@ -181,23 +188,32 @@ function FleetConfigRow({ game, onSaved }: { game: Game; onSaved: () => void }) 
           {/* badge + verbo do botão (spec 079): sinaliza que preencher +
               salvar aqui é o que faz o jogo aparecer na Visão geral — sem
               isso a linha não se distinguia de "edição comum". */}
-          {!hasFleet && (
-            <Badge size="xs" variant="outline" color="gray">
-              sem fleet
+          {onlyP2P ? (
+            <Badge size="xs" variant="light" color="grape">
+              P2P — sem frota
             </Badge>
+          ) : (
+            !hasFleet && (
+              <Badge size="xs" variant="outline" color="gray">
+                sem fleet
+              </Badge>
+            )
           )}
         </Group>
       </Table.Td>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
           <TextInput
-            placeholder="packet-arena"
+            placeholder={onlyP2P ? "não precisa (P2P)" : "packet-arena"}
+            // só-P2P sem fleet: nada a cadastrar (o jogo do host hospeda); se o
+            // jogo ganhar um modo dedicado, o campo volta a valer.
+            disabled={onlyP2P && !hasFleet}
             value={fleetInput}
             onChange={(e) => setFleetInput(e.currentTarget.value)}
             size="xs"
             w={200}
           />
-          <Button size="xs" onClick={save} loading={saving} disabled={!dirty}>
+          <Button size="xs" onClick={save} loading={saving} disabled={!dirty || (onlyP2P && !hasFleet)}>
             {hasFleet ? "Salvar" : "Ativar"}
           </Button>
         </Group>

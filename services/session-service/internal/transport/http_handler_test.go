@@ -409,3 +409,19 @@ func TestAdminFleetStatus_AgonesFleetExistente(t *testing.T) {
 		Cluster: "local", FleetExists: true, Desired: 2, Current: 2, Ready: 2, Allocated: 1,
 	}, dto)
 }
+
+// admin-ui/091: o JSON de sessão traz a conexão do host p2p e o último
+// heartbeat; ausentes quando não há.
+func TestToSessionDTO_P2PEHeartbeat(t *testing.T) {
+	hb := time.Date(2026, 9, 27, 12, 0, 30, 0, time.UTC)
+	dto := toSessionDTO(domain.Session{
+		ID: "w1", Origin: domain.OriginHostWorld, HostConnection: "steam:1", LastHeartbeatAt: hb,
+		Profile: &domain.ProfileSnapshot{Archetype: "host_world_dropin", Topology: domain.TopologyP2P},
+	})
+	assert.Equal(t, "p2p", dto.Topology)
+	assert.Equal(t, "steam:1", dto.HostConnection)
+	require.NotNil(t, dto.LastHeartbeatAt)
+	assert.Equal(t, hb, *dto.LastHeartbeatAt)
+
+	assert.Nil(t, toSessionDTO(domain.Session{ID: "m1"}).LastHeartbeatAt)
+}

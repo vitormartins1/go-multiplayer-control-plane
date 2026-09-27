@@ -140,6 +140,7 @@ export interface ModeSummary {
   modeId: string;
   displayName?: string;
   archetype: MultiplayerProfile["archetype"];
+  topology?: "dedicated" | "p2p"; // admin-ui/091
 }
 
 // Regras do modeId (spec game-registry/009): slug estável, imutável na prática.
@@ -279,6 +280,8 @@ export interface GameSession {
   // arquétipo), formação por time e resultado persistido (fechadas por result).
   archetype?: string;
   topology?: "dedicated" | "p2p"; // session/031; ausente no histórico persistido
+  hostConnection?: string; // p2p: id de conexão do host (ex.: SteamID) — admin-ui/091
+  lastHeartbeatAt?: string; // último heartbeat do mundo (session/032); ausente = o jogo não manda
   profileHash?: string;
   modeParams?: Record<string, unknown>;
   teams?: SessionTeam[];

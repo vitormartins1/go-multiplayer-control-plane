@@ -19,7 +19,9 @@ import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, serverLabel, shortId, truncate } from "../lib/format";
+import { closeReasonLabel, formatDuration, shortId } from "../lib/format";
+import { hostingOf } from "../lib/hosting";
+import { HeartbeatBadge, HostingCell, P2PTrustNote } from "../components/Hosting";
 import { sessionStateLabel } from "../lib/vocab";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
@@ -173,7 +175,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
                 <Table.Th>Modo</Table.Th>
                 <Table.Th>Estado</Table.Th>
                 <Table.Th>Players</Table.Th>
-                <Table.Th>Server</Table.Th>
+                <Table.Th>Hospedagem</Table.Th>
                 <Table.Th>Tempos</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -238,9 +240,12 @@ function SessionRow({
           </Badge>
         </Table.Td>
         <Table.Td>
-          <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
-            {sessionStateLabel(s.state, s.closeReason)}
-          </Badge>
+          <Stack gap={4} align="flex-start">
+            <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
+              {sessionStateLabel(s.state, s.closeReason)}
+            </Badge>
+            <HeartbeatBadge session={s} />
+          </Stack>
         </Table.Td>
         <Table.Td>
           {/* resumo compacto (034): a lista completa vive no painel expandido.
@@ -248,12 +253,8 @@ function SessionRow({
           <PlayersSummary players={s.players} size={32} />
         </Table.Td>
         <Table.Td>
-          {/* fallback "—" (achado: coluna ficava em branco em sessão
-              fechada — servidor já desalocado — e parecia bug de
-              carregamento; o painel expandido já tinha o fallback). */}
-          <Text ff="monospace" size="sm" c={serverLabel(s) === "—" ? "dimmed" : undefined}>
-            {s.serverAddress ? truncate(s.serverAddress) : serverLabel(s)}
-          </Text>
+          {/* GameServer / P2P + conexão do host / "—" (admin-ui/091) */}
+          <HostingCell session={s} />
         </Table.Td>
         <Table.Td>
           {s.state === "open" ? (
@@ -287,10 +288,16 @@ function SessionRow({
                       <Text ff="monospace" size="xs">{s.modeId || "default"}</Text>
                     </Stack>
                     <Stack gap={2}>
-                      <Text size="xs" c="dimmed" fw={600}>SERVIDOR</Text>
-                      <Text ff="monospace" size="xs">{serverLabel(s)}</Text>
+                      <Text size="xs" c="dimmed" fw={600}>
+                        {hostingOf(s) === "p2p" ? "CONEXÃO DO HOST (P2P)" : "SERVIDOR"}
+                      </Text>
+                      <Text ff="monospace" size="xs">
+                        {hostingOf(s) === "p2p" ? s.hostConnection || "—" : s.serverAddress || "—"}
+                      </Text>
                     </Stack>
                   </Group>
+
+                  {hostingOf(s) === "p2p" && <P2PTrustNote />}
 
                   {/* roster/formação/resultado vivem no painel por arquétipo
                       (spec 019) — sem bloco PLAYERS duplicado. */}

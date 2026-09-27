@@ -359,6 +359,18 @@ func TestGames_DelegaAoRegistry(t *testing.T) {
 	assert.Equal(t, "tetris", got[0].Slug)
 }
 
+// admin-ui/091: o resumo de modo da listagem carrega a topologia.
+func TestGames_ResumoDosModosComTopologia(t *testing.T) {
+	reg := &fakeRegistry{
+		games:   []domain.Game{{ID: "g1", Slug: "souls"}},
+		profile: json.RawMessage(`[{"modeId":"default","archetype":"host_world_dropin","topology":"p2p","params":{}}]`),
+	}
+	got, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).Games(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got[0].MultiplayerModes, 1)
+	assert.Equal(t, "p2p", got[0].MultiplayerModes[0].Topology)
+}
+
 func TestCreateGame_DelegaAoRegistry(t *testing.T) {
 	reg := &fakeRegistry{}
 	g, err := New(Deps{Metrics: fakeMetrics{}, Reader: &fakeReader{}, Registry: reg}).CreateGame(context.Background(), "tetris", "Tetris")

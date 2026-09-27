@@ -22,7 +22,9 @@ import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Gam
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, serverLabel, shortId, truncate } from "../lib/format";
+import { closeReasonLabel, formatDuration, shortId, truncate } from "../lib/format";
+import { hostingOf } from "../lib/hosting";
+import { closeEffect, HeartbeatBadge, HostingCell, P2PTrustNote } from "../components/Hosting";
 import { sessionStateLabel } from "../lib/vocab";
 import { EmptyState } from "../components/EmptyState";
 import { SessionAvatar } from "../components/SessionAvatar";
@@ -143,6 +145,8 @@ export function Rooms() {
   }
   const [filter, setFilter] = useState<"all" | "open" | "closed">("open");
   const [modeFilter, setModeFilter] = useState<string | null>(null);
+  // filtro de hospedagem (admin-ui/091): só aparece quando há mundo p2p.
+  const [hostingFilter, setHostingFilter] = useState<"all" | "dedicated" | "p2p">("all");
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [closing, setClosing] = useState<GameSession | null>(null);
@@ -213,12 +217,15 @@ export function Rooms() {
 
   // filtro por modo só aparece com ≥2 modos distintos na lista (sem ruído).
   const distinctModes = useMemo(() => [...new Set(allRows.map(modeOf))].sort(), [allRows]);
+  const hasP2P = useMemo(() => allRows.some((s) => hostingOf(s) === "p2p"), [allRows]);
   const rows = useMemo(() => {
-    const filtered = modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows;
+    const byMode = modeFilter ? allRows.filter((s) => modeOf(s) === modeFilter) : allRows;
+    const filtered =
+      hasP2P && hostingFilter !== "all" ? byMode.filter((s) => hostingOf(s) === hostingFilter) : byMode;
     // Array.prototype.sort é estável (ECMA2019+) — itens iguais no critério
     // mantêm a ordem original da API, de propósito (spec 060, item 11).
     return [...filtered].sort((a, b) => compareSessions(a, b, sortBy, sortDir, gamesById));
-  }, [allRows, modeFilter, sortBy, sortDir, gamesById]);
+  }, [allRows, modeFilter, hasP2P, hostingFilter, sortBy, sortDir, gamesById]);
 
   // Agrupamento por jogo (spec 060, visão "Por jogo") — só sobre `rows` já
   // filtradas/ordenadas; jogo sem sessão no filtro atual não gera seção
@@ -289,6 +296,18 @@ export function Rooms() {
               value={modeFilter}
               onChange={setModeFilter}
               data={distinctModes}
+            />
+          )}
+          {hasP2P && (
+            <SegmentedControl
+              size="xs"
+              value={hostingFilter}
+              onChange={(v) => setHostingFilter(v as typeof hostingFilter)}
+              data={[
+                { label: "Toda hospedagem", value: "all" },
+                { label: "Dedicado", value: "dedicated" },
+                { label: "P2P", value: "p2p" },
+              ]}
             />
           )}
           <SegmentedControl
@@ -368,13 +387,16 @@ export function Rooms() {
       <Modal opened={!!closing} onClose={() => setClosing(null)} title="Encerrar sala" centered>
         <Stack>
           <Text size="sm">
-            Encerrar a sala do match <Text span ff="monospace">{closing ? truncate(closing.matchId) : ""}</Text>
+            Encerrar {closing?.origin === "host_world" ? "o mundo" : "a sala do match"}{" "}
+            <Text span ff="monospace">
+              {closing ? shortId(closing.matchId || closing.sessionId) : ""}
+            </Text>
             {closing?.gameName ? (
               <>
                 {" "}do jogo <Text span fw={600}>{closing.gameName}</Text>
               </>
             ) : null}
-            ? O game server é liberado e os jogadores conectados caem.
+            ? {closing ? closeEffect(closing) : ""}
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setClosing(null)} disabled={closeLoading}>
@@ -432,7 +454,7 @@ function RoomsTable({
             <Table.Th>Sessão</Table.Th>
             <SortableTh label="Estado" sortKey="state" active={sortBy} dir={sortDir} onSort={onSort} />
             <SortableTh label="Players" sortKey="players" active={sortBy} dir={sortDir} onSort={onSort} />
-            <Table.Th>Server</Table.Th>
+            <Table.Th>Hospedagem</Table.Th>
             <SortableTh label="Tempos" sortKey="time" active={sortBy} dir={sortDir} onSort={onSort} />
             <Table.Th />
           </Table.Tr>
@@ -546,9 +568,12 @@ function RoomRow({
           </Group>
         </Table.Td>
         <Table.Td>
-          <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
-            {sessionStateLabel(s.state, s.closeReason)}
-          </Badge>
+          <Stack gap={4} align="flex-start">
+            <Badge color={s.state === "open" ? "nominal" : "gray"} variant="light">
+              {sessionStateLabel(s.state, s.closeReason)}
+            </Badge>
+            <HeartbeatBadge session={s} />
+          </Stack>
         </Table.Td>
         <Table.Td>
           {s.origin === "host_world" ? (
@@ -559,11 +584,9 @@ function RoomRow({
           )}
         </Table.Td>
         <Table.Td>
-          {/* fallback "—" (mesmo achado do GameSessions.tsx): coluna ficava em
-              branco em sessão fechada — servidor já desalocado. */}
-          <Text ff="monospace" size="sm" c={serverLabel(s) === "—" ? "dimmed" : undefined}>
-            {s.serverAddress ? truncate(s.serverAddress) : serverLabel(s)}
-          </Text>
+          {/* GameServer em dedicado; selo P2P + conexão do host em p2p; "—"
+              em sessão fechada (servidor já desalocado). */}
+          <HostingCell session={s} />
         </Table.Td>
         <Table.Td>
           {s.state === "open" ? (
@@ -594,11 +617,23 @@ function RoomRow({
                     <Field label="MODO" value={s.modeId || "default"} mono />
                     <Field label={s.origin === "host_world" ? "MUNDO" : "MATCH ID"} value={s.matchId || s.sessionId} mono />
                     <Field label="SESSION ID" value={s.sessionId} mono />
-                    <Field label="SERVIDOR" value={serverLabel(s)} mono />
+                    {hostingOf(s) === "p2p" ? (
+                      <>
+                        <Field label="HOSPEDAGEM" value="P2P — jogo do host" />
+                        <Field label="CONEXÃO DO HOST" value={s.hostConnection || "—"} mono />
+                      </>
+                    ) : (
+                      <Field label="SERVIDOR" value={s.serverAddress || "—"} mono />
+                    )}
+                    {s.lastHeartbeatAt && (
+                      <Field label="ÚLTIMO HEARTBEAT" value={new Date(s.lastHeartbeatAt).toLocaleTimeString("pt-BR")} />
+                    )}
                     {s.origin === "host_world" && s.hostPlayerId && (
                       <Field label="HOST" value={s.hostPlayerId} mono />
                     )}
                   </Group>
+
+                  {hostingOf(s) === "p2p" && <P2PTrustNote />}
 
                   {/* roster/slots/formação/resultado vivem no painel por
                       arquétipo (spec 019) — host_world vira cards por papel. */}
