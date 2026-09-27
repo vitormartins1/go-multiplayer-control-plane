@@ -41,13 +41,14 @@ func (c *Client) gamePath(gameID, suffix string) string {
 // catalogResponse é o shape de GET /admin/games/{g}/achievements.
 type catalogResponse struct {
 	Achievements []struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		EventType   string `json:"eventType"`
-		StatKey     string `json:"statKey"`
-		StatMode    string `json:"statMode"`
-		Target      int    `json:"target"`
+		ID           string `json:"id"`
+		Name         string `json:"name"`
+		Description  string `json:"description"`
+		EventType    string `json:"eventType"`
+		StatKey      string `json:"statKey"`
+		StatMode     string `json:"statMode"`
+		Target       int    `json:"target"`
+		SteamAPIName string `json:"steamApiName"` // achievements/019
 	} `json:"achievements"`
 }
 
@@ -66,7 +67,7 @@ func (c *Client) CatalogForGame(ctx context.Context, gameID string) ([]domain.Ac
 	}
 	out := make([]domain.Achievement, 0, len(body.Achievements))
 	for _, a := range body.Achievements {
-		out = append(out, domain.Achievement{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, StatKey: a.StatKey, StatMode: a.StatMode, Target: a.Target})
+		out = append(out, domain.Achievement{ID: a.ID, Name: a.Name, Description: a.Description, EventType: a.EventType, StatKey: a.StatKey, StatMode: a.StatMode, Target: a.Target, SteamAPIName: a.SteamAPIName})
 	}
 	return out, nil
 }
@@ -77,6 +78,7 @@ func (c *Client) CreateAchievement(ctx context.Context, gameID string, a domain.
 	body, _ := json.Marshal(map[string]any{
 		"id": a.ID, "name": a.Name, "description": a.Description,
 		"eventType": a.EventType, "statKey": a.StatKey, "statMode": a.StatMode, "target": a.Target,
+		"steamApiName": a.SteamAPIName,
 	})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.gamePath(gameID, "/achievements"), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -93,6 +95,7 @@ func (c *Client) UpdateAchievement(ctx context.Context, gameID, id string, a dom
 	body, _ := json.Marshal(map[string]any{
 		"name": a.Name, "description": a.Description,
 		"eventType": a.EventType, "statKey": a.StatKey, "statMode": a.StatMode, "target": a.Target,
+		"steamApiName": a.SteamAPIName,
 	})
 	u := c.gamePath(gameID, "/achievements/"+url.PathEscape(id))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))

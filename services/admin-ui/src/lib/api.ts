@@ -159,6 +159,7 @@ export interface CatalogAchievement {
   statKey?: string;
   statMode?: StatMode;
   target: number;
+  steamApiName?: string; // "API Name" no Steamworks (achievements/019); vazio = não espelha
 }
 
 export interface NewAchievement {
@@ -169,6 +170,7 @@ export interface NewAchievement {
   statKey?: string;
   statMode?: StatMode;
   target: number;
+  steamApiName?: string; // "API Name" no Steamworks (achievements/019); vazio = não espelha
 }
 
 export interface ImportResult {

@@ -18,6 +18,7 @@ import (
 var (
 	_ domain.AccountRepository          = (*PostgresAccountRepository)(nil)
 	_ domain.ExternalIdentityRepository = (*PostgresAccountRepository)(nil)
+	_ domain.ExternalIdentityLister     = (*PostgresAccountRepository)(nil)
 )
 
 // PostgresAccountRepository persiste contas em PostgreSQL.
@@ -125,6 +126,30 @@ func (r *PostgresAccountRepository) FindByExternal(ctx context.Context, provider
 		return nil, fmt.Errorf("identity repository: find by external: %w", err)
 	}
 	return &a, nil
+}
+
+// ListExternalByAccount devolve os vínculos de loja da conta (spec 006), em
+// ordem de criação. Lista vazia (não nil) quando não há vínculo.
+func (r *PostgresAccountRepository) ListExternalByAccount(ctx context.Context, accountID string) ([]domain.ExternalIdentity, error) {
+	const q = `SELECT provider, external_id FROM external_identities
+		WHERE account_id = $1 ORDER BY created_at, provider`
+	rows, err := r.pool.Query(ctx, q, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("identity repository: list external: %w", err)
+	}
+	defer rows.Close()
+	out := []domain.ExternalIdentity{}
+	for rows.Next() {
+		var e domain.ExternalIdentity
+		if err := rows.Scan(&e.Provider, &e.ExternalID); err != nil {
+			return nil, fmt.Errorf("identity repository: list external: scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("identity repository: list external: rows: %w", err)
+	}
+	return out, nil
 }
 
 // CreateWithExternal cria a conta e o vínculo numa transação (spec 005): ou os

@@ -41,6 +41,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/players", h.adminListPlayers)
 	// Lookup por id (specs/004-admin-player-by-id): handle de UM jogador.
 	mux.HandleFunc("GET /admin/players/{playerID}", h.adminGetPlayer)
+	// Vínculos de loja (spec 006): o achievements lê o SteamID para espelhar
+	// conquistas na Steam (achievements/019).
+	mux.HandleFunc("GET /admin/players/{playerID}/external-identities", h.adminExternalIdentities)
 }
 
 type credentials struct {
@@ -178,6 +181,28 @@ func (h *Handler) adminGetPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpkit.WriteJSON(w, http.StatusOK, playerDTO{ID: acc.ID, Handle: acc.Handle, CreatedAt: acc.CreatedAt})
+}
+
+type externalIdentityDTO struct {
+	Provider   string `json:"provider"`
+	ExternalID string `json:"externalId"`
+}
+
+func (h *Handler) adminExternalIdentities(w http.ResponseWriter, r *http.Request) {
+	ids, err := h.players.ExternalIdentities(r.Context(), r.PathValue("playerID"))
+	if err != nil {
+		if errors.Is(err, domain.ErrAccountNotFound) {
+			httpkit.WriteError(w, http.StatusNotFound, "player_not_found")
+			return
+		}
+		httpkit.WriteError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	out := make([]externalIdentityDTO, len(ids))
+	for i, e := range ids {
+		out[i] = externalIdentityDTO{Provider: e.Provider, ExternalID: e.ExternalID}
+	}
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"identities": out})
 }
 
 // atoiOr devolve o inteiro de s, ou def se vazio/inválido.

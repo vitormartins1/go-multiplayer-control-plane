@@ -38,6 +38,12 @@ type ExternalIdentity struct {
 	ExternalID string // SteamID64
 }
 
+// ExternalIdentityLister lê os vínculos externos de uma conta (spec 006) —
+// usado pelo achievements para espelhar conquistas na Steam.
+type ExternalIdentityLister interface {
+	ListExternalByAccount(ctx context.Context, accountID string) ([]ExternalIdentity, error)
+}
+
 // ExternalIdentityVerifier valida um ticket de um provedor (Steam, GOG, EOS…)
 // e devolve a identidade externa. Port de saída (adapter em internal/steam).
 type ExternalIdentityVerifier interface {
@@ -84,6 +90,9 @@ type PlayerLister interface {
 	ListPlayers(ctx context.Context, limit, offset int) (players []Account, total int, err error)
 	// GetPlayer devolve a conta pelo id; ErrAccountNotFound quando não existe.
 	GetPlayer(ctx context.Context, id string) (*Account, error)
+	// ExternalIdentities devolve os vínculos de loja da conta (spec 006);
+	// vazio se não houver; ErrAccountNotFound quando a conta não existe.
+	ExternalIdentities(ctx context.Context, id string) ([]ExternalIdentity, error)
 }
 
 // TokenIssuer é a Port de saída de emissão de tokens.

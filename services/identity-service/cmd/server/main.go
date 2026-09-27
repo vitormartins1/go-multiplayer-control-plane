@@ -102,7 +102,8 @@ func run(log *slog.Logger) error {
 
 	repo := repository.NewPostgresAccountRepository(pool)
 	svc := service.New(repo, issuer, notifier, log, externalLogin(repo, log)...)
-	lister := service.NewPlayerLister(repo) // listing admin (003-admin-list-users)
+	// listing admin (003-admin-list-users) + vínculos de loja (006)
+	lister := service.NewPlayerLister(repo, service.WithExternalIdentities(repo))
 	handler := transport.NewHandler(svc, issuer, lister)
 
 	metrics := middleware.NewMetrics(prometheus.DefaultRegisterer, "identity-service")

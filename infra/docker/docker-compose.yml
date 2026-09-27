@@ -212,6 +212,13 @@ services:
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: us-east-1
       OTEL_EXPORTER_OTLP_ENDPOINT: tempo:4317
+      # espelhamento de conquistas na Steam (achievements/019): desligado sem a
+      # publisher key. STEAM_GAME_ID = id (control plane) do jogo publicado na Steam.
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      STEAM_APP_ID: ${STEAM_APP_ID:-}
+      STEAM_GAME_ID: ${STEAM_GAME_ID:-}
+      IDENTITY_URL: http://identity-service:8080
+      INTERNAL_API_KEY: dev-internal-key # lê o SteamID no /admin do identity (ADR-0018)
     depends_on:
       achievements-postgres:
         condition: service_healthy

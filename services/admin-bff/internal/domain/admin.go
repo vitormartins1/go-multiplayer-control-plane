@@ -114,6 +114,8 @@ type Achievement struct {
 	StatKey     string `json:"statKey,omitempty"`
 	StatMode    string `json:"statMode,omitempty"`
 	Target      int    `json:"target"`
+	// SteamAPIName: "API Name" no Steamworks (achievements/019); vazio = não espelha.
+	SteamAPIName string `json:"steamApiName,omitempty"`
 }
 
 // Status de cada linha na importação em lote.

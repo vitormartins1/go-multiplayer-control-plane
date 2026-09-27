@@ -67,6 +67,12 @@ func (m *mockLister) GetPlayer(ctx context.Context, id string) (*domain.Account,
 	return acc, args.Error(1)
 }
 
+func (m *mockLister) ExternalIdentities(ctx context.Context, id string) ([]domain.ExternalIdentity, error) {
+	args := m.Called(ctx, id)
+	ids, _ := args.Get(0).([]domain.ExternalIdentity)
+	return ids, args.Error(1)
+}
+
 func newServer(auth domain.AuthService, tokens domain.TokenIssuer) http.Handler {
 	return newServerWith(auth, tokens, nil)
 }
@@ -285,4 +291,25 @@ func TestLoginExternal_AnonymousContinuaNaRotaLiteral(t *testing.T) {
 	rr := do(newServer(auth, new(mockTokens)), http.MethodPost, "/sessions/anonymous", ``)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	auth.AssertNotCalled(t, "AuthenticateExternal", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// spec 006: vínculos de loja do jogador (o achievements lê o SteamID).
+func TestAdminExternalIdentities(t *testing.T) {
+	lister := new(mockLister)
+	lister.On("ExternalIdentities", mock.Anything, "id-1").Return(
+		[]domain.ExternalIdentity{{Provider: "steam", ExternalID: "76561198000000042"}}, nil)
+	lister.On("ExternalIdentities", mock.Anything, "sem-vinculo").Return([]domain.ExternalIdentity{}, nil)
+	lister.On("ExternalIdentities", mock.Anything, "nope").Return(nil, domain.ErrAccountNotFound)
+	srv := newServerWith(new(mockAuth), new(mockTokens), lister)
+
+	rr := do(srv, http.MethodGet, "/admin/players/id-1/external-identities", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"identities":[{"provider":"steam","externalId":"76561198000000042"}]}`, rr.Body.String())
+
+	rr = do(srv, http.MethodGet, "/admin/players/sem-vinculo/external-identities", "")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"identities":[]}`, rr.Body.String())
+
+	rr = do(srv, http.MethodGet, "/admin/players/nope/external-identities", "")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }

@@ -39,7 +39,7 @@ func NewPostgresAchievementRepository(pool *pgxpool.Pool) *PostgresAchievementRe
 }
 
 // achievementCols é a projeção comum do catálogo (ordem casada por scanAchievements).
-const achievementCols = `game_id, id, name, description, event_type, stat_key, stat_mode, target`
+const achievementCols = `game_id, id, name, description, event_type, stat_key, stat_mode, target, steam_api_name`
 
 func (r *PostgresAchievementRepository) ListCatalog(ctx context.Context, gameID string) ([]domain.Achievement, error) {
 	const q = `SELECT ` + achievementCols + `
@@ -416,9 +416,9 @@ func recordStatProgress(ctx context.Context, qr querier, gameID, playerID, achie
 // CreateAchievement adiciona uma conquista ao catálogo do jogo (admin).
 // Violação de unicidade (game_id, id) vira ErrAchievementExists.
 func (r *PostgresAchievementRepository) CreateAchievement(ctx context.Context, a *domain.Achievement) error {
-	const q = `INSERT INTO achievements (game_id, id, name, description, event_type, stat_key, stat_mode, target)
-	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-	_, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target)
+	const q = `INSERT INTO achievements (game_id, id, name, description, event_type, stat_key, stat_mode, target, steam_api_name)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	_, err := r.pool.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target, a.SteamAPIName)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
@@ -458,9 +458,10 @@ func (r *PostgresAchievementRepository) UpdateAchievement(ctx context.Context, a
 	}
 
 	const q = `UPDATE achievements
-	           SET name = $3, description = $4, event_type = $5, stat_key = $6, stat_mode = $7, target = $8
+	           SET name = $3, description = $4, event_type = $5, stat_key = $6, stat_mode = $7, target = $8,
+	               steam_api_name = $9
 	           WHERE game_id = $1 AND id = $2`
-	if _, err := tx.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target); err != nil {
+	if _, err := tx.Exec(ctx, q, a.GameID, a.ID, a.Name, a.Description, a.EventType, a.StatKey, a.StatMode, a.Target, a.SteamAPIName); err != nil {
 		return fmt.Errorf("achievements repository: update achievement: %w", err)
 	}
 
@@ -509,7 +510,7 @@ func scanAchievements(rows pgx.Rows) ([]domain.Achievement, error) {
 	var out []domain.Achievement
 	for rows.Next() {
 		var a domain.Achievement
-		if err := rows.Scan(&a.GameID, &a.ID, &a.Name, &a.Description, &a.EventType, &a.StatKey, &a.StatMode, &a.Target); err != nil {
+		if err := rows.Scan(&a.GameID, &a.ID, &a.Name, &a.Description, &a.EventType, &a.StatKey, &a.StatMode, &a.Target, &a.SteamAPIName); err != nil {
 			return nil, fmt.Errorf("achievements repository: scan: %w", err)
 		}
 		out = append(out, a)

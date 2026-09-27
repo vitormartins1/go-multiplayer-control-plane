@@ -21,6 +21,9 @@ type Achievement struct {
 	StatKey  string // ex.: "kills"; vazio = critério por evento
 	StatMode string // "cumulative" | "per_match" (só com StatKey)
 	Target   int    // evento: nº de ocorrências; stat: threshold (>= 1)
+	// SteamAPIName é o "API Name" da conquista no Steamworks (spec 019); vazio =
+	// não espelha na Steam.
+	SteamAPIName string
 }
 
 // Modos de agregação de um critério por stat (ADR-0023 A1).

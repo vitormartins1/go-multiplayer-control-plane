@@ -151,6 +151,8 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 		StatKey     string `json:"statKey"`
 		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
+		// spec 019: "API Name" da conquista no Steamworks; vazio = não espelha.
+		SteamAPIName string `json:"steamApiName"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
@@ -159,6 +161,7 @@ func (h *Handler) adminCreateAchievement(w http.ResponseWriter, r *http.Request)
 	a, err := h.svc.CreateAchievement(r.Context(), r.PathValue("gameId"), domain.Achievement{
 		ID: req.ID, Name: req.Name, Description: req.Description,
 		EventType: req.EventType, StatKey: req.StatKey, StatMode: req.StatMode, Target: req.Target,
+		SteamAPIName: req.SteamAPIName,
 	})
 	if err != nil {
 		writeDomainError(w, err)
@@ -176,6 +179,8 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 		StatKey     string `json:"statKey"`
 		StatMode    string `json:"statMode"`
 		Target      int    `json:"target"`
+		// spec 019: "API Name" da conquista no Steamworks; vazio = não espelha.
+		SteamAPIName string `json:"steamApiName"`
 	}
 	if err := decodeStrict(r, &req); err != nil {
 		httpkit.WriteError(w, http.StatusBadRequest, "bad_request")
@@ -184,6 +189,7 @@ func (h *Handler) adminUpdateAchievement(w http.ResponseWriter, r *http.Request)
 	a, err := h.svc.UpdateAchievement(r.Context(), r.PathValue("gameId"), r.PathValue("id"), domain.Achievement{
 		Name: req.Name, Description: req.Description,
 		EventType: req.EventType, StatKey: req.StatKey, StatMode: req.StatMode, Target: req.Target,
+		SteamAPIName: req.SteamAPIName,
 	})
 	if err != nil {
 		writeDomainError(w, err)
@@ -375,6 +381,8 @@ type achievementDTO struct {
 	StatKey     string `json:"statKey,omitempty"`  // critério por stat (ADR-0023 A1)
 	StatMode    string `json:"statMode,omitempty"` // cumulative | per_match
 	Target      int    `json:"target"`
+	// spec 019: nome da conquista no Steamworks (espelhamento na Steam).
+	SteamAPIName string `json:"steamApiName,omitempty"`
 }
 
 type eventRuleDTO struct {
@@ -430,6 +438,7 @@ func toAchievementDTO(a domain.Achievement) achievementDTO {
 	return achievementDTO{
 		ID: a.ID, Name: a.Name, Description: a.Description,
 		EventType: a.EventType, StatKey: a.StatKey, StatMode: a.StatMode, Target: a.Target,
+		SteamAPIName: a.SteamAPIName,
 	}
 }
 

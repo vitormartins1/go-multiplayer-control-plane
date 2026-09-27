@@ -26,6 +26,9 @@ var slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,38}[a-z0-9]$`)
 // scoringStats do perfil de multiplayer — ADR-0023).
 var statKeyRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
+// steamAPINameRE é o formato do "API Name" de conquista no Steamworks (spec 019).
+var steamAPINameRE = regexp.MustCompile(`^[A-Za-z0-9_]{1,128}$`)
+
 const maxAchievementNameLen = 100
 
 // vocabulário do outcome no envelope (ADR-0023). A tradução outcome/stats ->
@@ -270,6 +273,11 @@ func validateCriterion(a *domain.Achievement) error {
 	}
 	if a.Target < 1 {
 		a.Target = 1
+	}
+	// spec 019: API Name do Steamworks — letras, dígitos e _, até 128.
+	a.SteamAPIName = strings.TrimSpace(a.SteamAPIName)
+	if a.SteamAPIName != "" && !steamAPINameRE.MatchString(a.SteamAPIName) {
+		return domain.ErrInvalidAchievement
 	}
 	if a.StatKey != "" {
 		// critério por stat: stat_key/stat_mode válidos, event_type ausente.

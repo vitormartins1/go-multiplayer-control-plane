@@ -61,4 +61,3 @@ func (c *Client) ForPlayer(ctx context.Context, gameID, playerID string) ([]doma
 	}
 	return out, nil
 }
-

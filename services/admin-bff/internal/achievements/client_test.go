@@ -343,3 +343,34 @@ func TestDeleteEventRule_404_UpstreamError(t *testing.T) {
 	require.ErrorAs(t, err, &ue)
 	assert.Equal(t, http.StatusNotFound, ue.Status, "global ou inexistente: mesma resposta")
 }
+
+// achievements/019: o nome Steam vai e volta pelo BFF.
+func TestSteamAPIName_IdaEVolta(t *testing.T) {
+	var gotBodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, err := w.Write([]byte(`{"achievements":[{"id":"boss","name":"B","eventType":"e","target":1,"steamApiName":"ACH_BOSS"}]}`))
+			assert.NoError(t, err)
+			return
+		}
+		b, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		gotBodies = append(gotBodies, string(b))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	c := New(srv.URL, srv.Client())
+	ctx := context.Background()
+
+	cat, err := c.CatalogForGame(ctx, "g1")
+	require.NoError(t, err)
+	assert.Equal(t, "ACH_BOSS", cat[0].SteamAPIName)
+
+	a := domain.Achievement{ID: "boss", Name: "B", EventType: "e", Target: 1, SteamAPIName: "ACH_BOSS"}
+	require.NoError(t, c.CreateAchievement(ctx, "g1", a))
+	require.NoError(t, c.UpdateAchievement(ctx, "g1", "boss", a))
+	require.Len(t, gotBodies, 2)
+	for _, b := range gotBodies {
+		assert.Contains(t, b, `"steamApiName":"ACH_BOSS"`)
+	}
+}

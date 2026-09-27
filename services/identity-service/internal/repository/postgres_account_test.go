@@ -200,3 +200,22 @@ func TestCreateWithExternal_HandleOcupado_ErrHandleTaken(t *testing.T) {
 	err := repo.CreateWithExternal(ctx, newAccount("STEAM_X"), "steam", "43")
 	assert.ErrorIs(t, err, domain.ErrHandleTaken)
 }
+
+// spec 006: vínculos de loja por conta.
+func TestListExternalByAccount(t *testing.T) {
+	repo := NewPostgresAccountRepository(newTestPool(t))
+	ctx := context.Background()
+	acc := newAccount("steam_list")
+	require.NoError(t, repo.CreateWithExternal(ctx, acc, "steam", "76561198000000099"))
+	semVinculo := newAccount("senha_list")
+	require.NoError(t, repo.Create(ctx, semVinculo))
+
+	ids, err := repo.ListExternalByAccount(ctx, acc.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.ExternalIdentity{{Provider: "steam", ExternalID: "76561198000000099"}}, ids)
+
+	ids, err = repo.ListExternalByAccount(ctx, semVinculo.ID)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+	assert.NotNil(t, ids, "lista vazia, não nil (vira [] no JSON)")
+}
