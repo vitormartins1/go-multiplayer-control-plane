@@ -33,7 +33,9 @@ func (s *Service) Heartbeat(_ context.Context, sessionID string) (time.Duration,
 	}
 	sess.LastHeartbeatAt = s.now()
 	s.heartbeats++
-	return s.heartbeatTTL / 3, nil
+	// piso de 1 s: com um TTL minúsculo (config errada) o intervalo truncado
+	// para segundos viraria 0 e o cliente martelaria o session.
+	return max(s.heartbeatTTL/3, time.Second), nil
 }
 
 // HeartbeatsTotal alimenta a métrica session_world_heartbeats_total.

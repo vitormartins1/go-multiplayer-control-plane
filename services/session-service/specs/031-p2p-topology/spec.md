@@ -55,6 +55,16 @@ identificador de conexão no lugar de `ip:porta`) e **quem reporta** (o cliente 
 8. O admin **deve** mostrar a topologia: badge por modo nas Configurações de multiplayer e, em Salas, "P2P · host"
    no lugar do endereço do servidor. Frota (Agones) segue valendo só para os modos dedicados.
 
+## Regras acrescentadas pela revisão de código (2026-09-27)
+
+9. **Se** o host p2p reportar evento de um jogador que nunca esteve no mundo, o session **deve** recusar
+   (`InvalidArgument`) — o host pode mentir sobre o próprio mundo, não forjar conquista para qualquer conta.
+10. **Quando** o mundo fechar, o world token **deve** continuar valendo **só** para reenviar o evento que o fechou
+    (spec 029: `HOST_KILLED` cujo publish falhou); qualquer outra chamada com ele é `Unauthenticated`. A janela é a
+    mesma do histórico em memória.
+11. Um host tem **no máximo um mundo p2p aberto**: abrir outro fecha o anterior (`host_left`). `host_connection`
+    tem até 128 caracteres, sem espaço nem caractere de controle.
+
 ## Contrato (aditivo — contrato 1.4.0)
 
 - `OpenWorldRequest.host_connection = 7` — identificador opaco de conexão do host (ex.: SteamID64 para Steam

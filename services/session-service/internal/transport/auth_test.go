@@ -273,7 +273,9 @@ func TestAuth_P2P_WorldToken_SoValeNoProprioMundo(t *testing.T) {
 	_, err = c.CloseWorld(asWorldHost(tok), &pb.CloseWorldRequest{SessionId: w1.GetSessionId()})
 	require.NoError(t, err)
 	_, err = c.ReportParticipationEvent(asWorldHost(tok), evt(w1.GetSessionId()))
-	assert.Equal(t, codes.Unauthenticated, status.Code(err), "mundo fechado: o token morre junto")
+	assert.Equal(t, codes.NotFound, status.Code(err), "mundo fechado: só o reenvio do evento que fechou passa")
+	_, err = c.Heartbeat(asWorldHost(tok), &pb.HeartbeatRequest{SessionId: w1.GetSessionId()})
+	assert.Equal(t, codes.Unauthenticated, status.Code(err), "token de mundo fechado não serve para mais nada")
 }
 
 func TestAuth_P2P_WorldTokenDesconhecido_Unauthenticated(t *testing.T) {
@@ -310,4 +312,68 @@ func TestAuth_Heartbeat_HostWorldTokenEServer(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err), "matchmaking não manda heartbeat")
 	_, err = c.Heartbeat(asServer(), &pb.HeartbeatRequest{SessionId: "nao-existe"})
 	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// Revisão (spec 029 × 031): o HOST_KILLED cujo publish falhou é reenviado com o
+// world token do mundo que ele mesmo fechou — em enforce, tem que passar.
+func TestAuth_P2P_ReenvioDoHostKilledComMundoFechado(t *testing.T) {
+	lis := bufconn.Listen(1024 * 1024)
+	iss, err := token.Generate()
+	require.NoError(t, err)
+	prof := stubProfile{profile: domain.ProfileSnapshot{
+		Archetype: "host_world_dropin", Topology: "p2p", ParamsJSON: []byte(`{}`), Hash: "h",
+		EnabledRoles: []string{domain.RoleInvader}, InvaderSlots: 1,
+	}}
+	part := &flakyParticipation{failFirst: true}
+	svc := service.New(allocator.New(nil), iss, publisher.New(slogDiscard()),
+		service.WithProfileProvider(prof), service.WithParticipationPublisher(part))
+	cfg := AuthConfig{Mode: AuthEnforce, Players: fakePlayers{}, InternalKey: testInternalKey, WorldTokens: svc}
+	srv := grpc.NewServer(grpc.UnaryInterceptor(UnaryAuthInterceptor(cfg)))
+	pb.RegisterSessionServer(srv, NewServer(svc, WithAuth(cfg)))
+	go func() { _ = srv.Serve(lis) }()
+	conn, err := grpc.NewClient("passthrough://bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close(); srv.Stop() })
+	c := pb.NewSessionClient(conn)
+
+	w, err := c.OpenWorld(asPlayer("host-1"), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:1"})
+	require.NoError(t, err)
+	_, err = c.JoinWorld(asInternal(), &pb.JoinWorldRequest{SessionId: w.GetSessionId(), PlayerId: "invasor", Role: "invader"})
+	require.NoError(t, err)
+	killed := &pb.ReportParticipationEventRequest{SessionId: w.GetSessionId(), PlayerId: "invasor", Role: "invader",
+		Event: "HOST_KILLED", Outcome: "SUCCESS", EventId: "e-1"}
+
+	_, err = c.ReportParticipationEvent(asWorldHost(w.GetWorldToken()), killed)
+	require.Equal(t, codes.Internal, status.Code(err), "1º publish falha: o host deve reenviar")
+	_, err = c.ReportParticipationEvent(asWorldHost(w.GetWorldToken()), killed)
+	require.NoError(t, err, "o reenvio com o token do mundo já fechado passa e publica")
+	assert.Equal(t, 1, part.published())
+}
+
+// flakyParticipation falha o primeiro publish e conta os seguintes.
+type flakyParticipation struct {
+	mu        sync.Mutex
+	failFirst bool
+	calls     int
+}
+
+func (f *flakyParticipation) PublishParticipation(_ context.Context, _, _, _ string, _ domain.ParticipationEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.failFirst && f.calls == 1 {
+		return errors.New("sns fora")
+	}
+	return nil
+}
+
+func (f *flakyParticipation) published() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failFirst {
+		return f.calls - 1
+	}
+	return f.calls
 }

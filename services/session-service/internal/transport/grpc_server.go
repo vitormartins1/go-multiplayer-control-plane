@@ -330,7 +330,7 @@ func worldError(err error, op string) error {
 	case errors.Is(err, domain.ErrFleetUnavailable):
 		return status.Error(codes.FailedPrecondition, "fleet not configured")
 	case errors.Is(err, domain.ErrHostConnectionRequired):
-		return status.Error(codes.InvalidArgument, "host_connection required for p2p world")
+		return status.Error(codes.InvalidArgument, "p2p world needs a valid host_connection (<=128 chars, no spaces)")
 	default:
 		return status.Error(codes.Internal, op)
 	}

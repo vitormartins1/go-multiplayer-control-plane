@@ -43,9 +43,12 @@ type Service struct {
 	// matchIndex mapeia matchID -> sessionID para o caminho queue_arena, cuja
 	// identidade externa é o matchID. host_world não popula (identidade = sessionID).
 	matchIndex map[string]string
-	// worldTokens mapeia hash do world token -> sessionID dos mundos p2p abertos
-	// (spec 031). closeSession remove a entrada.
-	worldTokens map[string]string
+	// worldTokens mapeia hash do world token -> mundo p2p (spec 031). Ao
+	// fechar, a entrada fica marcada como fechada por um tempo (closedTokens,
+	// mesmo limite do histórico): o host ainda precisa reenviar o HOST_KILLED
+	// cujo publish falhou (spec 029) — e só isso.
+	worldTokens  map[string]worldTokenEntry
+	closedTokens []string // hashes fechados, do mais antigo ao mais novo
 	// heartbeat de mundo (spec 032): TTL e contador da métrica.
 	heartbeatTTL time.Duration
 	heartbeats   float64
@@ -158,7 +161,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		log:                 slog.Default(),
 		sessions:            make(map[string]*domain.Session),
 		matchIndex:          make(map[string]string),
-		worldTokens:         make(map[string]string),
+		worldTokens:         make(map[string]worldTokenEntry),
 		closed:              make(map[domain.CloseReason]float64),
 		participationEvents: make(map[string]float64),
 		historyLimit:        200,
@@ -427,8 +430,10 @@ func (s *Service) GetSessionConfig(ctx context.Context, refID string) (*domain.S
 		sessionID = refID
 	}
 	sess, ok := s.sessions[sessionID]
+	// State é escrito sob o lock (closeSession): a leitura também
+	open := ok && sess.State == domain.SessionOpen && sess.Profile != nil
 	s.mu.Unlock()
-	if !ok || sess.State != domain.SessionOpen || sess.Profile == nil {
+	if !open {
 		return nil, fmt.Errorf("session service: get session config: %w", domain.ErrSessionNotFound)
 	}
 	snap := sess.Profile
@@ -502,18 +507,33 @@ var missionOutcomes = map[string]bool{
 // interna (sessionID). Libera o server PRIMEIRO em relação a qualquer fan-out:
 // o fim da partida não pode depender de destino externo.
 func (s *Service) closeSession(ctx context.Context, sessionID string, reason domain.CloseReason) (*domain.Session, error) {
+	return s.closeSessionIf(ctx, sessionID, func(*domain.Session) (domain.CloseReason, bool) { return reason, true })
+}
+
+// errNotExpired: o closeSessionIf achou a sessão mas a condição não vale mais
+// (ex.: o heartbeat chegou entre a varredura do Sweep e o fechamento).
+var errNotExpired = errors.New("session service: session no longer expired")
+
+// closeSessionIf fecha a sessão só se `should` ainda aprovar, avaliado sob o
+// mesmo lock que tira a sessão do mapa — sem janela entre decidir e fechar.
+func (s *Service) closeSessionIf(ctx context.Context, sessionID string, should func(*domain.Session) (domain.CloseReason, bool)) (*domain.Session, error) {
 	s.mu.Lock()
 	sess, ok := s.sessions[sessionID]
 	if !ok {
 		s.mu.Unlock()
 		return nil, domain.ErrSessionNotFound
 	}
+	reason, doClose := should(sess)
+	if !doClose {
+		s.mu.Unlock()
+		return nil, errNotExpired
+	}
 	delete(s.sessions, sessionID)
 	if sess.MatchID != "" {
 		delete(s.matchIndex, sess.MatchID) // queue_arena: limpa o índice reverso
 	}
 	if sess.WorldTokenHash != "" {
-		delete(s.worldTokens, sess.WorldTokenHash) // p2p: o token morre com o mundo (spec 031)
+		s.retireWorldTokenLocked(sess.WorldTokenHash) // p2p: só vale para o reenvio do fechamento
 	}
 	sess.State = domain.SessionClosed
 	sess.ClosedAt = s.now()
@@ -601,19 +621,26 @@ func (s *Service) SessionClosedPublishFailures() float64 {
 func (s *Service) Sweep(ctx context.Context, ttl time.Duration) int {
 	cutoff := s.now().Add(-ttl)
 	s.mu.Lock()
-	expired := make(map[string]domain.CloseReason)
+	expired := make(map[string]struct{})
 	for sessionID, sess := range s.sessions {
-		if reason, ok := s.expiredLocked(sess, cutoff); ok {
-			expired[sessionID] = reason
+		if _, ok := s.expiredLocked(sess, cutoff); ok {
+			expired[sessionID] = struct{}{}
 		}
 	}
 	s.mu.Unlock()
 
-	for sessionID, reason := range expired {
-		// ErrSessionNotFound = fechada por result entre a varredura e o close; ok.
-		_, _ = s.closeSession(ctx, sessionID, reason)
+	closed := 0
+	for sessionID := range expired {
+		// reavalia sob o lock do fechamento: um heartbeat que chegou enquanto
+		// outras sessões fechavam (release/SNS lentos) salva o mundo.
+		// ErrSessionNotFound = fechada por outro caminho no meio; ok.
+		if _, err := s.closeSessionIf(ctx, sessionID, func(sess *domain.Session) (domain.CloseReason, bool) {
+			return s.expiredLocked(sess, cutoff)
+		}); err == nil || !errors.Is(err, errNotExpired) && !errors.Is(err, domain.ErrSessionNotFound) {
+			closed++ // fechou (release com erro também conta: a sessão saiu)
+		}
 	}
-	return len(expired)
+	return closed
 }
 
 // reconcile fecha (CLOSED/abandoned) as sessões OPEN cujo game server sumiu da
@@ -774,8 +801,14 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID st
 		return fail(fmt.Errorf("archetype %q: %w", snap.Archetype, domain.ErrUnsupportedArchetype))
 	}
 	p2p := snap.Topology == domain.TopologyP2P
-	if p2p && attrs.HostConnection == "" {
-		return fail(domain.ErrHostConnectionRequired)
+	if p2p {
+		if err := validHostConnection(attrs.HostConnection); err != nil {
+			return fail(err)
+		}
+		// um mundo p2p aberto por host: abrir outro (o jogo caiu e voltou, ou
+		// um cliente abusivo) fecha o anterior — sem isto, qualquer jogador
+		// enchia o diretório de invasão de mundos que ninguém hospeda.
+		s.closeHostP2PWorlds(ctx, hostPlayerID)
 	}
 
 	sessionID := uuid.NewString()
@@ -833,7 +866,7 @@ func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID st
 	s.mu.Lock()
 	s.sessions[sessionID] = sess // host_world: identidade = sessionID, sem matchIndex
 	if worldTokenHash != "" {
-		s.worldTokens[worldTokenHash] = sessionID
+		s.worldTokens[worldTokenHash] = worldTokenEntry{sessionID: sessionID}
 	}
 	s.mu.Unlock()
 
@@ -1034,7 +1067,15 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 		return nil
 	}
 	gameID, modeID := sess.GameID, sess.ModeID
+	// mundo p2p: quem reporta é o jogo do host, não um servidor confiável —
+	// o evento só pode ser sobre quem está (ou esteve) no mundo, senão um host
+	// forjaria conquistas para qualquer conta (achado da revisão da spec 031).
+	untrusted := sess.HostConnection != ""
+	participant := hasParticipant(sess, evt.PlayerID)
 	s.mu.Unlock()
+	if untrusted && !participant {
+		return fmt.Errorf("session service: participation event: player not in p2p world: %w", domain.ErrInvalidParticipation)
+	}
 
 	// MUTA ANTES de publicar (fix 2026-08-19): o desenho antigo ("publica
 	// antes: falha => nada muda") deixava o GAMEPLAY refém da infra de
@@ -1065,7 +1106,9 @@ func (s *Service) ReportParticipationEvent(ctx context.Context, sessionID string
 		// o mundo sair do mapa de ativos (spec 029). ErrSessionNotFound = já
 		// fechado (ok).
 		s.mu.Lock()
-		if cur, ok := s.sessions[sessionID]; ok {
+		// só a primeira ocorrência marca: dois HOST_KILLED concorrentes (DS e
+		// reenvio, ou event_ids diferentes) não trocam a ocorrência que fechou.
+		if cur, ok := s.sessions[sessionID]; ok && cur.ClosingEvent == nil {
 			closing := evt
 			cur.ClosingEvent = &closing
 		}

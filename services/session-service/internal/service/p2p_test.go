@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,8 +50,9 @@ func TestOpenWorld_P2P_NaoAlocaEGuardaHostConnection(t *testing.T) {
 	assert.NotEmpty(t, worldToken)
 	assert.NotContains(t, sess.WorldTokenHash, worldToken, "o session guarda só o hash")
 
-	got, ok := svc.ResolveWorldToken(worldToken)
+	got, closed, ok := svc.ResolveWorldToken(worldToken)
 	assert.True(t, ok)
+	assert.False(t, closed)
 	assert.Equal(t, sess.ID, got)
 }
 
@@ -67,7 +69,7 @@ func TestOpenWorld_Dedicado_SemWorldToken(t *testing.T) {
 	active, _ := svc.AllSessions()
 	require.Len(t, active, 1)
 	assert.Empty(t, active[0].WorldTokenHash)
-	_, ok := svc.ResolveWorldToken("")
+	_, _, ok := svc.ResolveWorldToken("")
 	assert.False(t, ok)
 	assert.NotEmpty(t, sessionID)
 }
@@ -94,8 +96,10 @@ func TestCloseWorld_P2P_SemReleaseEInvalidaOWorldToken(t *testing.T) {
 
 	require.NoError(t, svc.CloseWorld(context.Background(), sess.ID))
 	alloc.AssertNotCalled(t, "Release", mock.Anything, mock.Anything)
-	_, ok := svc.ResolveWorldToken(worldToken)
-	assert.False(t, ok, "token de mundo fechado deixa de valer")
+	id, closed, ok := svc.ResolveWorldToken(worldToken)
+	assert.True(t, ok, "continua resolvendo para o reenvio do fechamento (spec 029)")
+	assert.True(t, closed, "mas marcado como fechado")
+	assert.Equal(t, sess.ID, id)
 }
 
 // Sem GameServer, o mundo p2p nunca aparece na fonte de verdade do Agones —
@@ -123,4 +127,67 @@ func TestNewWorldToken_HashBateEUnico(t *testing.T) {
 	assert.NotEqual(t, a, b)
 	assert.Equal(t, hashWorldToken(a), hashA)
 	assert.Len(t, hashA, 64)
+}
+
+// Revisão: o token de mundo fechado sai da janela junto com o histórico.
+func TestWorldToken_FechadoSaiDaJanela(t *testing.T) {
+	svc, _, iss := p2pSetup(t, WithHistoryLimit(1))
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("tok", nil)
+	ctx := context.Background()
+	open := func(host string) (string, string) {
+		sess, _, tok, err := svc.OpenWorld(ctx, host, "game-1", "default", domain.WorldAttributes{HostConnection: "steam:" + host})
+		require.NoError(t, err)
+		return sess.ID, tok
+	}
+	id1, tok1 := open("h1")
+	id2, tok2 := open("h2")
+	require.NoError(t, svc.CloseWorld(ctx, id1))
+	require.NoError(t, svc.CloseWorld(ctx, id2))
+
+	_, _, ok := svc.ResolveWorldToken(tok1)
+	assert.False(t, ok, "o mais antigo saiu (limite 1)")
+	_, closed, ok := svc.ResolveWorldToken(tok2)
+	assert.True(t, ok)
+	assert.True(t, closed)
+}
+
+// Revisão: o host p2p não reporta evento de quem nunca esteve no mundo.
+func TestReportParticipation_P2P_JogadorForaDoMundo_Rejeita(t *testing.T) {
+	part := &mockParticipation{}
+	svc, _, iss := p2pSetup(t, WithParticipationPublisher(part))
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("tok", nil)
+	ctx := context.Background()
+	sess, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{HostConnection: "steam:1"})
+	require.NoError(t, err)
+
+	err = svc.ReportParticipationEvent(ctx, sess.ID, domain.ParticipationEvent{PlayerID: "vitima", Role: "coop", Event: "BOSS_DEFEATED", Outcome: "SUCCESS"})
+	assert.ErrorIs(t, err, domain.ErrInvalidParticipation)
+	part.AssertNotCalled(t, "PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	part.On("PublishParticipation", mock.Anything, "game-1", sess.ID, "default", mock.Anything).Return(nil)
+	require.NoError(t, svc.ReportParticipationEvent(ctx, sess.ID, domain.ParticipationEvent{PlayerID: "host-1", Role: "host", Event: "BOSS_DEFEATED", Outcome: "SUCCESS"}),
+		"o próprio host é participante")
+}
+
+// Revisão: um mundo p2p aberto por host; abrir outro fecha o anterior.
+func TestOpenWorld_P2P_UmMundoPorHost(t *testing.T) {
+	svc, _, iss := p2pSetup(t)
+	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("tok", nil)
+	ctx := context.Background()
+	first, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{HostConnection: "steam:1"})
+	require.NoError(t, err)
+	_, _, _, err = svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{HostConnection: "steam:1"})
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(1), svc.ActiveSessions())
+	assert.Equal(t, domain.SessionClosed, first.State)
+	assert.Equal(t, domain.CloseHostLeft, first.CloseReason)
+}
+
+func TestValidHostConnection(t *testing.T) {
+	assert.NoError(t, validHostConnection("steam:76561198000000042"))
+	assert.ErrorIs(t, validHostConnection(""), domain.ErrHostConnectionRequired)
+	assert.ErrorIs(t, validHostConnection(strings.Repeat("x", 129)), domain.ErrHostConnectionRequired)
+	assert.ErrorIs(t, validHostConnection("steam 1"), domain.ErrHostConnectionRequired)
+	assert.ErrorIs(t, validHostConnection("steam:1\n"), domain.ErrHostConnectionRequired)
 }

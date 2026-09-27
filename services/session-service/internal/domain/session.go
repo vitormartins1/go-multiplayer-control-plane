@@ -387,9 +387,10 @@ type SessionService interface {
 	// disso para conectar. ErrWorldNotFound, ErrRoleNotEnabled, ErrRoleFull,
 	// ErrAlreadyJoined.
 	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, WorldEndpoint, error)
-	// ResolveWorldToken devolve o mundo aberto a que o world token pertence
-	// (spec 031); ok=false se o token não for de nenhum mundo aberto.
-	ResolveWorldToken(token string) (sessionID string, ok bool)
+	// ResolveWorldToken devolve o mundo a que o world token pertence (spec 031)
+	// e se ele já fechou (closed: só serve para o reenvio do evento que o
+	// fechou, spec 029); ok=false se o token não for de mundo nenhum.
+	ResolveWorldToken(token string) (sessionID string, closed, ok bool)
 	// ListInvadableWorlds devolve os mundos abertos do jogo (Origin=host_world)
 	// com slot de invasor livre, cada um com seus atributos e vagas (spec 012).
 	// Fonte de dados pura: sem filtro de faixa/senha (política é do matchmaking).

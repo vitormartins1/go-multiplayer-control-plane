@@ -37,11 +37,13 @@ const (
 )
 
 // Caller é o chamador identificado. PlayerID só existe para CallerPlayer;
-// SessionID só para CallerWorldHost (o único mundo que ele pode tocar).
+// SessionID só para CallerWorldHost (o único mundo que ele pode tocar), e
+// WorldClosed diz que esse mundo já fechou.
 type Caller struct {
-	Kind      CallerKind
-	PlayerID  string
-	SessionID string
+	Kind        CallerKind
+	PlayerID    string
+	SessionID   string
+	WorldClosed bool
 }
 
 // AuthMode é o modo de rollout (SESSION_AUTH_MODE).
@@ -75,7 +77,7 @@ type PlayerVerifier interface {
 // WorldTokenResolver devolve o mundo aberto dono de um world token (spec 031).
 // Satisfeito pelo service.
 type WorldTokenResolver interface {
-	ResolveWorldToken(token string) (sessionID string, ok bool)
+	ResolveWorldToken(token string) (sessionID string, closed, ok bool)
 }
 
 // RejectionCounter conta as falhas de autenticação/autorização
@@ -95,6 +97,8 @@ type AuthConfig struct {
 	Rejections    RejectionCounter
 	Log           *slog.Logger
 }
+
+const methodReportParticipation = "/session.v1.Session/ReportParticipationEvent"
 
 // methodCallers diz que tipos de chamador cada RPC aceita. RPC fora da tabela
 // (reflection, health) não é avaliado.
@@ -135,6 +139,11 @@ func UnaryAuthInterceptor(cfg AuthConfig) grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 		caller, reason := a.identify(ctx)
+		// token de mundo fechado só serve para reenviar o evento que o fechou
+		// (spec 029); o service confere se é mesmo essa ocorrência.
+		if reason == "" && caller.WorldClosed && info.FullMethod != methodReportParticipation {
+			caller, reason = Caller{Kind: CallerAnonymous}, "invalid_credential"
+		}
 		ctx = context.WithValue(ctx, callerKey{}, caller)
 		if reason == "" && !kindIn(caller.Kind, allowed) {
 			reason = "caller_not_allowed"
@@ -171,8 +180,8 @@ func (a *auth) identify(ctx context.Context) (Caller, string) {
 	}
 	if tok := first(md, mdWorldToken); tok != "" {
 		if a.cfg.WorldTokens != nil {
-			if sessionID, ok := a.cfg.WorldTokens.ResolveWorldToken(tok); ok {
-				return Caller{Kind: CallerWorldHost, SessionID: sessionID}, ""
+			if sessionID, closed, ok := a.cfg.WorldTokens.ResolveWorldToken(tok); ok {
+				return Caller{Kind: CallerWorldHost, SessionID: sessionID, WorldClosed: closed}, ""
 			}
 		}
 		return Caller{Kind: CallerAnonymous}, "invalid_credential"

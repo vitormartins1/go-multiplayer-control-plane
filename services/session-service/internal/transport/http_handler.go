@@ -86,7 +86,7 @@ type sessionDTO struct {
 	// Detalhe rico (spec 018): snapshot do modo (ADR-0024) + formação +
 	// resultado persistido. Aditivos; ausentes em sessões sem snapshot/result.
 	Archetype string `json:"archetype,omitempty"`
-	Topology  string `json:"topology,omitempty"` // dedicated | p2p (spec 031); ausente no histórico persistido
+	Topology  string `json:"topology,omitempty"` // dedicated | p2p (spec 031); vazio em sessões fechadas antes da migration 004
 	// HostConnection (p2p, spec 031) e LastHeartbeatAt (spec 032): o console
 	// mostra com quem o jogo conecta e se o mundo está vivo (admin-ui/091).
 	HostConnection  string          `json:"hostConnection,omitempty"`

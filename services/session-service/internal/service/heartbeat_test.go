@@ -92,3 +92,33 @@ func TestWithWorldHeartbeatTTL_ZeroMantemPadrao(t *testing.T) {
 	svc := New(&mockAllocator{}, &mockIssuer{}, &mockPublisher{}, WithWorldHeartbeatTTL(0))
 	assert.Equal(t, DefaultWorldHeartbeatTTL, svc.heartbeatTTL)
 }
+
+// Revisão: TTL minúsculo não vira intervalo 0 (o cliente martelaria o session).
+func TestHeartbeat_IntervaloTemPisoDeUmSegundo(t *testing.T) {
+	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	svc, _, id := heartbeatSetup(t, &now)
+	svc.heartbeatTTL = 2 * time.Second
+	interval, err := svc.Heartbeat(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, time.Second, interval)
+}
+
+// Revisão: a decisão do Sweep é refeita sob o lock do fechamento — um mundo que
+// avisou entre a varredura e o fechamento não fecha.
+func TestCloseSessionIf_RecheckSalvaMundoQueAvisou(t *testing.T) {
+	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	svc, _, id := heartbeatSetup(t, &now)
+	_, err := svc.Heartbeat(context.Background(), id)
+	require.NoError(t, err)
+	now = now.Add(91 * time.Second)
+	cutoff := now.Add(-30 * time.Minute)
+
+	// o heartbeat chega "no meio": depois da varredura, antes do fechamento
+	_, err = svc.Heartbeat(context.Background(), id)
+	require.NoError(t, err)
+	_, err = svc.closeSessionIf(context.Background(), id, func(sess *domain.Session) (domain.CloseReason, bool) {
+		return svc.expiredLocked(sess, cutoff)
+	})
+	assert.ErrorIs(t, err, errNotExpired)
+	assert.Equal(t, float64(1), svc.ActiveSessions())
+}
