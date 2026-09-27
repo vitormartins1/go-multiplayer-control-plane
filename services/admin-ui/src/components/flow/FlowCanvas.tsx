@@ -8,6 +8,7 @@ import {
   ReactFlow,
   useReactFlow,
   useStore,
+  useUpdateNodeInternals,
   type Edge,
   type Node,
   type NodeTypes,
@@ -51,26 +52,40 @@ function reservedFitOptions({ left, right, margin, maxZoom }: FitReserve): { pad
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
 // mount. Filho de <ReactFlow>, então tem acesso ao store interno.
 // Também re-enquadra quando a área livre muda (spec 094): lista recolhida,
-// detalhe expandido, tela cheia. E espera os nós novos serem medidos
-// (achado da spec 094): um fit antes disso não enquadra nada, e o canvas
-// ficava com o enquadramento anterior (ex.: ao salvar uma regra nova).
-// O `nodesInitialized` do store não serve: ele não volta a false quando o
-// grafo é trocado; por isso a contagem de nós medidos.
-const measuredSelector = (s: { nodeLookup: Map<string, { measured?: { width?: number } }> }) => {
-  let n = 0;
-  for (const [, node] of s.nodeLookup) if (node.measured?.width) n++;
-  return n === s.nodeLookup.size ? n : -1; // -1: ainda há nó sem medida
+// detalhe expandido, tela cheia. E só enquadra com todos os nós medidos: um
+// fit antes disso não enquadra nada, e o canvas ficava com o enquadramento
+// anterior (ex.: ao salvar uma regra nova). O `nodesInitialized` do store não
+// serve para isso: ele não volta a false quando o grafo é trocado.
+const unmeasuredSelector = (s: { nodeLookup: Map<string, { id: string; measured?: { width?: number } }> }) => {
+  const ids: string[] = [];
+  for (const [, node] of s.nodeLookup) if (!node.measured?.width) ids.push(node.id);
+  return ids.join("\n"); // string: o store compara por valor, sem re-render à toa
 };
 
 function AutoFit({ fitKey, reserve, full }: { fitKey: unknown; reserve: FitReserve; full: boolean }) {
   const rf = useReactFlow();
-  const measured = useStore(measuredSelector);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const unmeasured = useStore(unmeasuredSelector);
+  const nodeCount = useStore((s) => s.nodeLookup.size);
+  const ready = nodeCount > 0 && unmeasured === "";
   const { left, right, margin, maxZoom } = reserve;
+
+  // Achado da spec 094: quando um grafo troca por outro com nós de mesmo id
+  // (ex.: "src:event" no rascunho e na regra salva), o React Flow às vezes
+  // reaproveita o elemento sem medir de novo, e o nó fica invisível para
+  // sempre (ele esconde nós sem medida). Um nó ainda sem medida depois de um
+  // instante é medido à força.
   useEffect(() => {
-    if (measured <= 0) return;
+    if (!unmeasured) return;
+    const t = setTimeout(() => updateNodeInternals(unmeasured.split("\n")), 150);
+    return () => clearTimeout(t);
+  }, [unmeasured, updateNodeInternals]);
+
+  useEffect(() => {
+    if (!ready) return;
     const t = setTimeout(() => rf.fitView({ ...reservedFitOptions({ left, right, margin, maxZoom }), duration: 250 }), 50);
     return () => clearTimeout(t);
-  }, [fitKey, left, right, margin, maxZoom, full, measured, rf]);
+  }, [fitKey, left, right, margin, maxZoom, full, ready, rf]);
   return null;
 }
 
