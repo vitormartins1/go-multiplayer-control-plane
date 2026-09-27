@@ -9,7 +9,8 @@
 // implacavel e a regra que emite chefe_implacavel.
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { CONSOLE, concat, encodeFrames, mediaDir, renderCard, startRecording } from "./lib.mjs";
+import { finish } from "./cards.mjs";
+import { CONSOLE, encodeFrames, mediaDir, startRecording } from "./lib.mjs";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const GAME_NAME = process.env.GAME_NAME || "Folclore Souls";
@@ -201,9 +202,5 @@ const frames = await rec.end();
 const body = path.join(tmp, "02-body.mp4");
 await encodeFrames(frames, body);
 if (process.env.ONLY_BODY) process.exit(0); // ensaio: só a gravação, sem cartelas
-await renderCard({ kicker: "Vídeo 2 · Conquistas", title: "O motor de conquistas",
-  sub: "Dois tipos de critério, regras com comparadores, globais do arquétipo e regras do jogo, tudo editado no console." }, 4.5, path.join(tmp, "02-intro.mp4"));
-await renderCard({ kicker: "Regras são dados", title: "Flexível, sem<br/>código novo.",
-  sub: "Métricas acumuladas, eventos com meta, regras compostas e supressão por jogo: cada estúdio monta as conquistas do seu jeito." }, 5, path.join(tmp, "02-outro.mp4"));
-await concat([path.join(tmp, "02-intro.mp4"), body, path.join(tmp, "02-outro.mp4")], path.join(mediaDir, "video-02-conquistas.mp4"));
+await finish("02-conquistas", body);
 console.log("pronto: docs/media/video-02-conquistas.mp4");

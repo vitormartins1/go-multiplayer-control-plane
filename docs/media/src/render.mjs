@@ -95,9 +95,10 @@ if (args[0] === "--frames") {
 // MP4: PNG por stdin → H.264, yuv420p (toca em qualquer lugar), faststart (web).
 // CRF 25 + tune animation: o filme é quase todo cor chapada; o texto das telas
 // continua nítido e o arquivo fica em ~7 MB (CRF 20 dava 16 MB).
-const mp4 = path.join(out, "go-multiplayer-control-plane.mp4");
+// FILM_OUT e CRF: a versão do YouTube sai em alta qualidade noutro arquivo (hq.mjs).
+const mp4 = process.env.FILM_OUT || path.join(out, "go-multiplayer-control-plane.mp4");
 const ff = spawn(FFMPEG, ["-y", "-f", "image2pipe", "-framerate", String(FPS), "-i", "-",
-  "-c:v", "libx264", "-preset", "slow", "-crf", "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: ["pipe", "inherit", "inherit"] });
+  "-c:v", "libx264", "-preset", "slow", "-crf", process.env.CRF || "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: ["pipe", "inherit", "inherit"] });
 const total = Math.round(duration * FPS);
 for (let i = 0; i < total; i++) {
   await page.evaluate((x) => window.__seek(x), i / FPS);
@@ -107,6 +108,6 @@ for (let i = 0; i < total; i++) {
 }
 ff.stdin.end();
 await new Promise((r) => ff.on("close", r));
-await stills();
+if (!process.env.FILM_OUT) await stills();
 await browser.close(); server.close();
 console.log("pronto:", mp4);

@@ -16,6 +16,9 @@ export const mediaDir = path.resolve(here, "../..");
 const { chromium } = await import(path.join(repo, "services/admin-ui/node_modules/playwright/index.mjs"));
 export const FFMPEG = process.env.FFMPEG || "ffmpeg";
 export const CONSOLE = process.env.CONSOLE_URL || "http://localhost:5173";
+// CRF do x264 nos vídeos de feature: 22 para o repositório (depois o shrink.mjs
+// encaixa em 10 MB); o hq.mjs usa um valor menor para a versão do YouTube.
+const CRF = process.env.CRF || "22";
 
 // 1280×720 com DPR 1,5 = quadros de 1920×1080 com a interface em tamanho legível
 const VIEW = { width: 1280, height: 720 };
@@ -216,9 +219,15 @@ export async function encodeFrames(frames, out) {
   lines.push(`file '${frames.at(-1).file}'`); // o concat ignora a duração do último item
   const list = path.join(path.dirname(frames[0].file), "list.ffconcat");
   await writeFile(list, lines.join("\n"));
+  await encodeList(list, out);
+}
+
+// encodeList monta o MP4 a partir da lista de quadros que a gravação deixou
+// (docs/media/frames/<vídeo>/list.ffconcat): é o que o hq.mjs reaproveita.
+export async function encodeList(list, out) {
   await run(["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list,
     "-vf", "fps=30,scale=1920:1080:flags=lanczos,format=yuv420p",
-    "-c:v", "libx264", "-preset", "slow", "-crf", "22", "-tune", "animation", "-movflags", "+faststart", out]);
+    "-c:v", "libx264", "-preset", "slow", "-crf", CRF, "-tune", "animation", "-movflags", "+faststart", out]);
 }
 
 // card renderiza uma cartela (card.html) quadro a quadro, como o filme
@@ -229,7 +238,7 @@ export async function renderCard(params, seconds, out) {
   await page.goto("file://" + path.join(here, "card.html") + "?" + q);
   await page.evaluate(() => document.fonts.ready);
   const ff = spawn(FFMPEG, ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", "30", "-i", "-",
-    "-c:v", "libx264", "-preset", "slow", "-crf", "22", "-tune", "animation", "-pix_fmt", "yuv420p", out], { stdio: ["pipe", "inherit", "inherit"] });
+    "-c:v", "libx264", "-preset", "slow", "-crf", CRF, "-tune", "animation", "-pix_fmt", "yuv420p", out], { stdio: ["pipe", "inherit", "inherit"] });
   for (let i = 0; i < seconds * 30; i++) {
     await page.evaluate((t) => window.__seek(t), i / 30);
     const buf = await page.screenshot({ type: "png" });
@@ -245,6 +254,6 @@ export async function concat(parts, out) {
   const list = out + ".txt";
   await writeFile(list, parts.map((p) => `file '${p}'`).join("\n"));
   await run(["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-c:v", "libx264", "-preset", "slow",
-    "-crf", "22", "-tune", "animation", "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart", out]);
+    "-crf", CRF, "-tune", "animation", "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart", out]);
   await rm(list);
 }

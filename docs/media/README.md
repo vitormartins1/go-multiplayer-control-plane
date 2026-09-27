@@ -96,4 +96,15 @@ node docs/media/src/shrink.mjs docs/media/<arquivo>.mp4    # duas passadas até 
 
 Como os vídeos são quase só tela parada e texto, a taxa baixa não aparece: o x264 gasta os bits onde a imagem muda.
 
+### Versão para o YouTube (alta qualidade)
+
+```bash
+CRF=16 node docs/media/src/hq.mjs            # os três de feature, a partir dos quadros já gravados
+CRF=16 node docs/media/src/hq.mjs --film     # e o filme, renderizado de novo (~20 min)
+```
+
+Saem em `docs/media/hq/` (fora do git). Os vídeos de feature não são regravados: a gravação deixa os quadros e a
+lista com o instante de cada um em `docs/media/frames/<vídeo>/`, e o `hq.mjs` só os codifica de novo com menos
+compressão (as cartelas moram em `src/record/cards.mjs`, compartilhadas com os roteiros).
+
 Fontes: Space Grotesk, IBM Plex Sans e IBM Plex Mono (SIL Open Font License), em `src/fonts/`.

@@ -10,7 +10,8 @@
 // com o saci de host, para ele aparecer online.
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { CONSOLE, concat, encodeFrames, mediaDir, renderCard, startRecording } from "./lib.mjs";
+import { finish } from "./cards.mjs";
+import { CONSOLE, encodeFrames, mediaDir, startRecording } from "./lib.mjs";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const GAME_NAME = process.env.GAME_NAME || "Folclore Souls";
@@ -117,9 +118,5 @@ const frames = await rec.end();
 const body = path.join(tmp, "03-body.mp4");
 await encodeFrames(frames, body);
 if (process.env.ONLY_BODY) process.exit(0); // ensaio: só a gravação, sem cartelas
-await renderCard({ kicker: "Vídeo 3 · Jogador", title: "Visão 360 do jogador",
-  sub: "Presença, conquistas, histórico, dados, save e a sessão ao vivo de cada jogador, na mesma tela." }, 4.5, path.join(tmp, "03-intro.mp4"));
-await renderCard({ kicker: "Uma tela, todos os serviços", title: "Tudo sobre o jogador,<br/>num lugar só.",
-  sub: "O console junta o que cada serviço sabe: contas, conquistas, sessões, dados e saves." }, 5, path.join(tmp, "03-outro.mp4"));
-await concat([path.join(tmp, "03-intro.mp4"), body, path.join(tmp, "03-outro.mp4")], path.join(mediaDir, "video-03-jogador.mp4"));
+await finish("03-jogador", body);
 console.log("pronto: docs/media/video-03-jogador.mp4");

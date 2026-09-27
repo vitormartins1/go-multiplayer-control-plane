@@ -11,7 +11,8 @@
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import { CONSOLE, concat, encodeFrames, mediaDir, renderCard, startRecording } from "./lib.mjs";
+import { finish } from "./cards.mjs";
+import { CONSOLE, encodeFrames, mediaDir, startRecording } from "./lib.mjs";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const GAME_NAME = process.env.GAME_NAME || "Mata Adentro";
@@ -169,9 +170,5 @@ const body = path.join(tmp, "01-body.mp4");
 await encodeFrames(frames, body);
 await promisify(execFile)(path.join(here, "stage.sh"), ["stop"]);
 if (process.env.ONLY_BODY) process.exit(0); // ensaio: só a gravação, sem cartelas
-await renderCard({ kicker: "Vídeo 1 · Cadastro de jogo", title: "Do zero ao jogo online",
-  sub: "Registrar um jogo, escolher como ele joga online e ver o primeiro mundo abrir e ser invadido." }, 4.5, path.join(tmp, "01-intro.mp4"));
-await renderCard({ kicker: "Sem deploy", title: "Nenhuma linha de código<br/>por jogo.",
-  sub: "Um formulário configurou matchmaking, sessões, P2P e métricas. O resto do backend leu o modo sozinho." }, 5, path.join(tmp, "01-outro.mp4"));
-await concat([path.join(tmp, "01-intro.mp4"), body, path.join(tmp, "01-outro.mp4")], path.join(mediaDir, "video-01-cadastro.mp4"));
+await finish("01-cadastro", body);
 console.log("pronto: docs/media/video-01-cadastro.mp4 (jogo " + gameId + ")");
