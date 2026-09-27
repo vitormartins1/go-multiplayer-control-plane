@@ -63,13 +63,13 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Próximo (executável sem decisão do dono)
 
-3. Consolidar as 5 tabelas `*_daily` do analytics numa `game_activity_daily` — pede ADR (altera a ADR-0021).
+Nada pendente desta lista em 2026-09-27: o que sobrou depende de decisão ou de trabalho fora do repo (abaixo).
 
 ## Depende do dono
 
-- Netcode p2p no repo do jogo (NGO com transporte da Steam no modo host) — o backend já está pronto (ADR-0032).
-- Virar `SESSION_AUTH_MODE=enforce` quando o jogo mandar bearer e chave de servidor.
-- Publisher key e app id da Steam para validar o login contra a Steam real.
+Consolidado, com passo a passo, em [`../PENDENCIAS-DO-DONO.md`](../PENDENCIAS-DO-DONO.md): chaves e cadastro na Steam,
+trabalho no projeto Unity, `enforce`, virar o Folclore para P2P, `govulncheck`, decisões em aberto (inclui a
+consolidação das tabelas `*_daily`, que pede ADR) e validações locais.
 
 ## Para o dono validar localmente
 

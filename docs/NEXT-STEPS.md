@@ -37,6 +37,9 @@ D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `s
 | Virar `SESSION_AUTH_MODE=enforce` | quando o jogo mandar bearer e chave de servidor |
 | Abrir o repo como open source (Apache-2.0) | sim, depois do lançamento ou quando quiser a vitrine |
 
+**O que depende de você** (chaves da Steam, Unity, `enforce`, decisões, validações locais), com o passo a passo:
+[`PENDENCIAS-DO-DONO.md`](PENDENCIAS-DO-DONO.md).
+
 **Integração do jogo:** o que o projeto Unity precisa fazer (credenciais, login Steam, heartbeat, P2P) está em
 [`integration/UNITY-GUIA-INTEGRACAO.md`](integration/UNITY-GUIA-INTEGRACAO.md), com um prompt pronto para o agente
 de lá.

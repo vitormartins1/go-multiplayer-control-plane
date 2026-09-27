@@ -81,6 +81,11 @@ Portas do compose local: identity `8081`, matchmaking gRPC `50051`, session gRPC
 4. O JWT dura **15 min e não há refresh**: quando uma chamada voltar `Unauthenticated`, pegue um ticket novo e refaça
    o login. Na primeira vez a conta é criada sozinha (handle `steam_<últimos dígitos>`).
 
+**Conquistas na Steam (sem mudança no jogo):** desde a spec `achievements/019` o **backend** marca a conquista na
+Steam do jogador quando ela desbloqueia aqui (conquista com "Nome na Steam" preenchido no console). O jogo **não**
+deve chamar `SetAchievement`/`StoreStats` do Steamworks para essas conquistas — seria o mesmo desbloqueio por dois
+caminhos, e o do cliente não passa pelas regras do console. Só funciona para jogador que entrou pelo login Steam.
+
 ### Passo 3 — Modo e boss (1.1.0)
 
 - `Invade` e `OpenWorld` com o **mesmo `mode_id`** — a invasão só acha mundos do mesmo modo (vazio = `default`).
@@ -206,9 +211,12 @@ async Task HeartbeatLoop(string sessionId, Metadata cred, CancellationToken ct) 
 - [ ] P2P: NGO host com transporte Steam; `OpenWorld` com `host_connection`; `world_token` em memória; approval
       checando `server = host_connection`; reports e heartbeat com `x-world-token`; `CloseWorld` ao sair.
 - [ ] Phantom: conecta por `host_connection` quando vier; por `server_address` caso contrário.
+- [ ] Nenhuma chamada de `SetAchievement` no cliente para conquistas que o console espelha na Steam.
 - [ ] `session_auth_rejections_total = 0` numa sessão completa → avisar o operador para ligar `enforce` (2.0.0).
 
 ## 7. O que depende do dono (fora do código)
+
+Lista completa, com o passo a passo: [`docs/PENDENCIAS-DO-DONO.md`](../PENDENCIAS-DO-DONO.md). Resumo:
 
 - Publisher key e app id do Steamworks (`STEAM_WEB_API_KEY`, `STEAM_APP_ID`) no deploy do identity.
 - Virar o modo do Folclore para **P2P** no console quando o netcode estiver pronto.
