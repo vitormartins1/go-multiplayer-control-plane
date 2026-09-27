@@ -9,4 +9,4 @@
 - [ ] Validação visual com fluxo real (data plane + k3d) rodando
 - [x] Commits `feat(admin-ui): sessions tab`, merge --no-ff
 
-> **Revisão 2026-09:** checkboxes marcados retroativamente — o código existe na `main` (verificado na revisão de produto, `docs/review/REVISAO-2026-09.md`). Validação visual ao vivo, quando houver, segue pendente.
+> **Revisão 2026-09:** checkboxes marcados retroativamente — o código existe na `main` (verificado na revisão de produto). Validação visual ao vivo, quando houver, segue pendente.

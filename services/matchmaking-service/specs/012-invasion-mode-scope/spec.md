@@ -3,7 +3,7 @@
 **Serviço:** matchmaking-service (+ session-service, proto `session.v1`)
 **Status:** Done
 **Data:** 2026-09-26
-**Decisão:** D2 da revisão de produto 2026-09 (`docs/review/REVISAO-2026-09.md` §6), aprovada pelo dono.
+**Decisão:** D2 da revisão de produto 2026-09, aprovada pelo dono.
 **Contrato:** mudança **compatível** do `.proto` (campo novo opcional); muda quem encontra quem no `Invade`.
 
 ## Contexto

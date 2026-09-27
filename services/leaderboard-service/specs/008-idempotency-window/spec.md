@@ -4,7 +4,7 @@
 **Status:** Done
 **Data:** 2026-09-26
 **Nível:** fatia pequena, com uma decisão técnica registrada abaixo (D1)
-**Origem:** revisão de produto 2026-09 (`docs/review/REVISAO-2026-09.md`, lacuna G8)
+**Origem:** revisão de produto 2026-09 (lacuna G8)
 
 ## Contexto
 

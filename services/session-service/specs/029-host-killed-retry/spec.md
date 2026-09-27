@@ -4,7 +4,7 @@
 **Status:** Done
 **Data:** 2026-09-26
 **Nível:** fatia pequena (correção; sem mudança de proto nem de envelope)
-**Origem:** revisão de produto 2026-09 (`docs/review/REVISAO-2026-09.md`, risco R2)
+**Origem:** revisão de produto 2026-09 (risco R2)
 
 ## Contexto
 

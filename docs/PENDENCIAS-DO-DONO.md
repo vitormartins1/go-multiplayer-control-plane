@@ -4,7 +4,7 @@
 > validações que a VM da revisão não conseguiu fazer. Cada item diz **o que fazer**, **onde** e **como saber que
 > terminou**. Estado em 2026-09-27, branch `claude/revisao-produto-l2k7hr`.
 >
-> Histórico do que foi feito: [`review/PROGRESSO.md`](review/PROGRESSO.md). Estado geral: [`NEXT-STEPS.md`](NEXT-STEPS.md).
+> Histórico do que foi feito: `git log` e o [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1). Estado geral: [`NEXT-STEPS.md`](NEXT-STEPS.md).
 
 ## 0. Primeiro de tudo: trazer a branch para a `main`
 
@@ -88,10 +88,10 @@ dependências em dia quando ele reprovar um PR futuro.
 
 | Decisão | Recomendação | Onde está o contexto |
 |---|---|---|
-| Consolidar as 5 tabelas `*_daily` do analytics numa só | sim, quando mexer de novo no analytics — pede uma ADR nova sobre a ADR-0021 (você aprova o rascunho) | `review/REVISAO-2026-09.md` |
-| Login no console (admin-bff) — D6 | decidir **junto com o deploy real**: login de operador (OIDC/senha) ou console só atrás de VPN | `review/REVISAO-2026-09.md` §6 |
-| Deploy real e medição de custo (G10, a tese do projeto — ADR-0008) | o próximo grande marco depois do lançamento; P2P já cortou o maior custo | `review/REVISAO-2026-09.md` |
-| Resultado de partida sem outbox (G7) | **reenvio corrigido** (spec `session/033`); outbox de verdade só se o session deixar de ser em memória | `review/REVISAO-2026-09.md` |
+| Consolidar as 5 tabelas `*_daily` do analytics numa só | sim, quando mexer de novo no analytics — pede uma ADR nova sobre a ADR-0021 (você aprova o rascunho) | rascunho no git: `git show 6b8b0c7:docs/review/RASCUNHO-ADR-analytics-daily.md` |
+| Login no console (admin-bff) — D6 | decidir **junto com o deploy real**: login de operador (OIDC/senha) ou console só atrás de VPN | `SECURITY.md` |
+| Deploy real e medição de custo (G10, a tese do projeto — ADR-0008) | o próximo grande marco depois do lançamento; P2P já cortou o maior custo | ADR-0008 |
+| Resultado de partida sem outbox (G7) | **reenvio corrigido** (spec `session/033`); outbox de verdade só se o session deixar de ser em memória | spec `session/033` |
 | S3 local do cloud-save | **LocalStack** desde 2026-09-27 (o MinIO saiu do Docker Hub). Os saves locais somem quando o LocalStack reinicia; se isso incomodar, trocar por um S3 com persistência (SeaweedFS ou Garage) — só muda o endpoint | `infra/docker/docker-compose.yml` |
 | Licença | **decidida: Apache-2.0** (2026-09-27). `LICENSE`, `NOTICE`, badge e seção do README feitos | `LICENSE`, `NOTICE` |
 | Limite de tentativas no login (G5) | **feito em memória** (spec `identity/007`); com várias réplicas, trocar por um limite distribuído (Redis) no deploy real | idem |
@@ -118,23 +118,33 @@ O que já está pronto para a abertura: `LICENSE` (Apache-2.0) e `NOTICE`, READM
 `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SECURITY.md` e templates de issue e de PR.
 O que falta, numa passada só, na hora de abrir:
 
-1. **Contato do código de conduta:** trocar `[CONTATO A DEFINIR ...]` no `CODE_OF_CONDUCT.md` por um e-mail ou
-   formulário que você queira expor publicamente.
+1. ~~Contato do código de conduta~~: **feito** (e-mail do mantenedor no `CODE_OF_CONDUCT.md`).
 2. **Reporte privado de vulnerabilidades:** no GitHub, Settings → Code security → ligar *Private vulnerability
-   reporting* (o `SECURITY.md` e o template de issue apontam para ele).
-3. **Arquivos internos:** decidir o destino de cada um (a recomendação está ao lado).
-
-   | Arquivo | Recomendação |
-   |---|---|
-   | `docs/prompts/` | remover: é o prompt da revisão, não serve a quem chega |
-   | `docs/review/` (revisão, progresso, estratégia, rascunho de ADR) | remover ou mover para um repo privado; as decisões que importam já viraram ADR, spec ou este arquivo |
-   | `docs/PENDENCIAS-DO-DONO.md` (este) | remover depois de resolvido; o que sobrar vira issue pública |
-   | `CLAUDE.md` e `AGENTS.md` | manter: guias para agentes de código são comuns em projetos abertos e documentam as regras do repo |
-   | `docs/GO-LEARNINGS.md` | manter: 40+ padrões de Go com o código real é material raro e atrai quem estuda Go |
-4. **Segredos no histórico:** rodar um scanner no histórico inteiro antes de tornar público (por exemplo
-   `gitleaks detect --log-opts="--all"`). Uma varredura simples em 2026-09-27 (chaves privadas PEM, chaves AWS
-   e tokens do GitHub em todo o histórico) não achou nada, mas um scanner dedicado cobre mais padrões.
-5. **Vídeo tocando no README:** arrastar o MP4 principal para um comentário ou o editor do GitHub, copiar o link
-   `user-attachments` gerado e colocá-lo no topo do README (o GitHub toca esse link embutido; um MP4 do repositório,
-   não).
+   reporting*. Só existe para repositório **público**: ligar logo depois de abrir (o `SECURITY.md` e o template de
+   issue já apontam para ele).
+3. ~~Arquivos internos~~: **feito**. `docs/prompts/` e `docs/review/` saíram (continuam no histórico do git);
+   `CLAUDE.md`, `AGENTS.md` e `docs/GO-LEARNINGS.md` ficam.
+4. ~~Segredos no histórico~~: **feito** com o gitleaks em todo o histórico (2026-09-27): nenhum segredo; os dois
+   achados eram um comentário de teste (`key -> ...`), registrados em `.gitleaksignore`. Para repetir:
+   `gitleaks git --log-opts="--all" .`
+5. **Vídeos tocando no README:** ver a seção 9.
 6. **Tornar público** (Settings → General → Danger Zone → Change visibility) e publicar o post técnico.
+
+## 9. Vídeos tocando dentro do GitHub
+
+O GitHub só toca vídeo embutido (README, docs, issues) a partir de um link `github.com/user-attachments/assets/…`,
+que ele gera quando o arquivo é enviado pela interface web. Não há API para esse envio, então este passo é seu:
+
+1. Abra qualquer caixa de comentário do GitHub (por exemplo, um comentário novo no PR #1) e arraste os quatro
+   MP4 de `docs/media/`: `go-multiplayer-control-plane.mp4`, `video-01-cadastro.mp4`,
+   `video-02-conquistas.mp4` e `video-03-jogador.mp4`. Não precisa publicar o comentário: os links aparecem no
+   texto assim que o envio termina.
+2. Copie os quatro links e me passe.
+
+Com eles, o plano é:
+
+- **README (pt e en):** o vídeo principal toca no topo, no lugar da capa estática.
+- **"Veja em ação":** as três capas continuam lado a lado, mas o clique leva a uma página `docs/VIDEOS.md` em que
+  cada vídeo de feature toca embutido, com o resumo do que ele mostra. Três players seguidos no README deixariam a
+  página pesada; a página própria mantém o README leve e dá a cada vídeo um link direto (`docs/VIDEOS.md#…`).
+- Os MP4 continuam em `docs/media/` como fonte (e para quem clona o repositório).

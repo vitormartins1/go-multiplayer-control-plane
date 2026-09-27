@@ -3,7 +3,7 @@
 **Serviço:** session-service (+ matchmaking-service, game-registry, admin-bff, admin-ui, proto `session.v1`)
 **Status:** Done no backend (2026-09-27); o netcode do jogo segue no repo do jogo
 **Data:** 2026-09-26
-**ADR:** [0032](../../../../docs/adr/0032-p2p-host-world-topology.md) · rascunho B de `docs/review/ESTRATEGIA-PRODUTO-2026-09.md`
+**ADR:** [0032](../../../../docs/adr/0032-p2p-host-world-topology.md) · rascunho B da estratégia de produto 2026-09
 
 ## Contexto
 

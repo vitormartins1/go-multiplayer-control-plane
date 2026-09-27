@@ -4,7 +4,7 @@
 **Status:** Done
 **Data:** 2026-09-26
 **Nível:** fatia pequena (limite de entrada no handler; sem mudança de schema)
-**Origem:** revisão de produto 2026-09 (`docs/review/REVISAO-2026-09.md`, lacuna G5)
+**Origem:** revisão de produto 2026-09 (lacuna G5)
 
 ## Contexto
 

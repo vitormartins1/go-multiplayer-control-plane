@@ -3,7 +3,7 @@
 **Serviço:** identity-service
 **Status:** Done (validação com a Steam real depende da publisher key do Steamworks do jogo)
 **Data:** 2026-09-26
-**Decisão:** rascunho A de `docs/review/ESTRATEGIA-PRODUTO-2026-09.md` (identidade federada, Steam primeiro)
+**Decisão:** rascunho A da estratégia de produto 2026-09 (identidade federada, Steam primeiro), registrado na ADR-0031
 
 ## Contexto
 

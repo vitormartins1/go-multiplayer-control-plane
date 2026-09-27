@@ -2,9 +2,7 @@
 
 Ponto de retomada. Diz **onde o projeto está**, **o que depende do dono** e **o que fazer a seguir**. O histórico
 detalhado de cada fatia vive no `git log` (Conventional Commits com escopo) e nas `specs/` de cada serviço — este
-doc não é changelog. A análise completa que embasa esta versão está em
-[`review/REVISAO-2026-09.md`](review/REVISAO-2026-09.md); o andamento da execução, em
-[`review/PROGRESSO.md`](review/PROGRESSO.md).
+doc não é changelog.
 
 ## Onde estamos
 
@@ -12,7 +10,7 @@ doc não é changelog. A análise completa que embasa esta versão está em
   **Folclore Souls** (ex-Capoeira Souls; Fases 0–5 do data plane, e2e k3d→Pi 5 em 2026-07-11); `queue_arena` pelo
   protótipo Packet Arena; `battle_royale`/`coop_mission` têm contrato e código, **sem jogo real**.
 - **O jogo está em fase de gameplay** desde agosto (bosses, combate, mundo) — os pedidos de multiplayer estão
-  adiados do lado de lá (`review/SINAIS-DO-FOLCLORE-SOULS.md`). O backend se prepara onde o desenho está claro, sem
+  adiados do lado de lá. O backend se prepara onde o desenho está claro, sem
   correr na frente.
 - **Desde o último handoff (2026-07-13)** entraram: analytics por modo em todos os rollups e session health
   (analytics 012–015, session 027/028, admin-bff 025–028), ~27 specs de polimento do admin-ui (063–089), o fix
@@ -23,7 +21,7 @@ doc não é changelog. A análise completa que embasa esta versão está em
   restart policy e chave persistente do identity no compose, teto de corpo nas rotas de jogador
   (`player-data/003`), idempotência do leaderboard com TTL (`leaderboard/008`), cobertura ≥ 92% no analytics e no
   achievements, primeiros testes do admin-ui, **demo reproduzível** (`scripts/demo-host-world.sh`) e docs de estado
-  sincronizadas com o código. Ver `review/PROGRESSO.md` para os commits.
+  sincronizadas com o código.
 - **Fase 3 e rodada final (2026-09-26/27)**: autenticação no gRPC do session, login Steam, conquistas espelhadas
   na Steam, **topologia P2P** e **heartbeat do mundo** (contrato 1.1.0 → 1.5.0); console com hospedagem e sinal
   de vida; code review da branch inteira com os achados corrigidos (reenvio do `ReportResult`, limite de tentativas
@@ -33,8 +31,7 @@ doc não é changelog. A análise completa que embasa esta versão está em
 
 ## Decisões do dono
 
-D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `shared/auth`) — executadas na Fase 3
-(`review/PROGRESSO.md`). Abertas agora, na [estratégia de produto](review/ESTRATEGIA-PRODUTO-2026-09.md):
+D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `shared/auth`) — executadas na Fase 3. Abertas agora:
 
 | Decisão | Recomendação |
 |---|---|
@@ -68,8 +65,8 @@ de lá.
 Executáveis sem decisão (próximas sessões):
 
 Os cinco itens da lista anterior (espelho Steam, Rooms/Sessions unificados, ESLint, `govulncheck`, refatorar o
-`session_service.go`) estão feitos; o da consolidação das séries diárias do analytics espera a ADR
-([rascunho](review/RASCUNHO-ADR-analytics-daily.md)). Candidatos para a próxima sessão:
+`session_service.go`) estão feitos; o da consolidação das séries diárias do analytics espera a ADR (o rascunho está
+no histórico do git: `git show 6b8b0c7:docs/review/RASCUNHO-ADR-analytics-daily.md`). Candidatos para a próxima sessão:
 
 1. **Consolidar as séries diárias do analytics** assim que o rascunho de ADR for aprovado.
 2. **Limite de login distribuído** (Redis) quando houver mais de uma réplica do identity.

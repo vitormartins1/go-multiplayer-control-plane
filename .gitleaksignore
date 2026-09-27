@@ -1,0 +1,3 @@
+# falsos positivos revisados (2026-09-27): comentário "ORDER BY namespace, key -> ..." num teste
+ca7176b77f6ec67ddc7104cc7a7b743746648b9f:services/player-data-service/internal/repository/postgres_player_data_test.go:generic-api-key:149
+f03cd2be72c01ccd06ee83a9a5f1a9a4f0c9097f:services/player-data-service/internal/repository/postgres_player_data_test.go:generic-api-key:149

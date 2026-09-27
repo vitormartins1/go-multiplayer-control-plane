@@ -36,7 +36,7 @@ golangci-lint run ./...
 # Terraform local (LocalStack) — hoje só a mensageria (SNS/SQS); o compose já aplica no boot
 cd infra/terraform/environments/local/messaging && terraform init && terraform apply
 
-# Terraform prod: ainda não existe (ver docs/review/REVISAO-2026-09.md, G10)
+# Terraform prod: ainda não existe (ver docs/NEXT-STEPS.md)
 ```
 
 ## Estrutura dos serviços

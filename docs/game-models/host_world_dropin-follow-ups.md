@@ -97,7 +97,7 @@ declarar → **abrir mundo** (H0, `session/011`) → **descobrir/injetar por pap
 
 ## 10. Alocação do dedicated server **sob demanda** (a economia real)
 
-> **Revisão 2026-09:** continua não implementado (`OpenWorld` aloca na hora — `session_service.go`, `OpenWorld`). Pedido pelo Folclore Souls (`docs/review/SINAIS-DO-FOLCLORE-SOULS.md`), mas depende da decisão de topologia (P2P × dedicado) que o jogo ainda está tomando.
+> **Revisão 2026-09:** continua não implementado (`OpenWorld` aloca na hora — `session_service.go`, `OpenWorld`). Pedido pelo Folclore Souls, mas depende da decisão de topologia (P2P × dedicado) que o jogo ainda está tomando.
 
 - **O quê:** a H0 aloca um Agones GameServer **no `OpenWorld`** (mundo sempre num server — simples, mais caro). A evolução é alocar **sob demanda** só quando o mundo abre para multiplayer (1º co-op/invasão) e liberar ao esvaziar (barato, exige handoff de estado).
 - **Por que adiado:** validar o fluxo ponta a ponta e **medir** antes; o handoff introduz latência/complexidade.
