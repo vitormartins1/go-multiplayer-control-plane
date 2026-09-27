@@ -31,6 +31,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 			"../../migrations/001_create_closed_sessions.sql",
 			"../../migrations/002_create_closed_session_players.sql",
 			"../../migrations/003_closed_session_result_and_outcome.sql",
+			"../../migrations/004_closed_session_topology.sql",
 		),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -229,4 +230,30 @@ func TestPostgresHistoryRepository_ClosedByPlayer_SemHistorico_ListaVazia(t *tes
 	got, err := repo.ClosedByPlayer(ctx, "game-1", "ninguem", 10, time.Time{})
 	require.NoError(t, err)
 	assert.Empty(t, got)
+}
+
+// spec 031 (achado do console, admin-ui/091): o histórico guarda a topologia e
+// a conexão do host p2p — antes a sessão fechada voltava sem hospedagem.
+func TestPostgresHistoryRepository_SaveClosed_PersisteTopologiaEConexaoDoHost(t *testing.T) {
+	pool := newTestPool(t)
+	repo := NewPostgresHistoryRepository(pool)
+	ctx := context.Background()
+
+	closedAt := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+	p2p := closedSession("p2p-1", "game-1", closedAt)
+	p2p.Profile.Topology = domain.TopologyP2P
+	p2p.HostConnection = "steam:76561198000000042"
+	require.NoError(t, repo.SaveClosed(ctx, p2p))
+	ded := closedSession("ded-1", "game-1", closedAt.Add(-time.Minute))
+	ded.Profile.Topology = domain.TopologyDedicated
+	require.NoError(t, repo.SaveClosed(ctx, ded))
+
+	got, err := repo.ClosedByGame(ctx, "game-1", 10, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.NotNil(t, got[0].Profile)
+	assert.Equal(t, domain.TopologyP2P, got[0].Profile.Topology)
+	assert.Equal(t, "steam:76561198000000042", got[0].HostConnection)
+	assert.Equal(t, domain.TopologyDedicated, got[1].Profile.Topology)
+	assert.Empty(t, got[1].HostConnection)
 }

@@ -25,7 +25,7 @@
 - admin-ui: `src/lib/api.ts`, `src/pages/{MultiplayerSettings,Rooms,GameSessions}.tsx`
 - docs: `docs/contracts/CHANGELOG.md` (1.4.0), contrato do `host_world_dropin`, ADR-0032, `docs/GO-LEARNINGS.md`
 
-## Limitação conhecida
+## Limitação conhecida — resolvida (migration `004_closed_session_topology`, 2026-09-27)
 
 O histórico persistido (`closed_sessions`, spec 025) não guarda a topologia: sessões fechadas lidas do Postgres
 chegam sem `topology` e o admin mostra "—" na coluna de servidor. As em memória (abertas e recém-fechadas) mostram

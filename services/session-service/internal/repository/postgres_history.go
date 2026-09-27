@@ -36,10 +36,11 @@ func (r *PostgresHistoryRepository) SaveClosed(ctx context.Context, sess *domain
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // no-op após Commit
 
-	var archetype, profileHash string
+	var archetype, profileHash, topology string
 	if sess.Profile != nil {
 		archetype = sess.Profile.Archetype
 		profileHash = sess.Profile.Hash
+		topology = sess.Profile.Topology
 	}
 
 	// result/team_by_player (spec 027): nil quando a sessão não tem resultado
@@ -66,12 +67,12 @@ func (r *PostgresHistoryRepository) SaveClosed(ctx context.Context, sess *domain
 		INSERT INTO closed_sessions
 			(session_id, match_id, game_id, mode_id, archetype, origin,
 			 host_player_id, close_reason, profile_hash, opened_at, closed_at,
-			 result, team_by_player)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)`
+			 result, team_by_player, topology, host_connection)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15)`
 	if _, err := tx.Exec(ctx, insertSession,
 		sess.ID, sess.MatchID, sess.GameID, sess.ModeID, archetype, string(sess.Origin),
 		sess.HostPlayerID, string(sess.CloseReason), profileHash, sess.OpenedAt, sess.ClosedAt,
-		resultParam, teamsParam,
+		resultParam, teamsParam, topology, sess.HostConnection,
 	); err != nil {
 		return fmt.Errorf("session history repository: save closed: insert session: %w", err)
 	}
@@ -91,9 +92,9 @@ func (r *PostgresHistoryRepository) SaveClosed(ctx context.Context, sess *domain
 	return nil
 }
 
-const closedSessionCols = `session_id, match_id, game_id, mode_id, archetype, origin, host_player_id, close_reason, profile_hash, opened_at, closed_at, result, team_by_player`
+const closedSessionCols = `session_id, match_id, game_id, mode_id, archetype, origin, host_player_id, close_reason, profile_hash, opened_at, closed_at, result, team_by_player, topology, host_connection`
 
-const closedSessionColsAliased = `cs.session_id, cs.match_id, cs.game_id, cs.mode_id, cs.archetype, cs.origin, cs.host_player_id, cs.close_reason, cs.profile_hash, cs.opened_at, cs.closed_at, cs.result, cs.team_by_player`
+const closedSessionColsAliased = `cs.session_id, cs.match_id, cs.game_id, cs.mode_id, cs.archetype, cs.origin, cs.host_player_id, cs.close_reason, cs.profile_hash, cs.opened_at, cs.closed_at, cs.result, cs.team_by_player, cs.topology, cs.host_connection`
 
 // ClosedByGame lista as sessões fechadas do jogo, mais recente primeiro,
 // paginadas por closed_at (before zero = sem cursor).
@@ -183,20 +184,20 @@ func scanClosedSessions(rows pgx.Rows) ([]domain.Session, error) {
 	var out []domain.Session
 	for rows.Next() {
 		var s domain.Session
-		var archetype, profileHash, origin, closeReason string
+		var archetype, profileHash, origin, closeReason, topology string
 		var resultRaw, teamsRaw []byte
 		if err := rows.Scan(
 			&s.ID, &s.MatchID, &s.GameID, &s.ModeID, &archetype, &origin,
 			&s.HostPlayerID, &closeReason, &profileHash, &s.OpenedAt, &s.ClosedAt,
-			&resultRaw, &teamsRaw,
+			&resultRaw, &teamsRaw, &topology, &s.HostConnection,
 		); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		s.Origin = domain.SessionOrigin(origin)
 		s.CloseReason = domain.CloseReason(closeReason)
 		s.State = domain.SessionClosed
-		if archetype != "" || profileHash != "" {
-			s.Profile = &domain.ProfileSnapshot{Archetype: archetype, Hash: profileHash}
+		if archetype != "" || profileHash != "" || topology != "" {
+			s.Profile = &domain.ProfileSnapshot{Archetype: archetype, Hash: profileHash, Topology: topology}
 		}
 		if resultRaw != nil {
 			var result domain.MatchOutcome

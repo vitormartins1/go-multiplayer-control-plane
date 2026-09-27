@@ -352,8 +352,8 @@ services:
       - "5432:5432"
     volumes:
       # aplica a migration na inicialização do banco
-      - ../../services/identity-service/migrations/001_create_accounts.sql:/docker-entrypoint-initdb.d/001_create_accounts.sql:ro
-      - ../../services/identity-service/migrations/002_external_identities.sql:/docker-entrypoint-initdb.d/002_external_identities.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/identity-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d identity"]
       interval: 5s
@@ -371,16 +371,8 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ../../services/achievements-service/migrations/001_create_achievements.sql:/docker-entrypoint-initdb.d/001_create_achievements.sql:ro
-      - ../../services/achievements-service/migrations/002_add_progress.sql:/docker-entrypoint-initdb.d/002_add_progress.sql:ro
-      - ../../services/achievements-service/migrations/003_add_game_scope.sql:/docker-entrypoint-initdb.d/003_add_game_scope.sql:ro
-      - ../../services/achievements-service/migrations/004_processed_matches.sql:/docker-entrypoint-initdb.d/004_processed_matches.sql:ro
-      - ../../services/achievements-service/migrations/005_stat_criteria.sql:/docker-entrypoint-initdb.d/005_stat_criteria.sql:ro
-      - ../../services/achievements-service/migrations/006_processed_participations.sql:/docker-entrypoint-initdb.d/006_processed_participations.sql:ro
-      - ../../services/achievements-service/migrations/007_participation_event_id.sql:/docker-entrypoint-initdb.d/007_participation_event_id.sql:ro
-      - ../../services/achievements-service/migrations/008_event_rules.sql:/docker-entrypoint-initdb.d/008_event_rules.sql:ro
-      - ../../services/achievements-service/migrations/009_match_operators.sql:/docker-entrypoint-initdb.d/009_match_operators.sql:ro
-      - ../../services/achievements-service/migrations/010_event_rule_suppressions.sql:/docker-entrypoint-initdb.d/010_event_rule_suppressions.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/achievements-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d achievements"]
       interval: 5s
@@ -398,8 +390,8 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - ../../services/player-data-service/migrations/001_create_player_data.sql:/docker-entrypoint-initdb.d/001_create_player_data.sql:ro
-      - ../../services/player-data-service/migrations/002_add_game_scope.sql:/docker-entrypoint-initdb.d/002_add_game_scope.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/player-data-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d player_data"]
       interval: 5s
@@ -417,15 +409,8 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - ../../services/game-registry/migrations/001_create_games.sql:/docker-entrypoint-initdb.d/001_create_games.sql:ro
-      - ../../services/game-registry/migrations/002_seed_sandbox.sql:/docker-entrypoint-initdb.d/002_seed_sandbox.sql:ro
-      - ../../services/game-registry/migrations/003_create_game_players.sql:/docker-entrypoint-initdb.d/003_create_game_players.sql:ro
-      - ../../services/game-registry/migrations/004_add_cover_metadata.sql:/docker-entrypoint-initdb.d/004_add_cover_metadata.sql:ro
-      - ../../services/game-registry/migrations/005_add_multiplayer_profile.sql:/docker-entrypoint-initdb.d/005_add_multiplayer_profile.sql:ro
-      - ../../services/game-registry/migrations/006_add_deleted_at.sql:/docker-entrypoint-initdb.d/006_add_deleted_at.sql:ro
-      - ../../services/game-registry/migrations/007_add_fleet.sql:/docker-entrypoint-initdb.d/007_add_fleet.sql:ro
-      - ../../services/game-registry/migrations/008_add_modes_version.sql:/docker-entrypoint-initdb.d/008_add_modes_version.sql:ro
-      - ../../services/game-registry/migrations/009_add_description.sql:/docker-entrypoint-initdb.d/009_add_description.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/game-registry/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d game_registry"]
       interval: 5s
@@ -591,13 +576,8 @@ services:
     ports:
       - "5436:5432"
     volumes:
-      - ../../services/analytics-service/migrations/001_create_analytics.sql:/docker-entrypoint-initdb.d/001_create_analytics.sql:ro
-      - ../../services/analytics-service/migrations/002_outcome_counts.sql:/docker-entrypoint-initdb.d/002_outcome_counts.sql:ro
-      - ../../services/analytics-service/migrations/003_participation_rollup.sql:/docker-entrypoint-initdb.d/003_participation_rollup.sql:ro
-      - ../../services/analytics-service/migrations/004_placement_rollup.sql:/docker-entrypoint-initdb.d/004_placement_rollup.sql:ro
-      - ../../services/analytics-service/migrations/005_mission_rollup.sql:/docker-entrypoint-initdb.d/005_mission_rollup.sql:ro
-      - ../../services/analytics-service/migrations/006_participation_event_id_and_outcome.sql:/docker-entrypoint-initdb.d/006_participation_event_id_and_outcome.sql:ro
-      - ../../services/analytics-service/migrations/007_participation_mode_id.sql:/docker-entrypoint-initdb.d/007_participation_mode_id.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/analytics-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d analytics"]
       interval: 5s
@@ -627,8 +607,8 @@ services:
     ports:
       - "5437:5432"
     volumes:
-      - ../../services/session-service/migrations/001_create_closed_sessions.sql:/docker-entrypoint-initdb.d/001_create_closed_sessions.sql:ro
-      - ../../services/session-service/migrations/002_create_closed_session_players.sql:/docker-entrypoint-initdb.d/002_create_closed_session_players.sql:ro
+      # diretório inteiro: migration nova entra sozinha (antes, por arquivo, ficaram 6 de fora)
+      - ../../services/session-service/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev -d session"]
       interval: 5s

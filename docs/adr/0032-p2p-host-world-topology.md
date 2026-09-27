@@ -51,6 +51,6 @@ opaco nasce no `OpenWorld`, vale só para aquele mundo e morre quando ele fecha.
   servidor e um selo P2P no modo; Frota (Agones) passa a importar só para os modos dedicados.
 - **Negativas / riscos:** conquistas e analytics de mundos p2p dependem da honestidade do host. Mitigações baratas,
   fora desta ADR: conquista sensível só com evento de mais de um participante; separar números por topologia.
-- **Pendências:** o netcode do jogo (NGO com transporte da Steam no modo host) é decisão do repo do jogo; o histórico
-  persistido do session ainda não guarda a topologia (sessões fechadas lidas do Postgres aparecem sem ela).
+- **Pendências:** o netcode do jogo (NGO com transporte da Steam no modo host) é decisão do repo do jogo. (O histórico
+  persistido passou a guardar a topologia e a conexão do host na migration `004`.)
 - **Contrato:** aditivo (1.4.0, `docs/contracts/CHANGELOG.md`).
