@@ -144,10 +144,11 @@ await staged;
 // --- 8. o fim da partida --------------------------------------------------------------
 await rec.caption("Fim da luta", "Agora o invasor derrota o host. O jogo do host reporta a morte…");
 await promisify(execFile)(path.join(here, "stage.sh"), ["kill"]);
-// o polling tira o mundo das abertas
-await page.getByRole("row").filter({ hasText: /steam:/ }).first().waitFor({ state: "detached", timeout: 30000 });
+// o polling vê o mundo fechar: a linha vira "Fechada · Host morto" ao vivo (spec 095)
+const fechou = page.getByRole("row").filter({ hasText: /Host morto/ }).first();
+await fechou.waitFor({ timeout: 30000 });
 await rec.wait(800);
-await rec.say("Fechou", "O mundo saiu da lista de abertas: ele fecha sozinho quando o host morre.");
+await rec.spot(fechou, "Fechou", "O mundo fechou sozinho quando o host morreu, e a lista já mostra o motivo.");
 await rec.click(tab("Analytics"));
 await rec.wait(2500);
 await rec.spot(page.getByText("Resumo do mundo").locator("xpath=ancestor::div[contains(@class,'mantine-Paper-root') or contains(@class,'mantine-Card-root')][1]"),
