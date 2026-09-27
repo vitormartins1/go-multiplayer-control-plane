@@ -107,4 +107,23 @@ Saem em `docs/media/hq/` (fora do git). Os vídeos de feature não são regravad
 lista com o instante de cada um em `docs/media/frames/<vídeo>/`, e o `hq.mjs` só os codifica de novo com menos
 compressão (as cartelas moram em `src/record/cards.mjs`, compartilhadas com os roteiros).
 
+### Narração (versão do YouTube)
+
+A narração é a leitura das próprias legendas, por uma voz neural gratuita que roda na máquina: o
+[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) em ONNX, com a voz em português `pm_alex`
+([`src/record/narrate.py`](src/record/narrate.py); `pip install kokoro-onnx soundfile`, o modelo de ~330 MB é baixado
+na primeira vez). A legenda na tela não muda; só a fala passa por um dicionário de pronúncia para termos em inglês e
+identificadores (`matchmaking`, `P2P`, `SteamID`, `boss_boitata`…).
+
+```bash
+NARRATE=1 CRF=16 node docs/media/src/record/02-conquistas.mjs   # grava de novo, com a fala; sai em docs/media/hq/*-narrado.mp4 + .srt
+NARRATE=1 CRF=16 node docs/media/src/hq.mjs 03-jogador          # só remonta a partir da última gravação narrada
+NARRATE=1 CRF=16 FILM_OUT=$PWD/docs/media/hq/go-multiplayer-control-plane.mp4 node docs/media/src/render.mjs
+```
+
+Nos vídeos de feature, com `NARRATE=1` a legenda seguinte só aparece quando a fala anterior termina, e o gravador
+guarda o instante de cada uma (a fala é ancorada no primeiro quadro em que a legenda aparece). No filme, as falas de
+[`src/film-narration.json`](src/film-narration.json) ficam presas ao instante de cada texto, e o filme congela um
+momento onde a voz precisa de mais tempo. O `.srt` ao lado de cada vídeo serve de legenda no YouTube.
+
 Fontes: Space Grotesk, IBM Plex Sans e IBM Plex Mono (SIL Open Font License), em `src/fonts/`.

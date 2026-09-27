@@ -8,7 +8,7 @@
 // O Chromium é o do Playwright (PLAYWRIGHT_CHROMIUM para outro caminho).
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { readFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -97,17 +97,65 @@ if (args[0] === "--frames") {
 // continua nítido e o arquivo fica em ~7 MB (CRF 20 dava 16 MB).
 // FILM_OUT e CRF: a versão do YouTube sai em alta qualidade noutro arquivo (hq.mjs).
 const mp4 = process.env.FILM_OUT || path.join(out, "go-multiplayer-control-plane.mp4");
+
+// Narração (NARRATE=1): as falas de film-narration.json, cada uma ancorada no
+// instante do filme em que o texto correspondente aparece. Quando uma fala ainda
+// não terminou e a próxima chegaria, o filme congela um instante antes dela
+// (o texto anterior segue na tela) até a voz acabar. O mapa de tempo de saída →
+// tempo do filme faz esse congelamento na hora de renderizar os quadros.
+const NARRATE = !!process.env.NARRATE;
+let clips = [], holds = [], outDuration = duration;
+if (NARRATE) {
+  const { speak } = await import("./record/lib.mjs");
+  const cues = JSON.parse(await readFile(path.join(here, "film-narration.json"), "utf8"));
+  const GAP = 0.35;
+  let offset = 0, audioEnd = 0;
+  for (const c of cues) {
+    const a = await speak(c.text);
+    let start = c.at + offset;
+    if (start < audioEnd + GAP) {
+      const h = audioEnd + GAP - start;
+      holds.push({ film: Math.max(0, c.at - 0.1), dur: h });
+      offset += h;
+      start += h;
+    }
+    clips.push({ at: start, file: a.file, dur: a.dur, text: c.text });
+    audioEnd = start + a.dur;
+  }
+  outDuration = Math.max(duration + offset, audioEnd + 1.2); // a última fala termina antes do fim
+  console.log(`narração: ${clips.length} falas, ${holds.length} pausas, ${(outDuration - duration).toFixed(1)} s a mais`);
+}
+// filmAt: instante do filme para um instante do vídeo de saída
+const filmAt = (o) => {
+  for (const h of holds) {
+    if (o < h.film) return o;
+    if (o < h.film + h.dur) return h.film;
+    o -= h.dur;
+  }
+  return Math.min(o, duration - 1 / FPS);
+};
+
+const silent = NARRATE ? mp4.replace(/\.mp4$/, "-mudo.mp4") : mp4;
 const ff = spawn(FFMPEG, ["-y", "-f", "image2pipe", "-framerate", String(FPS), "-i", "-",
-  "-c:v", "libx264", "-preset", "slow", "-crf", process.env.CRF || "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: ["pipe", "inherit", "inherit"] });
-const total = Math.round(duration * FPS);
+  "-c:v", "libx264", "-preset", "slow", "-crf", process.env.CRF || "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart", silent], { stdio: ["pipe", "inherit", "inherit"] });
+const total = Math.round(outDuration * FPS);
 for (let i = 0; i < total; i++) {
-  await page.evaluate((x) => window.__seek(x), i / FPS);
+  await page.evaluate((x) => window.__seek(x), filmAt(i / FPS));
   const buf = await page.screenshot({ type: "png" });
   if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once("drain", r));
   if (i % 150 === 0) process.stdout.write(`quadro ${i}/${total}\n`);
 }
 ff.stdin.end();
 await new Promise((r) => ff.on("close", r));
-if (!process.env.FILM_OUT) await stills();
+if (!process.env.FILM_OUT && !NARRATE) await stills();
 await browser.close(); server.close();
-console.log("pronto:", mp4);
+if (NARRATE) {
+  const { mixNarration, srt, stopNarrator } = await import("./record/lib.mjs");
+  const narrated = mp4.replace(/\.mp4$/, "-narrado.mp4");
+  await mixNarration(silent, clips, narrated);
+  await writeFile(narrated.replace(/\.mp4$/, ".srt"), srt(clips));
+  stopNarrator();
+  console.log("pronto:", narrated);
+} else {
+  console.log("pronto:", mp4);
+}

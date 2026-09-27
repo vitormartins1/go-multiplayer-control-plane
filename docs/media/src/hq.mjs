@@ -3,6 +3,7 @@
 //
 //   CRF=16 node docs/media/src/hq.mjs            # os três de feature, dos quadros já gravados
 //   CRF=16 node docs/media/src/hq.mjs --film     # e o filme, renderizado de novo (~20 min)
+//   NARRATE=1 node docs/media/src/hq.mjs 03-jogador   # só os vídeos citados; narrado se a gravação foi narrada
 //
 // Os vídeos de feature não são regravados: a gravação deixa os quadros e a lista
 // com o instante de cada um (docs/media/frames/<vídeo>/list.ffconcat), e aqui eles
@@ -19,7 +20,8 @@ const { CARDS, finish } = await import("./record/cards.mjs");
 const hq = path.join(mediaDir, "hq");
 await mkdir(hq, { recursive: true });
 
-for (const name of Object.keys(CARDS)) {
+const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+for (const name of Object.keys(CARDS).filter((n) => only.length === 0 || only.includes(n))) {
   const list = path.join(mediaDir, "frames", name, "list.ffconcat");
   try {
     await access(list);

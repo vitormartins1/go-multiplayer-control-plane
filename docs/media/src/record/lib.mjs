@@ -6,6 +6,7 @@
 // o ffmpeg monta o vídeo respeitando esses instantes. Por cima do console, um
 // cursor e legendas injetados na página (o headless não desenha cursor).
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +20,33 @@ export const CONSOLE = process.env.CONSOLE_URL || "http://localhost:5173";
 // CRF do x264 nos vídeos de feature: 22 para o repositório (depois o shrink.mjs
 // encaixa em 10 MB); o hq.mjs usa um valor menor para a versão do YouTube.
 const CRF = process.env.CRF || "22";
+
+// Narração (NARRATE=1): cada legenda vira fala pelo narrate.py (Kokoro, voz
+// pm_alex). A legenda só aparece depois que a fala anterior terminou, o say
+// espera a fala inteira, e os instantes de cada fala ficam em
+// frames/<vídeo>/narration.json para o finish (cards.mjs) mixar o áudio.
+export const NARRATE = !!process.env.NARRATE;
+const GAP_MS = 350; // respiro entre uma fala e a próxima
+let narrator = null;
+
+// speak devolve { file, dur } do áudio da fala (o narrate.py mantém cache por texto)
+export function speak(text) {
+  if (!narrator) {
+    const proc = spawn(process.env.PYTHON || "python3", [path.join(here, "narrate.py")], { stdio: ["pipe", "pipe", "inherit"] });
+    const pending = [];
+    createInterface({ input: proc.stdout }).on("line", (line) => pending.shift()?.(JSON.parse(line)));
+    narrator = { proc, pending };
+  }
+  return new Promise((ok) => {
+    narrator.pending.push(ok);
+    narrator.proc.stdin.write(JSON.stringify({ text }) + "\n");
+  });
+}
+
+export function stopNarrator() {
+  narrator?.proc.stdin.end();
+  narrator = null;
+}
 
 // 1280×720 com DPR 1,5 = quadros de 1920×1080 com a interface em tamanho legível
 const VIEW = { width: 1280, height: 720 };
@@ -90,6 +118,8 @@ export async function startRecording(name) {
   });
 
   let cur = { x: -100, y: -100 };
+  const narration = []; // { t (relógio de parede, s), file, dur, text }
+  let audioUntil = 0;
   const rec = {
     page,
     async begin() {
@@ -162,13 +192,25 @@ export async function startRecording(name) {
       await rec.wait(750);
     },
     async caption(kicker, text, { left = false, width = 0 } = {}) {
+      if (NARRATE) {
+        // a legenda (e a fala) nova espera a fala anterior terminar
+        const rest = audioUntil - Date.now();
+        if (rest > 0) await rec.wait(rest);
+        if (text) {
+          const a = await speak(text.replace(/<[^>]+>/g, " "));
+          await page.evaluate(([k, t, l, w]) => window.__rec.caption(k, t, l, w), [kicker, text, left, width]);
+          narration.push({ t: Date.now() / 1000, file: a.file, dur: a.dur, text: text.replace(/<[^>]+>/g, " ") });
+          audioUntil = Date.now() + a.dur * 1000 + GAP_MS;
+          return;
+        }
+      }
       await page.evaluate(([k, t, l, w]) => window.__rec.caption(k, t, l, w), [kicker, text, left, width]);
     },
     // say mostra a legenda e espera o tempo de leitura (~14 caracteres por
     // segundo, entre 3,2 s e 8 s): quem não conhece o sistema precisa ler.
     async say(kicker, text, opts) {
       await rec.caption(kicker, text, opts);
-      await rec.wait(readMs(text));
+      await rec.wait(NARRATE ? Math.max(readMs(text), audioUntil - Date.now()) : readMs(text));
     },
     // spot destaca um elemento (escurece o resto), explica e segura; o destaque
     // sai no fim, a legenda fica até a próxima
@@ -193,10 +235,22 @@ export async function startRecording(name) {
       await page.evaluate((r) => window.__rec.highlight(r), b);
     },
     async end() {
+      if (NARRATE) {
+        const rest = audioUntil - Date.now(); // a última fala termina antes de parar
+        if (rest > 0) await rec.wait(rest);
+      }
       recording = false;
       await cdp.send("Page.stopScreencast");
       await Promise.all(writes);
       await browser.close();
+      if (NARRATE) {
+        // t0 = instante do primeiro quadro: o corpo do vídeo começa nele
+        // frames: o instante de cada quadro. A legenda só aparece no primeiro quadro
+        // depois do pedido (até ~0,6 s depois); o finish ancora a fala nele.
+        await writeFile(path.join(dir, "narration.json"),
+          JSON.stringify({ t0: frames[0].t, frames: frames.map((f) => f.t), events: narration }));
+        stopNarrator();
+      }
       return frames;
     },
   };
@@ -249,6 +303,35 @@ export async function renderCard(params, seconds, out) {
   await browser.close();
 }
 
+// mediaDuration lê a duração (s) do cabeçalho que o ffmpeg imprime (sem ffprobe)
+export async function mediaDuration(file) {
+  const err = await new Promise((ok) => {
+    const p = spawn(FFMPEG, ["-hide_banner", "-i", file], { stdio: ["ignore", "ignore", "pipe"] });
+    let buf = "";
+    p.stderr.on("data", (d) => (buf += d));
+    p.on("close", () => ok(buf));
+  });
+  const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(err);
+  if (!m) throw new Error("duração não encontrada: " + file);
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+// mixNarration põe as falas no vídeo: cada { at (s), file } entra no seu instante,
+// o volume é normalizado para a faixa de voz do YouTube (-16 LUFS) e o vídeo é
+// copiado sem reencodar.
+export async function mixNarration(video, clips, out) {
+  const dur = await mediaDuration(video);
+  const inputs = clips.flatMap((c) => ["-i", c.file]);
+  const chains = clips.map((c, i) => `[${i + 1}:a]adelay=delays=${Math.round(c.at * 1000)}:all=1[a${i}]`);
+  // apad até a duração exata do vídeo: apad sem fim + -shortest nunca termina
+  // quando o vídeo é copiado (o ffmpeg fica gerando silêncio)
+  const mix = clips.map((_, i) => `[a${i}]`).join("") +
+    `amix=inputs=${clips.length}:normalize=0:dropout_transition=0,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000,` +
+    `apad=whole_dur=${dur.toFixed(3)},atrim=0:${dur.toFixed(3)}[aout]`;
+  await run(["-y", "-loglevel", "error", "-i", video, ...inputs, "-filter_complex", [...chains, mix].join(";"),
+    "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]);
+}
+
 // concat junta cartela + gravação + cartela num MP4 só (reencoda: timebases diferem)
 export async function concat(parts, out) {
   const list = out + ".txt";
@@ -256,4 +339,14 @@ export async function concat(parts, out) {
   await run(["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-c:v", "libx264", "-preset", "slow",
     "-crf", CRF, "-tune", "animation", "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart", out]);
   await rm(list);
+}
+
+// srt: uma legenda por fala, no instante em que ela toca
+export function srt(clips) {
+  const ts = (s) => {
+    const ms = Math.max(0, Math.round(s * 1000));
+    const p = (n, w = 2) => String(n).padStart(w, "0");
+    return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+  };
+  return clips.map((c, i) => `${i + 1}\n${ts(c.at)} --> ${ts(c.at + c.dur)}\n${c.text.replace(/\s+/g, " ").trim()}\n`).join("\n");
 }

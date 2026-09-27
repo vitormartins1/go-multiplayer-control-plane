@@ -31,3 +31,4 @@ infra/docker/secrets/
 # quadros soltos de revisão do filme (node docs/media/src/render.mjs --frames ...)
 docs/media/frames/
 docs/media/hq/
+docs/media/narration/
