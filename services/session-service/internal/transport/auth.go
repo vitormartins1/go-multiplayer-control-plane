@@ -108,6 +108,7 @@ var methodCallers = map[string][]CallerKind{
 	"/session.v1.Session/ReportResult":             {CallerGameServer},
 	"/session.v1.Session/ReportParticipationEvent": {CallerGameServer, CallerWorldHost},
 	"/session.v1.Session/GetSessionConfig":         {CallerGameServer, CallerWorldHost},
+	"/session.v1.Session/Heartbeat":                {CallerPlayer, CallerGameServer, CallerWorldHost},
 }
 
 type callerKey struct{}

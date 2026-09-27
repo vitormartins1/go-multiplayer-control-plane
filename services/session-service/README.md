@@ -102,3 +102,10 @@ reporta com a metadata `x-world-token`, que só vale para o próprio mundo e mor
 reconcile de órfãs ignora esses mundos; o sweeper de TTL fecha o mundo se o host sumir. Demo:
 `TOPOLOGY=p2p scripts/demo-host-world.sh`.
 
+## Heartbeat do mundo (spec 032)
+
+`Heartbeat(session_id)` — do jogo do host (bearer ou `x-world-token`) ou do Dedicated Server. Depois do primeiro, o
+mundo só fecha se ficar `WORLD_HEARTBEAT_TTL` (padrão `90s`) sem outro (motivo `abandoned`), não mais aos
+`SESSION_TTL`. A resposta traz `interval_seconds` (TTL/3). Mundo que nunca mandou segue a regra de idade. Métrica:
+`session_world_heartbeats_total`.
+

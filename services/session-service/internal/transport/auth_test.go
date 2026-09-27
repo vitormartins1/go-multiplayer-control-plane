@@ -282,3 +282,32 @@ func TestAuth_P2P_WorldTokenDesconhecido_Unauthenticated(t *testing.T) {
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 	assert.Equal(t, 1, rej.get("/session.v1.Session/ReportParticipationEvent", "invalid_credential"))
 }
+
+// --- spec 032: heartbeat do mundo ---
+
+func TestAuth_Heartbeat_HostWorldTokenEServer(t *testing.T) {
+	c, _ := setupAuthTopology(t, AuthEnforce, "p2p")
+	w, err := c.OpenWorld(asPlayer("host-1"), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:1"})
+	require.NoError(t, err)
+	other, err := c.OpenWorld(asPlayer("host-2"), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:2"})
+	require.NoError(t, err)
+	sid := w.GetSessionId()
+	req := &pb.HeartbeatRequest{SessionId: sid}
+
+	resp, err := c.Heartbeat(asWorldHost(w.GetWorldToken()), req)
+	require.NoError(t, err)
+	assert.Positive(t, resp.GetIntervalSeconds())
+	_, err = c.Heartbeat(asPlayer("host-1"), req)
+	assert.NoError(t, err, "o host pelo bearer")
+	_, err = c.Heartbeat(asServer(), req)
+	assert.NoError(t, err, "o Dedicated Server")
+
+	_, err = c.Heartbeat(asPlayer("intruso"), req)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = c.Heartbeat(asWorldHost(other.GetWorldToken()), req)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err), "world token de outro mundo")
+	_, err = c.Heartbeat(asInternal(), req)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err), "matchmaking não manda heartbeat")
+	_, err = c.Heartbeat(asServer(), &pb.HeartbeatRequest{SessionId: "nao-existe"})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}

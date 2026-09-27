@@ -83,7 +83,7 @@ participante; analytics marca a origem (`dedicated`/`p2p`) para o operador separ
 - O netcode no jogo (NGO com transporte Steam no modo host) — decisão do repo do jogo.
 - Migração de host, relay próprio, anti-cheat.
 - `p2p` em `queue_arena`/`battle_royale`/`coop_mission`.
-- **Heartbeat do mundo (follow-up):** o sweeper fecha por **idade** (`SESSION_TTL`, 30 min), não por inatividade —
+- **Heartbeat do mundo — feito na spec `032-world-heartbeat`:** o sweeper fecha por **idade** (`SESSION_TTL`, 30 min), não por inatividade —
   já era assim para mundos dedicados. Em p2p o TTL é o único detector de host caído, e ele também fecha mundos
   saudáveis com mais de 30 min. O certo é um heartbeat do host (RPC novo, contrato aditivo) e TTL por última
   atividade; fica para uma spec própria.

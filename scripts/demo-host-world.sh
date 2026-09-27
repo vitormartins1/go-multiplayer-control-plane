@@ -91,6 +91,11 @@ else
   echo "mundo=$session_id server=$(jq -r .serverAddress <<<"$world")"
 fi
 
+# heartbeat (session/032): o mundo sai da regra de idade e passa a viver enquanto o host avisa
+if [[ "$TOPOLOGY" == p2p ]]; then hb_auth="x-world-token: $world_token"; else hb_auth="x-game-server-key: $SERVER_KEY"; fi
+hb="$(grpcurl -plaintext -H "$hb_auth" -d "{\"session_id\":\"$session_id\"}" "$SESSION_GRPC" session.v1.Session/Heartbeat)"
+echo "heartbeat ok: próximo em $(jq -r .intervalSeconds <<<"$hb")s"
+
 step "5. invasor invade (matchmaking.Invade, bearer do invasor)"
 invaded="$(grpcurl -plaintext -H "authorization: Bearer $invader_token" -d "{\"game_id\":\"$game_id\"}" "$MM_GRPC" matchmaking.v1.Matchmaking/Invade)"
 [[ "$(jq -r .sessionId <<<"$invaded")" == "$session_id" ]] || { echo "invadiu outro mundo: $invaded" >&2; exit 1; }

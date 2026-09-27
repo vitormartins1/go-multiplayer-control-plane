@@ -28,6 +28,7 @@ const (
 	Session_ListInvadableWorlds_FullMethodName      = "/session.v1.Session/ListInvadableWorlds"
 	Session_ReportParticipationEvent_FullMethodName = "/session.v1.Session/ReportParticipationEvent"
 	Session_GetSessionConfig_FullMethodName         = "/session.v1.Session/GetSessionConfig"
+	Session_Heartbeat_FullMethodName                = "/session.v1.Session/Heartbeat"
 )
 
 // SessionClient is the client API for Session service.
@@ -76,6 +77,11 @@ type SessionClient interface {
 	// ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
 	// sessão não existir ou já estiver fechada.
 	GetSessionConfig(ctx context.Context, in *GetSessionConfigRequest, opts ...grpc.CallOption) (*GetSessionConfigResponse, error)
+	// Heartbeat (spec 032) mantém o mundo vivo: depois do primeiro heartbeat, o
+	// mundo só fecha se ficar WORLD_HEARTBEAT_TTL sem outro (motivo abandoned), não
+	// mais pela idade. Mandado pelo jogo do host (p2p) ou pelo Dedicated Server a
+	// cada interval_seconds. NotFound se o mundo não estiver aberto.
+	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 }
 
 type sessionClient struct {
@@ -176,6 +182,16 @@ func (c *sessionClient) GetSessionConfig(ctx context.Context, in *GetSessionConf
 	return out, nil
 }
 
+func (c *sessionClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeartbeatResponse)
+	err := c.cc.Invoke(ctx, Session_Heartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionServer is the server API for Session service.
 // All implementations must embed UnimplementedSessionServer
 // for forward compatibility.
@@ -222,6 +238,11 @@ type SessionServer interface {
 	// ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
 	// sessão não existir ou já estiver fechada.
 	GetSessionConfig(context.Context, *GetSessionConfigRequest) (*GetSessionConfigResponse, error)
+	// Heartbeat (spec 032) mantém o mundo vivo: depois do primeiro heartbeat, o
+	// mundo só fecha se ficar WORLD_HEARTBEAT_TTL sem outro (motivo abandoned), não
+	// mais pela idade. Mandado pelo jogo do host (p2p) ou pelo Dedicated Server a
+	// cada interval_seconds. NotFound se o mundo não estiver aberto.
+	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	mustEmbedUnimplementedSessionServer()
 }
 
@@ -258,6 +279,9 @@ func (UnimplementedSessionServer) ReportParticipationEvent(context.Context, *Rep
 }
 func (UnimplementedSessionServer) GetSessionConfig(context.Context, *GetSessionConfigRequest) (*GetSessionConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSessionConfig not implemented")
+}
+func (UnimplementedSessionServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
 }
 func (UnimplementedSessionServer) mustEmbedUnimplementedSessionServer() {}
 func (UnimplementedSessionServer) testEmbeddedByValue()                 {}
@@ -442,6 +466,24 @@ func _Session_GetSessionConfig_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Session_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionServer).Heartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Session_Heartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionServer).Heartbeat(ctx, req.(*HeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Session_ServiceDesc is the grpc.ServiceDesc for Session service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -484,6 +526,10 @@ var Session_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSessionConfig",
 			Handler:    _Session_GetSessionConfig_Handler,
+		},
+		{
+			MethodName: "Heartbeat",
+			Handler:    _Session_Heartbeat_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

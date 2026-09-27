@@ -121,7 +121,9 @@ func run(log *slog.Logger) error {
 		service.WithHistoryStore(historyStore), // persistência de fechadas (spec 025)
 		service.WithLogger(log),
 		service.WithServerRegistry(registry),
-		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)))
+		service.WithOrphanGrace(durationEnv("SESSION_ORPHAN_GRACE", time.Minute, log)),
+		// heartbeat de mundo (spec 032): sem heartbeat além disto, o mundo fecha.
+		service.WithWorldHeartbeatTTL(durationEnv("WORLD_HEARTBEAT_TTL", service.DefaultWorldHeartbeatTTL, log)))
 
 	// métricas custom: sessões ativas + fechamentos por motivo (spec 004).
 	prometheus.MustRegister(
@@ -176,6 +178,11 @@ func run(log *slog.Logger) error {
 			Name: "session_closed_publish_failures_total",
 			Help: "Falhas ao publicar o fechamento de sessão no fan-out (SNS indisponível).",
 		}, svc.SessionClosedPublishFailures),
+		// heartbeats de mundo recebidos (spec 032) — zerado = o jogo ainda não manda.
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "session_world_heartbeats_total",
+			Help: "Heartbeats de mundo recebidos (host_world_dropin, spec 032).",
+		}, svc.HeartbeatsTotal),
 	)
 
 	authCfg, err := buildGRPCAuth(cfg, log)

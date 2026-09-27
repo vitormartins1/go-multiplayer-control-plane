@@ -149,6 +149,11 @@ type Session struct {
 	HostConnection string
 	WorldTokenHash string
 
+	// LastHeartbeatAt é o último heartbeat do mundo (spec 032). Zero = o jogo
+	// nunca mandou: o sweeper segue a regra de idade (SESSION_TTL). Não zero: o
+	// mundo só fecha se o heartbeat vencer (WORLD_HEARTBEAT_TTL).
+	LastHeartbeatAt time.Time
+
 	// Atributos de matchmaking do host (spec 012): a faixa do mundo para o
 	// matchmaking casar um invasor (soul level / weapon tier). Zero em
 	// queue_arena e em mundos abertos sem atributos.
@@ -401,6 +406,10 @@ type SessionService interface {
 	// mundo não existir. Usado para invocar sinal e para fechar o mundo / tirar
 	// outro jogador a pedido de um jogador.
 	AuthorizeWorldHost(ctx context.Context, sessionID, playerID string) error
+
+	// Heartbeat registra que o mundo segue vivo (spec 032) e devolve o
+	// intervalo sugerido até o próximo. ErrWorldNotFound se não estiver aberto.
+	Heartbeat(ctx context.Context, sessionID string) (time.Duration, error)
 
 	// ReportParticipationEvent recebe um evento por participante do server do
 	// mundo (spec 013): publica no fan-out (kind=participation_event) e aplica o

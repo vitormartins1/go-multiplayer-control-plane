@@ -128,6 +128,14 @@ papéis e reporta os eventos. **Confiança:** os eventos vêm do host — ele po
 sem `CloseWorld`, o sweeper de TTL do session fecha o mundo. O netcode (NGO com transporte da Steam no modo host) é
 decisão do repo do jogo.
 
+## Heartbeat do mundo (spec `session/032` — contrato 1.5.0)
+
+Quem hospeda o mundo (o Dedicated Server, ou o jogo do host em p2p) chama `Heartbeat(session_id)` logo depois de
+abrir/assumir o mundo e a cada `interval_seconds` da resposta (hoje 30 s). Sem heartbeat o mundo fecha aos 30 min
+de vida, jogando ou não; com heartbeat ele vive enquanto os avisos chegarem, e fecha como `abandoned` ~90 s depois
+do último — é assim que um host que crashou some da lista de invasão. `NotFound` na resposta = o mundo já fechou:
+pare de mandar.
+
 ## Connect token (session → data plane)
 
 JWT **EdDSA** (Ed25519), validado **offline** pelo server do mundo via JWKS (`/.well-known/jwks.json` do session). Mesmos claims do `queue_arena`, com **`role`** no lugar de `team_id`:

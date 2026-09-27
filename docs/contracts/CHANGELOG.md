@@ -17,6 +17,14 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+## [1.5.0] — 2026-09-27
+
+### Added
+- `session.v1.Session/Heartbeat` (spec `session/032`): o jogo do host (bearer ou `x-world-token`) ou o Dedicated
+  Server avisa que o mundo segue vivo e recebe `interval_seconds`. Depois do primeiro heartbeat o mundo não fecha
+  mais aos `SESSION_TTL` (30 min) — só se ficar `WORLD_HEARTBEAT_TTL` (90 s) sem aviso, com motivo `abandoned`.
+  Quem não manda heartbeat continua com a regra antiga.
+
 ## [1.4.0] — 2026-09-27
 
 ### Added

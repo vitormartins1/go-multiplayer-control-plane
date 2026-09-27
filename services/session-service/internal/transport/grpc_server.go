@@ -5,6 +5,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -288,6 +289,25 @@ func (s *Server) CloseWorld(ctx context.Context, req *pb.CloseWorldRequest) (*pb
 		return nil, worldError(err, "close world")
 	}
 	return &pb.CloseWorldResponse{}, nil
+}
+
+// Heartbeat mantém o mundo vivo (spec 032). Jogador só no próprio mundo (é o
+// host); world token só no mundo dele; o Dedicated Server em qualquer um.
+func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	const method = "/session.v1.Session/Heartbeat"
+	if c := callerFrom(ctx); c.Kind == CallerPlayer {
+		if err := s.hostCheck(ctx, method, req.GetSessionId(), c.PlayerID); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.worldScope(ctx, method, req.GetSessionId()); err != nil {
+		return nil, err
+	}
+	interval, err := s.svc.Heartbeat(ctx, req.GetSessionId())
+	if err != nil {
+		return nil, worldError(err, "heartbeat")
+	}
+	return &pb.HeartbeatResponse{IntervalSeconds: int32(interval / time.Second)}, nil
 }
 
 // worldError mapeia os erros de domínio do host_world_dropin para gRPC codes.

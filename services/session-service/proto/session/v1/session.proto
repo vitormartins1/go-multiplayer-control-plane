@@ -53,6 +53,21 @@ service Session {
   // ref_id = match_id (queue-form) ou session_id (host_world). NotFound se a
   // sessão não existir ou já estiver fechada.
   rpc GetSessionConfig(GetSessionConfigRequest) returns (GetSessionConfigResponse);
+
+  // Heartbeat (spec 032) mantém o mundo vivo: depois do primeiro heartbeat, o
+  // mundo só fecha se ficar WORLD_HEARTBEAT_TTL sem outro (motivo abandoned), não
+  // mais pela idade. Mandado pelo jogo do host (p2p) ou pelo Dedicated Server a
+  // cada interval_seconds. NotFound se o mundo não estiver aberto.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// spec 032 — heartbeat do mundo.
+message HeartbeatRequest {
+  string session_id = 1;
+}
+
+message HeartbeatResponse {
+  int32 interval_seconds = 1; // de quanto em quanto tempo mandar o próximo
 }
 
 // spec 017 (ADR-0024) — session manifest.

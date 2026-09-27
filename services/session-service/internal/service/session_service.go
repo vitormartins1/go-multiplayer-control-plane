@@ -46,7 +46,10 @@ type Service struct {
 	// worldTokens mapeia hash do world token -> sessionID dos mundos p2p abertos
 	// (spec 031). closeSession remove a entrada.
 	worldTokens map[string]string
-	closed      map[domain.CloseReason]float64
+	// heartbeat de mundo (spec 032): TTL e contador da métrica.
+	heartbeatTTL time.Duration
+	heartbeats   float64
+	closed       map[domain.CloseReason]float64
 	// contador de eventos de participação por tipo (métrica participation_events_total).
 	participationEvents map[string]float64
 
@@ -151,6 +154,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		publisher:           publisher,
 		now:                 time.Now,
 		orphanGrace:         time.Minute,
+		heartbeatTTL:        DefaultWorldHeartbeatTTL,
 		log:                 slog.Default(),
 		sessions:            make(map[string]*domain.Session),
 		matchIndex:          make(map[string]string),
@@ -590,22 +594,24 @@ func (s *Service) SessionClosedPublishFailures() float64 {
 	return s.sessionClosedPublishFailures
 }
 
-// Sweep fecha (CLOSED/ttl) as sessões abertas há mais que ttl e devolve
-// quantas fechou. Erros de release não interrompem a varredura.
+// Sweep fecha as sessões vencidas e devolve quantas fechou: as abertas há mais
+// que ttl (CLOSED/ttl) e, entre os mundos que mandam heartbeat, os que ficaram
+// sem heartbeat além do WORLD_HEARTBEAT_TTL (CLOSED/abandoned, spec 032). Erros
+// de release não interrompem a varredura.
 func (s *Service) Sweep(ctx context.Context, ttl time.Duration) int {
 	cutoff := s.now().Add(-ttl)
 	s.mu.Lock()
-	var expired []string
+	expired := make(map[string]domain.CloseReason)
 	for sessionID, sess := range s.sessions {
-		if sess.OpenedAt.Before(cutoff) {
-			expired = append(expired, sessionID)
+		if reason, ok := s.expiredLocked(sess, cutoff); ok {
+			expired[sessionID] = reason
 		}
 	}
 	s.mu.Unlock()
 
-	for _, sessionID := range expired {
+	for sessionID, reason := range expired {
 		// ErrSessionNotFound = fechada por result entre a varredura e o close; ok.
-		_, _ = s.closeSession(ctx, sessionID, domain.CloseTTL)
+		_, _ = s.closeSession(ctx, sessionID, reason)
 	}
 	return len(expired)
 }

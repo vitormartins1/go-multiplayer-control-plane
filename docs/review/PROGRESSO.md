@@ -56,9 +56,8 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Próximo (executável sem decisão do dono)
 
-0. **Heartbeat do mundo** (achado da spec `session/031`): o sweeper fecha qualquer mundo 30 min depois de aberto
-   (`SESSION_TTL` conta idade, não inatividade) — num Souls-like a sessão do host dura horas. Proposta: RPC
-   `Heartbeat` do host (ou do DS) e TTL pela última atividade. Contrato aditivo; pede spec própria.
+0. Console: trabalho de UI/layout para o que é específico de p2p (pedido do dono em 2026-09-27).
+0. Guia de integração para o projeto Unity (login Steam, auth, p2p, heartbeat) — no fim desta rodada.
 1. Espelhar conquistas na Steam (consumidor do fan-out → Web API `SetUserStatsForGame`) — precisa do mapeamento
    conquista → nome da API na Steam por jogo.
 2. Unificar Rooms e Sessions do jogo (`SessionTable`/`SessionDetail` compartilhados) — hoje quase duplicados.
