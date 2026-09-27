@@ -56,6 +56,21 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Steam | `cccd132` | conquistas espelhadas na Steam (spec `achievements/019` + `identity/006`): campo `steamApiName`, worker no consumer com backoff, backfill | unit + integração + **ao vivo com Steam falsa** (synced, skipped, backfill) |
 | Console P2P | `be48674` | hospedagem e sinal de vida no console (spec `admin-ui/091`): filtro e coluna Hospedagem, badge de heartbeat, detalhe p2p com aviso de confiança, Fleet "P2P — sem frota", selo P2P no jogo | vitest (27), build, **Playwright com mundos p2p/dedicado reais** |
 
+| Identity | `6b8b0c7` | limite de falhas no login por senha: 5 em 15 min por handle → 429 (spec `identity/007`, G5) | unit, `-race` |
+| Deps | `d2c226d` · `43791c7` | Go 1.26.8, grpc 1.83.2, x/text: as 29 vulnerabilidades do primeiro `govulncheck` e o GO-2026-6443 | CI `govulncheck` verde |
+
+## Rodada final — code review e acabamento (2026-09-27)
+
+| Item | Commit | O que mudou | Validação |
+|---|---|---|---|
+| Review · session | `bb0d5bd` | achado alto: reenvio do `HOST_KILLED` p2p recusado em `enforce` com o mundo já fechado (token agora é aposentado, não apagado); `Sweep` rechecando sob o lock; limites do `host_connection` e um mundo p2p por host | unit + transport |
+| Review · achievements/identity/auth | `a9a46f9` | lease do espelho Steam protege as marcações (`ErrSteamLeaseLost`); 404 permanente só para `player_not_found`; chave Steam nunca vaza em `*url.Error`; JWKS com `context.WithoutCancel` no singleflight | unit + integração |
+| Review · analytics/console/BFF | `f2f2221` | abandono sem o TTL do host_world; janela diária sem o dia extra; filtros de modo efetivos; heartbeat que envelhece na tela | integração, vitest, build |
+| ReportResult | `7946822` | reenvio de um resultado já aceito responde sucesso (spec `session/033`, G7) | unit |
+| Refactor | `6fb5708` | `session_service.go` (1,1k linhas) dividido por assunto: core, close, host_world, p2p, heartbeat, admin, métricas | unit, cobertura igual |
+| Infra | `2ba1bcb` | S3 local do cloud-save no LocalStack: a imagem `minio/minio` saiu do Docker Hub e derrubava o job de integração e o `compose up` | integração (S3 real no LocalStack), `compose config` |
+| CI | (este) | `govulncheck` passa a bloquear | CI |
+| Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, vídeo de 87 s e 4 GIFs em `docs/media/` | diagramas validados no parser do Mermaid |
 
 ## Em andamento
 

@@ -1,4 +1,4 @@
-# Product Overview — o que este sistema FAZ
+# Visão de produto — o que o sistema faz
 
 > Este doc descreve o **produto**: capacidades e fluxos, na perspectiva de quem opera jogos multiplayer live — não como ele é construído (isso é o [`ARCHITECTURE.md`](ARCHITECTURE.md), o panorama técnico canônico) nem o histórico incremental de como cada parte chegou lá (isso são as `specs/NNN-slug/` de cada serviço). A tese de origem (ADR-0008) é reimplementar em Go, sobre infra própria, os serviços que a AWS vende prontos — mas o sistema já foi além de "clone 1:1": ver a seção final sobre o que é genuinamente diferenciado.
 
@@ -34,6 +34,25 @@ Cada sessão/mundo aloca um **Dedicated Server real** via Agones (não um mock) 
 
 ![Aba Fleet — localização e réplicas reais de cada fleet no cluster Agones, mais o cadastro da fleet por jogo](images/fleet.png)
 
+### 3a. Ou sem servidor: P2P pela Steam, com o mesmo control plane
+
+No `host_world_dropin`, um modo pode ser `p2p` (ADR-0032): o jogo do host hospeda o mundo pela Steam e o control
+plane vira a lista telefônica, não o servidor. Matchmaking, papéis, connect token, eventos, conquistas e console
+continuam iguais; o que some é o custo de um GameServer por mundo aberto. O host reporta eventos com um
+`world_token` que só vale para o próprio mundo, e o session limita o que um host mentiroso consegue fazer.
+
+![Invasão P2P — o invasor pede ao matchmaking, recebe o SteamID do host e conecta direto pela Steam](media/invasao-p2p.gif)
+
+Em qualquer topologia, quem hospeda manda um **heartbeat**: um mundo cujo host caiu fecha em ~90 s como
+`abandoned`, e um mundo ativo não expira mais por idade.
+
+### 3b. Steam de ponta a ponta
+
+**Login Steam** (o ticket de sessão do jogo vira um JWT do control plane, ADR-0031) e **conquistas espelhadas na
+Steam**: basta preencher o "Nome na Steam" da conquista no console. O espelho tem fila própria com retry e backoff,
+e quem desbloqueou antes recebe na Steam também. As chaves e o passo a passo estão em
+[`PENDENCIAS-DO-DONO.md`](PENDENCIAS-DO-DONO.md).
+
 ### 4. Motor de conquistas visual e data-driven
 
 Em vez de 4 funções Go hardcoded traduzindo cada arquétipo pra um vocabulário fixo de eventos, existe um **motor de regras genérico**: fatos da partida (resultado, papel, evento, métricas) → regras editáveis (`campo = valor` ou comparadores `lt/lte/gt/gte/ne/in`) → tipos de evento → conquistas. Um jogo pode ter regras **globais** (compartilhadas por todo arquétipo) e regras **próprias**, e pode **suprimir** uma regra global só para si sem afetar os demais. Tudo isso é editado num **canvas visual** no admin-ui (grafo de 4 camadas) — sem redeploy, sem PR.
@@ -62,6 +81,10 @@ Agregados pré-computados (não é um event store) por jogo: total de partidas, 
 
 Um estúdio real não quer abrir o console da AWS, um cliente de banco e o Grafana separadamente. O `admin-ui` é **games-first**: entra pela lista de jogos, cada jogo abre com sub-abas (conquistas + editor visual de regras, leaderboards, jogadores, sessões, analytics, configurações), mais visões cross-game (Rooms — salas ao vivo de todos os jogos, agrupável/ordenável —, Players, Analytics, Fleet, Infrastructure).
 
+![Console: salas ao vivo, hospedagem (dedicado ou P2P) e sinal de vida do host](media/console-rooms.gif)
+
+![Console: conquistas com selo Steam e o analytics de um mundo do Folclore Souls](media/console-conquistas-analytics.gif)
+
 ![Analytics cross-game — sessões, jogadores únicos, abandono e sessões por dia de todos os jogos, qualquer arquétipo](images/analytics-global.png)
 
 ### 9. Observabilidade desde o primeiro serviço
@@ -75,14 +98,14 @@ Todo serviço nasce instrumentado — métricas RED (Prometheus), tracing distri
 ### A. Onboarding de um jogo novo (estúdio)
 
 1. Cadastra o jogo (`POST /games` — nome, capa gerada, descrição).
-2. Declara um ou mais modos de multiplayer (arquétipo + parâmetros) — ex.: "Ranked" = `queue_arena`, times 2, placar até 5.
-3. (Se for orquestrar via Agones de verdade) registra a Fleet do jogo.
+2. Declara um ou mais modos de multiplayer (arquétipo + parâmetros) — ex.: "Ranked" = `queue_arena`, times 2, placar até 5; ou "Roda Aberta" = `host_world_dropin` com topologia `p2p`.
+3. (Se for orquestrar via Agones de verdade) registra a Fleet do jogo. Modo P2P não precisa de fleet.
 4. Modela as conquistas: catálogo + regras (globais do arquétipo já vêm prontas; specíficas do jogo são criadas no canvas).
 5. Jogo está pronto — nenhum serviço precisou de deploy novo.
 
 ### B. Jornada do jogador
 
-Login (anônimo ou conta, com presença marcada no jogo) → entra na fila **ou** abre/entra num mundo → o sistema aloca servidor + emite token → joga no Dedicated Server real → o server reporta o desfecho (resultado terminal ou eventos por participante) → fan-out atualiza conquistas, leaderboard e analytics de forma assíncrona e idempotente.
+Login (anônimo, conta ou Steam, com presença marcada no jogo) → entra na fila **ou** abre/entra num mundo → o sistema aloca servidor (ou aponta para o host, no P2P) + emite token → joga no Dedicated Server real → o server reporta o desfecho (resultado terminal ou eventos por participante) → fan-out atualiza conquistas, leaderboard e analytics de forma assíncrona e idempotente.
 
 ### C. Jornada do operador (live-ops)
 
@@ -93,8 +116,9 @@ Abre o console → vê as salas ao vivo (todas ou agrupadas por jogo, ordenávei
 - **Um único backend agnóstico, não N serviços de propósito único.** GameLift/GameKit são ofertas separadas por preocupação; aqui um `game_id` + perfil de multiplayer configura matchmaking, sessão, conquistas, leaderboard e analytics de uma vez, para qualquer arquétipo suportado.
 - **Motor de conquistas editável visualmente, sem redeploy.** Nenhum dos serviços GameKit/GameLift equivalentes tem isso — é a peça mais "produto" do sistema.
 - **Console único, games-first.** Não é dashboard de infra genérico — é pensado pra operação de jogos (salas, jogadores, conquistas, ranking) na mesma tela.
+- **Dedicado e P2P no mesmo backend.** Um jogo começa P2P (custo zero de servidor) e passa um modo para dedicado quando precisar de autoridade, sem trocar de backend nem de console.
 - **Orquestração real, não simulada.** Fleet Agones por jogo, validada ponta a ponta com Dedicated Server Unity real (ARM64, k3d local → homelab Pi 5), não um mock que só existe em dev.
 
 ## Fora de escopo (deliberado, não esquecido)
 
-Ver [`FEATURE-MAP.md`](FEATURE-MAP.md) para o backlog vivo. Alguns itens ficam de fora **por falta de evidência real**, não por dificuldade: topologia P2P, PvPvE ("modo cinza"), covenants/mensagens assíncronas, anti-cheat de score, multi-região, seasons nomeadas — todos aguardando um caso de uso real antes de virar ADR (o próprio processo do projeto recomenda isso, ver `docs/sdd/SDD-GUIDE.md`).
+Ver [`FEATURE-MAP.md`](FEATURE-MAP.md) para o backlog vivo. Alguns itens ficam de fora **por falta de evidência real**, não por dificuldade: PvPvE ("modo cinza"), covenants/mensagens assíncronas, anti-cheat de score, multi-região, seasons nomeadas — todos aguardando um caso de uso real antes de virar ADR (o próprio processo do projeto recomenda isso, ver `docs/sdd/SDD-GUIDE.md`).

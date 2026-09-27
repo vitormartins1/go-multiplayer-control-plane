@@ -1,4 +1,4 @@
-# Arquitetura — game-backend
+# Arquitetura — go-multiplayer-control-plane
 
 > Visão consolidada da arquitetura do repositório. Aqui está o **panorama e o porquê de alto nível**; cada decisão pontual tem seu **ADR** em `docs/adr/`. O roadmap de execução está em `ROADMAP.md`. Para o que o sistema **faz** (capacidades/fluxos, visão de produto em vez de arquitetura), ver [`PRODUCT-OVERVIEW.md`](PRODUCT-OVERVIEW.md).
 
@@ -42,16 +42,16 @@ flowchart TB
     Client --> ID
     Client --> MM
     SS -->|endpoint + connect token| Client
-    Client -->|conecta| GS
-    GS -->|valida token| SS
-    GS -->|resultado da partida| SS
+    Client -->|conecta com o token| GS
+    GS -.->|"busca a chave pública 1× (JWKS)"| SS
+    GS -->|resultado · eventos · heartbeat| SS
 ```
 
 Serviços pagos (Unity Relay/Lobby/Matchmaker/Multiplay, AWS GameLift/GameKit gerenciados) são **substituídos por serviços Go** + game server com IP/porta. Escala de game server: EC2/VPS → ECS-on-EC2 → **Agones/EKS** (open-source). (ADR-0011)
 
 ### Onde o Go entra (e onde NÃO entra) no gameplay
 
-Durante a partida em tempo real, **o Go não participa**. A simulação autoritativa (input, tick, física, colisão, estado do mundo) roda inteira no Unity Dedicated Server, falando direto com os clients por UDP. O Go atua **em volta** da partida (control plane) e em chamadas **fora do caminho de tick** (validar token, heartbeat, resultado) — nunca no loop por frame, onde um salto extra só adicionaria latência.
+Durante a partida em tempo real, **o Go não participa**. A simulação autoritativa (input, tick, física, colisão, estado do mundo) roda inteira no Unity Dedicated Server, falando direto com os clients por UDP. O Go atua **em volta** da partida (control plane) e em chamadas **fora do caminho de tick** (heartbeat, eventos, resultado; o connect token é validado localmente pelo server) — nunca no loop por frame, onde um salto extra só adicionaria latência.
 
 ```mermaid
 flowchart LR
@@ -61,7 +61,7 @@ flowchart LR
 
     Client <-->|"UDP realtime · por tick · SEM Go"| Server
     Client -->|"HTTP/gRPC · login, matchmaking, leaderboard"| Go
-    Server -->|"HTTP/gRPC · valida token, heartbeat, resultado"| Go
+    Server -->|"gRPC · heartbeat, eventos, resultado"| Go
 ```
 
 > Nuance: o host realtime ser Unity vale para jogos com física/ação (o server precisa rodar a MESMA simulação do client). Para jogos turn-based/baixa frequência (cartas, tabuleiro), um serviço Go poderia hospedar a lógica da partida diretamente, sem Unity Dedicated Server — matchmaking e session continuam iguais; só muda o "host da partida".
@@ -69,6 +69,59 @@ flowchart LR
 ### Repos: 1 control plane + N data planes (por arquétipo)
 
 Client e Dedicated Server de um jogo são **o mesmo projeto Unity** (dois build targets: client gráfico, server headless) — compartilham o código de jogo. Como o backend virou agnóstico de arquétipo (ADR-0023), a topologia é **um control plane, N data planes**: cada arquétipo tem um data plane Unity de referência, em repo próprio, para validar aquele tipo de jogo isoladamente. Contrato via `.proto` + docs de contrato por arquétipo. Nomenclatura decidida (`go-multiplayer-control-plane` + `unity-<archetype>-data-plane`, rename concluído) e mapa de repos em **`docs/REPO-TOPOLOGY.md`**. (ADR-0010, ADR-0011)
+
+### Topologias de hospedagem: dedicado × P2P (ADR-0032)
+
+No `host_world_dropin`, o **modo** escolhe quem hospeda o mundo. O resto do control plane (matchmaking, papéis,
+connect token, eventos, fan-out, console) é o mesmo nas duas.
+
+```mermaid
+flowchart LR
+  subgraph DED["dedicated (padrão)"]
+    direction TB
+    S1["session"] -->|GameServerAllocation| A1[["Agones · fleet do jogo"]] --> D1["Dedicated Server"]
+    H1["host"] & I1["invasor"] -->|IP:porta + connect token| D1
+    D1 -->|eventos · heartbeat<br/>x-game-server-key| S1
+  end
+  subgraph P2P["p2p"]
+    direction TB
+    S2["session<br/>(sem alocação)"]
+    H2["host = servidor<br/>Steam Networking"]
+    I2["invasor"] -->|SteamID do host + connect token| H2
+    H2 -->|eventos · heartbeat<br/>x-world-token| S2
+  end
+```
+
+| | `dedicated` | `p2p` |
+|---|---|---|
+| Quem roda a simulação | Unity Dedicated Server no Agones | o jogo do host |
+| Custo de servidor | um GameServer por mundo aberto | zero |
+| Onde o invasor conecta | `IP:porta` devolvidos pelo session | `host_connection` (SteamID) via Steam Datagram Relay |
+| Quem reporta eventos | o DS, com `x-game-server-key` | o host, com o `world_token` do mundo (só o hash fica no session) |
+| Confiança nos eventos | autoritativa | o host pode mentir; o session limita o estrago (só participantes, um mundo por host) |
+
+O **heartbeat** (spec `session/032`) vale para as duas: quem hospeda chama `Heartbeat` a cada `TTL/3`; sem sinal
+por `WORLD_HEARTBEAT_TTL` (90 s), o mundo fecha como `abandoned`. Mundos que nunca mandaram heartbeat (clientes
+antigos) continuam no TTL por idade.
+
+### Quem pode chamar o quê (ADR-0030, ADR-0031)
+
+O gRPC do session identifica **quatro tipos de chamador** e cada RPC aceita só os seus. O modo `warn` registra o
+que seria recusado; `enforce` recusa.
+
+| Chamador | Credencial | RPCs |
+|---|---|---|
+| jogador | `Bearer` JWT do identity | `OpenWorld`, `LeaveWorld`, `CloseWorld`, `Heartbeat` |
+| game server | `x-game-server-key` | `ReportResult`, `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld`, `Heartbeat` |
+| host p2p | `x-world-token`, válido **só para o próprio mundo** | os do game server, menos `ReportResult` |
+| serviço interno | `x-internal-key` | `CreateSession`, `ListInvadableWorlds`, `JoinWorld` (o matchmaking) |
+
+Um `world_token` de mundo já fechado só serve para reenviar um `ReportParticipationEvent` (o reenvio do
+`HOST_KILLED`, spec `session/029`).
+
+O JWT do jogador vem do identity, que aceita **login Steam** (ticket de sessão verificado na Steam Web API) além de
+conta própria e anônimo; a conta Steam é uma identidade externa ligada à conta do control plane (ADR-0031).
+Tokens exigem `iss`, `aud` e `exp`; a chave pública vem do JWKS, com refetch por `kid` desconhecido.
 
 ---
 
@@ -151,7 +204,7 @@ services/<nome>-service/
 
 ## 6. Fluxo de uma partida (arquétipo `queue_arena`)
 
-Este é o fluxo do `queue_arena` (partida formada por fila). Cada arquétipo tem o seu — o `host_world_dropin`, por exemplo, não forma partida: o host **abre um mundo** e phantoms são **injetados por papel** ao longo da vida da sessão, reportando **eventos** em vez de um resultado terminal (ver `docs/game-models/host_world_dropin-dataplane-contract.md`).
+Este é o fluxo do `queue_arena` (partida formada por fila). Cada arquétipo tem o seu — o `host_world_dropin`, por exemplo, não forma partida: o host **abre um mundo** e phantoms são **injetados por papel** ao longo da vida da sessão, reportando **eventos** em vez de um resultado terminal (ver `docs/game-models/host_world_dropin-dataplane-contract.md` e a sequência completa, dedicada e P2P, no [README](../README.md#arquitetura)).
 
 ```mermaid
 sequenceDiagram
@@ -168,7 +221,7 @@ sequenceDiagram
     SS->>GS: aloca / escolhe game server
     SS-->>C: endpoint + connect token (claim team_id)
     C->>GS: conecta (token)
-    GS->>SS: valida connect token (offline, JWKS do session-service)
+    GS->>GS: valida o connect token offline (JWKS do session-service em cache)
     Note over GS: partida roda (realtime)
     GS->>SS: ReportResult (win_loss_draw)
     SS->>BE: fan-out (SNS→SQS): leaderboard, achievements, analytics
@@ -180,45 +233,46 @@ sequenceDiagram
 
 Quando o matchmaking fecha uma partida, o `session-service` precisa achar um Dedicated Server livre e saudável para hospedá-la — a reimplementação do *game session placement* do GameLift. Quatro responsabilidades: **registry** (quais servers existem e seu estado), **health** (heartbeat detecta server morto), **allocation** (reivindicar um livre sem corrida) e **reclaim** (devolver ao pool no fim).
 
-> **Nota (2026-09):** esta seção descreve o desenho original, de registry próprio com heartbeat. Na prática o
-> registry, a saúde e o claim atômico ficaram com o **Agones** (ADR-0012): o session-service pede uma
-> `GameServerAllocation` na fleet do jogo (ADR-0026), reconcilia sessões órfãs contra o cluster (ADR-0022) e usa um
-> allocator `static` em dev sem cluster. Os diagramas abaixo continuam válidos como modelo mental.
+Essas quatro responsabilidades ficaram com o **Agones** (ADR-0012): o session-service é um cliente fino da
+Allocation API, pede um `GameServer` `Ready` na **fleet do jogo** (ADR-0026) e reconcilia sessões órfãs contra o
+cluster (ADR-0022). Em dev sem cluster, um allocator `static` devolve um endereço fixo.
 
-Ciclo de vida de um game server:
+Ciclo de vida de um GameServer (estados do Agones):
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Ready: boot + registra
-    Ready --> Allocated: CreateSession/OpenWorld (claim atômico)
-    Allocated --> Shutdown: partida termina
-    Shutdown --> Ready: reinicia limpo
-    Ready --> Down: heartbeat perdido
-    Allocated --> Down: heartbeat perdido
-    Down --> [*]
+    [*] --> Scheduled: fleet cria o pod
+    Scheduled --> Ready: SDK.Ready() no boot do DS
+    Ready --> Allocated: GameServerAllocation (claim atômico do Agones)
+    Allocated --> Shutdown: SDK.Shutdown() no fim do mundo/partida
+    Ready --> Unhealthy: health check do SDK falhou
+    Allocated --> Unhealthy: health check do SDK falhou
+    Unhealthy --> Shutdown
+    Shutdown --> [*]: a fleet repõe outro Ready
 ```
 
-Fluxo de alocação:
+Fluxo de alocação e fim de sessão:
 
 ```mermaid
 sequenceDiagram
-    participant GS as Game Server (Unity headless)
+    participant C as Cliente (Unity)
     participant SS as session-service
-    participant MM as matchmaking-service
-    participant C as Unity Client
-    GS->>SS: registra (Ready, addr, região, versão)
-    loop a cada N s
-        GS->>SS: heartbeat
+    participant AG as Agones (fleet do jogo)
+    participant GS as Dedicated Server
+    C->>SS: OpenWorld / CreateSession (via matchmaking)
+    SS->>AG: GameServerAllocation(fleet = do jogo, labels)
+    AG-->>SS: endereço + nome do GameServer (Ready → Allocated)
+    SS-->>C: endereço + connect token (Ed25519)
+    C->>GS: conecta com o token
+    GS->>GS: valida o token offline (JWKS em cache)
+    GS->>SS: GetSessionConfig (modo, papéis, parâmetros)
+    loop a cada TTL/3
+        GS->>SS: Heartbeat
     end
-    MM->>SS: CreateSession(matchId, players, game_id)
-    SS->>SS: claim atômico Ready -> Allocated
-    SS->>GS: hospede matchId (jogadores, chave do token)
-    SS-->>C: serverAddress + port + connect token
-    C->>GS: conecta (token)
-    GS->>SS: valida token / confirma
-    Note over GS: partida roda
-    GS->>SS: matchId concluído (resultado vai ao backend)
-    SS->>GS: reciclar -> Ready
+    GS->>SS: ReportParticipationEvent / ReportResult
+    GS->>SS: CloseWorld
+    GS->>AG: SDK.Shutdown()
+    Note over SS,AG: reconcile: sessão cujo GameServer sumiu do cluster é fechada como órfã
 ```
 
 > O **claim atômico** Ready→Allocated é o ponto de concorrência crítico (duas partidas não podem pegar o mesmo server). Em processo único: `sync.Mutex`. Distribuído (várias instâncias do session-service): update condicional no store (DynamoDB `... IF state=Ready` / Postgres `UPDATE ... WHERE state='Ready' RETURNING`). Detalhado em `docs/GO-LEARNINGS.md` §01.

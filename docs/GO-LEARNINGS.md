@@ -1199,10 +1199,10 @@ store.now = func() time.Time { return fixedNow.Add(24 * time.Hour) } // "amanhã
 
 ```mermaid
 flowchart LR
-    A["FindByID(ctx, \"nao-e-uuid\")"] --> B["Postgres: 22P02<br/>invalid input syntax for uuid"]
+    A["FindByID(ctx, #quot;nao-e-uuid#quot;)"] --> B["Postgres: 22P02<br/>invalid input syntax for uuid"]
     B --> C{"errors.As(err, &pgErr)?"}
     C -->|"Code == 22P02"| D["domain.ErrAccountNotFound"]
-    C -->|outro código| E["fmt.Errorf(\"...: %w\", err)<br/>(erro interno de verdade)"]
+    C -->|outro código| E["fmt.Errorf(#quot;...: %w#quot;, err)<br/>(erro interno de verdade)"]
     D --> F["transport admin: 404<br/>transport login: 401 (não revela handle)"]
 ```
 
@@ -1580,3 +1580,88 @@ for id, reason := range expired {
 esse bug nem existe lá e ninguém precisa da convenção. Em Go, "junte o que precisa sob o lock, solte, e só então faça
 I/O" é o padrão; o sufixo `Locked` marca as funções do lado de dentro. (Bônus visto no teste do heartbeat: desde o Go
 1.22 dá para escrever `for range 240 { ... }` — range sobre inteiro, sem a variável de índice.)
+
+---
+
+## 45 — `context.WithoutCancel`: trabalho compartilhado não morre com quem o começou
+
+**O que é / por que importa:** desde o Go 1.21, `context.WithoutCancel(ctx)` devolve um contexto que **herda os
+valores** do pai (trace, logger, caller) mas **não o cancelamento nem o prazo**. Serve para o trabalho que a
+goroutine atual *começa*, mas que não é *só dela*. O caso clássico é o `singleflight` (§41): a primeira request
+dispara o fetch do JWKS e as outras 49 esperam o mesmo resultado. Se a primeira usar o próprio `ctx` e o cliente
+dela desistir, o fetch é cancelado e **todas** as 49 falham junto. Pior: o intervalo mínimo entre fetches já foi
+contado, então ninguém tenta de novo por 30 s.
+
+**Onde no projeto:** `shared/auth/jwks_verifier.go` — `keyForKid` (achado do code review de 2026-09-27).
+
+```mermaid
+sequenceDiagram
+  participant A as request A (desiste)
+  participant B as requests B..N
+  participant SF as singleflight "jwks"
+  participant ID as identity /jwks
+  A->>SF: Do(fn) — é o primeiro, roda o fetch
+  B->>SF: Do(fn) — espera o resultado de A
+  SF->>ID: GET (ctx de A)
+  A--xA: cliente de A cancela
+  Note over SF,ID: com ctx de A: fetch cancelado, B..N recebem o erro<br/>com WithoutCancel: o fetch termina e B..N recebem as chaves
+```
+
+```go
+_, err, _ := v.sf.Do("jwks", func() (any, error) {
+	// sem o cancelamento de quem chegou primeiro; o limite de tempo vem do
+	// Timeout do http.Client, que continua valendo para todos
+	return nil, v.refresh(context.WithoutCancel(ctx))
+})
+```
+
+**Pegadinha:** tirar o cancelamento tira também o prazo, então o trabalho precisa de um limite próprio (aqui, o
+timeout do `http.Client`; em outros casos, um `context.WithTimeout` em cima do `WithoutCancel`). **Vs C#:** é como
+chamar o método compartilhado com `CancellationToken.None` em vez do token da request, mas mantendo o
+`Activity`/`AsyncLocal` do chamador; em Go os dois viajam no mesmo `ctx` e o `WithoutCancel` separa um do outro.
+
+---
+
+## 46 — Lease com guarda no `UPDATE`: `RowsAffected()` como detector de "perdi a vez"
+
+**O que é / por que importa:** um worker que pega itens de uma fila no Postgres (`FOR UPDATE SKIP LOCKED`) marca
+cada item com um **lease** ("é meu até T"). Se o worker travar além de T, outro pega o mesmo item. O problema é o
+primeiro acordar depois e gravar por cima do resultado do segundo. A saída é fazer toda escrita posterior **provar
+que ainda é dona**: o `WHERE` inclui o valor do lease que ela recebeu, e `RowsAffected() == 0` vira um erro de
+domínio (`ErrSteamLeaseLost`), não um sucesso silencioso.
+
+**Onde no projeto:** `achievements-service/internal/repository/postgres_steam_sync.go` (`ClaimSteamPending`,
+`MarkSteamDone`, `MarkSteamRetry`) e `service/steam_mirror.go`.
+
+```mermaid
+sequenceDiagram
+  participant W1 as worker 1 (travou)
+  participant DB as player_achievements
+  participant W2 as worker 2
+  W1->>DB: claim → next_attempt_at = T1
+  Note over W1: passa de T1 sem responder
+  W2->>DB: claim (T1 venceu) → next_attempt_at = T2
+  W2->>DB: UPDATE ... WHERE next_attempt_at = T2 → 1 linha ✔
+  W1->>DB: UPDATE ... WHERE next_attempt_at = T1 → 0 linhas
+  Note over W1: ErrSteamLeaseLost: descarta, não sobrescreve
+```
+
+```go
+const q = `UPDATE player_achievements SET steam_sync_state = $4, ...
+            WHERE game_id = $1 AND player_id = $2 AND achievement_id = $3
+              AND steam_sync_state = '' AND steam_next_attempt_at = $7` // $7 = o lease que ESTE worker recebeu
+tag, err := r.pool.Exec(ctx, q, ..., it.LeaseUntil)
+if err != nil {
+	return fmt.Errorf("steam sync repository: mark done: %w", err)
+}
+if tag.RowsAffected() == 0 {
+	return domain.ErrSteamLeaseLost // outro worker assumiu (ou o item já terminou)
+}
+```
+
+**Pegadinha:** o valor da guarda precisa ser **o que o banco gravou**, não o que o Go calculou. O Postgres guarda
+`timestamptz` em microssegundos e o `time.Time` do Go tem nanossegundos: comparar com o valor calculado nunca
+bateria. Por isso o `claim` faz `RETURNING steam_next_attempt_at` e o worker guarda esse valor (o teste de
+integração pegou a diferença). **Vs C#:** é a mesma ideia do *optimistic concurrency* do EF Core (`[ConcurrencyCheck]`
+/ `rowversion` e a `DbUpdateConcurrencyException`), feita à mão: em Go não há ORM detectando o conflito, então o
+`RowsAffected()` é quem dá o sinal.

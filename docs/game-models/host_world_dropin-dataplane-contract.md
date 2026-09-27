@@ -50,7 +50,7 @@ sequenceDiagram
   SS-->>MM: connect_token(role=invader) + server_address
   MM-->>Inv: session_id + server_address + connect_token
   Inv->>World: conecta com o token (role=invader)
-  Note over World: mundo autoritativo; phantom injetado no meio
+  Note over World: mundo autoritativo, phantom injetado no meio
 ```
 
 ### B) Co-op — quadro de sinais em dois passos (o host escolhe)
@@ -99,6 +99,8 @@ extrair o `sub` do JWT; (2) o server lê `GAME_SERVER_KEY` do ambiente e anexa `
 
 Com o modo em `topology: p2p`, **o jogo do host hospeda o mundo** (como nos Souls da FromSoftware) e não há
 Dedicated Server:
+
+![Invasão P2P animada: o invasor pede ao matchmaking, recebe o SteamID do host e conecta pela Steam](../media/invasao-p2p.gif)
 
 ```mermaid
 sequenceDiagram

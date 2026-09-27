@@ -8,9 +8,9 @@
 
 ## 0. Primeiro de tudo: trazer a branch para a `main`
 
-Toda a revisão (2026-09-26 e 27) está na branch `claude/revisao-produto-l2k7hr`, sem PR aberto. O caminho de sempre
-(ADR-0013): revisar e fazer `merge --no-ff` na `main`, ou pedir para abrir o PR. O CI roda na primeira vez nesse
-push — veja o item 5 (govulncheck).
+Toda a revisão (2026-09-26 e 27) está na branch `claude/revisao-produto-l2k7hr`, no
+[PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1), com o CI verde. O caminho de sempre
+(ADR-0013): revisar e fazer `merge --no-ff` na `main`.
 
 **Ordem de deploy desta branch:** suba o **identity primeiro** e espere 15 min (a validade do JWT) antes dos
 outros serviços. Os consumidores de token passaram a exigir `iss`/`aud`, que só o identity novo emite — um token
@@ -80,9 +80,9 @@ mostrar "P2P · steam:…" e o sinal de vida. O backend está pronto desde a ADR
 
 ## 5. CI — `govulncheck`
 
-O job `govulncheck` entrou como **report-only** (`continue-on-error: true` em `.github/workflows/ci.yml`) porque a VM
-não alcança o `vuln.go.dev`. No primeiro run do CI: ler o resultado; atualizar as dependências apontadas (ou abrir a
-tarefa); depois remover o `continue-on-error` para o job bloquear.
+**Feito.** O job entrou report-only, achou 29 vulnerabilidades em dependências antigas e depois o GO-2026-6443 do
+grpc; tudo foi corrigido por atualização e o job agora **bloqueia** o PR. Nada a fazer, a não ser manter as
+dependências em dia quando ele reprovar um PR futuro.
 
 ## 6. Decisões de produto em aberto
 
@@ -92,6 +92,8 @@ tarefa); depois remover o `continue-on-error` para o job bloquear.
 | Login no console (admin-bff) — D6 | decidir **junto com o deploy real**: login de operador (OIDC/senha) ou console só atrás de VPN | `review/REVISAO-2026-09.md` §6 |
 | Deploy real e medição de custo (G10, a tese do projeto — ADR-0008) | o próximo grande marco depois do lançamento; P2P já cortou o maior custo | `review/REVISAO-2026-09.md` |
 | Resultado de partida sem outbox (G7) | **reenvio corrigido** (spec `session/033`); outbox de verdade só se o session deixar de ser em memória | `review/REVISAO-2026-09.md` |
+| S3 local do cloud-save | **LocalStack** desde 2026-09-27 (o MinIO saiu do Docker Hub). Os saves locais somem quando o LocalStack reinicia; se isso incomodar, trocar por um S3 com persistência (SeaweedFS ou Garage) — só muda o endpoint | `infra/docker/docker-compose.yml` |
+| Licença antes de abrir o código | escolher na hora de abrir: **Apache-2.0** (permissiva, com cláusula de patente) é a recomendação para atrair uso; AGPL-3.0 se o medo for alguém vender o backend como SaaS fechado. O README hoje diz "a definir" | `README.md`, `review/ESTRATEGIA-PRODUTO-2026-09.md` |
 | Limite de tentativas no login (G5) | **feito em memória** (spec `identity/007`); com várias réplicas, trocar por um limite distribuído (Redis) no deploy real | idem |
 | Mais de um app Steam por deploy | quando um segundo jogo for para a Steam: `STEAM_APP_ID` por jogo no game-registry | `achievements-service/specs/019-steam-mirror` |
 | SDK UPM | extrair do Folclore quando a camada C# (guia, seção 4) estabilizar | guia Unity, seção 8 |
@@ -103,7 +105,9 @@ tarefa); depois remover o `continue-on-error` para o job bloquear.
   `docker compose -f infra/docker/docker-compose.yml up -d --build` e `scripts/demo-host-world.sh` (e
   `TOPOLOGY=p2p scripts/demo-host-world.sh`). Suba num volume limpo (`down -v` antes) para as migrations novas
   rodarem — o compose agora monta os diretórios de migration inteiros.
-- **Cloud-save:** `go test -tags=integration ./services/cloud-save-service/...` (a VM não baixou a imagem do MinIO).
+- **Cloud-save no compose:** salvar e ler um save pelo `services/cloud-save-service/api/*.http`. O S3 local passou a
+  ser o LocalStack (a imagem `minio/minio` saiu do Docker Hub e derrubava o CI e o `compose up`); o teste de
+  integração já roda contra ele, o compose foi validado só com `docker compose config`.
 - **Túnel do Pi 5:** `infra/agones/pi5/pi5-tunnels.sh install`.
 - **Com o jogo:** `HOST_KILLED` com o LocalStack parado → o server recebe `Internal`, reenvia com o mesmo
   `event_id` e, com o LocalStack de volta, o invasor ganha a conquista.

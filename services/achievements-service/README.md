@@ -7,6 +7,8 @@ até a meta). O vocabulário de eventos ("o que dispara uma conquista") não é
 mais hardcoded por arquétipo — é dado, editável sem redeploy. Primeiro serviço
 a validar o JWT do identity (via `shared/auth`).
 
+<p align="center"><img src="../../docs/media/console-conquistas-analytics.gif" alt="Catálogo de conquistas com selo Steam e o analytics do mundo" width="720"/></p>
+
 - **Protocolo:** REST · **Porta host:** 8082
 - **Storage:** PostgreSQL (`achievements-postgres`, DB `achievements`)
 - **Dependências:** identity (JWKS); consome o fan-out durável (SQS, ADR-0020) publicado pelo session-service

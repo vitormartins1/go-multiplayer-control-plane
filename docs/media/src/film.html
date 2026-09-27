@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Go Multiplayer Control Plane — filme do produto</title>
+<!--
+  Filme do produto (docs/media). Uma única página 1920×1080 cuja imagem é função
+  pura do tempo: window.__seek(t) desenha o quadro do instante t (segundos).
+  render.mjs chama __seek quadro a quadro no Chromium headless e manda os PNGs
+  para o ffmpeg. Abra com ?play para assistir no navegador em tempo real.
+  Paleta e fontes são as do console (services/admin-ui/src/main.tsx).
+-->
+<style>
+@font-face { font-family: "Space Grotesk"; font-weight: 500; src: url(fonts/space-grotesk-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 600; src: url(fonts/space-grotesk-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 700; src: url(fonts/space-grotesk-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; src: url(fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; src: url(fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; src: url(fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url(fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2"); }
+
+:root {
+  --bg: #0a0d12; --panel: #12161d; --panel2: #1a212b; --line: #2a3340; --muted: #7d8a99; --text: #e6edf3; --text2: #c8d3de;
+  --signal: #5eb8ff; --nominal: #4ade9a; --critical: #ff5c5c; --grape: #cc5de8; --amber: #ffb454;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; background: var(--bg); overflow: hidden; }
+body { font-family: "IBM Plex Sans", sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+.abs { position: absolute; }
+.scene { position: absolute; inset: 0; opacity: 0; }
+.display { font-family: "Space Grotesk", sans-serif; letter-spacing: -0.02em; }
+.mono { font-family: "IBM Plex Mono", monospace; }
+
+/* fundo: grade de instrumento + brilhos que derivam devagar */
+#grid { position: absolute; inset: -80px; background-image:
+  linear-gradient(rgba(94,184,255,0.06) 1px, transparent 1px),
+  linear-gradient(90deg, rgba(94,184,255,0.06) 1px, transparent 1px);
+  background-size: 64px 64px; }
+.glow { position: absolute; width: 900px; height: 900px; border-radius: 50%; filter: blur(120px); opacity: 0.35; }
+#vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.65) 100%); }
+
+/* marcador de capítulo */
+#chapter { position: absolute; left: 96px; top: 72px; display: flex; gap: 14px; align-items: center; font-family: "IBM Plex Mono"; font-size: 20px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; }
+#chapter .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 16px var(--signal); }
+#progress { position: absolute; left: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, var(--signal), var(--nominal)); }
+
+/* cena 1 */
+.logo { width: 132px; height: 132px; }
+.title { font-size: 104px; font-weight: 700; line-height: 1; }
+.subtitle { font-size: 38px; color: var(--text2); font-weight: 400; }
+
+/* cena 2: tipografia cinética */
+.kin { font-size: 132px; font-weight: 700; line-height: 1; }
+.kin-small { font-size: 46px; color: var(--text2); }
+
+/* nós do diagrama */
+.node { position: absolute; background: linear-gradient(180deg, #161c25, #11151c); border: 1.5px solid var(--line); border-radius: 18px; padding: 18px 22px; }
+.node .t { font-family: "Space Grotesk"; font-weight: 600; font-size: 28px; }
+.node .s { font-family: "IBM Plex Mono"; font-size: 17px; color: var(--muted); margin-top: 4px; }
+.node.hot { border-color: var(--signal); box-shadow: 0 0 0 1px rgba(94,184,255,0.3), 0 0 38px rgba(94,184,255,0.25); }
+.tag { display: inline-block; font-family: "IBM Plex Mono"; font-size: 15px; padding: 3px 10px; border-radius: 999px; margin-top: 10px; margin-right: 6px; }
+.cap { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); background: rgba(18,22,29,0.92); border: 1.5px solid var(--line); border-radius: 14px; padding: 16px 28px; font-size: 30px; white-space: nowrap; }
+.cap b { color: var(--signal); font-weight: 600; }
+
+/* cena 4 */
+.player { position: absolute; width: 470px; height: 560px; border-radius: 26px; background: linear-gradient(180deg, #151b24, #0f1319); border: 1.5px solid var(--line); overflow: hidden; }
+.player .head { padding: 26px 30px; border-bottom: 1.5px solid var(--line); display: flex; align-items: center; gap: 16px; }
+.avatar { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; font-family: "Space Grotesk"; font-weight: 700; font-size: 30px; }
+.role { font-family: "IBM Plex Mono"; font-size: 17px; letter-spacing: 0.1em; text-transform: uppercase; }
+.pname { font-family: "Space Grotesk"; font-weight: 600; font-size: 34px; }
+.world { position: absolute; left: 30px; right: 30px; top: 150px; bottom: 30px; border-radius: 18px; overflow: hidden; background: radial-gradient(ellipse at 50% 120%, rgba(74,222,154,0.25), transparent 60%), linear-gradient(180deg, #0f1a1a, #0b1112); border: 1px solid #1f2b2b; }
+.cp { position: absolute; left: 735px; top: 480px; width: 450px; height: 345px; border-radius: 26px; background: linear-gradient(180deg, #16202c, #111821); border: 1.5px solid #2b4460; box-shadow: 0 0 60px rgba(94,184,255,0.12); padding: 26px 30px; }
+.msg { position: absolute; font-family: "IBM Plex Mono"; font-size: 20px; padding: 8px 14px; border-radius: 10px; background: #0f141b; border: 1.5px solid var(--line); white-space: nowrap; }
+.toast { position: absolute; display: flex; align-items: center; gap: 18px; padding: 20px 28px; border-radius: 18px; background: linear-gradient(180deg, #1b2a22, #121c17); border: 1.5px solid rgba(74,222,154,0.6); box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(74,222,154,0.2); }
+
+/* cena 5: janela do navegador + câmera */
+.browser { position: absolute; left: 160px; top: 150px; width: 1600px; height: 860px; border-radius: 20px; overflow: hidden; background: #0b0e13; border: 1.5px solid var(--line); box-shadow: 0 40px 120px rgba(0,0,0,0.6); }
+.bar { height: 52px; background: #141922; border-bottom: 1.5px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 20px; }
+.bar i { width: 13px; height: 13px; border-radius: 50%; display: block; }
+.url { margin-left: 22px; flex: 1; height: 32px; border-radius: 9px; background: #0d1117; border: 1px solid var(--line); font-family: "IBM Plex Mono"; font-size: 16px; color: var(--muted); display: flex; align-items: center; padding: 0 14px; }
+.viewport { position: absolute; left: 0; top: 52px; right: 0; bottom: 0; overflow: hidden; }
+.shot { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.hl { position: absolute; border: 3px solid var(--signal); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(5,8,12,0.55), 0 0 30px rgba(94,184,255,0.5); }
+.callout { position: absolute; max-width: 620px; background: rgba(15,20,27,0.96); border: 1.5px solid var(--signal); border-radius: 16px; padding: 18px 24px; font-size: 27px; line-height: 1.3; box-shadow: 0 20px 60px rgba(0,0,0,0.55); }
+.callout small { display: block; font-family: "IBM Plex Mono"; font-size: 16px; color: var(--signal); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+
+/* cena 6: stack */
+.chip { position: absolute; padding: 16px 26px; border-radius: 16px; background: #131922; border: 1.5px solid var(--line); font-family: "Space Grotesk"; font-weight: 600; font-size: 32px; white-space: nowrap; }
+.chip span { font-family: "IBM Plex Mono"; font-weight: 400; font-size: 18px; color: var(--muted); margin-left: 10px; }
+.stat { position: absolute; text-align: left; }
+.stat .n { font-family: "Space Grotesk"; font-weight: 700; font-size: 96px; line-height: 1; }
+.stat .l { font-size: 24px; color: var(--text2); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="grid"></div>
+  <div class="glow" id="g1" style="background:#1d4f86"></div>
+  <div class="glow" id="g2" style="background:#0f5a3e"></div>
+  <div id="vignette"></div>
+
+  <!-- 1. Título -->
+  <section class="scene" id="s1">
+    <div class="abs" id="s1logo" style="left:894px;top:250px">
+      <svg class="logo" viewBox="0 0 132 132" fill="none">
+        <path id="hex" d="M66 6 L118 36 L118 96 L66 126 L14 96 L14 36 Z" stroke="#5eb8ff" stroke-width="5" stroke-linejoin="round"/>
+        <circle cx="66" cy="66" r="14" fill="#4ade9a"/>
+        <g stroke="#5eb8ff" stroke-width="4" stroke-linecap="round">
+          <line id="sp1" x1="66" y1="52" x2="66" y2="26"/><line id="sp2" x1="78" y1="73" x2="100" y2="86"/><line id="sp3" x1="54" y1="73" x2="32" y2="86"/>
+        </g>
+        <circle cx="66" cy="24" r="7" fill="#5eb8ff"/><circle cx="102" cy="87" r="7" fill="#5eb8ff"/><circle cx="30" cy="87" r="7" fill="#5eb8ff"/>
+      </svg>
+    </div>
+    <div class="abs display title" id="s1title" style="left:0;right:0;top:430px;text-align:center">Go Multiplayer <span style="color:var(--signal)">Control Plane</span></div>
+    <div class="abs subtitle" id="s1sub" style="left:0;right:0;top:570px;text-align:center">O backend de um Souls-like online — escrito em Go.</div>
+    <div class="abs mono" id="s1meta" style="left:0;right:0;top:660px;text-align:center;font-size:22px;color:var(--muted);letter-spacing:.14em">IDENTIDADE · MATCHMAKING · SESSÕES · CONQUISTAS · ANALYTICS · CONSOLE</div>
+  </section>
+
+  <!-- 2. O problema -->
+  <section class="scene" id="s2">
+    <div class="abs display kin" id="k1" style="left:0;right:0;top:330px;text-align:center">Invasões.</div>
+    <div class="abs display kin" id="k2" style="left:0;right:0;top:330px;text-align:center">Sinais de co-op.</div>
+    <div class="abs display kin" id="k3" style="left:0;right:0;top:330px;text-align:center">Conquistas.</div>
+    <div class="abs display kin" id="k4" style="left:0;right:0;top:330px;text-align:center">Analytics.</div>
+    <div class="abs kin-small" id="k5" style="left:0;right:0;top:520px;text-align:center">Tudo que um jogo online precisa por trás do gameplay —<br/><span style="color:var(--nominal)">sem pagar servidor por hora de mundo aberto.</span></div>
+  </section>
+
+  <!-- 3. Arquitetura -->
+  <section class="scene" id="s3">
+    <svg class="abs" id="edges" width="1920" height="1080" style="left:0;top:0"></svg>
+    <div id="nodes"></div>
+    <div class="cap" id="cap3"></div>
+  </section>
+
+  <!-- 4. Invasão P2P -->
+  <section class="scene" id="s4">
+    <svg class="abs" id="s4svg" width="1920" height="1080" style="left:0;top:0"></svg>
+    <div class="player" id="pHost" style="left:150px;top:230px">
+      <div class="head"><div class="avatar" style="background:#1d3a2c;color:var(--nominal)">S</div><div><div class="role" style="color:var(--nominal)">Host · hospeda o mundo</div><div class="pname">Saci</div></div></div>
+      <div class="world"><div><svg width="410" height="380" viewBox="0 0 410 380" style="position:absolute;inset:0"><defs><linearGradient id="sk4ade9a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#123027"/><stop offset="1" stop-color="#0b1013"/></linearGradient></defs><rect width="410" height="380" fill="url(#sk4ade9a)"/><circle cx="300" cy="90" r="34" fill="#4ade9a" opacity=".25"/><circle cx="300" cy="90" r="20" fill="#4ade9a" opacity=".55"/><path d="M0 260 L70 190 L130 235 L205 150 L285 230 L350 180 L410 225 L410 380 L0 380Z" fill="#15302a"/><path d="M0 300 L90 250 L170 290 L260 240 L340 285 L410 260 L410 380 L0 380Z" fill="#0f211d"/></svg></div><div id="wHost" style="position:absolute;inset:0"></div></div>
+    </div>
+    <div class="player" id="pInv" style="left:1300px;top:230px">
+      <div class="head"><div class="avatar" style="background:#3a1d22;color:var(--critical)">C</div><div><div class="role" style="color:var(--critical)">Invasor</div><div class="pname">Curupira</div></div></div>
+      <div class="world" style="border-color:#2b1d22"><div><svg width="410" height="380" viewBox="0 0 410 380" style="position:absolute;inset:0"><defs><linearGradient id="skff5c5c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1419"/><stop offset="1" stop-color="#0b1013"/></linearGradient></defs><rect width="410" height="380" fill="url(#skff5c5c)"/><circle cx="300" cy="90" r="34" fill="#ff5c5c" opacity=".25"/><circle cx="300" cy="90" r="20" fill="#ff5c5c" opacity=".55"/><path d="M0 260 L70 190 L130 235 L205 150 L285 230 L350 180 L410 225 L410 380 L0 380Z" fill="#2c171c"/><path d="M0 300 L90 250 L170 290 L260 240 L340 285 L410 260 L410 380 L0 380Z" fill="#1d0f13"/></svg></div><div id="wInv" style="position:absolute;inset:0"></div></div>
+    </div>
+    <div class="cp" id="cpBox">
+      <div class="role" style="color:var(--signal)">Control plane</div>
+      <div class="display" style="font-size:36px;font-weight:600;margin-top:6px">matchmaking · session</div>
+      <div class="mono" id="cpLine1" style="font-size:20px;color:var(--muted);margin-top:26px">diretório de mundos</div>
+      <div id="cpWorlds" style="margin-top:12px"></div>
+    </div>
+    <div class="msg" id="m1"></div><div class="msg" id="m2"></div><div class="msg" id="m3"></div><div class="msg" id="m4"></div><div class="msg" id="m5"></div>
+    <div class="toast" id="toast" style="left:640px;top:860px">
+      <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#4ade9a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+      <div><div class="display" style="font-size:32px;font-weight:600">Invasor Vitorioso — desbloqueada</div><div class="mono" style="font-size:19px;color:var(--nominal)">regras do console → conquista → espelhada na Steam</div></div>
+    </div>
+    <div class="abs" id="s4sum" style="left:0;right:0;top:900px;text-align:center;font-size:34px;color:var(--text2)">Servidor de jogo: <b style="color:var(--nominal)">zero</b>. O host hospeda — o control plane cuida do resto.</div>
+  </section>
+
+  <!-- 5. Console -->
+  <section class="scene" id="s5">
+    <div class="browser" id="browser">
+      <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><div class="url" id="url">localhost:5173/rooms</div></div>
+      <div class="viewport" id="vp"></div>
+    </div>
+    <div class="callout" id="call"></div>
+  </section>
+
+  <!-- 6. Stack -->
+  <section class="scene" id="s6"></section>
+
+  <!-- 7. Fim -->
+  <section class="scene" id="s7">
+    <div class="abs" id="s7logo" style="left:894px;top:250px"></div>
+    <div class="abs display" id="s7title" style="left:0;right:0;top:430px;text-align:center;font-size:84px;font-weight:700">Go Multiplayer <span style="color:var(--signal)">Control Plane</span></div>
+    <div class="abs mono" id="s7url" style="left:0;right:0;top:560px;text-align:center;font-size:30px;color:var(--text2)">github.com/vitormartins1/go-multiplayer-control-plane</div>
+    <div class="abs" id="s7note" style="left:0;right:0;top:640px;text-align:center;font-size:28px;color:var(--muted)">Specs, ADRs e contrato versionado no repositório — para ler, rodar e evoluir.</div>
+  </section>
+
+  <div id="chapter"><div class="dot"></div><span id="chapterTxt"></span></div>
+  <div id="progress"></div>
+</div>
+
+<script>
+// ---------- utilidades de tempo ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeInOut = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeBack = (x) => { x = clamp(x); const c1 = 1.2, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+// janela com entrada e saída suaves
+const win = (t, a, b, d = 0.5) => Math.min(easeOut(seg(t, a, a + d)), 1 - easeInOut(seg(t, b - d, b)));
+const $ = (id) => document.getElementById(id);
+const css = (el, o) => { for (const k in o) el.style[k] = o[k]; };
+
+// ---------- roteiro (segundos) ----------
+const T = { s1: [0, 5.2], s2: [5, 12.2], s3: [12, 28.5], s4: [28.3, 46.5], s5: [46.3, 73.5], s6: [73.3, 81], s7: [80.8, 87] };
+const DURATION = 87;
+const CHAPTERS = [[12, 28.5, "01 · arquitetura"], [28.3, 46.5, "02 · invasão p2p"], [46.3, 73.5, "03 · console de operação"], [73.3, 81, "04 · stack"]];
+
+// ---------- cena 3: grafo ----------
+const N = {
+  steam:  { x: 110, y: 170, w: 330, t: "Steam", s: "login · conquistas · SDR", c: "var(--text2)" },
+  game:   { x: 110, y: 470, w: 330, t: "Jogo (Unity)", s: "cliente · host p2p · DS", c: "var(--nominal)" },
+  identity:{ x: 640, y: 170, w: 330, t: "identity", s: "JWT EdDSA · login Steam" },
+  mm:     { x: 640, y: 360, w: 330, t: "matchmaking", s: "gRPC · invasão · sinais" },
+  session:{ x: 640, y: 550, w: 330, t: "session", s: "mundos · p2p · heartbeat" },
+  registry:{ x: 640, y: 740, w: 330, t: "game-registry", s: "jogos · modos · perfis" },
+  fanout: { x: 1080, y: 550, w: 290, t: "fan-out", s: "SNS → SQS", c: "var(--amber)" },
+  ach:    { x: 1480, y: 250, w: 330, t: "achievements", s: "regras · espelho Steam" },
+  lb:     { x: 1480, y: 440, w: 330, t: "leaderboard", s: "Redis · rankings" },
+  an:     { x: 1480, y: 630, w: 330, t: "analytics", s: "rollups · sessões" },
+  console:{ x: 1480, y: 820, w: 330, t: "console", s: "admin-bff + React", c: "var(--signal)" },
+};
+const NODE_H = 104;
+const E = [
+  ["game", "identity", "login"], ["identity", "steam", "valida ticket"], ["game", "mm", "Invade"], ["game", "session", "OpenWorld · eventos"],
+  ["mm", "session", "JoinWorld"], ["session", "registry", "perfil"], ["session", "fanout", "resultado"],
+  ["fanout", "ach", ""], ["fanout", "lb", ""], ["fanout", "an", ""], ["ach", "steam", "SetAchievement"], ["console", "an", ""], ["game", "steam", "P2P · SDR"],
+];
+const edgeEls = [];
+function buildGraph() {
+  const nodes = $("nodes");
+  for (const k in N) {
+    const n = N[k]; const d = document.createElement("div");
+    d.className = "node"; d.id = "n-" + k; css(d, { left: n.x + "px", top: n.y + "px", width: n.w + "px", height: NODE_H + "px" });
+    d.innerHTML = `<div class="t" style="color:${n.c || "var(--text)"}">${n.t}</div><div class="s">${n.s}</div>`;
+    nodes.appendChild(d);
+  }
+  const svg = $("edges");
+  const anchor = (n, side) => side === "r" ? [n.x + n.w, n.y + NODE_H / 2] : side === "l" ? [n.x, n.y + NODE_H / 2] : side === "t" ? [n.x + n.w / 2, n.y] : [n.x + n.w / 2, n.y + NODE_H];
+  E.forEach(([a, b, label], i) => {
+    const A = N[a], B = N[b]; let p0, p1, d;
+    if (a === "game" && b === "steam") { p0 = anchor(A, "t"); p1 = anchor(B, "b"); d = `M${p0} L${p1}`; }
+    else if (a === "ach" && b === "steam") { p0 = anchor(A, "t"); p1 = anchor(B, "t"); d = `M${p0} C${p0[0]},60 ${p1[0]},60 ${p1}`; }
+    else if (a === "identity" && b === "steam") { p0 = anchor(A, "l"); p1 = anchor(B, "r"); d = `M${p0} L${p1}`; }
+    else if (a === "mm" && b === "session") { p0 = anchor(A, "b"); p1 = anchor(B, "t"); d = `M${p0} L${p1}`; }
+    else if (a === "session" && b === "registry") { p0 = anchor(A, "b"); p1 = anchor(B, "t"); d = `M${p0} L${p1}`; }
+    else if (a === "console") { p0 = anchor(A, "t"); p1 = anchor(B, "b"); d = `M${p0} L${p1}`; }
+    else { p0 = anchor(A, "r"); p1 = anchor(B, "l"); const mx = (p0[0] + p1[0]) / 2; d = `M${p0} C${mx},${p0[1]} ${mx},${p1[1]} ${p1}`; }
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d); path.setAttribute("fill", "none"); path.setAttribute("stroke", "#2e3d50"); path.setAttribute("stroke-width", "3");
+    svg.appendChild(path);
+    const len = path.getTotalLength(); path.style.strokeDasharray = len; path.style.strokeDashoffset = len;
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle"); dot.setAttribute("r", "6"); dot.setAttribute("fill", "#5eb8ff"); dot.style.opacity = 0;
+    svg.appendChild(dot);
+    edgeEls.push({ a, b, path, len, dot, i });
+  });
+}
+// trilhas destacadas na cena 3
+const TRACKS = [
+  { t0: 17.5, t1: 20.8, edges: ["game>identity", "identity>steam"], nodes: ["game", "identity", "steam"], cap: "<b>1.</b> Login com a Steam → o identity valida o ticket e emite o JWT" },
+  { t0: 20.8, t1: 24.1, edges: ["game>mm", "mm>session", "session>registry"], nodes: ["game", "mm", "session"], cap: "<b>2.</b> Invasão: o matchmaking acha um mundo na faixa e injeta o invasor" },
+  { t0: 24.1, t1: 28.2, edges: ["session>fanout", "fanout>ach", "fanout>an", "fanout>lb", "ach>steam"], nodes: ["session", "fanout", "ach", "an", "lb"], cap: "<b>3.</b> Cada evento vira fan-out: conquistas, ranking e analytics — e a Steam" },
+];
+function renderS3(t) {
+  const [a] = T.s3;
+  for (const k in N) {
+    const i = Object.keys(N).indexOf(k); const p = easeBack(seg(t, a + 0.8 + i * 0.12, a + 1.5 + i * 0.12));
+    const el = $("n-" + k); el.style.opacity = clamp(seg(t, a + 0.8 + i * 0.12, a + 1.3 + i * 0.12));
+    el.style.transform = `translateY(${(1 - p) * 26}px) scale(${0.94 + 0.06 * p})`;
+  }
+  const track = TRACKS.find((r) => t >= r.t0 && t < r.t1);
+  edgeEls.forEach((e) => {
+    const draw = easeInOut(seg(t, a + 2.4 + e.i * 0.16, a + 3.4 + e.i * 0.16));
+    e.path.style.strokeDashoffset = e.len * (1 - draw);
+    const key = e.a + ">" + e.b; const on = track && track.edges.includes(key);
+    e.path.setAttribute("stroke", on ? "#5eb8ff" : "#2e3d50"); e.path.setAttribute("stroke-width", on ? "4" : "3");
+    // pacotes: correm em loop; mais rápidos e brilhantes na trilha ativa
+    const period = on ? 1.1 : 2.4; const phase = ((t - a - e.i * 0.37) / period) % 1;
+    if (draw >= 1 && t > a + 5) {
+      const pt = e.path.getPointAtLength(e.len * phase);
+      e.dot.setAttribute("cx", pt.x); e.dot.setAttribute("cy", pt.y);
+      e.dot.style.opacity = on ? 1 : 0.35; e.dot.setAttribute("fill", e.a === "fanout" || e.b === "fanout" ? "#ffb454" : on ? "#9fd3ff" : "#5eb8ff");
+    } else e.dot.style.opacity = 0;
+  });
+  for (const k in N) $("n-" + k).classList.toggle("hot", !!(track && track.nodes.includes(k)));
+  const cap = $("cap3");
+  if (track) { cap.innerHTML = track.cap; cap.style.opacity = win(t, track.t0, track.t1, 0.35); }
+  else cap.style.opacity = 0;
+}
+
+// ---------- cena 4: invasão p2p ----------
+function msg(id, t, t0, t1, text, x0, y0, x1, y1, color) {
+  const el = $(id); const p = easeInOut(seg(t, t0, t0 + 0.9));
+  el.innerHTML = text; el.style.borderColor = color; el.style.color = color;
+  css(el, { left: lerp(x0, x1, p) + "px", top: lerp(y0, y1, p) + "px", opacity: win(t, t0, t1, 0.3) });
+}
+function renderS4(t) {
+  const [a] = T.s4; const L = (x) => a + x;
+  const hostIn = easeBack(seg(t, L(0.3), L(1.1))), invIn = easeBack(seg(t, L(0.6), L(1.4))), cpIn = easeBack(seg(t, L(0.9), L(1.7)));
+  css($("pHost"), { opacity: clamp(seg(t, L(0.3), L(0.8))), transform: `translateX(${(1 - hostIn) * -60}px)` });
+  css($("pInv"), { opacity: clamp(seg(t, L(0.6), L(1.1))), transform: `translateX(${(1 - invIn) * 60}px)` });
+  css($("cpBox"), { opacity: clamp(seg(t, L(0.9), L(1.4))), transform: `scale(${0.95 + 0.05 * cpIn})` });
+  // mundo do host: pulso do heartbeat
+  const hb = ((t - L(2)) % 2.2) / 2.2;
+  $("wHost").style.boxShadow = t > L(3.5) ? `inset 0 0 0 ${2 + 6 * (1 - hb)}px rgba(74,222,154,${0.5 * (1 - hb)})` : "none";
+  $("wHost").innerHTML = t > L(3.5) ? `<div class="mono" style="position:absolute;left:20px;bottom:18px;font-size:18px;color:var(--nominal)">♥ heartbeat · a cada 30 s</div>` : "";
+  // diretório do control plane
+  const worlds = [["Saci", "nível 88", t > L(3)], ["Iara", "nível 41", t > L(1.6)], ["Cuca", "nível 120", t > L(1.6)]];
+  const pick = t > L(6.3) && t < L(15);
+  $("cpWorlds").innerHTML = worlds.filter((w) => w[2]).map((w, i) => `<div class="mono" style="font-size:21px;padding:8px 12px;border-radius:9px;margin-top:8px;background:${pick && w[0] === "Saci" ? "rgba(94,184,255,0.18)" : "#0e131a"};border:1.5px solid ${pick && w[0] === "Saci" ? "#5eb8ff" : "#232d3a"}">mundo de ${w[0]} · ${w[1]}${pick && w[0] === "Saci" ? "  ✓" : ""}</div>`).join("");
+  msg("m1", t, L(1.9), L(4.4), "OpenWorld · host_connection = SteamID →", 600, 330, 650, 330, "#4ade9a");
+  msg("m2", t, L(3.0), L(5.2), "← world_token (só deste mundo)", 700, 400, 650, 400, "#4ade9a");
+  msg("m3", t, L(5.0), L(7.6), "← Invade · faixa de nível", 1040, 330, 980, 330, "#ff7a7a");
+  msg("m4", t, L(6.8), L(9.5), "connect token + SteamID do host →", 850, 400, 900, 400, "#ff7a7a");
+  msg("m5", t, L(12.2), L(14.8), "HOST_KILLED → fan-out → conquistas", 640, 450, 700, 450, "#ffb454");
+  // conexão direta p2p (Steam Networking) entre os dois jogos
+  const svg = $("s4svg"); const link = seg(t, L(9.3), L(10.4));
+  if (!svg.firstChild) svg.innerHTML = `<path id="p2p" d="M620,200 C 900,110 1020,110 1300,200" fill="none" stroke="#cc5de8" stroke-width="5" stroke-dasharray="14 12"/><text id="p2pTxt" x="960" y="118" text-anchor="middle" font-family="IBM Plex Mono" font-size="22" fill="#e2a8f5">conexão direta · Steam Networking (SDR)</text>`;
+  $("p2p").style.opacity = link > 0 && t < L(17.6) ? 1 : 0; $("p2p").style.strokeDashoffset = -((t * 60) % 26);
+  $("p2p").setAttribute("d", `M620,${lerp(230, 200, link)} C 900,${lerp(230, 110, link)} 1020,${lerp(230, 110, link)} 1300,${lerp(230, 200, link)}`);
+  $("p2pTxt").style.opacity = win(t, L(9.8), L(17.6), 0.4);
+  $("wInv").innerHTML = t > L(10.4) ? `<div class="mono" style="position:absolute;left:20px;top:18px;font-size:18px;color:#e2a8f5">no mundo do host · token validado</div>` : "";
+  // conquista
+  const toastIn = easeBack(seg(t, L(13.3), L(14.1)));
+  css($("toast"), { opacity: win(t, L(13.3), L(16.4), 0.4), transform: `translateY(${(1 - toastIn) * 40}px)` });
+  $("s4sum").style.opacity = win(t, L(16.5), L(18.2), 0.4);
+}
+
+// ---------- cena 5: console real ----------
+const SHOTS = {
+  rooms: { src: "shots/rooms.jpg", w: 2880, h: 1800, url: "localhost:5173/rooms" },
+  detail: { src: "shots/rooms-detail.jpg", w: 2880, h: 2250, url: "localhost:5173/rooms" },
+  ach: { src: "shots/game-achievements.jpg", w: 2880, h: 1800, url: "localhost:5173/games/folclore-souls" },
+  an: { src: "shots/game-analytics.jpg", w: 2880, h: 3968, url: "localhost:5173/games/folclore-souls · analytics" },
+  infra: { src: "shots/infrastructure.jpg", w: 2880, h: 2448, url: "localhost:5173/infrastructure" },
+};
+let BOX = null;
+const VPW = 1600, VPH = 808;
+// câmera: (cx, cy) = centro no espaço da imagem; z = zoom sobre o "caber na largura"
+function camFit(shot) { return VPW / SHOTS[shot].w; }
+// cada plano: shot, [t0,t1], câmeras de/para, destaque (caixa) e texto
+function plans(a) {
+  const B = BOX;
+  const pad = (b, p = 18) => ({ x: b.x - p, y: b.y - p, w: b.w + 2 * p, h: b.h + 2 * p });
+  const center = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+  return [
+    { shot: "rooms", t: [a + 0.3, a + 5.4], from: [1440, 900, 1], to: [1440, 780, 1.05], hl: null,
+      tag: "Rooms", text: "Todo mundo aberto, de todos os jogos — <b>ao vivo</b>.", cx: 1100, cy: 960 },
+    { shot: "rooms", t: [a + 5.4, a + 9.8], from: [1440, 780, 1.05], to: [...center(B.rooms.hosting), 2.2], hl: pad(B.rooms.hosting),
+      tag: "Hospedagem", text: "P2P: o jogo do host hospeda. O backend guarda o SteamID — não um servidor.", cx: 150, cy: 880 },
+    { shot: "rooms", t: [a + 9.8, a + 13.6], from: [...center(B.rooms.hosting), 2.2], to: [...center(B.rooms.heartbeat), 2.4], hl: pad(B.rooms.heartbeat, 14),
+      tag: "Sinal de vida", text: "Heartbeat a cada 30 s. Host caiu? O mundo sai da lista em ~90 s.", cx: 1110, cy: 880 },
+    { shot: "detail", t: [a + 13.6, a + 17.8], from: [1440, 1300, 1.2], to: [...center(B.roomsDetail.trust), 1.25], hl: pad(B.roomsDetail.trust, 12),
+      tag: "Detalhe do mundo", text: "Quem hospeda, último heartbeat, papéis — e o aviso de confiança do P2P.", cx: 150, cy: 120 },
+    { shot: "ach", t: [a + 17.8, a + 21.6], from: [1440, 820, 1.05], to: [...center(B.achievements.steam), 1.9], hl: pad(B.achievements.steam, 14),
+      tag: "Conquistas", text: "Regras visuais no console. Com nome na Steam, o desbloqueio aparece lá também.", cx: 1100, cy: 880 },
+    { shot: "an", t: [a + 21.6, a + 24.8], from: [1440, 780, 1.0], to: [...center(B.analytics.resumo), 1.15], hl: pad(B.analytics.resumo, 10),
+      tag: "Analytics", text: "Invasões, vitórias do invasor, bosses com ajuda — por modo.", cx: 150, cy: 880 },
+    { shot: "infra", t: [a + 24.8, a + 27.2], from: [1440, 900, 1.0], to: [1440, 1000, 1.05], hl: pad(B.infra.header, 12),
+      tag: "Infraestrutura", text: "10 serviços Go, observados com Prometheus e OpenTelemetry.", cx: 1100, cy: 120 },
+  ];
+}
+const imgs = {};
+function buildS5() {
+  const vp = $("vp");
+  for (const k in SHOTS) { const im = document.createElement("img"); im.className = "shot"; im.src = SHOTS[k].src; im.style.width = SHOTS[k].w + "px"; im.style.opacity = 0; vp.appendChild(im); imgs[k] = im; }
+  const hl = document.createElement("div"); hl.className = "hl"; hl.id = "hl"; vp.appendChild(hl);
+}
+function renderS5(t) {
+  const [a] = T.s5; const P = plans(a);
+  const browserIn = easeOut(seg(t, a, a + 0.8));
+  css($("browser"), { transform: `translateY(${(1 - browserIn) * 40}px) scale(${0.97 + 0.03 * browserIn})` });
+  const i = Math.max(0, P.findIndex((p) => t >= p.t[0] && t < p.t[1]));
+  const p = P[i] || P[P.length - 1];
+  const k = easeInOut(seg(t, p.t[0], p.t[0] + 1.3));
+  const [cx, cy, z] = [0, 1, 2].map((j) => lerp(p.from[j], p.to[j], k));
+  const s = camFit(p.shot) * z;
+  for (const n in imgs) {
+    const on = n === p.shot; const prev = i > 0 && P[i - 1].shot === n && P[i - 1].shot !== p.shot;
+    imgs[n].style.opacity = on ? clamp(seg(t, p.t[0], p.t[0] + 0.35) + (i > 0 && P[i - 1].shot === n ? 1 : 0)) : prev ? 1 - clamp(seg(t, p.t[0], p.t[0] + 0.35)) : 0;
+    if (on) imgs[n].style.transform = `translate(${VPW / 2 - cx * s}px, ${VPH / 2 - cy * s}px) scale(${s})`;
+  }
+  $("url").textContent = SHOTS[p.shot].url;
+  const hl = $("hl");
+  if (p.hl) {
+    const o = win(t, p.t[0] + 1.0, p.t[1], 0.35);
+    css(hl, { opacity: o, left: VPW / 2 + (p.hl.x - cx) * s + "px", top: VPH / 2 + (p.hl.y - cy) * s + "px", width: p.hl.w * s + "px", height: p.hl.h * s + "px" });
+  } else hl.style.opacity = 0;
+  const call = $("call"); call.innerHTML = `<small>${p.tag}</small>${p.text}`;
+  const ci = easeOut(seg(t, p.t[0] + 0.9, p.t[0] + 1.4));
+  css(call, { left: p.cx + "px", top: p.cy + "px", opacity: win(t, p.t[0] + 0.9, p.t[1], 0.3), transform: `translateY(${(1 - ci) * 16}px)` });
+}
+
+// ---------- cena 6: stack ----------
+const CHIPS = [["Go 1.26", "10 serviços"], ["gRPC", "session · matchmaking"], ["REST", "net/http"], ["PostgreSQL", "pgx"], ["Redis", "rankings"], ["SNS → SQS", "fan-out durável"], ["Agones", "servidores dedicados"], ["Prometheus", "RED por serviço"], ["OpenTelemetry", "traces"], ["React + Mantine", "console"], ["buf", "contrato versionado"], ["Terraform", "LocalStack"]];
+function buildS6() {
+  const s6 = $("s6");
+  s6.innerHTML = `<div class="abs display" id="s6h" style="left:0;right:0;top:170px;text-align:center;font-size:64px;font-weight:700">Feito para ser lido — e rodado.</div>` +
+    CHIPS.map((c, i) => `<div class="chip" id="chip${i}"><b>${c[0]}</b><span>${c[1]}</span></div>`).join("") +
+    [["10", "serviços Go + console"], ["32", "ADRs de arquitetura"], ["230+", "specs (SDD)"], ["1.5.0", "contrato com o jogo"]].map((s, i) => `<div class="stat" id="st${i}" style="left:${230 + i * 390}px;top:760px"><div class="n" style="color:${["var(--signal)", "var(--nominal)", "var(--amber)", "var(--grape)"][i]}">${s[0]}</div><div class="l">${s[1]}</div></div>`).join("");
+}
+function renderS6(t) {
+  const [a] = T.s6;
+  $("s6h").style.opacity = clamp(seg(t, a + 0.2, a + 0.8));
+  CHIPS.forEach((_, i) => {
+    const row = Math.floor(i / 4), col = i % 4; const el = $("chip" + i); const p = easeBack(seg(t, a + 0.5 + i * 0.09, a + 1.2 + i * 0.09));
+    css(el, { left: 230 + col * 390 + "px", top: 330 + row * 110 + "px", opacity: clamp(seg(t, a + 0.5 + i * 0.09, a + 0.9 + i * 0.09)), transform: `translateY(${(1 - p) * 24}px)` });
+  });
+  for (let i = 0; i < 4; i++) { const p = easeOut(seg(t, a + 2 + i * 0.2, a + 2.8 + i * 0.2)); css($("st" + i), { opacity: p, transform: `translateY(${(1 - p) * 20}px)` }); }
+}
+
+// ---------- cenas 1, 2, 7 ----------
+function renderS1(t) {
+  const lp = easeBack(seg(t, 0.2, 1.2));
+  css($("s1logo"), { opacity: clamp(seg(t, 0.2, 0.7)), transform: `scale(${0.6 + 0.4 * lp}) rotate(${(1 - lp) * -30}deg)` });
+  const hex = document.getElementById("hex"); const L = 330; hex.style.strokeDasharray = L; hex.style.strokeDashoffset = L * (1 - easeInOut(seg(t, 0.2, 1.4)));
+  const tp = easeOut(seg(t, 0.9, 1.8)); css($("s1title"), { opacity: tp, transform: `translateY(${(1 - tp) * 30}px)`, letterSpacing: `${-0.02 + (1 - tp) * 0.04}em` });
+  const sp = easeOut(seg(t, 1.5, 2.3)); css($("s1sub"), { opacity: sp, transform: `translateY(${(1 - sp) * 20}px)` });
+  $("s1meta").style.opacity = easeOut(seg(t, 2.2, 3));
+}
+function renderS2(t) {
+  const [a] = T.s2; const words = ["k1", "k2", "k3", "k4"];
+  words.forEach((w, i) => {
+    const t0 = a + 0.4 + i * 1.05, t1 = t0 + 1.05; const p = seg(t, t0, t1);
+    const inn = easeOut(seg(t, t0, t0 + 0.35)), out = easeInOut(seg(t, t1 - 0.3, t1));
+    css($(w), { opacity: Math.min(inn, 1 - out), transform: `translateY(${(1 - inn) * 40 - out * 40}px) scale(${1 + p * 0.04})`, color: ["var(--critical)", "var(--nominal)", "var(--amber)", "var(--signal)"][i] });
+  });
+  const f = easeOut(seg(t, a + 4.6, a + 5.4)); css($("k5"), { opacity: f, transform: `translateY(${(1 - f) * 24}px)` });
+  const big = easeOut(seg(t, a + 4.6, a + 5.4)); css($("k4"), {});
+  if (t > a + 4.6) css($("k4"), { opacity: 0 });
+}
+function renderS7(t) {
+  const [a] = T.s7;
+  if (!$("s7logo").innerHTML) $("s7logo").innerHTML = $("s1logo").innerHTML.replace('id="hex"', "");
+  const lp = easeBack(seg(t, a + 0.2, a + 1)); css($("s7logo"), { opacity: clamp(seg(t, a + 0.2, a + 0.6)), transform: `scale(${0.7 + 0.3 * lp})` });
+  const tp = easeOut(seg(t, a + 0.6, a + 1.4)); css($("s7title"), { opacity: tp, transform: `translateY(${(1 - tp) * 24}px)` });
+  $("s7url").style.opacity = easeOut(seg(t, a + 1.2, a + 2));
+  $("s7note").style.opacity = easeOut(seg(t, a + 1.8, a + 2.6));
+}
+
+// ---------- quadro ----------
+function frame(t) {
+  // fundo vivo: a grade desliza e os brilhos derivam
+  $("grid").style.transform = `translate(${(t * 6) % 64}px, ${(t * 3) % 64}px)`;
+  css($("g1"), { left: 200 + Math.sin(t * 0.25) * 160 + "px", top: -300 + Math.cos(t * 0.2) * 80 + "px" });
+  css($("g2"), { left: 1100 + Math.cos(t * 0.22) * 180 + "px", top: 500 + Math.sin(t * 0.18) * 90 + "px" });
+  const scenes = { s1: renderS1, s2: renderS2, s3: renderS3, s4: renderS4, s5: renderS5, s6: renderS6, s7: renderS7 };
+  for (const k in scenes) {
+    const [a, b] = T[k]; const o = win(t, a, b, 0.45); $(k).style.opacity = o;
+    if (o > 0 || (t >= a && t <= b)) scenes[k](t);
+  }
+  const ch = CHAPTERS.find((c) => t >= c[0] && t < c[1]);
+  $("chapter").style.opacity = ch ? win(t, ch[0], ch[1], 0.4) : 0; if (ch) $("chapterTxt").textContent = ch[2];
+  $("progress").style.width = (t / DURATION) * 1920 + "px";
+}
+
+window.__DURATION = DURATION;
+window.__ready = (async () => {
+  BOX = await (await fetch("shots/boxes.json")).json();
+  buildGraph(); buildS5(); buildS6();
+  await document.fonts.ready;
+  await Promise.all(Object.values(imgs).map((im) => im.decode().catch(() => {})));
+  frame(0);
+})();
+window.__seek = (t) => frame(t);
+if (location.search.includes("play")) window.__ready.then(() => { const t0 = performance.now(); const loop = () => { frame(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); }; loop(); });
+</script>
+</body>
+</html>

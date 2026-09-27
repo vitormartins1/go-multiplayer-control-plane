@@ -27,3 +27,6 @@ go.work.sum
 
 # segredos de dev do compose (gen-secrets.sh)
 infra/docker/secrets/
+
+# quadros soltos de revisão do filme (node docs/media/src/render.mjs --frames ...)
+docs/media/frames/

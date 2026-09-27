@@ -1,4 +1,4 @@
-# NEXT-STEPS — handoff (atualizado 2026-09-26)
+# NEXT-STEPS — handoff (atualizado 2026-09-27)
 
 Ponto de retomada. Diz **onde o projeto está**, **o que depende do dono** e **o que fazer a seguir**. O histórico
 detalhado de cada fatia vive no `git log` (Conventional Commits com escopo) e nas `specs/` de cada serviço — este
@@ -24,6 +24,12 @@ doc não é changelog. A análise completa que embasa esta versão está em
   (`player-data/003`), idempotência do leaderboard com TTL (`leaderboard/008`), cobertura ≥ 92% no analytics e no
   achievements, primeiros testes do admin-ui, **demo reproduzível** (`scripts/demo-host-world.sh`) e docs de estado
   sincronizadas com o código. Ver `review/PROGRESSO.md` para os commits.
+- **Fase 3 e rodada final (2026-09-26/27)**: autenticação no gRPC do session, login Steam, conquistas espelhadas
+  na Steam, **topologia P2P** e **heartbeat do mundo** (contrato 1.1.0 → 1.5.0); console com hospedagem e sinal
+  de vida; code review da branch inteira com os achados corrigidos (reenvio do `ReportResult`, limite de tentativas
+  no login, lease do espelho Steam, `session_service.go` dividido); CI com ESLint e `govulncheck` bloqueante; o S3
+  local trocado de MinIO para LocalStack (a imagem saiu do Docker Hub); README, arquitetura e produto reescritos,
+  com [vídeo e GIFs](media/README.md). Tudo no [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1).
 
 ## Decisões do dono
 
@@ -48,9 +54,8 @@ de lá.
 
 1. **Reinstalar o LaunchAgent do túnel Pi 5** (`infra/agones/pi5/pi5-tunnels.sh install`) — a ADR-0029 moveu o
    script; o LaunchAgent pode ainda apontar para o caminho antigo (pendência de 2026-07-11, não confirmada depois).
-2. **Integração do cloud-save**: a VM da revisão não conseguiu baixar `minio/minio:latest` (`pull access denied`).
-   Rodar `go test -tags=integration ./services/cloud-save-service/...` localmente; se falhar, a imagem saiu do
-   Docker Hub e o compose e o teste precisam de outra origem.
+2. ~~Integração do cloud-save~~ — **resolvido**: a imagem do MinIO saiu mesmo do Docker Hub; teste e compose usam o
+   S3 do LocalStack.
 3. **Recriar a stack local** depois de puxar esta branch: o compose ganhou restart policy, a `INTERNAL_API_KEY` do
    analytics e o secret do identity — rodar `infra/docker/gen-secrets.sh` e depois
    `docker compose -f infra/docker/docker-compose.yml up -d --build`; em seguida `scripts/demo-host-world.sh`
@@ -62,11 +67,13 @@ de lá.
 
 Executáveis sem decisão (próximas sessões):
 
-1. **Espelhar conquistas na Steam** (consumidor do fan-out → `SetUserStatsForGame`).
-2. **Unificar Rooms e Sessions** do jogo (tabela e detalhe compartilhados).
-3. **Consolidar as séries diárias do analytics** numa tabela (pede ADR sobre a ADR-0021).
-4. **ESLint no admin-ui** e **`govulncheck` no CI** (validar localmente antes).
-5. **Refatorar `session_service.go`** (1,1k linhas) com a cobertura atual como rede.
+Os cinco itens da lista anterior (espelho Steam, Rooms/Sessions unificados, ESLint, `govulncheck`, refatorar o
+`session_service.go`) estão feitos; o da consolidação das séries diárias do analytics espera a ADR
+([rascunho](review/RASCUNHO-ADR-analytics-daily.md)). Candidatos para a próxima sessão:
+
+1. **Consolidar as séries diárias do analytics** assim que o rascunho de ADR for aprovado.
+2. **Limite de login distribuído** (Redis) quando houver mais de uma réplica do identity.
+3. **Login no console (D6)**, junto com o primeiro deploy fora da máquina local.
 
 Dependem de decisão/evidência (não começar sem):
 

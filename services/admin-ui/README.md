@@ -6,6 +6,8 @@ Painel de operação do control plane — **games-first**: você entra pela list
 - **Porta dev:** `5173` (Vite) · **Porta prod:** `8089` (nginx, via `docker compose -f infra/docker/docker-compose.yml up`)
 - **Fala com o backend via proxy `/api` → admin-bff:** em dev o Vite proxya (`vite.config.ts`, alvo `http://localhost:8088`, sobrescrevível com `VITE_BFF_URL`); em prod o nginx (`nginx.conf`) proxya `/api/` → `admin-bff:8080` na rede do compose. Nunca fala direto com os serviços de domínio — sempre atrás do BFF.
 
+<p align="center"><img src="../../docs/media/console-rooms.gif" alt="Salas ao vivo com hospedagem e heartbeat" width="720"/></p>
+
 > App de apresentação — fora do hexagonal Go. Segue um **SDD adaptado** (spec = telas/UX), ver seção "Testar / Specs".
 
 ## Áreas do app
