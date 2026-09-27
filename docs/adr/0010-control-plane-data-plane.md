@@ -1,6 +1,6 @@
 # ADR-0010: Control plane em Go, data plane realtime no Unity Dedicated Server
 
-**Status:** Accepted
+**Status:** Accepted (o data plane deixou de ser exclusivo do Unity: ver [ADR-0033](0033-engine-and-store-agnostic.md))
 **Data:** 2026-06-27
 **Serviço(s) afetado(s):** matchmaking-service, session-service, (data plane: Unity — repo separado)
 

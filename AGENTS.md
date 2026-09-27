@@ -5,7 +5,7 @@
 
 ## O que é este projeto
 
-Monorepo de microsserviços em Go para backend de jogos multiplayer. Tese: reimplementar serviços de jogo da AWS (GameKit/GameLift) em Go sobre compute barato e comparar custo/performance (ADR-0008). O realtime de gameplay NÃO é feito em Go — roda no Unity Dedicated Server (data plane, repo separado; ADR-0010).
+Monorepo de microsserviços em Go para backend de jogos multiplayer. Tese: reimplementar serviços de jogo da AWS (GameKit/GameLift) em Go sobre compute barato e comparar custo/performance (ADR-0008). O realtime de gameplay NÃO é feito em Go — roda no servidor ou no host do jogo (data plane, repo separado; ADR-0010). Unity é a integração de referência; o contrato é agnóstico de engine (ADR-0033).
 Cada serviço em `services/` é um binário/imagem Docker independente, mas todos compartilham o **módulo Go único** da raiz (ver ADR-0001). Dockerfile próprio por serviço; Terraform por serviço é o plano (hoje só existe o da mensageria local).
 
 ## Metodologia: Spec-Driven Development
@@ -79,7 +79,7 @@ Leia `docs/adr/ADR-GUIDE.md`. Durante a sessão, monitore decisões arquiteturai
 - Não escreva código sem ler a spec primeiro
 - Não faça deploy manual — use os pipelines em `.github/workflows/`
 - Não crie `go.mod` por serviço — o repo é módulo único (ADR-0001)
-- Não implemente gameplay realtime em Go — data plane é Unity Dedicated Server, repo separado (ADR-0010)
+- Não implemente gameplay realtime em Go — data plane é o servidor ou o host do jogo, repo separado; Unity é a referência, o contrato é agnóstico de engine (ADR-0010, ADR-0033)
 
 ## Aprendizado contínuo (Go) — obrigatório ao fim de cada etapa
 

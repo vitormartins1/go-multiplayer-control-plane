@@ -15,13 +15,19 @@ A observabilidade é o **instrumento de medição** dessa comparação, não um 
 
 ---
 
-## 2. Topologia: control plane (Go) vs data plane (Unity)
+## 2. Topologia: control plane (Go) vs data plane (a engine do jogo)
 
 A decisão estrutural mais importante: o realtime de gameplay **não é Go**. Go cuida do *control plane*; o Unity Dedicated Server cuida do *data plane*. É como o GameLift de fato funciona — ele orquestra, não simula. (ADR-0010, ADR-0011)
 
+> **Qualquer engine** ([ADR-0033](adr/0033-engine-and-store-agnostic.md)). O data plane nasceu como Unity Dedicated
+> Server, e o Unity segue como integração de referência, mas o contrato não depende dele: gRPC e REST versionados,
+> connect token validado offline pelo JWKS e `host_connection` opaco no P2P. Godot e Unreal integram direto pelo
+> contrato; a web (Three.js) pede uma ponte gRPC-web/Connect e transporte WebSocket/WebRTC, e está no backlog. Onde
+> este documento diz "Unity", leia "o jogo, na engine que for".
+
 ```mermaid
 flowchart TB
-  subgraph DP["Data plane · Unity (repos separados)"]
+  subgraph DP["Data plane · engine do jogo (Unity na referência; repos separados)"]
     direction LR
     C["Cliente do jogo"]
     GS["Dedicated Server<br/>(GameServer no Agones)"]

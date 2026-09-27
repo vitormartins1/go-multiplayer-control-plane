@@ -13,7 +13,7 @@
 | [0007](0007-sdd-methodology.md) | Spec-Driven Development como metodologia | Accepted | 2026-06-27 | todos |
 | [0008](0008-generic-compute-vs-aws-game-services.md) | Reimplementar serviços de jogo AWS em Go sobre compute genérico | Accepted | 2026-06-27 | todos |
 | [0009](0009-gamekit-faithful-decomposition.md) | Decomposição fiel ao GameKit (identity como fundação) | Accepted | 2026-06-27 | identity, achievements, player-data, cloud-save |
-| [0010](0010-control-plane-data-plane.md) | Control plane (Go) vs data plane (Unity Dedicated Server) | Accepted | 2026-06-27 | matchmaking, session, Unity |
+| [0010](0010-control-plane-data-plane.md) | Control plane (Go) vs data plane (Unity Dedicated Server; generalizado para qualquer engine pela 0033) | Accepted | 2026-06-27 | matchmaking, session, Unity |
 | [0011](0011-unity-netcode-agones.md) | Unity Netcode for GameObjects + Agones/EKS, sem serviços pagos | Accepted | 2026-06-27 | data plane, infra |
 | [0012](0012-agones-from-start.md) | Agones desde o início (homelab k3s / EKS sob demanda) | Accepted | 2026-06-27 | session, data plane, infra |
 | [0013](0013-git-branching-strategy.md) | Trunk-based + feature branches + conventional commits | Accepted | 2026-06-27 | todos (processo) |
@@ -36,3 +36,4 @@
 | [0030](0030-session-grpc-auth.md) | Autenticação no gRPC do session (jogador por JWT, matchmaking por internal key, game server por chave de servidor; rollout warn→enforce) | Accepted | 2026-09-26 | session-service, matchmaking-service, infra, data plane |
 | [0031](0031-federated-identity.md) | Identidade federada no identity — ticket da loja vira conta + o JWT de sempre (Steam primeiro) | Accepted | 2026-09-26 | identity-service, data plane |
 | [0032](0032-p2p-host-world-topology.md) | Topologia p2p no host_world_dropin — o jogo do host hospeda, o control plane continua dono do resto | Accepted | 2026-09-27 | session-service, matchmaking-service, game-registry, admin-bff, admin-ui, data plane |
+| [0033](0033-engine-and-store-agnostic.md) | Control plane agnóstico de engine e de loja (Unity e Steam como integrações de referência) | Accepted | 2026-09-27 | docs, identity-service, achievements-service, data plane |

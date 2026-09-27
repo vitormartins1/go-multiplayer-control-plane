@@ -5,6 +5,10 @@
 > Fonte da verdade do contrato: [`docs/contracts/CHANGELOG.md`](../contracts/CHANGELOG.md) e
 > [`docs/game-models/host_world_dropin-dataplane-contract.md`](../game-models/host_world_dropin-dataplane-contract.md).
 > No fim há um [prompt pronto](#prompt-para-o-agente-do-projeto-unity) para colar no agente do projeto Unity.
+>
+> **Outras engines** (ADR-0033): o Unity é a integração de referência, mas nada do contrato é específico dele. Um
+> jogo em Godot, Unreal ou outra engine segue os mesmos passos (credenciais, login da loja, heartbeat, P2P) pelos
+> mesmos `.proto` e rotas REST; só os exemplos em C# mudam.
 
 ## 1. Em uma página
 

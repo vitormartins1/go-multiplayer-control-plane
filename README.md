@@ -4,7 +4,7 @@
 
 **Português** · [English](README.en.md)
 
-**Backend multiplayer self-hosted, em Go, para jogos cujo realtime roda no Unity.**<br/>
+**Backend multiplayer self-hosted, em Go, para jogos de qualquer engine.**<br/>
 Login, matchmaking, servidores dedicados no Agones ou P2P via Steam, conquistas sem deploy, leaderboard,
 analytics e um console de operação. O que GameLift e PlayFab vendem por jogador, rodando na sua infra.
 
@@ -34,8 +34,8 @@ prontas (GameLift, PlayFab, Photon, Unity Gaming Services) cobram por jogador e 
 
 Este projeto é esse backend, pronto e aberto. Roda em qualquer coisa que rode containers, **de um Raspberry Pi 5
 a um EKS**, e atende vários jogos ao mesmo tempo: cada jogo se cadastra no console, declara como joga online, e o
-backend se configura sozinho, sem código novo por jogo. O realtime continua no Unity; o Go cuida de tudo em volta
-da partida.
+backend se configura sozinho, sem código novo por jogo. O realtime continua na engine do jogo (Unity é a
+integração de referência); o Go cuida de tudo em volta da partida.
 
 O primeiro jogo em produção é o **Folclore Souls**, um Souls-like com mundo do host, co-op e invasões.
 
@@ -44,7 +44,7 @@ O primeiro jogo em produção é o **Folclore Souls**, um Souls-like com mundo d
 | | |
 |---|---|
 | 🎮 **Qualquer tipo de jogo** | O jogo declara modos por arquétipo (arena por fila, mundo do host, battle royale, missão co-op) e matchmaking, sessão e conquistas se ajustam sozinhos. |
-| 🖥️ **Servidor dedicado ou P2P** | Um Unity Dedicated Server por partida numa fleet Agones, **ou** o jogo do host hospeda via Steam, sem custo de servidor. Troca-se num campo do modo. |
+| 🖥️ **Servidor dedicado ou P2P** | Um servidor dedicado do jogo por partida numa fleet Agones, **ou** o jogo do host hospeda via Steam, sem custo de servidor. Troca-se num campo do modo. |
 | 🎟️ **Ingresso criptográfico** | Cada jogador recebe um connect token Ed25519 com o seu papel, validado **offline** pelo servidor do jogo. |
 | 🏆 **Conquistas sem deploy** | Regras editadas num canvas visual, critério por evento ou por métrica, e espelho automático na **Steam**. |
 | 📊 **Rankings e analytics** | Leaderboards por janela (diária, semanal, mensal, geral) e analytics por jogo, modo e papel. |
@@ -79,8 +79,8 @@ uma feature de cada vez, passo a passo.
 
 ## Como funciona
 
-O jogo em Unity roda a simulação (o *data plane*); este repositório é o *control plane*, que cuida do que
-acontece antes, em volta e depois da partida. É o mesmo corte que o GameLift faz.
+O jogo roda a simulação (o *data plane*), na engine que for; este repositório é o *control plane*, que cuida do
+que acontece antes, em volta e depois da partida. É o mesmo corte que o GameLift faz.
 
 1. O jogador faz login e pede para jogar; o **matchmaking** forma a partida ou escolhe o mundo em que ele entra.
 2. A **sessão** aloca um servidor dedicado no Agones, ou aponta para o jogo do host no P2P, e entrega a cada
@@ -120,6 +120,10 @@ em [`CONTRIBUTING.md`](CONTRIBUTING.md).
   demo, aguardando o lado Unity. Battle royale e missão co-op estão implementados, mas ainda sem um jogo real.
 - **Contrato com o jogo 1.5.0**, versionado e só com mudanças aditivas
   ([changelog](docs/contracts/CHANGELOG.md)).
+- **Engines e lojas** ([ADR-0033](docs/adr/0033-engine-and-store-agnostic.md)): o contrato é gRPC e REST, e o
+  ingresso é validado por chave pública, então nada depende de engine. Unity é a integração de referência; Godot e
+  Unreal integram direto pelo contrato, e a web (Three.js) está no roadmap. Na loja, a Steam está completa (login,
+  conquistas, P2P); o login da Epic é o próximo; GOG, sob demanda.
 - **Ainda não exponha na internet:** o console não tem login e a autenticação do gRPC da sessão sobe em modo
   de observação (`warn`).
 - **Próximos passos:** deploy de referência na AWS, login no console e um SDK Unity empacotado
@@ -131,7 +135,7 @@ em [`CONTRIBUTING.md`](CONTRIBUTING.md).
 |---|---|
 | entender o produto | [Visão de produto](docs/PRODUCT-OVERVIEW.md) · [vídeos](docs/media/README.md) |
 | entender a arquitetura | [Arquitetura](docs/ARCHITECTURE.md) · [ADRs](docs/adr/README.md) · [topologia de repositórios](docs/REPO-TOPOLOGY.md) |
-| integrar um jogo Unity | [Guia de integração](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [contratos por arquétipo](docs/game-models/README.md) · [changelog do contrato](docs/contracts/CHANGELOG.md) |
+| integrar um jogo | [Guia de integração (Unity, a referência)](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [contratos por arquétipo](docs/game-models/README.md) · [changelog do contrato](docs/contracts/CHANGELOG.md) |
 | operar | [Infra local](infra/docker/README.md) · [observabilidade](docs/OBSERVABILITY.md) · [regras de eventos](docs/EVENT-RULES-GUIDE.md) |
 | contribuir | [CONTRIBUTING](CONTRIBUTING.md) · [como as features são especificadas](docs/sdd/SDD-GUIDE.md) · [fluxo de Git](docs/GIT-WORKFLOW.md) |
 

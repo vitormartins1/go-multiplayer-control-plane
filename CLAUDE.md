@@ -134,7 +134,7 @@ Leia `docs/adr/ADR-GUIDE.md` para o guia completo. Resumo do comportamento esper
 - Não faça deploy direto — use o pipeline CI/CD
 - Não grave ADRs sem confirmação do usuário
 - Não crie `go.mod` por serviço — o repo é módulo único (ADR-0001)
-- Não implemente gameplay realtime em Go — o data plane é o Unity Dedicated Server, em repo separado (ADR-0010)
+- Não implemente gameplay realtime em Go — o data plane é o servidor ou o host do jogo, em repo separado; Unity é a integração de referência, mas o contrato é agnóstico de engine (ADR-0010, ADR-0033)
 
 ## Referências detalhadas
 

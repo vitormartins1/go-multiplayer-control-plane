@@ -4,7 +4,7 @@
 
 [Português](README.md) · **English**
 
-**A self-hosted multiplayer backend, written in Go, for games whose realtime runs in Unity.**<br/>
+**A self-hosted multiplayer backend, written in Go, for games built with any engine.**<br/>
 Login, matchmaking, dedicated servers on Agones or P2P over Steam, achievements without redeploys, leaderboards,
 analytics and an operations console. What GameLift and PlayFab sell per player, running on your own infrastructure.
 
@@ -36,7 +36,8 @@ options (GameLift, PlayFab, Photon, Unity Gaming Services) charge per player and
 
 This project is that backend, ready and open. It runs on anything that runs containers, **from a Raspberry Pi 5 to
 EKS**, and serves several games at once: each game registers in the console, declares how it plays online, and the
-backend configures itself, with no per-game code. Realtime stays in Unity; Go handles everything around the match.
+backend configures itself, with no per-game code. Realtime stays in the game's engine (Unity is the reference
+integration); Go handles everything around the match.
 
 The first game in production is **Folclore Souls**, a Souls-like with host worlds, co-op and invasions.
 
@@ -45,7 +46,7 @@ The first game in production is **Folclore Souls**, a Souls-like with host world
 | | |
 |---|---|
 | 🎮 **Any kind of game** | A game declares modes by archetype (queue arena, host world, battle royale, co-op mission), and matchmaking, sessions and achievements adapt on their own. |
-| 🖥️ **Dedicated server or P2P** | One Unity Dedicated Server per match on an Agones fleet, **or** the host's game serves the world over Steam, at zero server cost. It's a single field on the mode. |
+| 🖥️ **Dedicated server or P2P** | One dedicated game server per match on an Agones fleet, **or** the host's game serves the world over Steam, at zero server cost. It's a single field on the mode. |
 | 🎟️ **Cryptographic tickets** | Each player gets an Ed25519 connect token carrying their role, validated **offline** by the game server. |
 | 🏆 **Achievements without redeploys** | Rules edited on a visual canvas, event-based or metric-based criteria, and automatic mirroring to **Steam**. |
 | 📊 **Leaderboards and analytics** | Leaderboards per window (daily, weekly, monthly, all-time) and analytics per game, mode and role. |
@@ -80,8 +81,8 @@ and walk through one feature at a time (narration in Portuguese).
 
 ## How it works
 
-The Unity game runs the simulation (the *data plane*); this repository is the *control plane*, which handles what
-happens before, around and after the match. It's the same split GameLift makes.
+The game runs the simulation (the *data plane*), in whatever engine it uses; this repository is the *control plane*,
+which handles what happens before, around and after the match. It's the same split GameLift makes.
 
 1. The player logs in and asks to play; **matchmaking** forms the match or picks the world they join.
 2. The **session** service allocates a dedicated server on Agones, or points to the host's game in P2P, and gives
@@ -120,6 +121,10 @@ listed in [`infra/docker/README.md`](infra/docker/README.md); tests, lint and th
   dedicated server (k3s on a Raspberry Pi 5); P2P over Steam is done on the backend and validated by the demo,
   waiting on the Unity side. Battle royale and co-op mission are implemented but have no real game yet.
 - **Game contract 1.5.0**, versioned and additive-only ([changelog](docs/contracts/CHANGELOG.md)).
+- **Engines and stores** ([ADR-0033](docs/adr/0033-engine-and-store-agnostic.md)): the contract is gRPC and REST,
+  and tickets are validated with a public key, so nothing depends on the engine. Unity is the reference
+  integration; Godot and Unreal integrate straight through the contract, and the web (Three.js) is on the roadmap.
+  On the store side, Steam is complete (login, achievements, P2P); Epic login is next; GOG, on demand.
 - **Don't expose it to the internet yet:** the console has no login, and the session gRPC auth starts in
   observe-only mode (`warn`).
 - **Next:** a reference AWS deployment, console login and a packaged Unity SDK ([roadmap](docs/NEXT-STEPS.md)).
@@ -132,7 +137,7 @@ Detailed documentation is in Portuguese.
 |---|---|
 | understand the product | [Product overview](docs/PRODUCT-OVERVIEW.md) · [videos](docs/media/README.md) |
 | understand the architecture | [Architecture](docs/ARCHITECTURE.md) · [ADRs](docs/adr/README.md) · [repository topology](docs/REPO-TOPOLOGY.md) |
-| integrate a Unity game | [Integration guide](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [per-archetype contracts](docs/game-models/README.md) · [contract changelog](docs/contracts/CHANGELOG.md) |
+| integrate a game | [Integration guide (Unity, the reference)](docs/integration/UNITY-GUIA-INTEGRACAO.md) · [per-archetype contracts](docs/game-models/README.md) · [contract changelog](docs/contracts/CHANGELOG.md) |
 | operate it | [Local infra](infra/docker/README.md) · [observability](docs/OBSERVABILITY.md) · [event rules](docs/EVENT-RULES-GUIDE.md) |
 | contribute | [CONTRIBUTING](CONTRIBUTING.md) · [how features are specified](docs/sdd/SDD-GUIDE.md) · [Git workflow](docs/GIT-WORKFLOW.md) |
 
