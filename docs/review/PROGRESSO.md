@@ -46,7 +46,7 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Produto | `af3a677` | `ESTRATEGIA-PRODUTO-2026-09.md`: crítica do colega, Steam/GOG, SaaS × Asset Store × open source, SDK | — |
 | Steam | `aea9f87` | login federado Steam no identity (spec `identity/005-steam-login`), contrato 1.3.0 | unit + integração + **ao vivo com Steam falsa** |
 | Console | `65a2baa` | Rooms e Sessões do jogo na mesma `SessionTable` (spec `admin-ui/092`): ~1000 → ~800 linhas; a aba do jogo ganha slots por papel e o painel completo | vitest (32), build, Playwright |
-| CI | ver `git log` | ESLint no admin-ui (hooks com dependência faltando = erro; 3 casos corrigidos) + job `govulncheck` report-only | `npm run lint` (0 erros), vitest, build |
+| CI | `ed2afa8` | ESLint no admin-ui (hooks com dependência faltando = erro; 3 casos corrigidos) + job `govulncheck` report-only | `npm run lint` (0 erros), vitest, build |
 | Console | `299fca3` | mapa de serviços com o analytics e as dependências reais; capturas novas na documentação | Playwright |
 | ADRs | `aa344f1` | ADR-0031 (identidade federada, rascunho A) e spec `session/031` em rascunho | — |
 | P2P | `43441db` | topologia p2p no `host_world_dropin` (spec `session/031`, ADR-0032, contrato 1.4.0): session sem GameServer + world token, registry, matchmaking, admin "P2P · host" | unit + **demo ao vivo p2p e dedicado em `enforce`** |
