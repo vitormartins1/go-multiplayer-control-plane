@@ -22,6 +22,7 @@ const (
 	mdAuthorization = "authorization"
 	mdInternalKey   = "x-internal-key"
 	mdGameServerKey = "x-game-server-key"
+	mdWorldToken    = "x-world-token" // host de mundo p2p (spec 031)
 )
 
 // CallerKind é o tipo de quem chama o session.
@@ -32,12 +33,15 @@ const (
 	CallerPlayer     CallerKind = "player"      // cliente do jogo, JWT do identity
 	CallerInternal   CallerKind = "internal"    // matchmaking, internal key (ADR-0018)
 	CallerGameServer CallerKind = "game_server" // Dedicated Server, GAME_SERVER_KEY
+	CallerWorldHost  CallerKind = "world_host"  // cliente do host de mundo p2p, world token (spec 031)
 )
 
-// Caller é o chamador identificado. PlayerID só existe para CallerPlayer.
+// Caller é o chamador identificado. PlayerID só existe para CallerPlayer;
+// SessionID só para CallerWorldHost (o único mundo que ele pode tocar).
 type Caller struct {
-	Kind     CallerKind
-	PlayerID string
+	Kind      CallerKind
+	PlayerID  string
+	SessionID string
 }
 
 // AuthMode é o modo de rollout (SESSION_AUTH_MODE).
@@ -68,6 +72,12 @@ type PlayerVerifier interface {
 	Verify(ctx context.Context, token string) (string, error)
 }
 
+// WorldTokenResolver devolve o mundo aberto dono de um world token (spec 031).
+// Satisfeito pelo service.
+type WorldTokenResolver interface {
+	ResolveWorldToken(token string) (sessionID string, ok bool)
+}
+
 // RejectionCounter conta as falhas de autenticação/autorização
 // (session_auth_rejections_total{method,reason}). Satisfeito por um
 // adapter fino sobre prometheus.CounterVec no main.
@@ -78,9 +88,10 @@ type RejectionCounter interface {
 // AuthConfig configura a autenticação do servidor.
 type AuthConfig struct {
 	Mode          AuthMode
-	Players       PlayerVerifier // nil: bearer nunca valida
-	InternalKey   string         // vazio: nunca valida (fail closed)
-	GameServerKey string         // vazio: nunca valida (fail closed)
+	Players       PlayerVerifier     // nil: bearer nunca valida
+	InternalKey   string             // vazio: nunca valida (fail closed)
+	GameServerKey string             // vazio: nunca valida (fail closed)
+	WorldTokens   WorldTokenResolver // nil: world token nunca valida
 	Rejections    RejectionCounter
 	Log           *slog.Logger
 }
@@ -92,11 +103,11 @@ var methodCallers = map[string][]CallerKind{
 	"/session.v1.Session/ListInvadableWorlds":      {CallerInternal},
 	"/session.v1.Session/JoinWorld":                {CallerInternal},
 	"/session.v1.Session/OpenWorld":                {CallerPlayer},
-	"/session.v1.Session/LeaveWorld":               {CallerPlayer, CallerGameServer},
-	"/session.v1.Session/CloseWorld":               {CallerPlayer, CallerGameServer},
+	"/session.v1.Session/LeaveWorld":               {CallerPlayer, CallerGameServer, CallerWorldHost},
+	"/session.v1.Session/CloseWorld":               {CallerPlayer, CallerGameServer, CallerWorldHost},
 	"/session.v1.Session/ReportResult":             {CallerGameServer},
-	"/session.v1.Session/ReportParticipationEvent": {CallerGameServer},
-	"/session.v1.Session/GetSessionConfig":         {CallerGameServer},
+	"/session.v1.Session/ReportParticipationEvent": {CallerGameServer, CallerWorldHost},
+	"/session.v1.Session/GetSessionConfig":         {CallerGameServer, CallerWorldHost},
 }
 
 type callerKey struct{}
@@ -154,6 +165,14 @@ func (a *auth) identify(ctx context.Context) (Caller, string) {
 	if key := first(md, mdGameServerKey); key != "" {
 		if equalKey(key, a.cfg.GameServerKey) {
 			return Caller{Kind: CallerGameServer}, ""
+		}
+		return Caller{Kind: CallerAnonymous}, "invalid_credential"
+	}
+	if tok := first(md, mdWorldToken); tok != "" {
+		if a.cfg.WorldTokens != nil {
+			if sessionID, ok := a.cfg.WorldTokens.ResolveWorldToken(tok); ok {
+				return Caller{Kind: CallerWorldHost, SessionID: sessionID}, ""
+			}
 		}
 		return Caller{Kind: CallerAnonymous}, "invalid_credential"
 	}

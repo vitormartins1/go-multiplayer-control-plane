@@ -177,7 +177,7 @@ func TestJoinWorld_TokenFalha_ReverteParticipant(t *testing.T) {
 	iss.On("Issue", "phantom-1", mock.Anything, mock.Anything, mock.Anything).Return("", assert.AnError)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "phantom-1", domain.RoleCoop)
@@ -260,7 +260,7 @@ func TestCloseWorld_ComHistoryStore_ParticipantesIncluemCoopMorto(t *testing.T) 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part), WithHistoryStore(store))
 
 	ctx := context.Background()
-	sess, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(ctx, "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	_, _, err = svc.JoinWorld(ctx, sess.ID, "coop-1", domain.RoleCoop)
 	require.NoError(t, err)

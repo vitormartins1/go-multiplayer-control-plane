@@ -168,7 +168,7 @@ func TestSessionsByGame_DetalheRico_RepassaSnapshotEResultado(t *testing.T) {
 			"active": [],
 			"closed": [{"sessionId":"s1","matchId":"m1","state":"closed","players":["p1","p3"],
 				"openedAt":"2026-07-08T12:00:00Z","closedAt":"2026-07-08T12:01:00Z","closeReason":"result",
-				"archetype":"queue_arena","profileHash":"abc123",
+				"archetype":"queue_arena","topology":"dedicated","profileHash":"abc123",
 				"modeParams":{"structure":"teams","scoreTarget":5},
 				"teams":[{"teamId":"team-1","players":["p1"]},{"teamId":"team-2","players":["p3"]}],
 				"result":{"kind":"win_loss_draw","winLossDraw":[
@@ -184,6 +184,7 @@ func TestSessionsByGame_DetalheRico_RepassaSnapshotEResultado(t *testing.T) {
 	require.Len(t, got.Closed, 1)
 	s := got.Closed[0]
 	assert.Equal(t, "queue_arena", s.Archetype)
+	assert.Equal(t, "dedicated", s.Topology, "session/031: topologia repassada")
 	assert.Equal(t, "abc123", s.ProfileHash)
 	assert.JSONEq(t, `{"structure":"teams","scoreTarget":5}`, string(s.ModeParams))
 	require.Len(t, s.Teams, 2)

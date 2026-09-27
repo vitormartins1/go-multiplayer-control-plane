@@ -65,6 +65,15 @@ func (s *Server) hostCheck(ctx context.Context, method, sessionID, playerID stri
 	}
 }
 
+// worldScope confere que o host de mundo p2p (world token, spec 031) só toca o
+// próprio mundo. Outros chamadores passam direto.
+func (s *Server) worldScope(ctx context.Context, method, sessionID string) error {
+	if c := callerFrom(ctx); c.Kind == CallerWorldHost && c.SessionID != sessionID {
+		return s.deny(ctx, method, "other_world")
+	}
+	return nil
+}
+
 // normalizeMode aplica a retrocompat do ADR-0024 na borda: mode_id ausente/
 // vazio = "default". Domain/service sempre recebem um modo não-vazio.
 func normalizeMode(modeID string) string {
@@ -142,6 +151,9 @@ func (s *Server) ReportResult(ctx context.Context, req *pb.ReportResultRequest) 
 
 // GetSessionConfig devolve o session manifest do snapshot (ADR-0024, spec 017).
 func (s *Server) GetSessionConfig(ctx context.Context, req *pb.GetSessionConfigRequest) (*pb.GetSessionConfigResponse, error) {
+	if err := s.worldScope(ctx, "/session.v1.Session/GetSessionConfig", req.GetRefId()); err != nil {
+		return nil, err
+	}
 	m, err := s.svc.GetSessionConfig(ctx, req.GetRefId())
 	if err != nil {
 		if errors.Is(err, domain.ErrSessionNotFound) {
@@ -177,15 +189,20 @@ func (s *Server) OpenWorld(ctx context.Context, req *pb.OpenWorldRequest) (*pb.O
 			}
 		}
 	}
-	attrs := domain.WorldAttributes{SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier()), Password: req.GetPassword()}
-	sess, grant, err := s.svc.OpenWorld(ctx, host, req.GetGameId(), normalizeMode(req.GetModeId()), attrs)
+	attrs := domain.WorldAttributes{
+		SoulLevel: int(req.GetHostSoulLevel()), WeaponTier: int(req.GetWeaponTier()),
+		Password: req.GetPassword(), HostConnection: req.GetHostConnection(),
+	}
+	sess, grant, worldToken, err := s.svc.OpenWorld(ctx, host, req.GetGameId(), normalizeMode(req.GetModeId()), attrs)
 	if err != nil {
 		return nil, worldError(err, "open world")
 	}
 	return &pb.OpenWorldResponse{
-		SessionId:     sess.ID,
-		ServerAddress: sess.ServerAddress,
-		HostGrant:     &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+		SessionId:      sess.ID,
+		ServerAddress:  sess.ServerAddress,
+		HostGrant:      &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+		HostConnection: sess.HostConnection,
+		WorldToken:     worldToken,
 	}, nil
 }
 
@@ -199,13 +216,14 @@ func (s *Server) JoinWorld(ctx context.Context, req *pb.JoinWorldRequest) (*pb.J
 			return nil, worldError(err, "join world")
 		}
 	}
-	grant, serverAddr, err := s.svc.JoinWorld(ctx, req.GetSessionId(), req.GetPlayerId(), req.GetRole())
+	grant, endpoint, err := s.svc.JoinWorld(ctx, req.GetSessionId(), req.GetPlayerId(), req.GetRole())
 	if err != nil {
 		return nil, worldError(err, "join world")
 	}
 	return &pb.JoinWorldResponse{
-		Grant:         &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
-		ServerAddress: serverAddr,
+		Grant:          &pb.ConnectGrant{PlayerId: grant.PlayerID, ConnectToken: grant.Token},
+		ServerAddress:  endpoint.ServerAddress,
+		HostConnection: endpoint.HostConnection,
 	}, nil
 }
 
@@ -246,6 +264,9 @@ func (s *Server) LeaveWorld(ctx context.Context, req *pb.LeaveWorldRequest) (*pb
 			}
 		}
 	}
+	if err := s.worldScope(ctx, "/session.v1.Session/LeaveWorld", req.GetSessionId()); err != nil {
+		return nil, err
+	}
 	if err := s.svc.LeaveWorld(ctx, req.GetSessionId(), player); err != nil {
 		return nil, worldError(err, "leave world")
 	}
@@ -259,6 +280,9 @@ func (s *Server) CloseWorld(ctx context.Context, req *pb.CloseWorldRequest) (*pb
 		if err := s.hostCheck(ctx, "/session.v1.Session/CloseWorld", req.GetSessionId(), c.PlayerID); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.worldScope(ctx, "/session.v1.Session/CloseWorld", req.GetSessionId()); err != nil {
+		return nil, err
 	}
 	if err := s.svc.CloseWorld(ctx, req.GetSessionId()); err != nil {
 		return nil, worldError(err, "close world")
@@ -285,6 +309,8 @@ func worldError(err error, op string) error {
 		return status.Error(codes.InvalidArgument, "invalid participation event")
 	case errors.Is(err, domain.ErrFleetUnavailable):
 		return status.Error(codes.FailedPrecondition, "fleet not configured")
+	case errors.Is(err, domain.ErrHostConnectionRequired):
+		return status.Error(codes.InvalidArgument, "host_connection required for p2p world")
 	default:
 		return status.Error(codes.Internal, op)
 	}
@@ -293,6 +319,9 @@ func worldError(err error, op string) error {
 // ReportParticipationEvent recebe um evento por participante do server do mundo
 // (spec 013) e o traduz para o domínio.
 func (s *Server) ReportParticipationEvent(ctx context.Context, req *pb.ReportParticipationEventRequest) (*pb.ReportParticipationEventResponse, error) {
+	if err := s.worldScope(ctx, "/session.v1.Session/ReportParticipationEvent", req.GetSessionId()); err != nil {
+		return nil, err
+	}
 	evt := domain.ParticipationEvent{
 		PlayerID: req.GetPlayerId(),
 		Role:     req.GetRole(),

@@ -122,6 +122,7 @@ type worldFake struct {
 	gotKey      []string
 	joinCode    codes.Code // OK = sucesso
 	joinAddress string
+	joinHost    string // session/031: mundo p2p
 }
 
 func (f *worldFake) ListInvadableWorlds(_ context.Context, req *sessionv1.ListInvadableWorldsRequest) (*sessionv1.ListInvadableWorldsResponse, error) {
@@ -139,8 +140,9 @@ func (f *worldFake) JoinWorld(ctx context.Context, req *sessionv1.JoinWorldReque
 		return nil, status.Error(f.joinCode, "join failed")
 	}
 	return &sessionv1.JoinWorldResponse{
-		Grant:         &sessionv1.ConnectGrant{PlayerId: req.GetPlayerId(), ConnectToken: "tok-" + req.GetPlayerId()},
-		ServerAddress: f.joinAddress,
+		Grant:          &sessionv1.ConnectGrant{PlayerId: req.GetPlayerId(), ConnectToken: "tok-" + req.GetPlayerId()},
+		ServerAddress:  f.joinAddress,
+		HostConnection: f.joinHost,
 	}, nil
 }
 
@@ -169,6 +171,14 @@ func TestInject_Sucesso_DevolveServerEToken(t *testing.T) {
 	assert.Equal(t, "10.0.0.7:7777", got.ServerAddress)
 	assert.Equal(t, "tok-invader-1", got.ConnectToken)
 	assert.Equal(t, "invader", fake.gotJoin.GetRole(), "papel invader repassado ao JoinWorld")
+}
+
+func TestInject_MundoP2P_DevolveHostConnection(t *testing.T) {
+	c := setup(t, &worldFake{joinCode: codes.OK, joinHost: "steam:765"})
+	got, err := c.Inject(context.Background(), "w1", "invader-1", "invader", "")
+	require.NoError(t, err)
+	assert.Empty(t, got.ServerAddress)
+	assert.Equal(t, "steam:765", got.HostConnection)
 }
 
 func TestInject_SlotCheio_ErrRoleFull(t *testing.T) {

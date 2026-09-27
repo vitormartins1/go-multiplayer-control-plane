@@ -80,12 +80,15 @@ message OpenWorldRequest {
   int32 weapon_tier = 4;      // tier de arma do host (spec 012); 0 = sem faixa
   string mode_id = 5;         // modo do jogo (ADR-0024, spec 017); vazio = "default"
   string password = 6;        // senha do mundo (follow-up #1, spec 020); vazio = sem senha
+  string host_connection = 7; // spec 031: id de conexão do host (ex.: SteamID64); obrigatório se o modo for p2p
 }
 
 message OpenWorldResponse {
   string session_id = 1;       // identidade do mundo (não há match)
   string server_address = 2;   // endereço do game server alocado
   ConnectGrant host_grant = 3; // connect token do host (claim role=host)
+  string host_connection = 4;  // spec 031: eco do id de conexão do host (p2p); vazio em dedicado
+  string world_token = 5;      // spec 031: credencial do host p2p (metadata x-world-token), só deste mundo; vazio em dedicado
 }
 
 message JoinWorldRequest {
@@ -97,7 +100,8 @@ message JoinWorldRequest {
 
 message JoinWorldResponse {
   ConnectGrant grant = 1;    // connect token do phantom (claim role)
-  string server_address = 2; // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar
+  string server_address = 2; // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar; vazio em p2p
+  string host_connection = 3; // spec 031: id de conexão do host quando o mundo é p2p
 }
 
 message LeaveWorldRequest {

@@ -220,6 +220,17 @@ func TestFindMatch_SemPerfil_FailedPrecondition(t *testing.T) {
 
 // --- Invade (host_world_dropin, spec 006) ---
 
+// session/031: mundo p2p — o cliente recebe o id de conexão do host.
+func TestInvade_MundoP2P_DevolveHostConnection(t *testing.T) {
+	inv := stubInvader{result: domain.Invaded{SessionID: "w1", HostConnection: "steam:765", ConnectToken: "tok"}}
+	client := setupFull(t, okProvisioner, stubProvider{size: 2}, inv, defaultSummoner())
+
+	resp, err := client.Invade(authCtx("invader-1"), &pb.InvadeRequest{GameId: "hw"})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetServerAddress())
+	assert.Equal(t, "steam:765", resp.GetHostConnection())
+}
+
 func TestInvade_Sucesso_DevolveServerETokenEPlayerDoJWT(t *testing.T) {
 	var gotPlayer string
 	inv := stubInvader{

@@ -169,15 +169,16 @@ func (x *GetSessionConfigResponse) GetProfileHash() string {
 // host_world_dropin (spec 011): o connect token carrega o claim role
 // (host|coop|invader), lido pelo game server no connection approval.
 type OpenWorldRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HostPlayerId  string                 `protobuf:"bytes,1,opt,name=host_player_id,json=hostPlayerId,proto3" json:"host_player_id,omitempty"`     // dono do mundo
-	GameId        string                 `protobuf:"bytes,2,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`                         // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
-	HostSoulLevel int32                  `protobuf:"varint,3,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"` // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
-	WeaponTier    int32                  `protobuf:"varint,4,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"`            // tier de arma do host (spec 012); 0 = sem faixa
-	ModeId        string                 `protobuf:"bytes,5,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`                         // modo do jogo (ADR-0024, spec 017); vazio = "default"
-	Password      string                 `protobuf:"bytes,6,opt,name=password,proto3" json:"password,omitempty"`                                   // senha do mundo (follow-up #1, spec 020); vazio = sem senha
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	HostPlayerId   string                 `protobuf:"bytes,1,opt,name=host_player_id,json=hostPlayerId,proto3" json:"host_player_id,omitempty"`     // dono do mundo
+	GameId         string                 `protobuf:"bytes,2,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`                         // jogo (multi-tenant, ADR-0017); perfil host_world_dropin
+	HostSoulLevel  int32                  `protobuf:"varint,3,opt,name=host_soul_level,json=hostSoulLevel,proto3" json:"host_soul_level,omitempty"` // faixa do host p/ matchmaking (spec 012); 0 = sem faixa
+	WeaponTier     int32                  `protobuf:"varint,4,opt,name=weapon_tier,json=weaponTier,proto3" json:"weapon_tier,omitempty"`            // tier de arma do host (spec 012); 0 = sem faixa
+	ModeId         string                 `protobuf:"bytes,5,opt,name=mode_id,json=modeId,proto3" json:"mode_id,omitempty"`                         // modo do jogo (ADR-0024, spec 017); vazio = "default"
+	Password       string                 `protobuf:"bytes,6,opt,name=password,proto3" json:"password,omitempty"`                                   // senha do mundo (follow-up #1, spec 020); vazio = sem senha
+	HostConnection string                 `protobuf:"bytes,7,opt,name=host_connection,json=hostConnection,proto3" json:"host_connection,omitempty"` // spec 031: id de conexão do host (ex.: SteamID64); obrigatório se o modo for p2p
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OpenWorldRequest) Reset() {
@@ -252,13 +253,22 @@ func (x *OpenWorldRequest) GetPassword() string {
 	return ""
 }
 
+func (x *OpenWorldRequest) GetHostConnection() string {
+	if x != nil {
+		return x.HostConnection
+	}
+	return ""
+}
+
 type OpenWorldResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`             // identidade do mundo (não há match)
-	ServerAddress string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server alocado
-	HostGrant     *ConnectGrant          `protobuf:"bytes,3,opt,name=host_grant,json=hostGrant,proto3" json:"host_grant,omitempty"`             // connect token do host (claim role=host)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`                // identidade do mundo (não há match)
+	ServerAddress  string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"`    // endereço do game server alocado
+	HostGrant      *ConnectGrant          `protobuf:"bytes,3,opt,name=host_grant,json=hostGrant,proto3" json:"host_grant,omitempty"`                // connect token do host (claim role=host)
+	HostConnection string                 `protobuf:"bytes,4,opt,name=host_connection,json=hostConnection,proto3" json:"host_connection,omitempty"` // spec 031: eco do id de conexão do host (p2p); vazio em dedicado
+	WorldToken     string                 `protobuf:"bytes,5,opt,name=world_token,json=worldToken,proto3" json:"world_token,omitempty"`             // spec 031: credencial do host p2p (metadata x-world-token), só deste mundo; vazio em dedicado
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OpenWorldResponse) Reset() {
@@ -310,6 +320,20 @@ func (x *OpenWorldResponse) GetHostGrant() *ConnectGrant {
 		return x.HostGrant
 	}
 	return nil
+}
+
+func (x *OpenWorldResponse) GetHostConnection() string {
+	if x != nil {
+		return x.HostConnection
+	}
+	return ""
+}
+
+func (x *OpenWorldResponse) GetWorldToken() string {
+	if x != nil {
+		return x.WorldToken
+	}
+	return ""
 }
 
 type JoinWorldRequest struct {
@@ -381,11 +405,12 @@ func (x *JoinWorldRequest) GetSummonerPlayerId() string {
 }
 
 type JoinWorldResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Grant         *ConnectGrant          `protobuf:"bytes,1,opt,name=grant,proto3" json:"grant,omitempty"`                                      // connect token do phantom (claim role)
-	ServerAddress string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"` // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Grant          *ConnectGrant          `protobuf:"bytes,1,opt,name=grant,proto3" json:"grant,omitempty"`                                         // connect token do phantom (claim role)
+	ServerAddress  string                 `protobuf:"bytes,2,opt,name=server_address,json=serverAddress,proto3" json:"server_address,omitempty"`    // endereço do game server do mundo (spec 012): o phantom precisa dele p/ conectar; vazio em p2p
+	HostConnection string                 `protobuf:"bytes,3,opt,name=host_connection,json=hostConnection,proto3" json:"host_connection,omitempty"` // spec 031: id de conexão do host quando o mundo é p2p
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *JoinWorldResponse) Reset() {
@@ -428,6 +453,13 @@ func (x *JoinWorldResponse) GetGrant() *ConnectGrant {
 func (x *JoinWorldResponse) GetServerAddress() string {
 	if x != nil {
 		return x.ServerAddress
+	}
+	return ""
+}
+
+func (x *JoinWorldResponse) GetHostConnection() string {
+	if x != nil {
+		return x.HostConnection
 	}
 	return ""
 }
@@ -1683,7 +1715,7 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\btopology\x18\x06 \x01(\tR\btopology\x12\x1f\n" +
 	"\vparams_json\x18\a \x01(\tR\n" +
 	"paramsJson\x12!\n" +
-	"\fprofile_hash\x18\b \x01(\tR\vprofileHash\"\xcf\x01\n" +
+	"\fprofile_hash\x18\b \x01(\tR\vprofileHash\"\xf8\x01\n" +
 	"\x10OpenWorldRequest\x12$\n" +
 	"\x0ehost_player_id\x18\x01 \x01(\tR\fhostPlayerId\x12\x17\n" +
 	"\agame_id\x18\x02 \x01(\tR\x06gameId\x12&\n" +
@@ -1691,22 +1723,27 @@ const file_session_v1_session_proto_rawDesc = "" +
 	"\vweapon_tier\x18\x04 \x01(\x05R\n" +
 	"weaponTier\x12\x17\n" +
 	"\amode_id\x18\x05 \x01(\tR\x06modeId\x12\x1a\n" +
-	"\bpassword\x18\x06 \x01(\tR\bpassword\"\x92\x01\n" +
+	"\bpassword\x18\x06 \x01(\tR\bpassword\x12'\n" +
+	"\x0fhost_connection\x18\a \x01(\tR\x0ehostConnection\"\xdc\x01\n" +
 	"\x11OpenWorldResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
 	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x127\n" +
 	"\n" +
-	"host_grant\x18\x03 \x01(\v2\x18.session.v1.ConnectGrantR\thostGrant\"\x90\x01\n" +
+	"host_grant\x18\x03 \x01(\v2\x18.session.v1.ConnectGrantR\thostGrant\x12'\n" +
+	"\x0fhost_connection\x18\x04 \x01(\tR\x0ehostConnection\x12\x1f\n" +
+	"\vworld_token\x18\x05 \x01(\tR\n" +
+	"worldToken\"\x90\x01\n" +
 	"\x10JoinWorldRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12,\n" +
-	"\x12summoner_player_id\x18\x04 \x01(\tR\x10summonerPlayerId\"j\n" +
+	"\x12summoner_player_id\x18\x04 \x01(\tR\x10summonerPlayerId\"\x93\x01\n" +
 	"\x11JoinWorldResponse\x12.\n" +
 	"\x05grant\x18\x01 \x01(\v2\x18.session.v1.ConnectGrantR\x05grant\x12%\n" +
-	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\"O\n" +
+	"\x0eserver_address\x18\x02 \x01(\tR\rserverAddress\x12'\n" +
+	"\x0fhost_connection\x18\x03 \x01(\tR\x0ehostConnection\"O\n" +
 	"\x11LeaveWorldRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +

@@ -172,7 +172,7 @@ func (s *Summoner) Summon(ctx context.Context, sessionID, signID, summonerID str
 	delete(s.signs, signID)
 	s.consumed[signID] = s.now() // tombstone: reinvocação vira ErrSignConsumed
 	s.mu.Unlock()
-	sg.ch <- domain.Summoned{SessionID: sessionID, ServerAddress: injected.ServerAddress, ConnectToken: injected.ConnectToken}
+	sg.ch <- domain.Summoned{SessionID: sessionID, ServerAddress: injected.ServerAddress, HostConnection: injected.HostConnection, ConnectToken: injected.ConnectToken}
 	s.count(resultSummoned)
 	return allyID, nil
 }

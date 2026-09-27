@@ -17,6 +17,20 @@ aditiva; o `.pb.go` sempre regenerado com `buf generate` (nunca editado à mão)
 
 ## [Não lançado]
 
+## [1.4.0] — 2026-09-27
+
+### Added
+- Topologia `p2p` no `host_world_dropin` (spec `session/031`, ADR-0032): o jogo do host hospeda o mundo, sem
+  Dedicated Server. Campos novos, todos opcionais para quem segue em dedicado:
+  `session.v1.OpenWorldRequest.host_connection` (7), `OpenWorldResponse.host_connection` (4) e `.world_token` (5),
+  `JoinWorldResponse.host_connection` (3), `matchmaking.v1.InvadeResponse.host_connection` (4) e
+  `SummonUpdate.host_connection` (6).
+- Metadata `x-world-token` (host de mundo p2p) aceita em `ReportParticipationEvent`, `GetSessionConfig`,
+  `LeaveWorld` e `CloseWorld`, só para o próprio mundo.
+- O perfil aceita `topology: "p2p"` em `host_world_dropin` (antes: 422 em qualquer arquétipo). Os demais arquétipos
+  continuam só `dedicated`.
+- Em p2p, o claim `server` do connect token carrega o `host_connection`.
+
 ## [1.3.0] — 2026-09-26
 
 ### Added

@@ -22,7 +22,7 @@ import { api, type GameSession, type RoleSlot, type MultiplayerProfile, type Gam
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, shortId, truncate } from "../lib/format";
+import { closeReasonLabel, formatDuration, serverLabel, shortId, truncate } from "../lib/format";
 import { sessionStateLabel } from "../lib/vocab";
 import { EmptyState } from "../components/EmptyState";
 import { SessionAvatar } from "../components/SessionAvatar";
@@ -561,8 +561,8 @@ function RoomRow({
         <Table.Td>
           {/* fallback "—" (mesmo achado do GameSessions.tsx): coluna ficava em
               branco em sessão fechada — servidor já desalocado. */}
-          <Text ff="monospace" size="sm" c={s.serverAddress ? undefined : "dimmed"}>
-            {s.serverAddress ? truncate(s.serverAddress) : "—"}
+          <Text ff="monospace" size="sm" c={serverLabel(s) === "—" ? "dimmed" : undefined}>
+            {s.serverAddress ? truncate(s.serverAddress) : serverLabel(s)}
           </Text>
         </Table.Td>
         <Table.Td>
@@ -594,7 +594,7 @@ function RoomRow({
                     <Field label="MODO" value={s.modeId || "default"} mono />
                     <Field label={s.origin === "host_world" ? "MUNDO" : "MATCH ID"} value={s.matchId || s.sessionId} mono />
                     <Field label="SESSION ID" value={s.sessionId} mono />
-                    <Field label="SERVIDOR" value={s.serverAddress || "—"} mono />
+                    <Field label="SERVIDOR" value={serverLabel(s)} mono />
                     {s.origin === "host_world" && s.hostPlayerId && (
                       <Field label="HOST" value={s.hostPlayerId} mono />
                     )}

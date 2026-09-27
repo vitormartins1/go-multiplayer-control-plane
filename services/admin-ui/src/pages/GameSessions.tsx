@@ -19,7 +19,7 @@ import { api, type GameSession } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
-import { closeReasonLabel, formatDuration, shortId, truncate } from "../lib/format";
+import { closeReasonLabel, formatDuration, serverLabel, shortId, truncate } from "../lib/format";
 import { sessionStateLabel } from "../lib/vocab";
 import { SessionAvatar } from "../components/SessionAvatar";
 import { PlayersSummary } from "../components/PlayersSummary";
@@ -251,8 +251,8 @@ function SessionRow({
           {/* fallback "—" (achado: coluna ficava em branco em sessão
               fechada — servidor já desalocado — e parecia bug de
               carregamento; o painel expandido já tinha o fallback). */}
-          <Text ff="monospace" size="sm" c={s.serverAddress ? undefined : "dimmed"}>
-            {s.serverAddress ? truncate(s.serverAddress) : "—"}
+          <Text ff="monospace" size="sm" c={serverLabel(s) === "—" ? "dimmed" : undefined}>
+            {s.serverAddress ? truncate(s.serverAddress) : serverLabel(s)}
           </Text>
         </Table.Td>
         <Table.Td>
@@ -288,7 +288,7 @@ function SessionRow({
                     </Stack>
                     <Stack gap={2}>
                       <Text size="xs" c="dimmed" fw={600}>SERVIDOR</Text>
-                      <Text ff="monospace" size="xs">{s.serverAddress || "—"}</Text>
+                      <Text ff="monospace" size="xs">{serverLabel(s)}</Text>
                     </Stack>
                   </Group>
 

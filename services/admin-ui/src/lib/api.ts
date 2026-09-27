@@ -278,6 +278,7 @@ export interface GameSession {
   // Detalhe rico (session spec 018): snapshot do modo (params crus do
   // arquétipo), formação por time e resultado persistido (fechadas por result).
   archetype?: string;
+  topology?: "dedicated" | "p2p"; // session/031; ausente no histórico persistido
   profileHash?: string;
   modeParams?: Record<string, unknown>;
   teams?: SessionTeam[];

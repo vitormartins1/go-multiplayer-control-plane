@@ -58,6 +58,26 @@ func TestSetMultiplayerProfile_TopologiaNaoSuportada_Erro(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrUnsupportedTopology)
 }
 
+// session/031: p2p vale só no host_world_dropin.
+func TestSetMultiplayerProfile_P2PNoHostWorldDropIn_Aceita(t *testing.T) {
+	repo := new(mockRepo)
+	repo.On("FindByID", mock.Anything, "g1").Return(&domain.Game{ID: "g1"}, nil)
+	repo.On("SetModes", mock.Anything, "g1", mock.Anything, mock.Anything).Return(nil)
+	p := validHWDProfile()
+	p.Topology = domain.TopologyP2P
+	got, err := New(repo).SetMultiplayerProfile(context.Background(), "g1", p)
+	require.NoError(t, err)
+	assert.Equal(t, domain.TopologyP2P, got.Topology)
+}
+
+func TestSetMultiplayerProfile_P2PForaDoHostWorldDropIn_Erro(t *testing.T) {
+	for name, p := range map[string]domain.MultiplayerProfile{"br": validBRProfile(), "cm": validCMProfile()} {
+		p.Topology = domain.TopologyP2P
+		_, err := New(new(mockRepo)).SetMultiplayerProfile(context.Background(), "g1", p)
+		assert.ErrorIs(t, err, domain.ErrUnsupportedTopology, name)
+	}
+}
+
 func TestSetMultiplayerProfile_ParamsAusentes_ErrInvalidProfileParams(t *testing.T) {
 	p := validProfile()
 	p.QueueArena = nil

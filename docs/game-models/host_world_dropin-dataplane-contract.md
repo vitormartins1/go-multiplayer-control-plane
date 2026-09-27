@@ -84,6 +84,7 @@ Toda chamada ao gRPC do session leva uma credencial na **metadata**:
 |---|---|---|
 | Cliente do jogo | `authorization: Bearer <JWT do identity>` | `OpenWorld` (o host é o `sub` do token — `host_player_id` pode ir vazio), `LeaveWorld` (a si mesmo; o host pode tirar outro), `CloseWorld` (só o host) |
 | Dedicated Server | `x-game-server-key: <GAME_SERVER_KEY>` | `ReportResult`, `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld` |
+| Jogo do host, mundo p2p (spec `session/031`) | `x-world-token: <world_token do OpenWorld>` | `ReportParticipationEvent`, `GetSessionConfig`, `LeaveWorld`, `CloseWorld` — só do próprio mundo |
 
 A chave do Dedicated Server chega ao pod pela env `GAME_SERVER_KEY` (Secret `game-server-key` nas fleets de
 `infra/agones/fleets/`; `dev-game-server-key` no compose). O session roda em **`warn`** enquanto o jogo não manda as
@@ -94,6 +95,39 @@ a falta de permissão, `PermissionDenied`). O `SummonSign` só funciona para o h
 **O que muda no jogo:** (1) o `SessionRpcClient` do cliente anexa o bearer que já tem do login e pode parar de
 extrair o `sub` do JWT; (2) o server lê `GAME_SERVER_KEY` do ambiente e anexa `x-game-server-key` nos reports.
 
+## Topologia p2p (spec `session/031`, ADR-0032 — contrato 1.4.0)
+
+Com o modo em `topology: p2p`, **o jogo do host hospeda o mundo** (como nos Souls da FromSoftware) e não há
+Dedicated Server:
+
+```mermaid
+sequenceDiagram
+    participant H as Jogo do host
+    participant S as session
+    participant M as matchmaking
+    participant I as Jogo do invasor
+    H->>S: OpenWorld (bearer, host_connection)
+    S-->>H: session_id, host_grant, world_token
+    I->>M: Invade (bearer)
+    M-->>I: connect_token + host_connection
+    I->>H: conecta pela rede da loja (Steam Networking / SDR) e entrega o connect token
+    H->>H: valida o token (JWKS do session), lê role
+    H->>S: ReportParticipationEvent (x-world-token)
+```
+
+| Campo | Dedicado | p2p |
+|---|---|---|
+| `OpenWorldRequest.host_connection` | ignorado | **obrigatório** (id de conexão do host; ex.: SteamID64) — sem ele, `InvalidArgument` |
+| `OpenWorldResponse.server_address` | endereço do GameServer | vazio |
+| `OpenWorldResponse.world_token` | vazio | credencial do host para reportar; vale só para este mundo e morre quando ele fecha |
+| `JoinWorldResponse` / `InvadeResponse` / `SummonUpdate` `.host_connection` | vazio | o id de conexão do host |
+| claim `server` do connect token | endereço do GameServer | o `host_connection` — o host confere que o token é para ele |
+
+O jogo do host faz o papel que o Dedicated Server faz no dedicado: valida o connect token de quem entra, aplica os
+papéis e reporta os eventos. **Confiança:** os eventos vêm do host — ele pode mentir, como nos Souls. Se o host cair
+sem `CloseWorld`, o sweeper de TTL do session fecha o mundo. O netcode (NGO com transporte da Steam no modo host) é
+decisão do repo do jogo.
+
 ## Connect token (session → data plane)
 
 JWT **EdDSA** (Ed25519), validado **offline** pelo server do mundo via JWKS (`/.well-known/jwks.json` do session). Mesmos claims do `queue_arena`, com **`role`** no lugar de `team_id`:
@@ -102,7 +136,7 @@ JWT **EdDSA** (Ed25519), validado **offline** pelo server do mundo via JWKS (`/.
 |---|---|---|
 | `sub` | playerID | — |
 | `match_id` | **o `session_id` do mundo** (o refID do token) | ⚠️ o claim se chama `match_id` por herança, mas **carrega o `session_id`** neste arquétipo |
-| `server` | endereço do server do mundo | — |
+| `server` | endereço do server do mundo | em p2p, o `host_connection` do host (spec `session/031`) |
 | `iat` / `exp` | emissão / expiração (TTL 5 min) | — |
 | **`role`** | **`"host"` \| `"coop"` \| `"invader"`** | **host_world_dropin** (spec `011`); `team_id` **ausente** aqui |
 

@@ -46,6 +46,8 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Produto | `af3a677` | `ESTRATEGIA-PRODUTO-2026-09.md`: crítica do colega, Steam/GOG, SaaS × Asset Store × open source, SDK | — |
 | Steam | `aea9f87` | login federado Steam no identity (spec `identity/005-steam-login`), contrato 1.3.0 | unit + integração + **ao vivo com Steam falsa** |
 | Console | `299fca3` | mapa de serviços com o analytics e as dependências reais; capturas novas na documentação | Playwright |
+| ADRs | `aa344f1` | ADR-0031 (identidade federada, rascunho A) e spec `session/031` em rascunho | — |
+| P2P | ver `git log` | topologia p2p no `host_world_dropin` (spec `session/031`, ADR-0032, contrato 1.4.0): session sem GameServer + world token, registry, matchmaking, admin "P2P · host" | unit + **demo ao vivo p2p e dedicado em `enforce`** |
 
 
 ## Em andamento
@@ -54,6 +56,9 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Próximo (executável sem decisão do dono)
 
+0. **Heartbeat do mundo** (achado da spec `session/031`): o sweeper fecha qualquer mundo 30 min depois de aberto
+   (`SESSION_TTL` conta idade, não inatividade) — num Souls-like a sessão do host dura horas. Proposta: RPC
+   `Heartbeat` do host (ou do DS) e TTL pela última atividade. Contrato aditivo; pede spec própria.
 1. Espelhar conquistas na Steam (consumidor do fan-out → Web API `SetUserStatsForGame`) — precisa do mapeamento
    conquista → nome da API na Steam por jogo.
 2. Unificar Rooms e Sessions do jogo (`SessionTable`/`SessionDetail` compartilhados) — hoje quase duplicados.
@@ -62,8 +67,7 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 
 ## Depende do dono
 
-- Aprovar a spec `session/031-p2p-topology` (rascunho B, topologia P2P host-autoritativa); a implementação depende
-  da decisão de netcode no repo do jogo. O rascunho A já virou a ADR-0031.
+- Netcode p2p no repo do jogo (NGO com transporte da Steam no modo host) — o backend já está pronto (ADR-0032).
 - Virar `SESSION_AUTH_MODE=enforce` quando o jogo mandar bearer e chave de servidor.
 - Publisher key e app id da Steam para validar o login contra a Steam real.
 

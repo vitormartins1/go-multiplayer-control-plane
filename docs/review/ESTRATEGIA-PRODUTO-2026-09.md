@@ -116,7 +116,7 @@ então medir se há demanda (estrelas, issues, estúdios pedindo) para um kit pa
 | # | Item | Depende de | Por quê |
 |---|---|---|---|
 | 1 | **Login federado Steam** no identity (rascunho A) — ✅ **feito** (spec `identity/005-steam-login`, validado com Steam falsa) | publisher key do Steamworks para validar contra a Steam real | é o que torna o backend utilizável com jogadores reais |
-| 2 | **Topologia P2P host-autoritativa** no `host_world_dropin` (rascunho B) | decisão de netcode no repo do jogo | corta o maior custo do lançamento |
+| 2 | **Topologia P2P host-autoritativa** no `host_world_dropin` (rascunho B) — ✅ **backend feito** (ADR-0032, spec `session/031`, demo `TOPOLOGY=p2p`) | netcode no repo do jogo (NGO + transporte Steam no modo host) | corta o maior custo do lançamento |
 | 3 | Espelhar conquistas na Steam (consumidor do fan-out) | 1 | o jogador vê a conquista onde espera |
 | 4 | Virar o `SESSION_AUTH_MODE` para `enforce` | jogo mandar bearer e chave de servidor | fecha o buraco que a ADR-0030 deixou em `warn` |
 | 5 | SDK UPM extraído do Folclore | fase multiplayer do jogo | reuso real |

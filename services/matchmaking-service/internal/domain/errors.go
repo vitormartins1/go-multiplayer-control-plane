@@ -26,7 +26,7 @@ var ErrNoEligibleWorld = errors.New("matchmaking: no eligible world")
 // corrida listar→injetar); ErrWorldNotFound é o mundo que fechou entre listar e
 // injetar. Nenhum dos dois vaza para o cliente do Invade.
 var (
-	ErrRoleFull     = errors.New("matchmaking: invader slot full")
+	ErrRoleFull      = errors.New("matchmaking: invader slot full")
 	ErrWorldNotFound = errors.New("matchmaking: world not found")
 	// ErrNotWorldHost: quem invocou o sinal não é o host do mundo (spec 012 do
 	// session/030 — o session recusa com PermissionDenied).

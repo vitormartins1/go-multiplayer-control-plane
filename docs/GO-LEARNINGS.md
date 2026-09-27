@@ -1498,3 +1498,40 @@ provider := r.PathValue("provider") // "steam"
 convivendo com `sessions/anonymous`, onde o literal também tem precedência) — só que sem atributos nem reflexão: o
 padrão é uma string e a precedência é regra da biblioteca padrão. Antes do 1.22, em Go, isso exigia gorilla/mux ou
 chi.
+
+---
+
+## 43 — Ler de map `nil` devolve o zero value: tabela de regras aninhada sem `if ok`
+
+**O que é / por que importa:** em Go, ler uma chave ausente de um map devolve o **zero value** do tipo do valor — e
+isso vale até para um map `nil`. Então `m[a][b]` num `map[string]map[string]bool` é seguro mesmo quando `a` não
+existe: `m[a]` devolve um map `nil`, e ler `[b]` dele devolve `false`. Uma tabela "o que é permitido em cada caso"
+vira uma linha, sem checar existência em cada nível. (Só **escrever** num map `nil` entra em pânico.)
+
+**Onde no projeto:** `game-registry/internal/service/profile_service.go` — `supportedTopologies`: p2p só vale no
+`host_world_dropin` (spec `session/031`); testes `TestSetMultiplayerProfile_P2P*`.
+
+```mermaid
+flowchart LR
+    A["supportedTopologies[archetype]"] -->|arquétipo conhecido| B["map de topologias"]
+    A -->|arquétipo desconhecido| N["map nil"]
+    B --> C["[topology] → true/false"]
+    N --> D["[topology] → false (zero value, sem pânico)"]
+```
+
+```go
+var supportedTopologies = map[string]map[string]bool{
+	domain.ArchetypeQueueArena:      {domain.TopologyDedicated: true},
+	domain.ArchetypeHostWorldDropIn: {domain.TopologyDedicated: true, domain.TopologyP2P: true},
+}
+
+// arquétipo ou topologia fora da tabela → false nos dois níveis
+if !supportedTopologies[p.Archetype][p.Topology] {
+	return domain.ErrUnsupportedTopology
+}
+```
+
+**Pegadinha (vs C#):** `Dictionary<TKey,TValue>` lança `KeyNotFoundException` no indexador — em C# a mesma linha
+pediria `TryGetValue` em cada nível (ou `GetValueOrDefault`). Em Go a leitura nunca falha; quando precisar
+distinguir "ausente" de "presente com zero", use a forma de dois valores: `v, ok := m[k]`. E cuidado com a escrita:
+`var m map[string]bool; m["x"] = true` entra em pânico — o map precisa de `make` ou de um literal antes.

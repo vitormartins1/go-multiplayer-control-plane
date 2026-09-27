@@ -61,6 +61,7 @@ type sessionDTO struct {
 	// Detalhe rico (session spec 018) — passthrough 1:1; os tipos do domain já
 	// espelham o shape do session, então decodifica direto neles.
 	Archetype   string               `json:"archetype"`
+	Topology    string               `json:"topology"` // session/031
 	ProfileHash string               `json:"profileHash"`
 	ModeParams  json.RawMessage      `json:"modeParams"`
 	Teams       []domain.SessionTeam `json:"teams"`
@@ -281,6 +282,7 @@ func toGameSessions(dtos []sessionDTO) []domain.GameSession {
 			HostPlayerID:  d.HostPlayerID,
 			RoleSlots:     slots,
 			Archetype:     d.Archetype,
+			Topology:      d.Topology,
 			ProfileHash:   d.ProfileHash,
 			ModeParams:    d.ModeParams,
 			Teams:         d.Teams,

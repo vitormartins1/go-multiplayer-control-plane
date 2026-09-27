@@ -142,6 +142,13 @@ type Session struct {
 	HostPlayerID string
 	RoleSlots    map[string]*RoleSlot
 
+	// Mundo p2p (spec 031): HostConnection é como os phantoms alcançam o host
+	// (ServerID/ServerAddress ficam vazios — não há GameServer);
+	// WorldTokenHash é o SHA-256 (hex) do world token do host — o token em si
+	// só existe na resposta do OpenWorld.
+	HostConnection string
+	WorldTokenHash string
+
 	// Atributos de matchmaking do host (spec 012): a faixa do mundo para o
 	// matchmaking casar um invasor (soul level / weapon tier). Zero em
 	// queue_arena e em mundos abertos sem atributos.
@@ -200,6 +207,17 @@ type WorldAttributes struct {
 	// 020); vazia = sem senha. Só usada para computar PasswordHash no OpenWorld
 	// — não sobrevive além da chamada.
 	Password string
+	// HostConnection é o identificador de conexão do host num mundo p2p (spec
+	// 031; ex.: SteamID64 para Steam Networking Sockets). Opaco para o backend;
+	// obrigatório quando o modo é p2p, ignorado em dedicado.
+	HostConnection string
+}
+
+// WorldEndpoint é como um phantom alcança o mundo (spec 031): o endereço do
+// game server (dedicado) OU o identificador de conexão do host (p2p).
+type WorldEndpoint struct {
+	ServerAddress  string
+	HostConnection string
 }
 
 // InvadableWorld é a fotografia de um mundo aberto com vaga de invasor (spec
@@ -234,6 +252,11 @@ const (
 	ArchetypeHostWorldDropIn = "host_world_dropin"
 	ArchetypeBattleRoyale    = "battle_royale"
 	ArchetypeCoopMission     = "coop_mission"
+
+	// Topologias do perfil (ADR-0023). p2p só no host_world_dropin (spec 031,
+	// ADR-0032): o cliente do host hospeda o mundo, sem GameServer.
+	TopologyDedicated = "dedicated"
+	TopologyP2P       = "p2p"
 
 	// DefaultModeID é o modo assumido quando a entrada não declara um
 	// (ADR-0024). A normalização acontece no transport.
@@ -347,13 +370,21 @@ type SessionService interface {
 	// level / weapon tier) para o matchmaking casar depois (spec 012); zeros =
 	// mundo sem faixa. ErrUnsupportedArchetype se o jogo não for host_world_dropin;
 	// ErrNoServer se o pool esgotar. Spec 011/012, ADR-0023.
-	OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs WorldAttributes) (*Session, ConnectGrant, error)
+	//
+	// Em modo p2p (spec 031) não aloca server: guarda attrs.HostConnection
+	// (ErrHostConnectionRequired se vazio) e devolve worldToken, a credencial
+	// do host para reportar eventos deste mundo; em dedicado worldToken = "".
+	OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs WorldAttributes) (sess *Session, hostGrant ConnectGrant, worldToken string, err error)
 	// JoinWorld injeta um phantom no mundo com um papel (coop/invader), ocupando
 	// um slot, e emite o connect token com o claim role. Devolve o endereço do
-	// game server junto do grant (spec 012): o phantom injetado pelo matchmaking
-	// precisa dele para conectar. ErrWorldNotFound, ErrRoleNotEnabled, ErrRoleFull,
+	// game server junto do grant (spec 012) — ou o id de conexão do host, se o
+	// mundo for p2p (spec 031): o phantom injetado pelo matchmaking precisa
+	// disso para conectar. ErrWorldNotFound, ErrRoleNotEnabled, ErrRoleFull,
 	// ErrAlreadyJoined.
-	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, string, error)
+	JoinWorld(ctx context.Context, sessionID, playerID, role string) (ConnectGrant, WorldEndpoint, error)
+	// ResolveWorldToken devolve o mundo aberto a que o world token pertence
+	// (spec 031); ok=false se o token não for de nenhum mundo aberto.
+	ResolveWorldToken(token string) (sessionID string, ok bool)
 	// ListInvadableWorlds devolve os mundos abertos do jogo (Origin=host_world)
 	// com slot de invasor livre, cada um com seus atributos e vagas (spec 012).
 	// Fonte de dados pura: sem filtro de faixa/senha (política é do matchmaking).
@@ -388,7 +419,7 @@ type SessionService interface {
 type ProfileSnapshot struct {
 	ModeID     string
 	Archetype  string // Archetype* (vocabulário do ADR-0023)
-	Topology   string // "dedicated"
+	Topology   string // TopologyDedicated | TopologyP2P (spec 031)
 	ParamsJSON []byte // params crus do arquétipo (JSON)
 	Hash       string // hash do snapshot (SHA-256 truncado, calculado no adapter)
 

@@ -86,6 +86,7 @@ type sessionDTO struct {
 	// Detalhe rico (spec 018): snapshot do modo (ADR-0024) + formação +
 	// resultado persistido. Aditivos; ausentes em sessões sem snapshot/result.
 	Archetype   string          `json:"archetype,omitempty"`
+	Topology    string          `json:"topology,omitempty"` // dedicated | p2p (spec 031); ausente no histórico persistido
 	ProfileHash string          `json:"profileHash,omitempty"`
 	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
 	Teams       []teamDTO       `json:"teams,omitempty"`
@@ -381,6 +382,7 @@ func toSessionDTO(s domain.Session) sessionDTO {
 	}
 	if s.Profile != nil {
 		dto.Archetype = s.Profile.Archetype
+		dto.Topology = s.Profile.Topology
 		dto.ProfileHash = s.Profile.Hash
 		dto.ModeParams = json.RawMessage(s.Profile.ParamsJSON)
 	}

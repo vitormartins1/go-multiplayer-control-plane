@@ -145,6 +145,7 @@ func TestSummon_Sucesso_InjetaEntregaEConsome(t *testing.T) {
 	require.True(t, ok, "aliado recebe SUMMONED")
 	assert.Equal(t, "world-7", got.SessionID)
 	assert.Equal(t, "addr-world-7", got.ServerAddress)
+	assert.Equal(t, "host-world-7", got.HostConnection, "session/031: id de conexão do host repassado")
 	assert.Equal(t, "tok-ally-1", got.ConnectToken)
 
 	assert.Equal(t, float64(0), s.SignsActive(), "sinal consumido")

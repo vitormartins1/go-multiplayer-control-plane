@@ -67,6 +67,7 @@ type GameSession struct {
 	// Passthrough 1:1 do session-service; handles do resultado se resolvem no
 	// front via Players.
 	Archetype   string          `json:"archetype,omitempty"`
+	Topology    string          `json:"topology,omitempty"` // dedicated | p2p (session/031)
 	ProfileHash string          `json:"profileHash,omitempty"`
 	ModeParams  json.RawMessage `json:"modeParams,omitempty"`
 	Teams       []SessionTeam   `json:"teams,omitempty"`

@@ -112,7 +112,7 @@ func (in *Invader) tryInject(ctx context.Context, worlds []domain.InvadableWorld
 		injected, err := in.inject(ctx, w.SessionID, playerID)
 		switch {
 		case err == nil:
-			return domain.Invaded{SessionID: w.SessionID, ServerAddress: injected.ServerAddress, ConnectToken: injected.ConnectToken}, true, nil
+			return domain.Invaded{SessionID: w.SessionID, ServerAddress: injected.ServerAddress, HostConnection: injected.HostConnection, ConnectToken: injected.ConnectToken}, true, nil
 		case errors.Is(err, domain.ErrRoleFull), errors.Is(err, domain.ErrWorldNotFound):
 			continue // corrida: mundo encheu/fechou entre listar e injetar → tenta o próximo
 		default:

@@ -94,3 +94,11 @@ Uso real em homelab (k3d local + Raspberry Pi 5) via Agones, validado ponta a po
 
 Quem pode chamar cada RPC: `specs/030-grpc-auth/spec.md`.
 
+## Topologia p2p (spec 031, ADR-0032)
+
+Modo `host_world_dropin` com `topology: p2p`: o `OpenWorld` não aloca GameServer — exige `host_connection` (id de
+conexão do host, ex.: SteamID64), devolve um `world_token` e repassa o `host_connection` a quem entra. O jogo do host
+reporta com a metadata `x-world-token`, que só vale para o próprio mundo e morre com ele. Sem GameServer, o
+reconcile de órfãs ignora esses mundos; o sweeper de TTL fecha o mundo se o host sumir. Demo:
+`TOPOLOGY=p2p scripts/demo-host-world.sh`.
+

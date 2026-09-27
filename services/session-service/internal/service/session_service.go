@@ -43,7 +43,10 @@ type Service struct {
 	// matchIndex mapeia matchID -> sessionID para o caminho queue_arena, cuja
 	// identidade externa é o matchID. host_world não popula (identidade = sessionID).
 	matchIndex map[string]string
-	closed     map[domain.CloseReason]float64
+	// worldTokens mapeia hash do world token -> sessionID dos mundos p2p abertos
+	// (spec 031). closeSession remove a entrada.
+	worldTokens map[string]string
+	closed      map[domain.CloseReason]float64
 	// contador de eventos de participação por tipo (métrica participation_events_total).
 	participationEvents map[string]float64
 
@@ -151,6 +154,7 @@ func New(allocator domain.ServerAllocator, issuer domain.ConnectTokenIssuer, pub
 		log:                 slog.Default(),
 		sessions:            make(map[string]*domain.Session),
 		matchIndex:          make(map[string]string),
+		worldTokens:         make(map[string]string),
 		closed:              make(map[domain.CloseReason]float64),
 		participationEvents: make(map[string]float64),
 		historyLimit:        200,
@@ -504,6 +508,9 @@ func (s *Service) closeSession(ctx context.Context, sessionID string, reason dom
 	if sess.MatchID != "" {
 		delete(s.matchIndex, sess.MatchID) // queue_arena: limpa o índice reverso
 	}
+	if sess.WorldTokenHash != "" {
+		delete(s.worldTokens, sess.WorldTokenHash) // p2p: o token morre com o mundo (spec 031)
+	}
 	sess.State = domain.SessionClosed
 	sess.ClosedAt = s.now()
 	sess.CloseReason = reason
@@ -514,7 +521,10 @@ func (s *Service) closeSession(ctx context.Context, sessionID string, reason dom
 	}
 	s.mu.Unlock()
 
-	releaseErr := s.allocator.Release(ctx, sess.ServerID)
+	var releaseErr error
+	if sess.ServerID != "" { // mundo p2p não tem GameServer (spec 031)
+		releaseErr = s.allocator.Release(ctx, sess.ServerID)
+	}
 	// persiste o histórico DEPOIS do release, best-effort, independente do
 	// resultado dele (spec 025) — a sessão já está CLOSED e fora do mapa de
 	// ativas; o registro do que aconteceu não deve depender de o server ter
@@ -621,6 +631,9 @@ func (s *Service) reconcile(ctx context.Context, grace time.Duration, log *slog.
 	s.mu.Lock()
 	var orphans []string
 	for sessionID, sess := range s.sessions {
+		if sess.ServerID == "" {
+			continue // mundo p2p (spec 031): não há GameServer para sumir
+		}
 		if _, alive := live[sess.ServerID]; !alive && sess.OpenedAt.Before(cutoff) {
 			orphans = append(orphans, sessionID)
 		}
@@ -736,58 +749,89 @@ func (s *Service) resolveAdminCloseID(id string) (string, bool) {
 // lê o perfil, aloca um server, deriva os slots por papel e emite o connect
 // token do host. Qualquer problema com o perfil (ausente, arquétipo != host_world
 // _dropin, rede) vira ErrUnsupportedArchetype — só esse arquétipo abre mundo.
-func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs domain.WorldAttributes) (*domain.Session, domain.ConnectGrant, error) {
+// Em modo p2p (spec 031) não aloca: o cliente do host hospeda, os phantoms o
+// alcançam por attrs.HostConnection e o host recebe um world token para reportar.
+func (s *Service) OpenWorld(ctx context.Context, hostPlayerID, gameID, modeID string, attrs domain.WorldAttributes) (*domain.Session, domain.ConnectGrant, string, error) {
+	fail := func(err error) (*domain.Session, domain.ConnectGrant, string, error) {
+		return nil, domain.ConnectGrant{}, "", fmt.Errorf("session service: open world: %w", err)
+	}
 	if s.profiles == nil {
-		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %w", domain.ErrUnsupportedArchetype)
+		return fail(domain.ErrUnsupportedArchetype)
 	}
 	snap, err := s.modeSnapshot(ctx, gameID, modeID)
 	if err != nil {
-		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: %v: %w", err, domain.ErrUnsupportedArchetype)
+		return fail(fmt.Errorf("%v: %w", err, domain.ErrUnsupportedArchetype))
 	}
 	// a checagem de arquétipo subiu do adapter (que virou genérico por modo,
 	// ADR-0024) para cá: só host_world_dropin abre mundo.
 	if snap.Archetype != domain.ArchetypeHostWorldDropIn {
-		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: archetype %q: %w", snap.Archetype, domain.ErrUnsupportedArchetype)
+		return fail(fmt.Errorf("archetype %q: %w", snap.Archetype, domain.ErrUnsupportedArchetype))
+	}
+	p2p := snap.Topology == domain.TopologyP2P
+	if p2p && attrs.HostConnection == "" {
+		return fail(domain.ErrHostConnectionRequired)
 	}
 
 	sessionID := uuid.NewString()
-	server, err := s.allocator.Allocate(ctx, sessionID, gameID, snap.Fleet)
-	if err != nil {
-		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: allocate: %w", err)
+	var server domain.Server
+	var worldToken, worldTokenHash string
+	if p2p {
+		// o claim server do connect token leva o id de conexão do host: o host
+		// confere que o token foi emitido para o mundo dele (plan 031).
+		server = domain.Server{Address: attrs.HostConnection}
+		if worldToken, worldTokenHash, err = newWorldToken(); err != nil {
+			return fail(err)
+		}
+	} else {
+		if server, err = s.allocator.Allocate(ctx, sessionID, gameID, snap.Fleet); err != nil {
+			return fail(fmt.Errorf("allocate: %w", err))
+		}
 	}
 
 	// token do host (papel host) — rollback do server se a emissão falhar.
 	tok, err := s.issuer.Issue(hostPlayerID, sessionID, server.Address, domain.ConnectClaims{Role: domain.RoleHost, ModeID: modeID})
 	if err != nil {
-		_ = s.allocator.Release(ctx, server.ID)
-		return nil, domain.ConnectGrant{}, fmt.Errorf("session service: open world: issue token: %w", err)
+		if server.ID != "" {
+			if relErr := s.allocator.Release(ctx, server.ID); relErr != nil {
+				s.log.Warn("open world: release após falha no token", "session_id", sessionID, "err", relErr)
+			}
+		}
+		return fail(fmt.Errorf("issue token: %w", err))
 	}
 
 	openedAt := s.now()
 	sess := &domain.Session{
-		ID:            sessionID,
-		GameID:        gameID,
-		ModeID:        modeID,
-		Profile:       &snap,
-		Players:       []string{hostPlayerID},
-		Participants:  []domain.Participant{{PlayerID: hostPlayerID, Role: domain.RoleHost, JoinedAt: openedAt}},
-		ServerID:      server.ID,
-		ServerAddress: server.Address,
-		Origin:        domain.OriginHostWorld,
-		HostPlayerID:  hostPlayerID,
-		RoleSlots:     roleSlotsFromProfile(snap),
-		HostSoulLevel: attrs.SoulLevel,
-		WeaponTier:    attrs.WeaponTier,
-		PasswordHash:  domain.HashWorldPassword(attrs.Password),
-		State:         domain.SessionOpen,
-		OpenedAt:      openedAt,
+		ID:             sessionID,
+		GameID:         gameID,
+		ModeID:         modeID,
+		Profile:        &snap,
+		Players:        []string{hostPlayerID},
+		Participants:   []domain.Participant{{PlayerID: hostPlayerID, Role: domain.RoleHost, JoinedAt: openedAt}},
+		ServerID:       server.ID,
+		Origin:         domain.OriginHostWorld,
+		HostPlayerID:   hostPlayerID,
+		RoleSlots:      roleSlotsFromProfile(snap),
+		HostSoulLevel:  attrs.SoulLevel,
+		WeaponTier:     attrs.WeaponTier,
+		PasswordHash:   domain.HashWorldPassword(attrs.Password),
+		WorldTokenHash: worldTokenHash,
+		State:          domain.SessionOpen,
+		OpenedAt:       openedAt,
+	}
+	if p2p {
+		sess.HostConnection = attrs.HostConnection
+	} else {
+		sess.ServerAddress = server.Address
 	}
 
 	s.mu.Lock()
 	s.sessions[sessionID] = sess // host_world: identidade = sessionID, sem matchIndex
+	if worldTokenHash != "" {
+		s.worldTokens[worldTokenHash] = sessionID
+	}
 	s.mu.Unlock()
 
-	return sess, domain.ConnectGrant{PlayerID: hostPlayerID, Token: tok}, nil
+	return sess, domain.ConnectGrant{PlayerID: hostPlayerID, Token: tok}, worldToken, nil
 }
 
 // roleSlotsFromProfile deriva a capacidade por papel do perfil, só para os papéis
@@ -808,25 +852,25 @@ func roleSlotsFromProfile(p domain.ProfileSnapshot) map[string]*domain.RoleSlot 
 // JoinWorld injeta um phantom no mundo ocupando um slot do papel e emite o
 // connect token com o claim role. O slot é reservado sob o lock; o token é
 // cunhado fora (cripto) e o slot é revertido se a emissão falhar.
-func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role string) (domain.ConnectGrant, string, error) {
+func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role string) (domain.ConnectGrant, domain.WorldEndpoint, error) {
 	s.mu.Lock()
 	sess, ok := s.sessions[sessionID]
 	if !ok || sess.Origin != domain.OriginHostWorld {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrWorldNotFound)
+		return domain.ConnectGrant{}, domain.WorldEndpoint{}, fmt.Errorf("session service: join world: %w", domain.ErrWorldNotFound)
 	}
 	slot, ok := sess.RoleSlots[role]
 	if !ok {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrRoleNotEnabled)
+		return domain.ConnectGrant{}, domain.WorldEndpoint{}, fmt.Errorf("session service: join world: %w", domain.ErrRoleNotEnabled)
 	}
 	if sess.HostPlayerID == playerID || playerInWorld(sess, playerID) {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrAlreadyJoined)
+		return domain.ConnectGrant{}, domain.WorldEndpoint{}, fmt.Errorf("session service: join world: %w", domain.ErrAlreadyJoined)
 	}
 	if len(slot.Occupants) >= slot.Capacity {
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: %w", domain.ErrRoleFull)
+		return domain.ConnectGrant{}, domain.WorldEndpoint{}, fmt.Errorf("session service: join world: %w", domain.ErrRoleFull)
 	}
 	slot.Occupants = append(slot.Occupants, playerID)
 	// Players acumula PARTICIPANTES (ver domain.Session): re-entrada de quem já
@@ -836,11 +880,16 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 		sess.Players = append(sess.Players, playerID)
 	}
 	sess.Participants = upsertParticipant(sess.Participants, playerID, role, s.now())
-	serverAddr := sess.ServerAddress
+	endpoint := domain.WorldEndpoint{ServerAddress: sess.ServerAddress, HostConnection: sess.HostConnection}
 	modeID := sess.ModeID
 	s.mu.Unlock()
 
-	tok, err := s.issuer.Issue(playerID, sessionID, serverAddr, domain.ConnectClaims{Role: role, ModeID: modeID})
+	// claim server: o endereço do GameServer, ou o id de conexão do host em p2p.
+	tokenServer := endpoint.ServerAddress
+	if endpoint.HostConnection != "" {
+		tokenServer = endpoint.HostConnection
+	}
+	tok, err := s.issuer.Issue(playerID, sessionID, tokenServer, domain.ConnectClaims{Role: role, ModeID: modeID})
 	if err != nil {
 		s.mu.Lock()
 		removeFromWorld(sess, playerID) // reverte a reserva do slot
@@ -850,9 +899,9 @@ func (s *Service) JoinWorld(ctx context.Context, sessionID, playerID, role strin
 			sess.Participants = slices.DeleteFunc(sess.Participants, func(p domain.Participant) bool { return p.PlayerID == playerID })
 		}
 		s.mu.Unlock()
-		return domain.ConnectGrant{}, "", fmt.Errorf("session service: join world: issue token: %w", err)
+		return domain.ConnectGrant{}, domain.WorldEndpoint{}, fmt.Errorf("session service: join world: issue token: %w", err)
 	}
-	return domain.ConnectGrant{PlayerID: playerID, Token: tok}, serverAddr, nil
+	return domain.ConnectGrant{PlayerID: playerID, Token: tok}, endpoint, nil
 }
 
 // AuthorizeWorldHost confere que playerID é o host do mundo aberto sessionID

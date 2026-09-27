@@ -106,9 +106,10 @@ func (s *Server) Invade(ctx context.Context, req *pb.InvadeRequest) (*pb.InvadeR
 		}
 	}
 	return &pb.InvadeResponse{
-		SessionId:     invaded.SessionID,
-		ServerAddress: invaded.ServerAddress,
-		ConnectToken:  invaded.ConnectToken,
+		SessionId:      invaded.SessionID,
+		ServerAddress:  invaded.ServerAddress,
+		ConnectToken:   invaded.ConnectToken,
+		HostConnection: invaded.HostConnection,
 	}, nil
 }
 
@@ -143,10 +144,11 @@ func (s *Server) PostSummonSign(req *pb.PostSummonSignRequest, stream pb.Matchma
 			return stream.Send(&pb.SummonUpdate{Status: pb.SummonStatus_SUMMON_STATUS_EXPIRED})
 		}
 		return stream.Send(&pb.SummonUpdate{
-			Status:        pb.SummonStatus_SUMMON_STATUS_SUMMONED,
-			SessionId:     summoned.SessionID,
-			ServerAddress: summoned.ServerAddress,
-			ConnectToken:  summoned.ConnectToken,
+			Status:         pb.SummonStatus_SUMMON_STATUS_SUMMONED,
+			SessionId:      summoned.SessionID,
+			ServerAddress:  summoned.ServerAddress,
+			ConnectToken:   summoned.ConnectToken,
+			HostConnection: summoned.HostConnection,
 		})
 	}
 }

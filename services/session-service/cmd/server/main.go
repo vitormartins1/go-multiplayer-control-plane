@@ -182,8 +182,9 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	authCfg.WorldTokens = svc // host de mundo p2p (spec 031)
 	grpcSrv := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()), // tracing gRPC (ADR-0014)
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),                 // tracing gRPC (ADR-0014)
 		grpc.UnaryInterceptor(transport.UnaryAuthInterceptor(authCfg)), // spec 030 / ADR-0030
 	)
 	pb.RegisterSessionServer(grpcSrv, transport.NewServer(svc, transport.WithAuth(authCfg)))
@@ -462,7 +463,8 @@ func buildIssuer(cfg config.Config, log *slog.Logger) (*token.ConnectIssuer, err
 
 // buildGRPCAuth monta a autenticação do gRPC (spec 030 / ADR-0030): JWT do
 // jogador via JWKS do identity, internal key do matchmaking (ADR-0018) e a
-// chave do Dedicated Server, no modo SESSION_AUTH_MODE (padrão warn).
+// chave do Dedicated Server, no modo SESSION_AUTH_MODE (padrão warn). O
+// resolvedor de world token (spec 031) é o service, ligado pelo chamador.
 func buildGRPCAuth(cfg config.Config, log *slog.Logger) (transport.AuthConfig, error) {
 	mode := transport.ParseAuthMode(os.Getenv("SESSION_AUTH_MODE"))
 	ac := transport.AuthConfig{
@@ -504,4 +506,3 @@ func newRejectionCounter() rejectionCounter {
 }
 
 func (r rejectionCounter) Inc(method, reason string) { r.vec.WithLabelValues(method, reason).Inc() }
-

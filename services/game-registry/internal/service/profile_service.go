@@ -22,7 +22,14 @@ var (
 		domain.ArchetypeBattleRoyale:    true,
 		domain.ArchetypeCoopMission:     true,
 	}
-	supportedTopologies = map[string]bool{domain.TopologyDedicated: true}
+	// topologias por arquétipo: p2p só no host_world_dropin (session/031,
+	// ADR-0032) — o cliente do host hospeda o mundo; os demais seguem dedicados.
+	supportedTopologies = map[string]map[string]bool{
+		domain.ArchetypeQueueArena:      {domain.TopologyDedicated: true},
+		domain.ArchetypeHostWorldDropIn: {domain.TopologyDedicated: true, domain.TopologyP2P: true},
+		domain.ArchetypeBattleRoyale:    {domain.TopologyDedicated: true},
+		domain.ArchetypeCoopMission:     {domain.TopologyDedicated: true},
+	}
 
 	// queue_arena
 	qaStructures    = map[string]bool{"ffa": true, "teams": true}
@@ -189,7 +196,7 @@ func validateProfile(p domain.MultiplayerProfile) error {
 	if !supportedArchetypes[p.Archetype] {
 		return domain.ErrUnsupportedArchetype
 	}
-	if !supportedTopologies[p.Topology] {
+	if !supportedTopologies[p.Archetype][p.Topology] {
 		return domain.ErrUnsupportedTopology
 	}
 	switch p.Archetype {

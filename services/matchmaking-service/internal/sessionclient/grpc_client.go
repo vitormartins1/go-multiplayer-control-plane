@@ -102,8 +102,9 @@ func (c *Client) Inject(ctx context.Context, sessionID, playerID, role, summoner
 		}
 	}
 	return domain.Injected{
-		ServerAddress: resp.GetServerAddress(),
-		ConnectToken:  resp.GetGrant().GetConnectToken(),
+		ServerAddress:  resp.GetServerAddress(),
+		HostConnection: resp.GetHostConnection(),
+		ConnectToken:   resp.GetGrant().GetConnectToken(),
 	}, nil
 }
 

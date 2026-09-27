@@ -26,9 +26,10 @@ type Sign struct {
 // Summoned é o que o aliado recebe quando um host o invoca (spec 007): o mundo em
 // que entrou como coop e como conectar. Entregue pelo canal do PostSummonSign.
 type Summoned struct {
-	SessionID     string
-	ServerAddress string
-	ConnectToken  string
+	SessionID      string
+	ServerAddress  string
+	HostConnection string // mundo p2p (session/031)
+	ConnectToken   string
 }
 
 // CoopCriteria é a faixa que o aliado traz ao anunciar o sinal — e, do outro

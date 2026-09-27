@@ -32,8 +32,8 @@ D1–D6 da revisão foram **aprovadas em 2026-09-26** (e o aval para mexer em `s
 
 | Decisão | Recomendação |
 |---|---|
-| Topologia P2P host-autoritativa para o Folclore (rascunho B) | sim, para o lançamento na Steam; depende do netcode do jogo |
-| Rascunho A (identidade federada) virar ADR | sim — já implementado como `identity/005-steam-login` |
+| ~~Topologia P2P (rascunho B)~~ | **aprovada e feita no backend** (ADR-0032, `session/031`, contrato 1.4.0); falta o netcode no jogo (NGO + transporte Steam no modo host) |
+| ~~Rascunho A virar ADR~~ | **feito** — ADR-0031 |
 | Virar `SESSION_AUTH_MODE=enforce` | quando o jogo mandar bearer e chave de servidor |
 | Abrir o repo como open source (Apache-2.0) | sim, depois do lançamento ou quando quiser a vitrine |
 

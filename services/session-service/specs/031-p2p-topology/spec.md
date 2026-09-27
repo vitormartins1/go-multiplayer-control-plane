@@ -1,9 +1,9 @@
 # Spec: 031-p2p-topology
 
 **Serviço:** session-service (+ matchmaking-service, game-registry, admin-bff, admin-ui, proto `session.v1`)
-**Status:** Rascunho — aguardando aprovação do dono e a decisão de netcode no repo do jogo
+**Status:** Done no backend (2026-09-27); o netcode do jogo segue no repo do jogo
 **Data:** 2026-09-26
-**Decisão de origem:** rascunho B de `docs/review/ESTRATEGIA-PRODUTO-2026-09.md` (vira ADR ao aprovar)
+**ADR:** [0032](../../../../docs/adr/0032-p2p-host-world-topology.md) · rascunho B de `docs/review/ESTRATEGIA-PRODUTO-2026-09.md`
 
 ## Contexto
 
@@ -47,7 +47,7 @@ identificador de conexão no lugar de `ip:porta`) e **quem reporta** (o cliente 
    ecoado e um `world_token` (credencial do host para reportar eventos daquele mundo, e só dele).
 4. **Quando** o `JoinWorld` injetar alguém num mundo `p2p`, a resposta **deve** trazer `host_connection` no lugar de
    `server_address`; o matchmaking **deve** repassá-lo no `Invade`/`SummonSign`.
-5. **Quando** chegar `ReportParticipationEvent`/`CloseWorld`/`LeaveWorld` com metadata `x-world-token`, o session
+5. **Quando** chegar `ReportParticipationEvent`/`CloseWorld`/`LeaveWorld`/`GetSessionConfig` com metadata `x-world-token`, o session
    **deve** aceitá-lo só para o `session_id` do token (outro mundo → `PermissionDenied`).
 6. **Se** o cliente do host cair sem chamar `CloseWorld`, o session **deve** fechar o mundo pelo TTL sweeper que já
    existe (`Sweep`); não há GameServer para liberar nem reconciliação de órfãs.
@@ -83,3 +83,7 @@ participante; analytics marca a origem (`dedicated`/`p2p`) para o operador separ
 - O netcode no jogo (NGO com transporte Steam no modo host) — decisão do repo do jogo.
 - Migração de host, relay próprio, anti-cheat.
 - `p2p` em `queue_arena`/`battle_royale`/`coop_mission`.
+- **Heartbeat do mundo (follow-up):** o sweeper fecha por **idade** (`SESSION_TTL`, 30 min), não por inatividade —
+  já era assim para mundos dedicados. Em p2p o TTL é o único detector de host caído, e ele também fecha mundos
+  saudáveis com mais de 30 min. O certo é um heartbeat do host (RPC novo, contrato aditivo) e TTL por última
+  atividade; fica para uma spec própria.

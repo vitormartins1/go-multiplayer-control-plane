@@ -833,7 +833,13 @@ export function ModeProfileFields({
               />
             }
             value={archetype}
-            onChange={(v) => v && setArchetype(v as typeof archetype)}
+            onChange={(v) => {
+              if (!v) return;
+              setArchetype(v as typeof archetype);
+              // p2p só existe no host_world_dropin (session/031): trocar de
+              // arquétipo volta a topologia para dedicado.
+              if (v !== "host_world_dropin") setTopology("dedicated");
+            }}
             allowDeselect={false}
             data={[
               { value: "queue_arena", label: "Queue Arena — partida simétrica (FFA / NvN)" },
@@ -843,23 +849,25 @@ export function ModeProfileFields({
             ]}
           />
 
-          <Tooltip label="p2p é reservado (ADR-0023) e ainda não implementado — o servidor rejeita.">
-            <Select
-              label={
-                <FieldLabel
-                  label="Topologia"
-                  help="Dedicated Server: o gameplay roda num servidor dedicado (Agones/Unity). Autoridade neutra, sem trapaças do lado do cliente. P2P: o host lógico hospeda o mundo localmente — sem custo de servidor mas com risco de cheating."
-                />
-              }
-              value={topology}
-              onChange={(v) => v && setTopology(v as "dedicated" | "p2p")}
-              allowDeselect={false}
-              data={[
-                { value: "dedicated", label: "Dedicated Server" },
-                { value: "p2p", label: "P2P (reservado — não implementado)" },
-              ]}
-            />
-          </Tooltip>
+          <Select
+            label={
+              <FieldLabel
+                label="Topologia"
+                help="Dedicated Server: o gameplay roda num servidor dedicado (Agones/Unity) — autoridade neutra, custo por hora de mundo. P2P (só Host World Drop-in): o jogo do host hospeda o mundo e os phantoms conectam nele pela rede da loja (ex.: Steam) — sem custo de servidor, mas os eventos vêm do host (mesma confiança que os Souls dão ao host). O control plane segue fazendo login, matchmaking, conquistas e analytics."
+              />
+            }
+            value={topology}
+            onChange={(v) => v && setTopology(v as "dedicated" | "p2p")}
+            allowDeselect={false}
+            data={[
+              { value: "dedicated", label: "Dedicated Server" },
+              {
+                value: "p2p",
+                label: archetype === "host_world_dropin" ? "P2P — o jogo do host hospeda" : "P2P (só Host World Drop-in)",
+                disabled: archetype !== "host_world_dropin",
+              },
+            ]}
+          />
         </SimpleGrid>
       </FormSection>
 
@@ -1225,9 +1233,18 @@ export function MultiplayerSettings({ gameId }: { gameId: string }) {
                   <Code>{m.modeId}</Code>
                 </Table.Td>
                 <Table.Td>
-                  <Badge variant="light" color="gray" leftSection={<meta.icon size={12} />}>
-                    {meta.label}
-                  </Badge>
+                  <Group gap={4} wrap="nowrap">
+                    <Badge variant="light" color="gray" leftSection={<meta.icon size={12} />}>
+                      {meta.label}
+                    </Badge>
+                    {m.topology === "p2p" && (
+                      <Tooltip label="O jogo do host hospeda o mundo — sem servidor dedicado (session/031)." withArrow>
+                        <Badge variant="light" color="grape">
+                          P2P
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   {hash ? (

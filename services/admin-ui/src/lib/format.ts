@@ -13,6 +13,13 @@ export function truncate(id: string): string {
   return id.length > 12 ? `${id.slice(0, 12)}…` : id;
 }
 
+// serverLabel é o que a coluna "servidor" mostra (session/031): o endereço do
+// game server em dedicado; em p2p não há servidor — o jogo do host hospeda.
+export function serverLabel(s: { serverAddress: string; topology?: string }): string {
+  if (s.topology === "p2p") return "P2P · host";
+  return s.serverAddress || "—";
+}
+
 // closeReasonLabel traduz o motivo de fechamento da sessão para exibição —
 // fonte única em lib/vocab.ts (cobre os 6 motivos do session-service).
 export function closeReasonLabel(reason?: string): string {

@@ -60,11 +60,17 @@ const (
 // setupAuth sobe o server com interceptor + checagens por mundo no modo dado.
 func setupAuth(t *testing.T, mode AuthMode) (pb.SessionClient, *countingRejections) {
 	t.Helper()
+	return setupAuthTopology(t, mode, "dedicated")
+}
+
+// setupAuthTopology é o setupAuth com a topologia do modo escolhida (spec 031).
+func setupAuthTopology(t *testing.T, mode AuthMode, topology string) (pb.SessionClient, *countingRejections) {
+	t.Helper()
 	lis := bufconn.Listen(1024 * 1024)
 	iss, err := token.Generate()
 	require.NoError(t, err)
 	prof := stubProfile{profile: domain.ProfileSnapshot{
-		Archetype: "host_world_dropin", Topology: "dedicated", ParamsJSON: []byte(`{}`), Hash: "h",
+		Archetype: "host_world_dropin", Topology: topology, ParamsJSON: []byte(`{}`), Hash: "h",
 		EnabledRoles: []string{domain.RoleCoop, domain.RoleInvader}, CoopSlots: 2, InvaderSlots: 1,
 	}}
 	pub := publisher.New(slogDiscard())
@@ -72,7 +78,7 @@ func setupAuth(t *testing.T, mode AuthMode) (pb.SessionClient, *countingRejectio
 		service.WithProfileProvider(prof), service.WithParticipationPublisher(pub))
 
 	rej := &countingRejections{n: map[string]int{}}
-	cfg := AuthConfig{Mode: mode, Players: fakePlayers{}, InternalKey: testInternalKey, GameServerKey: testServerKey, Rejections: rej}
+	cfg := AuthConfig{Mode: mode, Players: fakePlayers{}, InternalKey: testInternalKey, GameServerKey: testServerKey, WorldTokens: svc, Rejections: rej}
 	srv := grpc.NewServer(grpc.UnaryInterceptor(UnaryAuthInterceptor(cfg)))
 	pb.RegisterSessionServer(srv, NewServer(svc, WithAuth(cfg)))
 	go func() { _ = srv.Serve(lis) }()
@@ -209,4 +215,70 @@ func TestParseAuthMode_DesconhecidoViraWarn(t *testing.T) {
 	assert.Equal(t, AuthOff, ParseAuthMode("off"))
 	assert.Equal(t, AuthWarn, ParseAuthMode(""))
 	assert.Equal(t, AuthWarn, ParseAuthMode("sim"))
+}
+
+// --- spec 031: host de mundo p2p com world token ---
+
+func asWorldHost(token string) context.Context {
+	return metadata.AppendToOutgoingContext(context.Background(), "x-world-token", token)
+}
+
+func TestAuth_P2P_OpenWorld_DevolveHostConnectionEWorldToken(t *testing.T) {
+	c, _ := setupAuthTopology(t, AuthEnforce, "p2p")
+
+	w, err := c.OpenWorld(asPlayer("host-1"), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:765"})
+	require.NoError(t, err)
+	assert.Empty(t, w.GetServerAddress(), "p2p não tem game server")
+	assert.Equal(t, "steam:765", w.GetHostConnection())
+	assert.NotEmpty(t, w.GetWorldToken())
+
+	j, err := c.JoinWorld(asInternal(), &pb.JoinWorldRequest{SessionId: w.GetSessionId(), PlayerId: "invasor", Role: "invader"})
+	require.NoError(t, err)
+	assert.Equal(t, "steam:765", j.GetHostConnection())
+	assert.Empty(t, j.GetServerAddress())
+}
+
+func TestAuth_P2P_OpenWorldSemHostConnection_InvalidArgument(t *testing.T) {
+	c, _ := setupAuthTopology(t, AuthEnforce, "p2p")
+	_, err := c.OpenWorld(asPlayer("host-1"), &pb.OpenWorldRequest{GameId: "hw"})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestAuth_P2P_WorldToken_SoValeNoProprioMundo(t *testing.T) {
+	c, rej := setupAuthTopology(t, AuthEnforce, "p2p")
+	w1, err := c.OpenWorld(asPlayer("host-1"), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:1"})
+	require.NoError(t, err)
+	w2, err := c.OpenWorld(asPlayer("host-2"), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:2"})
+	require.NoError(t, err)
+	tok := w1.GetWorldToken()
+
+	evt := func(sid string) *pb.ReportParticipationEventRequest {
+		return &pb.ReportParticipationEventRequest{SessionId: sid, PlayerId: "host-1", Role: "host", Event: "BOSS_DEFEATED", Outcome: "SUCCESS"}
+	}
+	_, err = c.ReportParticipationEvent(asWorldHost(tok), evt(w1.GetSessionId()))
+	assert.NoError(t, err, "o host reporta no próprio mundo")
+
+	_, err = c.ReportParticipationEvent(asWorldHost(tok), evt(w2.GetSessionId()))
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Equal(t, 1, rej.get("/session.v1.Session/ReportParticipationEvent", "other_world"))
+	_, err = c.CloseWorld(asWorldHost(tok), &pb.CloseWorldRequest{SessionId: w2.GetSessionId()})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = c.OpenWorld(asWorldHost(tok), &pb.OpenWorldRequest{GameId: "hw", HostConnection: "steam:1"})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err), "world token não abre mundo")
+
+	_, err = c.GetSessionConfig(asWorldHost(tok), &pb.GetSessionConfigRequest{RefId: w1.GetSessionId()})
+	assert.NoError(t, err, "o host lê o manifest do próprio mundo")
+
+	_, err = c.CloseWorld(asWorldHost(tok), &pb.CloseWorldRequest{SessionId: w1.GetSessionId()})
+	require.NoError(t, err)
+	_, err = c.ReportParticipationEvent(asWorldHost(tok), evt(w1.GetSessionId()))
+	assert.Equal(t, codes.Unauthenticated, status.Code(err), "mundo fechado: o token morre junto")
+}
+
+func TestAuth_P2P_WorldTokenDesconhecido_Unauthenticated(t *testing.T) {
+	c, rej := setupAuthTopology(t, AuthEnforce, "p2p")
+	_, err := c.ReportParticipationEvent(asWorldHost("inventado"), &pb.ReportParticipationEventRequest{SessionId: "s"})
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+	assert.Equal(t, 1, rej.get("/session.v1.Session/ReportParticipationEvent", "invalid_credential"))
 }

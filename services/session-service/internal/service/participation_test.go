@@ -25,7 +25,7 @@ func participationSetup(t *testing.T) (*Service, *mockAllocator, *mockParticipat
 	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	return svc, alloc, part, sess.ID
 }
@@ -192,7 +192,7 @@ func TestReportParticipation_PublishFalha_SlotLiberaMesmoAssim(t *testing.T) {
 	part.On("PublishParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(assert.AnError)
 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	_, _, err = svc.JoinWorld(context.Background(), sess.ID, "inv-1", domain.RoleInvader)
 	require.NoError(t, err)
@@ -306,7 +306,7 @@ func TestReportParticipation_SemPublisher_Erro(t *testing.T) {
 	iss.On("Issue", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("token", nil)
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 
 	err = svc.ReportParticipationEvent(context.Background(), sess.ID, evt("p", domain.RoleCoop, domain.EventJoined, domain.OutcomeNeutral))
@@ -327,7 +327,7 @@ func hostKilledSetup(t *testing.T, releaseErr error) (*Service, *mockParticipati
 	prof.On("ModeProfile", mock.Anything, "game-1", mock.Anything).Return(coopInvaderProfile(), nil)
 
 	svc := New(alloc, iss, &mockPublisher{}, WithProfileProvider(prof), WithParticipationPublisher(part))
-	sess, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
+	sess, _, _, err := svc.OpenWorld(context.Background(), "host-1", "game-1", "default", domain.WorldAttributes{})
 	require.NoError(t, err)
 	return svc, part, sess.ID
 }

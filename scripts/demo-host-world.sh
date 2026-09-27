@@ -14,6 +14,10 @@
 #   7. o fan-out SNS -> SQS entrega ao achievements-consumer e a conquista
 #      aparece desbloqueada para o invasor
 #
+# TOPOLOGY=p2p (session/031) roda a variante P2P: o OpenWorld não aloca server,
+# recebe o id de conexão do host (um SteamID de mentira) e devolve o world token;
+# o passo 6 é o JOGO DO HOST reportando com esse token, não o Dedicated Server.
+#
 # Requisitos: stack no ar (docker compose -f infra/docker/docker-compose.yml up),
 # curl, jq e grpcurl (go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest).
 # As portas podem ser trocadas por env (IDENTITY, REGISTRY, ACHIEVEMENTS, SESSION_GRPC, MM_GRPC).
@@ -26,6 +30,8 @@ SESSION_GRPC="${SESSION_GRPC:-localhost:50052}"
 MM_GRPC="${MM_GRPC:-localhost:50051}"
 KEY="${INTERNAL_API_KEY:-dev-internal-key}"
 SERVER_KEY="${GAME_SERVER_KEY:-dev-game-server-key}" # chave do Dedicated Server (session/030)
+TOPOLOGY="${TOPOLOGY:-dedicated}"                   # dedicated | p2p (session/031)
+HOST_CONNECTION="steam:76561198000000042"           # id de conexão do host na variante p2p
 
 for bin in curl jq grpcurl; do
   command -v "$bin" >/dev/null || { echo "falta: $bin" >&2; exit 1; }
@@ -41,11 +47,11 @@ api() { # api METHOD URL [BODY] — falha com a resposta se não for 2xx
   printf '%s' "$out"
 }
 
-step "1. jogo + modo host_world_dropin"
+step "1. jogo + modo host_world_dropin ($TOPOLOGY)"
 game_id="$(api POST "$REGISTRY/games" "{\"slug\":\"demo-souls-$run\",\"name\":\"Demo Souls $run\"}" | jq -r .id)"
 api PUT "$REGISTRY/games/$game_id/multiplayer-profiles/default" '{
   "displayName": "Mundo aberto",
-  "archetype": "host_world_dropin", "topology": "dedicated",
+  "archetype": "host_world_dropin", "topology": "'"$TOPOLOGY"'",
   "params": {"enabledRoles": ["coop","invader"], "coopSlots": 2, "invaderSlots": 1,
              "invasionEnabled": true, "levelRangeEnabled": false, "weaponTierEnabled": false,
              "passwordEnabled": false}
@@ -73,17 +79,36 @@ echo "host=$host_id invasor=$invader_id"
 
 step "4. host abre o mundo (session.OpenWorld)"
 # o host é o sub do JWT (session/030): o cliente não precisa mandar host_player_id
-world="$(grpcurl -plaintext -H "authorization: Bearer $host_token" -d "{\"game_id\":\"$game_id\"}" "$SESSION_GRPC" session.v1.Session/OpenWorld)"
+open_req="{\"game_id\":\"$game_id\"}"
+[[ "$TOPOLOGY" == p2p ]] && open_req="{\"game_id\":\"$game_id\",\"host_connection\":\"$HOST_CONNECTION\"}"
+world="$(grpcurl -plaintext -H "authorization: Bearer $host_token" -d "$open_req" "$SESSION_GRPC" session.v1.Session/OpenWorld)"
 session_id="$(jq -r .sessionId <<<"$world")"
-echo "mundo=$session_id server=$(jq -r .serverAddress <<<"$world")"
+if [[ "$TOPOLOGY" == p2p ]]; then
+  world_token="$(jq -r .worldToken <<<"$world")"
+  [[ -n "$world_token" && "$world_token" != null ]] || { echo "p2p sem world token: $world" >&2; exit 1; }
+  echo "mundo=$session_id p2p host=$(jq -r .hostConnection <<<"$world") (sem game server)"
+else
+  echo "mundo=$session_id server=$(jq -r .serverAddress <<<"$world")"
+fi
 
 step "5. invasor invade (matchmaking.Invade, bearer do invasor)"
 invaded="$(grpcurl -plaintext -H "authorization: Bearer $invader_token" -d "{\"game_id\":\"$game_id\"}" "$MM_GRPC" matchmaking.v1.Matchmaking/Invade)"
 [[ "$(jq -r .sessionId <<<"$invaded")" == "$session_id" ]] || { echo "invadiu outro mundo: $invaded" >&2; exit 1; }
-echo "entrou no mundo $session_id com connect token role=invader"
+if [[ "$TOPOLOGY" == p2p ]]; then
+  [[ "$(jq -r .hostConnection <<<"$invaded")" == "$HOST_CONNECTION" ]] || { echo "invasor sem o host p2p: $invaded" >&2; exit 1; }
+  echo "entrou no mundo $session_id: conecta no host $HOST_CONNECTION com connect token role=invader"
+else
+  echo "entrou no mundo $session_id com connect token role=invader"
+fi
 
-step "6. servidor do mundo reporta HOST_KILLED"
-grpcurl -plaintext -H "x-game-server-key: $SERVER_KEY" \
+if [[ "$TOPOLOGY" == p2p ]]; then
+  step "6. o jogo do host reporta HOST_KILLED (world token)"
+  report_auth="x-world-token: $world_token"
+else
+  step "6. servidor do mundo reporta HOST_KILLED"
+  report_auth="x-game-server-key: $SERVER_KEY"
+fi
+grpcurl -plaintext -H "$report_auth" \
   -d "{\"session_id\":\"$session_id\",\"player_id\":\"$invader_id\",\"role\":\"invader\",\"event\":\"HOST_KILLED\",\"outcome\":\"SUCCESS\",\"event_id\":\"demo-$run\"}" \
   "$SESSION_GRPC" session.v1.Session/ReportParticipationEvent >/dev/null
 echo "mundo encerrado (host_killed); evento publicado no fan-out"
