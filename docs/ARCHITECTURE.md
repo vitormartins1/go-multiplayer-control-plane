@@ -18,33 +18,48 @@ A decisão estrutural mais importante: o realtime de gameplay **não é Go**. Go
 
 ```mermaid
 flowchart TB
-    Client["Unity Client"]
+  subgraph DP["Data plane · Unity (repos separados)"]
+    direction LR
+    C["Cliente do jogo"]
+    GS["Dedicated Server<br/>(GameServer no Agones)"]
+    H["Host P2P<br/>(Steam Networking)"]
+  end
 
-    subgraph CP["Control plane — Go (este repo)"]
-        ID["identity (auth)"]
-        GR["game-registry<br/>jogos · modos · fleet"]
-        ACH["achievements"]
-        PD["player-data"]
-        CS["cloud-save"]
-        LB["leaderboard"]
-        AN["analytics"]
-        MM["matchmaking"]
-        SS["session-service<br/>sessão · registry · connect token"]
-        MM --> SS
-        MM --> GR
-        SS --> GR
+  subgraph CP["Control plane · Go (este repo)"]
+    direction TB
+    subgraph EDGE["APIs do jogador"]
+      direction LR
+      ID["identity<br/>contas · Steam · JWT"]
+      MM["matchmaking<br/>fila · invasão · sinais"]
+      SE["session<br/>mundos · alocação · connect token"]
+      PD["player-data · cloud-save"]
     end
-
-    subgraph DP["Data plane — Unity Dedicated Server (repo separado)"]
-        GS["Netcode for GameObjects + Unity Transport<br/>input · tick · estado · colisão · snapshots · sync"]
+    GR["game-registry<br/>jogos · modos · fleets"]
+    BUS[("SNS match-results → SQS por consumidor")]
+    subgraph SINKS["Consumidores do fan-out"]
+      direction LR
+      ACH["achievements<br/>regras → conquistas"]
+      LB["leaderboard<br/>Redis"]
+      AN["analytics"]
     end
+  end
 
-    Client --> ID
-    Client --> MM
-    SS -->|endpoint + connect token| Client
-    Client -->|conecta com o token| GS
-    GS -.->|"busca a chave pública 1× (JWKS)"| SS
-    GS -->|resultado · eventos · heartbeat| SS
+  subgraph OPS["Operação"]
+    direction LR
+    UI["admin-ui<br/>console React"] --> BFF["admin-bff"]
+  end
+
+  AG[["Agones · fleet por jogo"]]
+
+  C -->|"login · FindMatch · Invade · OpenWorld"| EDGE
+  MM --> SE
+  MM & SE -.->|perfil do modo| GR
+  SE -->|aloca| AG -.-> GS
+  C -.->|"conecta com o connect token"| GS
+  C -.->|"conecta no SteamID do host"| H
+  GS & H -->|"eventos · resultado · heartbeat"| SE
+  SE --> BUS --> ACH & LB & AN
+  BFF -.->|"administra e observa"| CP
 ```
 
 Serviços pagos (Unity Relay/Lobby/Matchmaker/Multiplay, AWS GameLift/GameKit gerenciados) são **substituídos por serviços Go** + game server com IP/porta. Escala de game server: EC2/VPS → ECS-on-EC2 → **Agones/EKS** (open-source). (ADR-0011)
@@ -104,6 +119,46 @@ O **heartbeat** (spec `session/032`) vale para as duas: quem hospeda chama `Hear
 por `WORLD_HEARTBEAT_TTL` (90 s), o mundo fecha como `abandoned`. Mundos que nunca mandaram heartbeat (clientes
 antigos) continuam no TTL por idade.
 
+### Um mundo do login à conquista (dedicado e P2P)
+
+O caminho completo de um mundo do `host_world_dropin`, com o Folclore Souls como exemplo: o host abre o mundo, um
+invasor entra pelo matchmaking, o servidor (ou o host, no P2P) reporta a morte do host e o fan-out desbloqueia a
+conquista do invasor.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Host as Host (Unity)
+  participant Inv as Invasor (Unity)
+  participant ID as identity
+  participant MM as matchmaking
+  participant SE as session
+  participant DS as Dedicated Server
+  participant Bus as SNS→SQS
+  participant ACH as achievements
+
+  Host->>ID: login (Steam ticket)
+  ID-->>Host: JWT
+  Host->>SE: OpenWorld(modo)
+  alt topologia dedicada
+    SE->>DS: GameServerAllocation (fleet do jogo)
+    SE-->>Host: endereço + connect token (role=host)
+  else topologia p2p
+    SE-->>Host: world_token + connect token (server = SteamID do host)
+  end
+  loop a cada TTL/3
+    DS->>SE: Heartbeat (o host, no P2P)
+  end
+  Inv->>MM: Invade(modo)
+  MM->>SE: JoinWorld(role=invader)
+  SE-->>Inv: onde conectar + connect token
+  Inv->>DS: conecta (token validado offline via JWKS)
+  DS->>SE: ReportParticipationEvent(HOST_KILLED)
+  SE->>Bus: publica uma vez
+  Bus->>ACH: consumidor idempotente
+  Note over ACH: conquista do invasor desbloqueada<br/>e espelhada na Steam
+```
+
 ### Quem pode chamar o quê (ADR-0030, ADR-0031)
 
 O gRPC do session identifica **quatro tipos de chamador** e cada RPC aceita só os seus. O modo `warn` registra o
@@ -141,6 +196,22 @@ Cada serviço é a reimplementação de um equivalente AWS e forma um **par de c
 | 7 | matchmaking-service | GameLift FlexMatch | fila/tickets + injeção por arquétipo, gRPC streaming | ✅ |
 | 8 | session-service | GameLift (orquestração) | ciclo de sessão, registry, connect token, resultado | ✅ |
 | — | admin-bff + admin-ui | painel de operação (ADR-0016) | agrega os serviços + Prometheus; React | ✅ |
+
+Protocolo, armazenamento e porta local de cada um (o mapa completo, com bancos e ferramentas, está em
+[`infra/docker/README.md`](../infra/docker/README.md)):
+
+| Serviço | Protocolo | Storage | Porta local |
+|---|---|---|---|
+| identity | REST | Postgres | 8081 |
+| game-registry | REST | Postgres | 8090 |
+| matchmaking | gRPC (streaming) | memória | 50051 |
+| session | gRPC + REST admin | memória + Postgres (histórico) | 50052 · 8087 |
+| achievements | REST + consumidor SQS | Postgres | 8082 |
+| leaderboard | REST + consumidor SQS | Redis | 8085 |
+| analytics | REST admin + consumidor SQS | Postgres | 8091 |
+| player-data | REST | Postgres | 8083 |
+| cloud-save | REST | S3 | 8084 |
+| admin-bff · admin-ui | REST · React | sem banco | 8088 · 8089 |
 
 Os quatro do GameKit (1–4) são **serviços separados, com a identity como fundação de auth** — espelhando o deploy per-feature do GameKit. O compute de cada um é decidido no `plan.md` (ADR-0005), não pré-fixado. (ADR-0009) O fan-out durável do resultado (ADR-0020) liga session → achievements/leaderboard/analytics por **SNS→SQS** idempotente.
 
@@ -204,7 +275,7 @@ services/<nome>-service/
 
 ## 6. Fluxo de uma partida (arquétipo `queue_arena`)
 
-Este é o fluxo do `queue_arena` (partida formada por fila). Cada arquétipo tem o seu — o `host_world_dropin`, por exemplo, não forma partida: o host **abre um mundo** e phantoms são **injetados por papel** ao longo da vida da sessão, reportando **eventos** em vez de um resultado terminal (ver `docs/game-models/host_world_dropin-dataplane-contract.md` e a sequência completa, dedicada e P2P, no [README](../README.md#arquitetura)).
+Este é o fluxo do `queue_arena` (partida formada por fila). Cada arquétipo tem o seu — o `host_world_dropin`, por exemplo, não forma partida: o host **abre um mundo** e phantoms são **injetados por papel** ao longo da vida da sessão, reportando **eventos** em vez de um resultado terminal (ver `docs/game-models/host_world_dropin-dataplane-contract.md` e a sequência completa, dedicada e P2P, em [Um mundo do login à conquista](#um-mundo-do-login-à-conquista-dedicado-e-p2p)).
 
 ```mermaid
 sequenceDiagram

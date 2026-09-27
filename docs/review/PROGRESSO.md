@@ -70,8 +70,9 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Refactor | `6fb5708` | `session_service.go` (1,1k linhas) dividido por assunto: core, close, host_world, p2p, heartbeat, admin, métricas | unit, cobertura igual |
 | Infra | `2ba1bcb` | S3 local do cloud-save no LocalStack: a imagem `minio/minio` saiu do Docker Hub e derrubava o job de integração e o `compose up` | integração (S3 real no LocalStack), `compose config` |
 | CI | (este) | `govulncheck` passa a bloquear | CI |
-| Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, vídeo de 87 s (~7 MB) e imagens paradas em `docs/media/` (GIF descartado: pesado e com paleta ruim) | diagramas validados no parser do Mermaid |
-| Vídeos de feature | (este) | três vídeos de ~1 min gravados do console real (cadastro de jogo P2P, o motor de conquistas, visão 360 do jogador), com cursor, legendas e cartelas; roteiros regraváveis em `docs/media/src/record/` | revisados quadro a quadro |
+| Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, o vídeo do produto e imagens paradas em `docs/media/` (GIF descartado: pesado e com paleta ruim) | diagramas validados no parser do Mermaid |
+| Vídeos de feature | `69346cd`..`046be7a` | vídeo do produto refeito (3 min, foco no produto) e três vídeos de feature gravados do console real (cadastro, conquistas, visão 360 do jogador, de 2:30 a 4:16), com destaques, legendas e pausas; roteiros regraváveis em `docs/media/src/record/` | revisados quadro a quadro |
+| README para código aberto | (este) | README enxuto (o que é, recursos, "Veja em ação" com as capas dos três vídeos, como funciona em quatro passos, começando, estado); diagramas, mapa de serviços e portas foram para o ARCHITECTURE | links conferidos |
 
 ## Em andamento
 

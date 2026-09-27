@@ -4,14 +4,15 @@
 |---|---|---|
 | [`go-multiplayer-control-plane.mp4`](go-multiplayer-control-plane.mp4) | o filme do produto (~3 min, 1080p): o problema, como funciona, qualquer tipo de jogo, dedicado ou P2P, conquistas e regras, um tour pelo console e a engenharia. Os exemplos usam o Folclore Souls, mas o foco é o produto | links no README, PRODUCT-OVERVIEW e contrato do `host_world_dropin` |
 | `hero.jpg` | quadro da arquitetura com o fan-out aceso e o selo "Assista ao vídeo" | capa do README |
-| `invasao-p2p.jpg` | quadro da invasão P2P com a conquista desbloqueada | README, PRODUCT-OVERVIEW, contrato do `host_world_dropin` |
+| `invasao-p2p.jpg` | quadro da invasão P2P com a conquista desbloqueada | PRODUCT-OVERVIEW, contrato do `host_world_dropin` |
+| `thumb-0N-*.jpg` | as capas clicáveis dos três vídeos de feature: um quadro do vídeo com o título, a duração e o play | seção "Veja em ação" do README |
 
 ### Vídeos de feature (gravados do console real)
 
 | Arquivo | O que mostra |
 |---|---|
 | [`video-01-cadastro.mp4`](video-01-cadastro.mp4) | **Do zero ao jogo online**: cada parte do registro explicada (identidade, modo, arquétipo, topologia, papéis, matchmaking, métricas), a frota que o P2P dispensa e o primeiro mundo abrindo e sendo invadido |
-| [`video-02-conquistas.mp4`](video-02-conquistas.mp4) | **O motor de conquistas** (~2 min): critério por evento (um evento, duas metas) e por métrica (acumulada ou por partida), regras globais do arquétipo e supressão por jogo, uma regra nova com comparador, a conquista criada a partir do evento órfão e o desbloqueio ao vivo (14 de 50 numa, desbloqueada na outra) |
+| [`video-02-conquistas.mp4`](video-02-conquistas.mp4) | **Conquistas sem deploy**: critério por evento (um evento, duas metas) e por métrica (acumulada ou por partida), regras globais do arquétipo e supressão por jogo, uma regra nova com comparador, a conquista criada a partir do evento órfão e o desbloqueio ao vivo (14 de 50 numa, desbloqueada na outra) |
 | [`video-03-jogador.mp4`](video-03-jogador.mp4) | **Visão 360 do jogador**: quem está online no jogo, conquistas com progresso e agrupamento, histórico com o desfecho de cada mundo (inclusive a queda do host), dados, save e a sessão ao vivo |
 
 Os vídeos de feature são didáticos de propósito: cada momento importante ganha um destaque (o resto da tela escurece),
@@ -77,5 +78,11 @@ node docs/media/src/record/03-jogador.mjs                              # usa o j
 
 O slug de um jogo apagado continua reservado (soft delete, ADR-0025): para regravar o vídeo 1, use outro nome ou
 uma base limpa.
+
+As capas do README (`thumb-0N-*.jpg`) saem dos próprios vídeos: depois de regravar um deles, rode
+
+```bash
+node docs/media/src/record/thumbs.mjs    # o quadro de cada capa e o título ficam na lista THUMBS
+```
 
 Fontes: Space Grotesk, IBM Plex Sans e IBM Plex Mono (SIL Open Font License), em `src/fonts/`.
