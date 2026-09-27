@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -12,6 +12,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { IconActivity } from "@tabler/icons-react";
 import { api, type GameSession } from "../lib/api";
+import { mergeClosed, someClosed } from "../lib/closedSessions";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
@@ -21,8 +22,9 @@ import { SessionTable } from "../components/SessionTable";
 // GameSessions é a aba de operação/debug das partidas do jogo (spec 007):
 // abertas ao vivo (mapa in-memory, polling da preferência global) + histórico
 // de fechadas PERSISTIDO (spec 025), paginado com "carregar mais" (tamanho
-// da preferência global, spec 084). Polling só das abertas — o histórico não
-// muda sozinho, recarrega só ao trocar de jogo ou via "carregar mais".
+// da preferência global, spec 084). Polling só das abertas; o histórico
+// recarrega ao trocar de jogo, via "carregar mais" e quando uma aberta some
+// da lista entre dois pollings, ou seja, fechou (spec 095).
 // GameDetail usa keepMounted=false, então sair da aba desmonta e para o
 // polling.
 export function GameSessions({ gameId }: { gameId: string }) {
@@ -32,7 +34,11 @@ export function GameSessions({ gameId }: { gameId: string }) {
   // mais" acumula em closedExtra e avança o cursor (mesmo padrão do
   // leaderboard, spec 039). Postgres do histórico fora (503) -> cai pro ring
   // in-memory de `data.closed` (plan D6), com aviso.
-  const { data: closedPage, error: closedError } = useAsync(
+  const {
+    data: closedPage,
+    error: closedError,
+    reload: reloadClosed,
+  } = useAsync(
     (s) => api.closedGameSessions(gameId, { limit: pageSize }, s),
     [gameId, pageSize],
   );
@@ -53,6 +59,16 @@ export function GameSessions({ gameId }: { gameId: string }) {
 
   usePolling(reload, pollingMs);
 
+  // spec 095: uma sessão que estava aberta e sumiu das abertas fechou; a
+  // primeira página do histórico é recarregada para ela aparecer em Fechadas.
+  const prevOpenIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!data) return;
+    if (someClosed(prevOpenIds.current, data.active)) reloadClosed();
+    prevOpenIds.current = new Set(data.active.map((s) => s.sessionId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   useEffect(() => {
     if (data) setLastUpdate(new Date());
   }, [data]);
@@ -63,7 +79,7 @@ export function GameSessions({ gameId }: { gameId: string }) {
   const historyUnavailable = !!closedError;
   const closedRows = useMemo(() => {
     if (historyUnavailable) return data?.closed ?? [];
-    return [...(closedPage?.closed ?? []), ...closedExtra];
+    return mergeClosed(closedPage?.closed ?? [], closedExtra);
   }, [historyUnavailable, data, closedPage, closedExtra]);
   const hasMoreClosed = !historyUnavailable && !closedNoMore && !!(closedCursor ?? closedPage?.nextBefore);
 

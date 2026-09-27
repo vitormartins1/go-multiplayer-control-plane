@@ -1,7 +1,7 @@
 # Spec: 095-closed-sessions-live
 
 **Serviço:** admin-ui
-**Status:** Draft (aguardando aprovação)
+**Status:** Done (2026-09-27)
 **Data:** 2026-09-27
 **Origem:** gravação do vídeo 1. Fatia pequena: um recarregamento a mais na aba Sessions do jogo.
 
