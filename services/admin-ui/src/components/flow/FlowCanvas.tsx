@@ -7,6 +7,7 @@ import {
   Panel,
   ReactFlow,
   useReactFlow,
+  useStore,
   type Edge,
   type Node,
   type NodeTypes,
@@ -50,14 +51,26 @@ function reservedFitOptions({ left, right, margin, maxZoom }: FitReserve): { pad
 // troca de arquétipo, resize do canvas) — o fitView do ReactFlow só roda no
 // mount. Filho de <ReactFlow>, então tem acesso ao store interno.
 // Também re-enquadra quando a área livre muda (spec 094): lista recolhida,
-// detalhe expandido, tela cheia.
+// detalhe expandido, tela cheia. E espera os nós novos serem medidos
+// (achado da spec 094): um fit antes disso não enquadra nada, e o canvas
+// ficava com o enquadramento anterior (ex.: ao salvar uma regra nova).
+// O `nodesInitialized` do store não serve: ele não volta a false quando o
+// grafo é trocado; por isso a contagem de nós medidos.
+const measuredSelector = (s: { nodeLookup: Map<string, { measured?: { width?: number } }> }) => {
+  let n = 0;
+  for (const [, node] of s.nodeLookup) if (node.measured?.width) n++;
+  return n === s.nodeLookup.size ? n : -1; // -1: ainda há nó sem medida
+};
+
 function AutoFit({ fitKey, reserve, full }: { fitKey: unknown; reserve: FitReserve; full: boolean }) {
   const rf = useReactFlow();
+  const measured = useStore(measuredSelector);
   const { left, right, margin, maxZoom } = reserve;
   useEffect(() => {
+    if (measured <= 0) return;
     const t = setTimeout(() => rf.fitView({ ...reservedFitOptions({ left, right, margin, maxZoom }), duration: 250 }), 50);
     return () => clearTimeout(t);
-  }, [fitKey, left, right, margin, maxZoom, full, rf]);
+  }, [fitKey, left, right, margin, maxZoom, full, measured, rf]);
   return null;
 }
 
