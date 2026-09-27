@@ -29,7 +29,7 @@ doc não é changelog. A análise completa que embasa esta versão está em
   de vida; code review da branch inteira com os achados corrigidos (reenvio do `ReportResult`, limite de tentativas
   no login, lease do espelho Steam, `session_service.go` dividido); CI com ESLint e `govulncheck` bloqueante; o S3
   local trocado de MinIO para LocalStack (a imagem saiu do Docker Hub); README, arquitetura e produto reescritos,
-  com [vídeo e GIFs](media/README.md). Tudo no [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1).
+  com [vídeo e imagens do produto](media/README.md). Tudo no [PR #1](https://github.com/vitormartins1/go-multiplayer-control-plane/pull/1).
 
 ## Decisões do dono
 

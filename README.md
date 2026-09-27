@@ -19,7 +19,7 @@ leaderboard, analytics e um console de operação: o que a AWS vende como GameKi
 [Decisões (ADRs)](docs/adr/README.md) ·
 [Integração Unity](docs/integration/UNITY-GUIA-INTEGRACAO.md)
 
-<a href="docs/media/go-multiplayer-control-plane.mp4"><img src="docs/media/arquitetura.gif" alt="Animação da arquitetura: cliente, control plane em Go, servidor dedicado no Agones e o fan-out de resultados" width="820"/></a>
+<a href="docs/media/go-multiplayer-control-plane.mp4"><img src="docs/media/hero.jpg" alt="Quadro do vídeo do produto: a arquitetura com o fan-out de um evento aceso; clique para assistir" width="820"/></a>
 
 </div>
 
@@ -50,12 +50,12 @@ o **Folclore Souls**, um Souls-like em Unity com mundo do host, co-op por sinais
 
 <table>
 <tr>
-<td width="50%"><img src="docs/media/invasao-p2p.gif" alt="Invasão P2P: o host hospeda pela Steam, o control plane só diz onde conectar"/></td>
-<td width="50%"><img src="docs/media/console-rooms.gif" alt="Console: salas ao vivo com hospedagem e sinal de vida do host"/></td>
+<td width="50%"><a href="docs/media/go-multiplayer-control-plane.mp4"><img src="docs/media/invasao-p2p.jpg" alt="Invasão P2P: o host hospeda pela Steam, o control plane só diz onde conectar"/></a></td>
+<td width="50%"><img src="docs/images/rooms-p2p.jpg" alt="Console: salas ao vivo com hospedagem, sinal de vida do host e o detalhe de um mundo P2P"/></td>
 </tr>
 <tr>
 <td align="center"><sub><b>Invasão P2P</b>: o host hospeda pela Steam; o control plane é a lista telefônica, não o servidor.</sub></td>
-<td align="center"><sub><b>Salas ao vivo</b>: hospedagem, papéis e o heartbeat do host em tempo real.</sub></td>
+<td align="center"><sub><b>Salas ao vivo</b>: hospedagem, papéis, o heartbeat do host e o aviso de confiança do P2P.</sub></td>
 </tr>
 </table>
 

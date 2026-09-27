@@ -1,6 +1,7 @@
-// render.mjs — renderiza o filme (film.html) quadro a quadro e gera o MP4 e os GIFs.
+// render.mjs — renderiza o filme (film.html) quadro a quadro e gera o MP4 e as imagens paradas.
 //
-//   node docs/media/src/render.mjs                 # vídeo + GIFs
+//   node docs/media/src/render.mjs                 # vídeo + imagens
+//   node docs/media/src/render.mjs --stills        # só as imagens paradas (segundos)
 //   node docs/media/src/render.mjs --frames 12,30  # só quadros soltos (PNG) para revisão
 //
 // Requisitos: playwright (vem com o admin-ui) e um ffmpeg no PATH ou em FFMPEG.
@@ -18,12 +19,12 @@ const { chromium } = await import(path.join(repo, "services/admin-ui/node_module
 const FFMPEG = process.env.FFMPEG || "ffmpeg";
 const FPS = 30;
 
-// GIFs: [nome, início, fim] em segundos do filme (ver o roteiro em film.html)
-const GIFS = [
-  ["arquitetura", 12.6, 28.2],
-  ["invasao-p2p", 28.6, 46.3],
-  ["console-rooms", 46.6, 60.0],
-  ["console-conquistas-analytics", 64.0, 71.0],
+// Imagens paradas para a documentação: [nome, instante do filme, selo "assista"?].
+// GIF foi descartado: a paleta de 256 cores estraga o degradê escuro e cada
+// recorte passava de 10 MB. Onde precisa de movimento, o link vai para o MP4.
+const STILLS = [
+  ["hero", 27.5, true],        // arquitetura com o fan-out aceso; capa do README
+  ["invasao-p2p", 43.5, false], // invasão p2p com a conquista desbloqueada
 ];
 
 // servidor estático: o film.html busca shots/boxes.json (fetch não funciona em file://)
@@ -44,7 +45,43 @@ await page.goto(url);
 await page.evaluate(() => window.__ready);
 const duration = await page.evaluate(() => window.__DURATION);
 
+// selo "assista ao vídeo" desenhado na própria página, com a fonte do filme
+async function stills() {
+  const secs = Math.round(duration);
+  for (const [name, t, badge] of STILLS) {
+    await page.evaluate(([x, on, s]) => {
+      window.__seek(x);
+      document.getElementById("__badge")?.remove();
+      if (!on) return;
+      const b = document.createElement("div");
+      b.id = "__badge";
+      b.innerHTML = `<span class="i">▶</span>Assista ao vídeo · ${s} s`;
+      b.style.cssText = "position:absolute;top:44px;right:60px;z-index:99;display:flex;align-items:center;gap:16px;" +
+        "padding:14px 28px 14px 16px;border:3px solid #5eb8ff;border-radius:40px;background:rgba(10,18,30,.9);" +
+        "color:#e8f0fa;font:600 30px 'Space Grotesk',sans-serif;";
+      b.querySelector(".i").style.cssText = "display:grid;place-items:center;width:38px;height:38px;border-radius:50%;" +
+        "background:#5eb8ff;color:#0a121e;font-size:16px;padding-left:3px;box-sizing:border-box;";
+      document.body.appendChild(b);
+    }, [t, badge, secs]);
+    // 1600 px de largura em JPEG: nítido no README e ~100 KB
+    const png = await page.screenshot({ type: "png" });
+    await run(["-y", "-loglevel", "error", "-f", "image2pipe", "-i", "-", "-vf", "scale=1600:-1:flags=lanczos", "-q:v", "3",
+      path.join(out, `${name}.jpg`)], png);
+  }
+}
+
+// run executa o ffmpeg; input opcional vai pelo stdin
+const run = (a, input) => new Promise((ok, ko) => {
+  const p = spawn(FFMPEG, a, { stdio: [input ? "pipe" : "ignore", "inherit", "inherit"] });
+  if (input) p.stdin.end(input);
+  p.on("close", (c) => (c ? ko(c) : ok()));
+});
+
 const args = process.argv.slice(2);
+if (args[0] === "--stills") {
+  await stills();
+  await browser.close(); server.close(); process.exit(0);
+}
 if (args[0] === "--frames") {
   await mkdir(path.join(out, "frames"), { recursive: true });
   for (const t of args[1].split(",").map(Number)) {
@@ -54,10 +91,12 @@ if (args[0] === "--frames") {
   await browser.close(); server.close(); process.exit(0);
 }
 
-// MP4 master: PNG por stdin → H.264, yuv420p (toca em qualquer lugar), faststart (web)
+// MP4: PNG por stdin → H.264, yuv420p (toca em qualquer lugar), faststart (web).
+// CRF 25 + tune animation: o filme é quase todo cor chapada; o texto das telas
+// continua nítido e o arquivo fica em ~7 MB (CRF 20 dava 16 MB).
 const mp4 = path.join(out, "go-multiplayer-control-plane.mp4");
 const ff = spawn(FFMPEG, ["-y", "-f", "image2pipe", "-framerate", String(FPS), "-i", "-",
-  "-c:v", "libx264", "-preset", "slow", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: ["pipe", "inherit", "inherit"] });
+  "-c:v", "libx264", "-preset", "slow", "-crf", "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: ["pipe", "inherit", "inherit"] });
 const total = Math.round(duration * FPS);
 for (let i = 0; i < total; i++) {
   await page.evaluate((x) => window.__seek(x), i / FPS);
@@ -67,14 +106,6 @@ for (let i = 0; i < total; i++) {
 }
 ff.stdin.end();
 await new Promise((r) => ff.on("close", r));
+await stills();
 await browser.close(); server.close();
-
-// GIFs: recortes do MP4, 960 px, 15 fps, paleta própria por GIF (fica nítido e leve)
-const run = (a) => new Promise((ok, ko) => spawn(FFMPEG, a, { stdio: "inherit" }).on("close", (c) => (c ? ko(c) : ok())));
-for (const [name, a, b] of GIFS) {
-  const vf = "fps=15,scale=960:-1:flags=lanczos";
-  await run(["-y", "-ss", String(a), "-to", String(b), "-i", mp4, "-vf", `${vf},palettegen=stats_mode=diff:max_colors=160`, "/tmp/palette.png"]);
-  await run(["-y", "-ss", String(a), "-to", String(b), "-i", mp4, "-i", "/tmp/palette.png",
-    "-lavfi", `${vf}[x];[x][1:v]paletteuse=dither=sierra2_4a:diff_mode=rectangle`, path.join(out, `${name}.gif`)]);
-}
 console.log("pronto:", mp4);

@@ -41,7 +41,7 @@ plane vira a lista telefônica, não o servidor. Matchmaking, papéis, connect t
 continuam iguais; o que some é o custo de um GameServer por mundo aberto. O host reporta eventos com um
 `world_token` que só vale para o próprio mundo, e o session limita o que um host mentiroso consegue fazer.
 
-![Invasão P2P — o invasor pede ao matchmaking, recebe o SteamID do host e conecta direto pela Steam](media/invasao-p2p.gif)
+[![Invasão P2P — o invasor pede ao matchmaking, recebe o SteamID do host e conecta direto pela Steam](media/invasao-p2p.jpg)](media/go-multiplayer-control-plane.mp4)
 
 Em qualquer topologia, quem hospeda manda um **heartbeat**: um mundo cujo host caiu fecha em ~90 s como
 `abandoned`, e um mundo ativo não expira mais por idade.
@@ -81,9 +81,9 @@ Agregados pré-computados (não é um event store) por jogo: total de partidas, 
 
 Um estúdio real não quer abrir o console da AWS, um cliente de banco e o Grafana separadamente. O `admin-ui` é **games-first**: entra pela lista de jogos, cada jogo abre com sub-abas (conquistas + editor visual de regras, leaderboards, jogadores, sessões, analytics, configurações), mais visões cross-game (Rooms — salas ao vivo de todos os jogos, agrupável/ordenável —, Players, Analytics, Fleet, Infrastructure).
 
-![Console: salas ao vivo, hospedagem (dedicado ou P2P) e sinal de vida do host](media/console-rooms.gif)
+![Rooms — salas ao vivo, hospedagem (dedicado ou P2P), sinal de vida do host e o detalhe de um mundo P2P com o aviso de confiança](images/rooms-p2p.jpg)
 
-![Console: conquistas com selo Steam e o analytics de um mundo do Folclore Souls](media/console-conquistas-analytics.gif)
+![Catálogo de conquistas do Folclore Souls — o selo "Steam" marca as que são espelhadas na Steam](images/achievements-steam.jpg)
 
 ![Analytics cross-game — sessões, jogadores únicos, abandono e sessões por dia de todos os jogos, qualquer arquétipo](images/analytics-global.png)
 

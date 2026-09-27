@@ -100,7 +100,7 @@ extrair o `sub` do JWT; (2) o server lê `GAME_SERVER_KEY` do ambiente e anexa `
 Com o modo em `topology: p2p`, **o jogo do host hospeda o mundo** (como nos Souls da FromSoftware) e não há
 Dedicated Server:
 
-![Invasão P2P animada: o invasor pede ao matchmaking, recebe o SteamID do host e conecta pela Steam](../media/invasao-p2p.gif)
+[![Invasão P2P: o invasor pede ao matchmaking, recebe o SteamID do host e conecta pela Steam (quadro do vídeo; clique para assistir)](../media/invasao-p2p.jpg)](../media/go-multiplayer-control-plane.mp4)
 
 ```mermaid
 sequenceDiagram

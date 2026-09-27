@@ -70,7 +70,7 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Refactor | `6fb5708` | `session_service.go` (1,1k linhas) dividido por assunto: core, close, host_world, p2p, heartbeat, admin, métricas | unit, cobertura igual |
 | Infra | `2ba1bcb` | S3 local do cloud-save no LocalStack: a imagem `minio/minio` saiu do Docker Hub e derrubava o job de integração e o `compose up` | integração (S3 real no LocalStack), `compose config` |
 | CI | (este) | `govulncheck` passa a bloquear | CI |
-| Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, vídeo de 87 s e 4 GIFs em `docs/media/` | diagramas validados no parser do Mermaid |
+| Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, vídeo de 87 s (~7 MB) e imagens paradas em `docs/media/` (GIF descartado: pesado e com paleta ruim) | diagramas validados no parser do Mermaid |
 
 ## Em andamento
 
