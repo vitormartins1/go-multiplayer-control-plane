@@ -62,6 +62,7 @@ import {
 } from "../lib/api";
 import { ARCHETYPE_META } from "../lib/archetypeMeta";
 import { matchesListFilter } from "../lib/eventRules";
+import { escapeOwnedByPopup } from "../lib/keys";
 import {
   buildMatchValue,
   condLabel,
@@ -464,11 +465,12 @@ export function GameEventRulesCanvas({
     }
   }
 
-  // Esc cancela o rascunho (spec 048).
+  // Esc cancela o rascunho (spec 048), a menos que o Esc já tenha dono: a
+  // tela cheia (que sai primeiro), um diálogo ou um dropdown aberto.
   useEffect(() => {
     if (!draft) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDraft(null);
+      if (e.key === "Escape" && !e.defaultPrevented && !escapeOwnedByPopup()) setDraft(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1108,7 +1110,7 @@ function EventRulesDock({
             color="gray"
             leftSection={<IconListDetails size={14} />}
             onClick={() => onListCollapsed(false)}
-            aria-label="Mostrar lista de regras"
+            aria-label={`Regras · ${rules.length}: mostrar a lista`}
           >
             Regras · {rules.length}
           </Button>

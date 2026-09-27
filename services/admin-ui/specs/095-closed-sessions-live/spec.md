@@ -27,3 +27,13 @@ endpoint, no mesmo polling.
    Abertas e aparece em Fechadas como "Host morto", sem trocar de aba.
 2. Com "carregar mais" já usado, a sessão recém-fechada aparece no topo e nenhuma linha se repete.
 3. `npm run lint`, `npm test` e `npm run build` passam.
+
+## Revisão do PR (2026-09-27)
+
+Achados do review, corrigidos:
+
+- O session tira a sessão das abertas um instante antes de gravá-la no histórico. Se o recarregamento cai nessa
+  janela, ele se repete nos ciclos de polling seguintes até a sessão aparecer (no máximo 3).
+- A linha que a nova primeira página empurra para fora continua na lista (a primeira página antiga é mantida
+  junto das páginas de "carregar mais").
+- Trocar de jogo zera o acompanhamento das abertas, sem um recarregamento a mais.

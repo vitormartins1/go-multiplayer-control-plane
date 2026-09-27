@@ -14,7 +14,8 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import type { Padding } from "@xyflow/system";
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { escapeOwnedByPopup } from "../../lib/keys";
 import "./flow.css";
 
 const FIT_MARGIN = 90; // respiro (px) além da área reservada pro dock/overlay.
@@ -81,9 +82,20 @@ function AutoFit({ fitKey, reserve, full }: { fitKey: unknown; reserve: FitReser
     return () => clearTimeout(t);
   }, [unmeasured, updateNodeInternals]);
 
+  // O fit fica pendente quando algo que pede enquadramento muda, e roda assim
+  // que os nós estão medidos. Só `ready` voltar a true não pede fit: nós
+  // recriados pela seleção ou pela busca são medidos de novo, e o zoom manual
+  // do operador não pode ser desfeito a cada clique.
+  const pending = useRef(true);
   useEffect(() => {
-    if (!ready) return;
-    const t = setTimeout(() => rf.fitView({ ...reservedFitOptions({ left, right, margin, maxZoom }), duration: 250 }), 50);
+    pending.current = true;
+  }, [fitKey, left, right, margin, maxZoom, full]);
+  useEffect(() => {
+    if (!ready || !pending.current) return;
+    const t = setTimeout(() => {
+      pending.current = false;
+      rf.fitView({ ...reservedFitOptions({ left, right, margin, maxZoom }), duration: 250 });
+    }, 50);
     return () => clearTimeout(t);
   }, [fitKey, left, right, margin, maxZoom, full, ready, rf]);
   return null;
@@ -197,11 +209,16 @@ export function FlowCanvas({
   const [full, setFull] = useState(false);
   useEffect(() => {
     if (!full) return;
+    // Captura: roda antes dos outros atalhos de Esc da página e marca o evento
+    // como tratado, para o mesmo Esc não sair da tela cheia e descartar um
+    // rascunho junto. Com um diálogo ou um dropdown aberto, o Esc é deles.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFull(false);
+      if (e.key !== "Escape" || e.defaultPrevented || escapeOwnedByPopup()) return;
+      e.preventDefault();
+      setFull(false);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [full]);
   const reserve: FitReserve = {
     left: dockReservedWidth ?? 0,
@@ -261,6 +278,7 @@ export function FlowCanvas({
                 onClick={() => setFull((f) => !f)}
                 title={full ? "Sair da tela cheia (Esc)" : "Tela cheia"}
                 aria-label={full ? "Sair da tela cheia" : "Tela cheia"}
+                aria-pressed={full}
               >
                 {full ? <IconArrowsMinimize size={14} /> : <IconArrowsMaximize size={14} />}
               </ControlButton>

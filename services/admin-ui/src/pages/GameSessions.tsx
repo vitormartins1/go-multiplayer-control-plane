@@ -12,7 +12,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { IconActivity } from "@tabler/icons-react";
 import { api, type GameSession } from "../lib/api";
-import { mergeClosed, someClosed } from "../lib/closedSessions";
+import { awaitHistory, goneIds, mergeClosed } from "../lib/closedSessions";
 import { useAsync } from "../lib/useAsync";
 import { usePolling } from "../lib/usePolling";
 import { useSettings } from "../lib/settings";
@@ -51,21 +51,38 @@ export function GameSessions({ gameId }: { gameId: string }) {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // spec 095: ids abertos no último polling e sessões fechadas que ainda
+  // esperam aparecer no histórico (id -> tentativas).
+  const prevOpenIds = useRef<Set<string>>(new Set());
+  const awaiting = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
     setClosedExtra([]);
     setClosedCursor(undefined);
     setClosedNoMore(false);
+    prevOpenIds.current = new Set();
+    awaiting.current = new Map();
   }, [gameId]);
 
   usePolling(reload, pollingMs);
 
   // spec 095: uma sessão que estava aberta e sumiu das abertas fechou; a
   // primeira página do histórico é recarregada para ela aparecer em Fechadas.
-  const prevOpenIds = useRef<Set<string>>(new Set());
+  // O session grava o histórico logo depois de tirá-la das abertas, então o
+  // recarregamento se repete nos ciclos seguintes até ela aparecer (com
+  // limite). A primeira página antiga vai para as extras: a linha que a nova
+  // empurrar para fora não some da lista.
   useEffect(() => {
     if (!data) return;
-    if (someClosed(prevOpenIds.current, data.active)) reloadClosed();
+    const gone = goneIds(prevOpenIds.current, data.active);
     prevOpenIds.current = new Set(data.active.map((s) => s.sessionId));
+    const inHistory = new Set((closedPage?.closed ?? []).map((s) => s.sessionId));
+    const step = awaitHistory(awaiting.current, gone, inHistory);
+    awaiting.current = step.awaiting;
+    if (!step.reload) return;
+    const oldFirst = closedPage?.closed ?? [];
+    setClosedExtra((prev) => mergeClosed(oldFirst, prev));
+    reloadClosed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

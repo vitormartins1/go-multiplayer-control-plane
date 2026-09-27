@@ -52,3 +52,12 @@ Medido no console a 1280×720, a resolução dos vídeos:
 4. Tela cheia cobre a janela, `Esc` volta, e o grafo é reenquadrado nas duas transições.
 5. Recarregar a página mantém a lista recolhida ou aberta como estava.
 6. `npm run lint`, `npm test` e `npm run build` passam; a prévia de conquistas e o pipeline não mudam.
+
+## Revisão do PR (2026-09-27)
+
+Achados do review, corrigidos sem mudar o comportamento pedido:
+
+- O reenquadramento automático roda só quando algo que pede enquadramento muda (grafo focado, área livre, tela
+  cheia). Nós recriados pela seleção ou pela busca não desfazem mais o zoom manual do operador.
+- Com a tela cheia ligada, um `Esc` só sai da tela cheia; o segundo descarta o rascunho. Com um diálogo ou um
+  dropdown aberto, o `Esc` é deles.

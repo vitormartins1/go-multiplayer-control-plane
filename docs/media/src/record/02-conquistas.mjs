@@ -149,7 +149,7 @@ await rec.type(page.getByPlaceholder("nome_do_type"), "chefe_implacavel", { dela
 await rec.say("Evento novo", "Quando as duas condições batem, a regra emite um evento novo, com o nome que o estúdio escolher.");
 await rec.click(page.getByRole("button", { name: "Salvar", exact: true }));
 await rec.wait(2000);
-await rec.click(page.getByRole("button", { name: "Mostrar lista de regras" }));
+await rec.click(page.getByRole("button", { name: /^Regras · \d+/ }));
 await rec.wait(900);
 await rec.spot(page.getByText("chefe_implacavel").first().locator("xpath=ancestor::tr[1]"), "Regra do jogo",
   "Ela entra na lista ao lado das globais, marcada como regra do jogo.");
