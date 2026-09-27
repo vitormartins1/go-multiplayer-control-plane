@@ -27,16 +27,24 @@ const rec = await startRecording("02-conquistas");
 const { page } = rec;
 const side = { left: true, width: 370 }; // modal/drawer ocupando o centro ou a direita
 const row = (text) => page.getByRole("row").filter({ hasText: text }).first();
-// grafo inteiro legível: recolhe o detalhe, enquadra, aproxima um passo e
-// arrasta para a direita da lista de regras (o fit reserva o espaço dela)
+// grafo inteiro legível (admin-ui spec 094): recolhe a lista e o detalhe e
+// põe o canvas em tela cheia; o enquadramento automático faz o resto
+const node = (type) => page.locator(`.react-flow__node-${type}`);
+const collapseIfOpen = async (name) => {
+  const b = page.getByRole("button", { name });
+  if (await b.isVisible()) await rec.click(b);
+};
 const showGraph = async () => {
-  const collapse = page.getByRole("button", { name: "Recolher detalhe" });
-  if (await collapse.isVisible()) await rec.click(collapse);
-  await rec.click(page.getByRole("button", { name: "Fit View" }));
-  await rec.wait(500);
-  await rec.click(page.getByRole("button", { name: "Zoom In" }));
-  await rec.wait(500);
-  await rec.drag(1000, 620, -120, -70);
+  await collapseIfOpen("Recolher lista");
+  await collapseIfOpen("Recolher detalhe");
+  await rec.click(page.getByRole("button", { name: "Tela cheia" }));
+  await rec.wait(1300);
+};
+const exitFull = async () => {
+  await rec.caption("Esc", "Esc volta o canvas ao tamanho normal.");
+  await rec.wait(1600);
+  await page.keyboard.press("Escape");
+  await rec.wait(1200);
 };
 
 await page.goto(`${CONSOLE}/games/${game.id}`);
@@ -94,8 +102,26 @@ await rec.spot(page.getByText("INVASION_WON").first().locator("xpath=ancestor::t
   "Estas vêm prontas com o arquétipo do jogo, marcadas como globais. Valem para todo jogo do mesmo tipo.");
 await rec.click(page.getByText("INVASION_WON").first());
 await rec.wait(1200);
-await showGraph();
-await rec.say("Grafo", "O canvas mostra o caminho: os fatos da partida, a regra, o evento e as conquistas que ele alimenta.");
+await rec.say("Grafo", "Ao escolher uma regra, o canvas desenha o caminho dela. Primeiro, vamos abrir espaço.");
+await rec.spot(page.getByRole("button", { name: "Recolher lista" }), "Espaço",
+  "A lista de regras recolhe num botão, e o grafo ganha a largura dela.");
+await rec.click(page.getByRole("button", { name: "Recolher lista" }));
+await rec.click(page.getByRole("button", { name: "Recolher detalhe" }));
+await rec.wait(900);
+await rec.spot(page.getByRole("button", { name: "Tela cheia" }), "Tela cheia",
+  "E o canvas pode ocupar a tela inteira.");
+await rec.click(page.getByRole("button", { name: "Tela cheia" }));
+await rec.wait(1300);
+await rec.say("Da esquerda para a direita", "Agora o caminho inteiro cabe na tela. Ele se lê da esquerda para a direita.");
+await rec.spot(node("source"), "Fatos",
+  "Primeiro, os fatos que a partida reporta: o resultado, o papel do jogador e o evento que aconteceu.");
+await rec.spot(node("rule"), "Regra",
+  "A regra junta condições sobre esses fatos. Esta pede: o host foi morto, com sucesso, por um invasor. Todas precisam bater.");
+await rec.spot(node("eventType"), "Evento",
+  "Quando todas batem, a regra emite um evento com nome próprio: invasion_won.");
+await rec.spot(node("achievement"), "Conquistas",
+  "E o evento alimenta as conquistas: Invasor Vitorioso desbloqueia na primeira vez; Caçador de Hosts, na quinta.");
+await exitFull();
 await rec.click(page.getByRole("button", { name: "Expandir detalhe" }));
 await rec.wait(600);
 await rec.spot(page.getByRole("button", { name: /Suprimir para este jogo/ }), "Por jogo",
@@ -104,9 +130,7 @@ await rec.spot(page.getByRole("button", { name: /Suprimir para este jogo/ }), "P
 // --- 4. regra do jogo com comparador + conquista a partir do evento órfão ----
 await rec.say("Regra nova", "Agora uma regra do próprio jogo: derrotar um chefe com 10 abates ou mais na mesma luta.");
 await rec.click(page.getByRole("button", { name: "Nova regra" }));
-await rec.wait(1000);
-await rec.click(page.getByRole("button", { name: "Zoom In" })); // o rascunho fica legível
-await rec.wait(700);
+await rec.wait(1400); // o enquadramento amplia o rascunho sozinho (spec 094)
 const keys = page.getByPlaceholder("chave");
 await rec.type(keys.nth(0), "event", { delay: 80 });
 await rec.type(page.getByPlaceholder("valor").nth(0), "BOSS_DEFEATED", { delay: 65 });
@@ -124,11 +148,15 @@ await rec.type(page.getByPlaceholder("nome_do_type"), "chefe_implacavel", { dela
 await rec.say("Evento novo", "Quando as duas condições batem, a regra emite um evento novo, com o nome que o estúdio escolher.");
 await rec.click(page.getByRole("button", { name: "Salvar", exact: true }));
 await rec.wait(2000);
+await rec.click(page.getByRole("button", { name: "Mostrar lista de regras" }));
+await rec.wait(900);
 await rec.spot(page.getByText("chefe_implacavel").first().locator("xpath=ancestor::tr[1]"), "Regra do jogo",
   "Ela entra na lista ao lado das globais, marcada como regra do jogo.");
 await rec.click(page.getByText("chefe_implacavel").first()); // o item novo na lista
-await rec.wait(1500);
-await rec.click(page.locator(".react-flow__node").filter({ hasText: "chefe_implacavel" }).last());
+await rec.wait(1200);
+await rec.click(page.getByRole("button", { name: "Recolher lista" }));
+await rec.wait(1200);
+await rec.click(node("eventType"));
 await rec.wait(1000);
 await rec.spot(page.getByRole("button", { name: /Criar achievement que escuta este type/ }), "Órfão",
   "O evento ainda não alimenta nenhuma conquista. O canvas avisa e oferece criar a conquista ali mesmo.");
@@ -141,11 +169,13 @@ await rec.type(drawer.getByRole("textbox", { name: "Nome" }), "Implacável", { d
 await rec.type(drawer.getByRole("textbox", { name: "Descrição" }), "Derrotou um chefe com 10 abates ou mais", { delay: 35 });
 await rec.wait(600);
 await rec.click(drawer.getByRole("button", { name: "Criar" }));
-await rec.wait(1600);
-await rec.click(page.getByText("chefe_implacavel").first());
-await rec.wait(900);
+await rec.wait(1600); // a regra continua focada; o grafo ganha a conquista nova
 await showGraph();
-await rec.say("Fechado", "O caminho fecha: o fato e a stat, a regra com comparador, o evento e a conquista.");
+await rec.spot(node("source"), "Fatos", "Os fatos desta regra: o evento da partida e a stat kills, com os abates da luta.");
+await rec.spot(node("rule"), "Comparador", "A regra do jogo: chefe derrotado e kills maior ou igual a 10.");
+await rec.spot(node("achievement"), "Fechado",
+  "O caminho fecha: o evento chefe_implacavel alimenta a conquista Implacável, criada agora há pouco.");
+await exitFull();
 
 // --- 5. ao vivo ---------------------------------------------------------------
 const staged = stageRun("world", game.id, MODE_ID).then(() => stageRun("boss", "14"));

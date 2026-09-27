@@ -73,6 +73,8 @@ autonomia no que não depende de gameplay, inclusive mudança de escopo.
 | Docs e mídia | (este) | README reescrito (padrão open source), CONTRIBUTING, ARCHITECTURE com P2P/auth/Agones, PRODUCT-OVERVIEW, o vídeo do produto e imagens paradas em `docs/media/` (GIF descartado: pesado e com paleta ruim) | diagramas validados no parser do Mermaid |
 | Vídeos de feature | `69346cd`..`046be7a` | vídeo do produto refeito (3 min, foco no produto) e três vídeos de feature gravados do console real (cadastro, conquistas, visão 360 do jogador, de 2:30 a 4:16), com destaques, legendas e pausas; roteiros regraváveis em `docs/media/src/record/` | revisados quadro a quadro |
 | README para código aberto | (este) | README enxuto (o que é, recursos, "Veja em ação" com as capas dos três vídeos, como funciona em quatro passos, começando, estado); diagramas, mapa de serviços e portas foram para o ARCHITECTURE | links conferidos |
+| Event Rules legível | (este) | spec `admin-ui/094`: lista recolhível, enquadramento que desvia do painel de detalhe, zoom automático até 150%, tela cheia e o fit que espera os nós novos serem medidos; vídeo 2 regravado explicando cada coluna do grafo | capturas a 1280×720 antes e depois; lint, testes e build do admin-ui |
+| Abertura do código | (este) | Apache-2.0 (`LICENSE`, `NOTICE`), `README.en.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, templates de issue e PR; checklist do que falta em `PENDENCIAS-DO-DONO.md` §8 | links conferidos; varredura simples de segredos no histórico |
 
 ## Em andamento
 

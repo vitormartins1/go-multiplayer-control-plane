@@ -19,7 +19,7 @@ const run = promisify(execFile);
 // texto do README: numa grade de três capas, uma frase dentro da imagem não se lê.
 const THUMBS = [
   ["01-cadastro", 40, "Vídeo 1 · Cadastro", "Do zero ao<br/>jogo online"],
-  ["02-conquistas", 232, "Vídeo 2 · Conquistas", "Conquistas<br/>sem deploy"],
+  ["02-conquistas", 150, "Vídeo 2 · Conquistas", "Conquistas<br/>sem deploy"],
   ["03-jogador", 26, "Vídeo 3 · Jogador", "Visão 360<br/>do jogador"],
 ];
 

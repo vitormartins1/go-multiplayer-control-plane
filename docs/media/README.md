@@ -12,7 +12,7 @@
 | Arquivo | O que mostra |
 |---|---|
 | [`video-01-cadastro.mp4`](video-01-cadastro.mp4) | **Do zero ao jogo online**: cada parte do registro explicada (identidade, modo, arquétipo, topologia, papéis, matchmaking, métricas), a frota que o P2P dispensa e o primeiro mundo abrindo e sendo invadido |
-| [`video-02-conquistas.mp4`](video-02-conquistas.mp4) | **Conquistas sem deploy**: critério por evento (um evento, duas metas) e por métrica (acumulada ou por partida), regras globais do arquétipo e supressão por jogo, uma regra nova com comparador, a conquista criada a partir do evento órfão e o desbloqueio ao vivo (14 de 50 numa, desbloqueada na outra) |
+| [`video-02-conquistas.mp4`](video-02-conquistas.mp4) | **Conquistas sem deploy**: critério por evento (um evento, duas metas) e por métrica (acumulada ou por partida), o grafo de uma regra lido coluna por coluna em tela cheia (fatos, regra, evento, conquistas), regras globais do arquétipo e supressão por jogo, uma regra nova com comparador, a conquista criada a partir do evento órfão e o desbloqueio ao vivo (14 de 50 numa, desbloqueada na outra) |
 | [`video-03-jogador.mp4`](video-03-jogador.mp4) | **Visão 360 do jogador**: quem está online no jogo, conquistas com progresso e agrupamento, histórico com o desfecho de cada mundo (inclusive a queda do host), dados, save e a sessão ao vivo |
 
 Os vídeos de feature são didáticos de propósito: cada momento importante ganha um destaque (o resto da tela escurece),

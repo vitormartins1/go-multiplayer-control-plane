@@ -170,14 +170,23 @@ export async function startRecording(name) {
     // spot destaca um elemento (escurece o resto), explica e segura; o destaque
     // sai no fim, a legenda fica até a próxima
     async spot(loc, kicker, text, opts = {}) {
-      await rec.reveal(loc, "center", !!opts.force);
+      await rec.reveal(loc.first(), "center", !!opts.force);
       await rec.highlight(loc);
       await rec.say(kicker, text, opts);
       if (!opts.keep) await rec.highlight(null);
     },
+    // highlight aceita um locator com vários elementos (uma coluna de nós do
+    // canvas, por exemplo): o destaque cobre a caixa que envolve todos
     async highlight(loc) {
-      if (loc) await rec.settle(loc);
-      const b = loc ? await loc.boundingBox() : null;
+      if (loc) await rec.settle(loc.first());
+      let b = null;
+      if (loc) {
+        const boxes = (await Promise.all((await loc.all()).map((l) => l.boundingBox()))).filter(Boolean);
+        if (boxes.length) {
+          const x = Math.min(...boxes.map((r) => r.x)), y = Math.min(...boxes.map((r) => r.y));
+          b = { x, y, width: Math.max(...boxes.map((r) => r.x + r.width)) - x, height: Math.max(...boxes.map((r) => r.y + r.height)) - y };
+        }
+      }
       await page.evaluate((r) => window.__rec.highlight(r), b);
     },
     async end() {
