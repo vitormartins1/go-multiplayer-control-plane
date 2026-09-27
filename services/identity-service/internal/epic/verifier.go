@@ -64,6 +64,7 @@ type Verifier struct {
 	keys        map[string]crypto.PublicKey
 	fetched     time.Time // último fetch bem-sucedido (TTL do cache)
 	lastAttempt time.Time // última tentativa, com ou sem sucesso (limite de refetch)
+	lastErr     error     // erro da última tentativa (nil se deu certo)
 
 	sf singleflight.Group
 }
@@ -89,7 +90,8 @@ func (v *Verifier) Provider() string { return "epic" }
 
 // Verify valida o ID token e devolve o PUID. Token inválido por qualquer motivo
 // (formato, assinatura, iss, aud, exp, iat) → ErrInvalidTicket; JWKS da Epic
-// inalcançável sem chave em cache para o kid → ErrProviderUnavailable.
+// inalcançável sem chave em cache para o kid → ErrProviderUnavailable (também
+// nas chamadas seguintes, enquanto a busca está limitada).
 func (v *Verifier) Verify(ctx context.Context, ticket string) (domain.ExternalIdentity, error) {
 	if ticket == "" || len(ticket) > maxTokenLen {
 		return domain.ExternalIdentity{}, domain.ErrInvalidTicket
@@ -123,6 +125,9 @@ func (v *Verifier) Verify(ctx context.Context, ticket string) (domain.ExternalId
 	if u, err := url.Parse(iss); err != nil || u.Scheme != "https" || u.Host != issuerHost {
 		return domain.ExternalIdentity{}, domain.ErrInvalidTicket
 	}
+	if _, ok := claims["iat"]; !ok { // WithIssuedAt só checa o iat quando ele existe
+		return domain.ExternalIdentity{}, domain.ErrInvalidTicket
+	}
 	sub, _ := claims["sub"].(string)
 	if sub == "" {
 		return domain.ExternalIdentity{}, domain.ErrInvalidTicket
@@ -154,11 +159,21 @@ func (v *Verifier) keyForKid(ctx context.Context, kid string) (crypto.PublicKey,
 		recent := !v.lastAttempt.IsZero() && v.now().Sub(v.lastAttempt) < minRefetchInterval
 		v.mu.RUnlock()
 		if recent {
+			v.mu.RLock()
+			lastErr := v.lastErr
+			v.mu.RUnlock()
+			if lastErr != nil {
+				return nil, lastErr // a Epic caiu há pouco: continua indisponível, não "token ruim"
+			}
 			return nil, errRefetchThrottled
 		}
 		// sem o cancelamento de quem chegou primeiro: os outros que esperam no
 		// singleflight não podem falhar junto. O http.Client tem timeout.
-		return nil, v.refresh(context.WithoutCancel(ctx))
+		err := v.refresh(context.WithoutCancel(ctx))
+		v.mu.Lock()
+		v.lastErr = err
+		v.mu.Unlock()
+		return nil, err
 	})
 
 	v.mu.RLock()
@@ -167,11 +182,11 @@ func (v *Verifier) keyForKid(ctx context.Context, kid string) (crypto.PublicKey,
 	switch {
 	case found:
 		return fresh, nil
-	case ok:
+	case ok && err != nil:
 		return key, nil // a busca falhou ou foi limitada: segue com a chave conhecida
 	case err != nil && !errors.Is(err, errRefetchThrottled):
 		return nil, fmt.Errorf("%w: %v", domain.ErrProviderUnavailable, err)
-	default:
+	default: // inclui a chave que a Epic tirou do JWKS (busca ok, kid ausente)
 		return nil, errUnknownKid
 	}
 }

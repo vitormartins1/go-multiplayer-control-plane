@@ -145,6 +145,8 @@ func TestVerify_TokenInvalido_ErrInvalidTicket(t *testing.T) {
 	delete(semSub, "sub")
 	semExp := validClaims()
 	delete(semExp, "exp")
+	semIat := validClaims()
+	delete(semIat, "iat")
 	noneTok, err := jwt.NewWithClaims(jwt.SigningMethodNone, validClaims()).SignedString(jwt.UnsafeAllowNoneSignatureType)
 	require.NoError(t, err)
 
@@ -159,6 +161,7 @@ func TestVerify_TokenInvalido_ErrInvalidTicket(t *testing.T) {
 		"aud de outro produto":   sign(t, jwt.SigningMethodRS256, "k1", rk, with("aud", "outro-client")),
 		"expirado":               sign(t, jwt.SigningMethodRS256, "k1", rk, with("exp", epoch.Add(-time.Second).Unix())),
 		"sem exp":                sign(t, jwt.SigningMethodRS256, "k1", rk, semExp),
+		"sem iat":                sign(t, jwt.SigningMethodRS256, "k1", rk, semIat),
 		"iat no futuro":          sign(t, jwt.SigningMethodRS256, "k1", rk, with("iat", epoch.Add(time.Minute).Unix())),
 		"sem sub":                sign(t, jwt.SigningMethodRS256, "k1", rk, semSub),
 		"kid que a Epic não tem": sign(t, jwt.SigningMethodRS256, "k9", rk, validClaims()),
@@ -217,6 +220,51 @@ func TestVerify_EpicForaSemChaveEmCache_ErrProviderUnavailable(t *testing.T) {
 	_, err = newVerifier(f).Verify(context.Background(), sign(t, jwt.SigningMethodRS256, "k1", rk, validClaims()))
 
 	assert.ErrorIs(t, err, domain.ErrProviderUnavailable)
+}
+
+func TestVerify_ChaveRetiradaDoJWKS_ErrInvalidTicket(t *testing.T) {
+	k1, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	k2, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	f := newFakeEpic(t)
+	f.publish(rsaJWK("k1", k1))
+	v := newVerifier(f)
+	_, err = v.Verify(context.Background(), sign(t, jwt.SigningMethodRS256, "k1", k1, validClaims()))
+	require.NoError(t, err)
+
+	// o cache vence e a Epic já girou: k1 saiu do JWKS e não vale mais
+	f.publish(rsaJWK("k2", k2))
+	v.now = func() time.Time { return epoch.Add(defaultKeyTTL + time.Minute) }
+	claims := validClaims()
+	claims["exp"] = epoch.Add(2 * defaultKeyTTL).Unix()
+	_, err = v.Verify(context.Background(), sign(t, jwt.SigningMethodRS256, "k1", k1, claims))
+
+	assert.ErrorIs(t, err, domain.ErrInvalidTicket)
+	assert.EqualValues(t, 2, f.calls.Load())
+}
+
+func TestVerify_EpicForaChamadasSeguidas_TodasErrProviderUnavailable(t *testing.T) {
+	rk, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	f := newFakeEpic(t)
+	f.setDown(true)
+	v := newVerifier(f)
+
+	for range 3 {
+		_, err := v.Verify(context.Background(), sign(t, jwt.SigningMethodRS256, "k1", rk, validClaims()))
+		require.ErrorIs(t, err, domain.ErrProviderUnavailable)
+	}
+	assert.EqualValues(t, 1, f.calls.Load(), "dentro do intervalo mínimo, só a primeira busca vai à rede")
+
+	// a Epic volta: passado o intervalo, a busca seguinte funciona
+	f.setDown(false)
+	f.publish(rsaJWK("k1", rk))
+	v.now = func() time.Time { return epoch.Add(minRefetchInterval) }
+	claims := validClaims()
+	claims["iat"] = epoch.Unix()
+	_, err = v.Verify(context.Background(), sign(t, jwt.SigningMethodRS256, "k1", rk, claims))
+	assert.NoError(t, err)
 }
 
 func TestVerify_EpicForaComChaveEmCache_UsaAChaveConhecida(t *testing.T) {
